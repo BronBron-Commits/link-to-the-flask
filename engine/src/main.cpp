@@ -9,7 +9,7 @@ int main() {
     std::cout << "Engine running. Use WASD to move, q to quit.\n";
 
     while (true) {
-        render_frame();
+        render_frame(player);
         std::cout << "Command: ";
         std::cin >> cmd;
         if (cmd == 'q') break;

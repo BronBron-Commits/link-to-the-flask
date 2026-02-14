@@ -1,5 +1,4 @@
 #pragma once
-
 struct Character {
     int x = 0;
     int y = 0;
