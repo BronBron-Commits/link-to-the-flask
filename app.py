@@ -1,58 +1,65 @@
-from flask import Flask, jsonify, render_template_string, send_from_directory
+from flask import Flask, jsonify, request
 import subprocess
-import os
+import threading
 
-app = Flask(__name__, static_folder="app/static", template_folder="app/templates")
+app = Flask(__name__)
 
-# ---------- Home page ----------
+# Engine state (x, y)
+engine_pos = {"x": 0, "y": 0}
+
+lock = threading.Lock()
+
 @app.route("/")
 def index():
-    return render_template_string("""
-    <h1>Flask Game Engine Control</h1>
-    <p><a href="/build-engine">Build Engine</a></p>
-    <p><a href="/engine-files">View Engine Files</a></p>
-    <p><a href="/run-engine">Run Engine</a></p>
-    """)
+    return """
+    <h1>Engine Control</h1>
+    <p>Use buttons or WASD keys to move:</p>
+    <button onclick="move('w')">W</button>
+    <button onclick="move('a')">A</button>
+    <button onclick="move('s')">S</button>
+    <button onclick="move('d')">D</button>
+    <pre id="grid"></pre>
+    <script>
+    function move(dir){
+        fetch('/move?dir=' + dir)
+        .then(resp => resp.json())
+        .then(data => { document.getElementById('grid').innerText = data.grid })
+    }
+    window.onload = () => { fetch('/grid').then(r => r.json()).then(d => document.getElementById('grid').innerText = d.grid) }
+    </script>
+    """
 
-# ---------- Build engine ----------
-@app.route("/build-engine")
-def build_engine():
-    script = os.path.join("scripts", "build_engine.sh")
-    if os.path.exists(script):
-        subprocess.run(["bash", script])
-        return jsonify({"status": "engine built"})
-    return jsonify({"error": "build script missing"}), 404
+def render_grid():
+    w, h = 5, 5
+    lines = []
+    for y in reversed(range(h)):
+        line = ""
+        for x in range(w):
+            if x == engine_pos["x"] and y == engine_pos["y"]:
+                line += "@ "
+            else:
+                line += ". "
+        lines.append(line)
+    return "\n".join(lines)
 
-# ---------- List engine output ----------
-@app.route("/engine-files")
-def engine_files():
-    base = os.path.join("app", "static", "engine")
-    if not os.path.exists(base):
-        return jsonify({"files": []})
-    files = []
-    for root, _, filenames in os.walk(base):
-        for f in filenames:
-            files.append(os.path.relpath(os.path.join(root, f), base))
-    return jsonify({"files": files})
+@app.route("/grid")
+def grid():
+    with lock:
+        return jsonify({"grid": render_grid()})
 
-# ---------- Run engine ----------
-@app.route("/run-engine")
-def run_engine():
-    engine_path = os.path.join("engine", "build", "engine")
-    if not os.path.exists(engine_path):
-        return "Engine binary not found. Build it first.", 404
-    proc = subprocess.Popen([engine_path],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True)
-    output = proc.communicate()[0]
-    return "<pre>" + output + "</pre>"
+@app.route("/move")
+def move():
+    dir = request.args.get("dir", "")
+    with lock:
+        if dir == "w": engine_pos["y"] += 1
+        if dir == "s": engine_pos["y"] -= 1
+        if dir == "a": engine_pos["x"] -= 1
+        if dir == "d": engine_pos["x"] += 1
+        # Keep in bounds
+        engine_pos["x"] = max(0, min(4, engine_pos["x"]))
+        engine_pos["y"] = max(0, min(4, engine_pos["y"]))
+        grid_str = render_grid()
+    return jsonify({"grid": grid_str})
 
-# ---------- Serve engine files manually if needed ----------
-@app.route("/engine/<path:filename>")
-def serve_engine_file(filename):
-    return send_from_directory("app/static/engine", filename)
-
-# ---------- Run server ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
