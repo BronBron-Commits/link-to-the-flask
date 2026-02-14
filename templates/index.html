@@ -1,10 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Zelda: Link to the Flask</title>
+    <title>Link to the Flask</title>
+    <style>
+        body {
+            margin: 0;
+            background: black;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+    </style>
 </head>
 <body>
-    <h1>Legend of Zelda: Link to the Flask - Mobile Prototype</h1>
-    <p>Use a mobile client or JS front-end to control your character on the map.</p>
+    <canvas id="game"></canvas>
+    <script src="{{ url_for('static', filename='game.js') }}"></script>
 </body>
 </html>

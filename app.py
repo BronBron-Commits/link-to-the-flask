@@ -1,50 +1,44 @@
-from flask import Flask, render_template, jsonify, request
-import random
+from flask import Flask, jsonify, render_template_string, send_from_directory
+import subprocess
+import os
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder="app/static", template_folder="app/templates")
 
-# Game state
-players = {}
-world = {
-    "map": [[0]*10 for _ in range(10)],  # 10x10 grid
-    "enemies": []
-}
-
-@app.route('/')
+# ---------- Home page ----------
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template_string("""
+    <h1>Flask Game Engine Control</h1>
+    <p><a href="/build-engine">Build Engine</a></p>
+    <p><a href="/engine-files">View Engine Files</a></p>
+    """)
 
-@app.route('/join', methods=['POST'])
-def join_game():
-    player_name = request.json.get('name')
-    if player_name:
-        players[player_name] = {"x": 0, "y": 0, "health": 10, "inventory": []}
-        return jsonify({"status": "joined", "player": player_name})
-    return jsonify({"status": "error"}), 400
+# ---------- Build engine ----------
+@app.route("/build-engine")
+def build_engine():
+    script = os.path.join("scripts", "build_engine.sh")
+    if os.path.exists(script):
+        subprocess.run(["bash", script])
+        return jsonify({"status": "engine built"})
+    return jsonify({"error": "build script missing"}), 404
 
-@app.route('/move/<player_name>', methods=['POST'])
-def move(player_name):
-    if player_name not in players:
-        return jsonify({"status": "error"}), 404
-    direction = request.json.get('direction')
-    x, y = players[player_name]["x"], players[player_name]["y"]
-    if direction == "up" and y > 0:
-        players[player_name]["y"] -= 1
-    elif direction == "down" and y < 9:
-        players[player_name]["y"] += 1
-    elif direction == "left" and x > 0:
-        players[player_name]["x"] -= 1
-    elif direction == "right" and x < 9:
-        players[player_name]["x"] += 1
-    return jsonify(players[player_name])
+# ---------- List engine output ----------
+@app.route("/engine-files")
+def engine_files():
+    base = os.path.join("app", "static", "engine")
+    if not os.path.exists(base):
+        return jsonify({"files": []})
+    files = []
+    for root, _, filenames in os.walk(base):
+        for f in filenames:
+            files.append(os.path.relpath(os.path.join(root, f), base))
+    return jsonify({"files": files})
 
-@app.route('/world')
-def get_world():
-    return jsonify(world)
+# ---------- Serve engine files manually if needed ----------
+@app.route("/engine/<path:filename>")
+def serve_engine_file(filename):
+    return send_from_directory("app/static/engine", filename)
 
-@app.route('/players')
-def get_players():
-    return jsonify(players)
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+# ---------- Run ----------
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
