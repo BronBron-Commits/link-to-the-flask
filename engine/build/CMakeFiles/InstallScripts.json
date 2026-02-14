@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/data/data/com.termux/files/home/link_to_the_flask/engine/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

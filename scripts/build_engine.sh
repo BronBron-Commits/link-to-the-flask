@@ -1,14 +1,16 @@
 #!/data/data/com.termux/files/usr/bin/bash
 
-cd "$(dirname "$0")/../engine" || exit 1
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ENGINE="$ROOT/engine"
+BUILD="$ENGINE/build"
 
-mkdir -p build
-cd build || exit 1
+mkdir -p "$BUILD"
+cd "$BUILD" || exit 1
 
-cmake .. 2>/dev/null || true
+echo "Running CMake configure..."
+cmake ..
+
+echo "Building engine..."
 cmake --build .
 
-# copy outputs so Flask can serve them
-cp -r ../assets ../../app/static/engine/ 2>/dev/null || true
-cp -r ../shaders ../../app/static/engine/ 2>/dev/null || true
-
+echo "Done."

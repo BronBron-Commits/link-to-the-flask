@@ -11,6 +11,7 @@ def index():
     <h1>Flask Game Engine Control</h1>
     <p><a href="/build-engine">Build Engine</a></p>
     <p><a href="/engine-files">View Engine Files</a></p>
+    <p><a href="/run-engine">Run Engine</a></p>
     """)
 
 # ---------- Build engine ----------
@@ -34,11 +35,24 @@ def engine_files():
             files.append(os.path.relpath(os.path.join(root, f), base))
     return jsonify({"files": files})
 
+# ---------- Run engine ----------
+@app.route("/run-engine")
+def run_engine():
+    engine_path = os.path.join("engine", "build", "engine")
+    if not os.path.exists(engine_path):
+        return "Engine binary not found. Build it first.", 404
+    proc = subprocess.Popen([engine_path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.STDOUT,
+                            text=True)
+    output = proc.communicate()[0]
+    return "<pre>" + output + "</pre>"
+
 # ---------- Serve engine files manually if needed ----------
 @app.route("/engine/<path:filename>")
 def serve_engine_file(filename):
     return send_from_directory("app/static/engine", filename)
 
-# ---------- Run ----------
+# ---------- Run server ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
