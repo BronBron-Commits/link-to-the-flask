@@ -8,7 +8,9 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
+  "/data/data/com.termux/files/home/link_to_the_flask/engine/src/controls/input.cpp" "CMakeFiles/engine.dir/src/controls/input.cpp.o" "gcc" "CMakeFiles/engine.dir/src/controls/input.cpp.o.d"
   "/data/data/com.termux/files/home/link_to_the_flask/engine/src/main.cpp" "CMakeFiles/engine.dir/src/main.cpp.o" "gcc" "CMakeFiles/engine.dir/src/main.cpp.o.d"
+  "/data/data/com.termux/files/home/link_to_the_flask/engine/src/renderer/renderer.cpp" "CMakeFiles/engine.dir/src/renderer/renderer.cpp.o" "gcc" "CMakeFiles/engine.dir/src/renderer/renderer.cpp.o.d"
   "" "engine" "gcc" "CMakeFiles/engine.dir/link.d"
   )
 

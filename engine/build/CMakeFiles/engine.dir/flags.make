@@ -4,7 +4,7 @@
 # compile CXX with /data/data/com.termux/files/usr/bin/c++
 CXX_DEFINES = 
 
-CXX_INCLUDES = 
+CXX_INCLUDES = -I/data/data/com.termux/files/home/link_to_the_flask/engine/include -I/data/data/com.termux/files/home/link_to_the_flask/engine/include/renderer -I/data/data/com.termux/files/home/link_to_the_flask/engine/include/controls
 
-CXX_FLAGS = -O2 -g -DNDEBUG -std=gnu++17
+CXX_FLAGS = -std=gnu++17
 

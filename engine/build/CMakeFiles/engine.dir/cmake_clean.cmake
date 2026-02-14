@@ -1,7 +1,11 @@
 file(REMOVE_RECURSE
   "CMakeFiles/engine.dir/link.d"
+  "CMakeFiles/engine.dir/src/controls/input.cpp.o"
+  "CMakeFiles/engine.dir/src/controls/input.cpp.o.d"
   "CMakeFiles/engine.dir/src/main.cpp.o"
   "CMakeFiles/engine.dir/src/main.cpp.o.d"
+  "CMakeFiles/engine.dir/src/renderer/renderer.cpp.o"
+  "CMakeFiles/engine.dir/src/renderer/renderer.cpp.o.d"
   "engine"
   "engine.pdb"
 )

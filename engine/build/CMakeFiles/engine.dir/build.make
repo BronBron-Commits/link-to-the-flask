@@ -72,10 +72,24 @@ include CMakeFiles/engine.dir/flags.make
 CMakeFiles/engine.dir/codegen:
 .PHONY : CMakeFiles/engine.dir/codegen
 
+CMakeFiles/engine.dir/src/controls/input.cpp.o: CMakeFiles/engine.dir/flags.make
+CMakeFiles/engine.dir/src/controls/input.cpp.o: /data/data/com.termux/files/home/link_to_the_flask/engine/src/controls/input.cpp
+CMakeFiles/engine.dir/src/controls/input.cpp.o: CMakeFiles/engine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/data/data/com.termux/files/home/link_to_the_flask/engine/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/engine.dir/src/controls/input.cpp.o"
+	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/engine.dir/src/controls/input.cpp.o -MF CMakeFiles/engine.dir/src/controls/input.cpp.o.d -o CMakeFiles/engine.dir/src/controls/input.cpp.o -c /data/data/com.termux/files/home/link_to_the_flask/engine/src/controls/input.cpp
+
+CMakeFiles/engine.dir/src/controls/input.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/engine.dir/src/controls/input.cpp.i"
+	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /data/data/com.termux/files/home/link_to_the_flask/engine/src/controls/input.cpp > CMakeFiles/engine.dir/src/controls/input.cpp.i
+
+CMakeFiles/engine.dir/src/controls/input.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/engine.dir/src/controls/input.cpp.s"
+	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /data/data/com.termux/files/home/link_to_the_flask/engine/src/controls/input.cpp -o CMakeFiles/engine.dir/src/controls/input.cpp.s
+
 CMakeFiles/engine.dir/src/main.cpp.o: CMakeFiles/engine.dir/flags.make
 CMakeFiles/engine.dir/src/main.cpp.o: /data/data/com.termux/files/home/link_to_the_flask/engine/src/main.cpp
 CMakeFiles/engine.dir/src/main.cpp.o: CMakeFiles/engine.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/data/data/com.termux/files/home/link_to_the_flask/engine/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/engine.dir/src/main.cpp.o"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/data/data/com.termux/files/home/link_to_the_flask/engine/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/engine.dir/src/main.cpp.o"
 	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/engine.dir/src/main.cpp.o -MF CMakeFiles/engine.dir/src/main.cpp.o.d -o CMakeFiles/engine.dir/src/main.cpp.o -c /data/data/com.termux/files/home/link_to_the_flask/engine/src/main.cpp
 
 CMakeFiles/engine.dir/src/main.cpp.i: cmake_force
@@ -86,18 +100,36 @@ CMakeFiles/engine.dir/src/main.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/engine.dir/src/main.cpp.s"
 	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /data/data/com.termux/files/home/link_to_the_flask/engine/src/main.cpp -o CMakeFiles/engine.dir/src/main.cpp.s
 
+CMakeFiles/engine.dir/src/renderer/renderer.cpp.o: CMakeFiles/engine.dir/flags.make
+CMakeFiles/engine.dir/src/renderer/renderer.cpp.o: /data/data/com.termux/files/home/link_to_the_flask/engine/src/renderer/renderer.cpp
+CMakeFiles/engine.dir/src/renderer/renderer.cpp.o: CMakeFiles/engine.dir/compiler_depend.ts
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/data/data/com.termux/files/home/link_to_the_flask/engine/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Building CXX object CMakeFiles/engine.dir/src/renderer/renderer.cpp.o"
+	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/engine.dir/src/renderer/renderer.cpp.o -MF CMakeFiles/engine.dir/src/renderer/renderer.cpp.o.d -o CMakeFiles/engine.dir/src/renderer/renderer.cpp.o -c /data/data/com.termux/files/home/link_to_the_flask/engine/src/renderer/renderer.cpp
+
+CMakeFiles/engine.dir/src/renderer/renderer.cpp.i: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/engine.dir/src/renderer/renderer.cpp.i"
+	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /data/data/com.termux/files/home/link_to_the_flask/engine/src/renderer/renderer.cpp > CMakeFiles/engine.dir/src/renderer/renderer.cpp.i
+
+CMakeFiles/engine.dir/src/renderer/renderer.cpp.s: cmake_force
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/engine.dir/src/renderer/renderer.cpp.s"
+	/data/data/com.termux/files/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /data/data/com.termux/files/home/link_to_the_flask/engine/src/renderer/renderer.cpp -o CMakeFiles/engine.dir/src/renderer/renderer.cpp.s
+
 # Object files for target engine
 engine_OBJECTS = \
-"CMakeFiles/engine.dir/src/main.cpp.o"
+"CMakeFiles/engine.dir/src/controls/input.cpp.o" \
+"CMakeFiles/engine.dir/src/main.cpp.o" \
+"CMakeFiles/engine.dir/src/renderer/renderer.cpp.o"
 
 # External object files for target engine
 engine_EXTERNAL_OBJECTS =
 
+engine: CMakeFiles/engine.dir/src/controls/input.cpp.o
 engine: CMakeFiles/engine.dir/src/main.cpp.o
+engine: CMakeFiles/engine.dir/src/renderer/renderer.cpp.o
 engine: CMakeFiles/engine.dir/build.make
 engine: CMakeFiles/engine.dir/compiler_depend.ts
 engine: CMakeFiles/engine.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/data/data/com.termux/files/home/link_to_the_flask/engine/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Linking CXX executable engine"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/data/data/com.termux/files/home/link_to_the_flask/engine/build/CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX executable engine"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/engine.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

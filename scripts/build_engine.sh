@@ -8,7 +8,9 @@ mkdir -p "$BUILD"
 cd "$BUILD" || exit 1
 
 echo "Running CMake configure..."
-cmake ..
+
+# Force CMake to use host compiler, avoid termux-x11 toolchain
+cmake .. -DCMAKE_SYSTEM_NAME=Linux -DCMAKE_C_COMPILER=cc -DCMAKE_CXX_COMPILER=c++ || exit 1
 
 echo "Building engine..."
 cmake --build .

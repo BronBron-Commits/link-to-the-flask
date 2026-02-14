@@ -1,5 +1,5 @@
-CMakeFiles/engine.dir/src/main.cpp.o: \
-  /data/data/com.termux/files/home/link_to_the_flask/engine/src/main.cpp \
+CMakeFiles/engine.dir/src/controls/input.cpp.o: \
+  /data/data/com.termux/files/home/link_to_the_flask/engine/src/controls/input.cpp \
   /data/data/com.termux/files/usr/bin/../../usr/include/c++/v1/iostream \
   /data/data/com.termux/files/usr/bin/../../usr/include/c++/v1/__config \
   /data/data/com.termux/files/usr/bin/../../usr/include/c++/v1/__config_site \
@@ -694,6 +694,4 @@ CMakeFiles/engine.dir/src/main.cpp.o: \
   /data/data/com.termux/files/usr/bin/../../usr/include/c++/v1/stack \
   /data/data/com.termux/files/usr/bin/../../usr/include/c++/v1/__fwd/stack.h \
   /data/data/com.termux/files/usr/bin/../../usr/include/c++/v1/print \
-  /data/data/com.termux/files/usr/bin/../../usr/include/unistd.h \
-  /data/data/com.termux/files/home/link_to_the_flask/engine/include/renderer/renderer.hpp \
-  /data/data/com.termux/files/home/link_to_the_flask/engine/include/input.hpp
+  /data/data/com.termux/files/usr/bin/../../usr/include/unistd.h
