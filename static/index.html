@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Engine Touch Controls</title>
+<style>
+body{
+    background:#111;
+    color:#0f0;
+    font-family:monospace;
+    text-align:center;
+    margin:0;
+}
+
+#screen{
+    white-space:pre;
+    border:1px solid #0f0;
+    padding:14px;
+    margin:12px;
+}
+
+#controls{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:20px;
+}
+
+#stickArea{
+    width:160px;
+    height:160px;
+    border:2px solid #0f0;
+    border-radius:50%;
+    position:relative;
+    touch-action:none;
+}
+
+#stick{
+    width:60px;
+    height:60px;
+    background:#0f0;
+    border-radius:50%;
+    position:absolute;
+    left:50%;
+    top:50%;
+    transform:translate(-50%,-50%);
+}
+
+.btn{
+    width:80px;
+    height:80px;
+    margin:10px;
+    font-size:22px;
+    background:#000;
+    color:#0f0;
+    border:2px solid #0f0;
+    border-radius:50%;
+}
+</style>
+</head>
+
+<body>
+
+<h3>Engine Touch Controls</h3>
+<div id="screen">Waiting...</div>
+
+<div id="controls">
+
+    <div id="stickArea">
+        <div id="stick"></div>
+    </div>
+
+    <div>
+        <button class="btn" onclick="press('j')">A</button><br>
+        <button class="btn" onclick="press('k')">B</button>
+    </div>
+
+</div>
+
+<script>
+const stick = document.getElementById("stick");
+const area = document.getElementById("stickArea");
+let dragging=false;
+
+area.addEventListener("touchstart",()=>dragging=true);
+area.addEventListener("touchend",()=>{
+    dragging=false;
+    stick.style.left="50%";
+    stick.style.top="50%";
+});
+
+area.addEventListener("touchmove", async e=>{
+    if(!dragging) return;
+
+    const rect = area.getBoundingClientRect();
+    const t = e.touches[0];
+
+    let x = t.clientX - rect.left;
+    let y = t.clientY - rect.top;
+
+    const cx = rect.width/2;
+    const cy = rect.height/2;
+
+    let dx = x - cx;
+    let dy = y - cy;
+
+    const dist = Math.sqrt(dx*dx+dy*dy);
+    const max = rect.width/2-30;
+
+    if(dist>max){
+        dx *= max/dist;
+        dy *= max/dist;
+    }
+
+    stick.style.left = (cx+dx)+"px";
+    stick.style.top  = (cy+dy)+"px";
+
+    // decide direction
+    let key=null;
+    if(Math.abs(dx)>Math.abs(dy)){
+        key = dx>0 ? "d":"a";
+    }else{
+        key = dy>0 ? "s":"w";
+    }
+
+    send(key);
+});
+
+async function send(key){
+    const res = await fetch("/move",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({key})
+    });
+    const data = await res.json();
+    document.getElementById("screen").textContent =
+        data.output || data.error;
+}
+
+function press(key){ send(key); }
+</script>
+
+</body>
+</html>

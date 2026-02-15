@@ -1,25 +1,57 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Link to the Flask</title>
-    <style>
-        body {
-            margin: 0;
-            background: black;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-        }
-
-        canvas {
-            image-rendering: pixelated;
-            image-rendering: crisp-edges;
-        }
-    </style>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Engine View</title>
+<style>
+body{background:#111;color:white;text-align:center;font-family:sans-serif}
+canvas{background:#222;margin-top:20px}
+button{font-size:20px;margin:6px;padding:12px 16px}
+</style>
 </head>
 <body>
-    <canvas id="game"></canvas>
-    <script src="{{ url_for('static', filename='game.js') }}"></script>
+
+<h2>Engine Visual</h2>
+
+<canvas id="game" width="400" height="400"></canvas>
+
+<div>
+<button onclick="move(0,1)">▲</button><br>
+<button onclick="move(-1,0)">◀</button>
+<button onclick="move(1,0)">▶</button><br>
+<button onclick="move(0,-1)">▼</button>
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+async function move(x,y){
+    await fetch("/move",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({x:x,y:y})
+    });
+}
+
+function draw(x,y){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    const cx = canvas.width/2 + x*20;
+    const cy = canvas.height/2 - y*20;
+
+    ctx.fillStyle="red";
+    ctx.fillRect(cx-10,cy-10,20,20);
+}
+
+async function tick(){
+    const r = await fetch("/state");
+    const p = await r.json();
+    draw(p.x,p.y);
+}
+
+setInterval(tick,33);
+</script>
+
 </body>
 </html>
