@@ -4,42 +4,84 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Engine View</title>
 <style>
-body{background:#111;color:white;text-align:center;font-family:sans-serif}
-canvas{background:#222;margin-top:20px}
-button{font-size:20px;margin:6px;padding:12px 16px}
+body{background:#111;color:white;text-align:center;font-family:sans-serif;margin:0}
+canvas{background:#222;margin-top:10px}
+
+#controls{
+position:fixed;
+bottom:20px;
+left:0; right:0;
+display:flex;
+justify-content:space-between;
+padding:0 20px;
+}
+
+#stick{
+width:140px;height:140px;
+background:#333;border-radius:50%;
+position:relative;
+touch-action:none;
+}
+
+#knob{
+width:60px;height:60px;
+background:#888;border-radius:50%;
+position:absolute;
+left:40px;top:40px;
+}
+
+.buttons{
+display:flex;
+flex-direction:column;
+gap:14px;
+}
+
+button{
+font-size:18px;
+padding:18px 24px;
+border:none;
+border-radius:10px;
+background:#555;color:white;
+}
 </style>
 </head>
 <body>
 
-<h2>Engine Visual</h2>
-
 <canvas id="game" width="400" height="400"></canvas>
 
-<div>
-<button onclick="move(0,1)">▲</button><br>
-<button onclick="move(-1,0)">◀</button>
-<button onclick="move(1,0)">▶</button><br>
-<button onclick="move(0,-1)">▼</button>
+<div id="controls">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="buttons">
+    <button onclick="action('A')">A</button>
+    <button onclick="action('B')">B</button>
+  </div>
 </div>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-async function move(x,y){
+let joy={x:0,y:0};
+
+async function sendMove(){
+    if(joy.x===0 && joy.y===0) return;
     await fetch("/move",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({x:x,y:y})
+        body:JSON.stringify({x:joy.x,y:joy.y})
     });
+}
+
+setInterval(sendMove,60);
+
+async function action(btn){
+    console.log("Pressed",btn);
 }
 
 function draw(x,y){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-
     const cx = canvas.width/2 + x*20;
     const cy = canvas.height/2 - y*20;
-
     ctx.fillStyle="red";
     ctx.fillRect(cx-10,cy-10,20,20);
 }
@@ -49,8 +91,46 @@ async function tick(){
     const p = await r.json();
     draw(p.x,p.y);
 }
-
 setInterval(tick,33);
+
+/* ---------- JOYSTICK ---------- */
+
+const stick=document.getElementById("stick");
+const knob=document.getElementById("knob");
+
+let dragging=false;
+
+stick.addEventListener("touchstart",()=>dragging=true);
+window.addEventListener("touchend",()=>{
+    dragging=false;
+    knob.style.left="40px";
+    knob.style.top="40px";
+    joy.x=0; joy.y=0;
+});
+
+window.addEventListener("touchmove",e=>{
+    if(!dragging) return;
+
+    const rect=stick.getBoundingClientRect();
+    const t=e.touches[0];
+
+    let x=t.clientX-rect.left-70;
+    let y=t.clientY-rect.top-70;
+
+    const dist=Math.sqrt(x*x+y*y);
+    const max=50;
+
+    if(dist>max){
+        x=x/dist*max;
+        y=y/dist*max;
+    }
+
+    knob.style.left=(40+x)+"px";
+    knob.style.top=(40+y)+"px";
+
+    joy.x=Math.round(x/25);
+    joy.y=Math.round(-y/25);
+});
 </script>
 
 </body>
