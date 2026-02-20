@@ -16,11 +16,12 @@ let player = {
 // Configurable parameters
 const maxSpeed = 2.5;
 const accel = 0.2;
+const tileSize = 40; // size of checkerboard tiles
 
 // update loop with inertia (normal Y)
 function update() {
     player.vx += (joy.x * maxSpeed - player.vx) * accel;
-    player.vy += (joy.y * maxSpeed - player.vy) * accel; // normal vertical
+    player.vy += (joy.y * maxSpeed - player.vy) * accel;
 
     player.x += player.vx;
     player.y += player.vy;
@@ -29,9 +30,20 @@ function update() {
     player.y = Math.max(0, Math.min(canvas.height, player.y));
 }
 
+// draw checkerboard
+function drawFloor() {
+    for(let y=0; y < canvas.height; y += tileSize) {
+        for(let x=0; x < canvas.width; x += tileSize) {
+            const isWhite = ((x/tileSize + y/tileSize) % 2 === 0);
+            ctx.fillStyle = isWhite ? "#fff" : "#000";
+            ctx.fillRect(x, y, tileSize, tileSize);
+        }
+    }
+}
+
 // draw
 function draw() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawFloor();
     drawWizard(ctx, player.x, player.y, 4);
 }
 
@@ -63,10 +75,8 @@ window.addEventListener("touchmove", e => {
     const dist = Math.sqrt(x*x + y*y);
     const max = 50;
     if(dist > max){ x = x/dist*max; y = y/dist*max; }
-
     knob.style.left = (40 + x) + "px";
     knob.style.top  = (40 + y) + "px";
-
     joy.x = x / max;
-    joy.y = y / max; // normal Y
+    joy.y = y / max;
 });
