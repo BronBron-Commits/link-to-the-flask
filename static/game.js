@@ -9,7 +9,7 @@ const tileSize = 40;
 let player = { x: 0, y: 0 };
 
 let camera = { x:0, y:0, targetX:0, targetY:0 };
-const cameraLerp = 0.12;
+const cameraLerp = 0.1656;
 
 const moveDelay = 800;
 let lastMove = 0;
