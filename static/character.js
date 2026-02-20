@@ -1,26 +1,23 @@
-export function drawWizard(ctx, x, y, scale=4, frame=0){
+export function drawWizard(ctx, x, y, scale=4, frame=0, idle=0){
 
 const pixels = [
 "00000HHHHHH00000",
 "0000HHHHHHHH0000",
-"000HHHHHHHHHH000",
-"0HHHHHHHHHHHHHH0",
-"0HHHHHHHHHHHHHH0",
-"HHHHHSSSSSSHHHHH",
-"HHHHSWWNNWWSHHHH",
-"HHHHSWKNNKWSHHHH",
-"HHHHHWKNNKWHHHHH",
-"HHHHHSSSSSSHHHH",
-"0HHKKKSSSSKKKHH0",
-"HHHK3KKKKKK3KH",
-"HHHK33K33K33KH0",
-"0HHK3G3KK3G3KHHH0",
+"00HHHKKKKKKHHH00",
+"0HHHKWWNNWWKHHH0",
+"00HHKWKNNKWKHH00",
+"0HHHKSKNNKSKHHH0",
+"0HHHKHSSSSHKHHH0",
+"00HHHKKHHKKHHH0",
+"0HHK333KK333KHH",
+"00HK33K33K33KH0",
+"0HHK3G3KK3G3KHH0",
 "00K3G3K33K3G3K0",
 "0033G33KK33G330",
 "0KKGKKKGGKKKGKK",
 "033G33333333G33",
-"0033GGGGGGGGG33",
-"00033333333330"
+"0033GGGGGGGG33",
+"0003333333333000"
 ];
 
 const colors = {
@@ -68,6 +65,7 @@ const t = performance.now();
 
 const h = pixels.length;
 const w = Math.max(...pixels.map(r => r.length));
+const breathe = Math.sin(idle*0.003)*1.5;
 
 function cell(ix, iy){
   if(iy < 0 || iy >= h) return "0";
