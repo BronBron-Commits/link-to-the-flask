@@ -40,18 +40,27 @@ function hairColor(i,j){
   return "rgb(145,95,55)";
 }
 
+/* GOLD VARIATION (stable like hair) */
+function goldColor(i,j){
+  const seed = (i*19349663 ^ j*83492791) & 255;
+
+  if(seed < 64)  return "#cfa72e"; // dark gold
+  if(seed < 128) return "#f5c542"; // base
+  if(seed < 192) return "#ffd95e"; // light
+  return "#fff1a8";                // highlight
+}
+
 /* enchanted robe shimmer */
 const robePalette = [
-"#5b2fa0", // dark
-"#6a3dad", // base
-"#7c52c7", // light
-"#a884ff"  // glint
+"#5b2fa0",
+"#6a3dad",
+"#7c52c7",
+"#a884ff"
 ];
 
 function robeColor(i,j,time){
-    // moving diagonal wave
     const wave = Math.sin((i*0.8 + j*0.6) + time*0.004);
-    const idx = Math.floor((wave+1)*1.5); // 0-3
+    const idx = Math.floor((wave+1)*1.5);
     return robePalette[idx];
 }
 
@@ -101,6 +110,9 @@ for(let j=0;j<h;j++){
     }
     else if(ch==="3"){
       ctx.fillStyle = robeColor(i,j,t);
+    }
+    else if(ch==="G"){
+      ctx.fillStyle = goldColor(i,j);
     }
     else{
       const c = colors[ch];
