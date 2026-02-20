@@ -1,4 +1,4 @@
-export function drawWizard(ctx, x, y, scale=4){
+export function drawWizard(ctx, x, y, scale=4, frame=0){
 
 const pixels = [
 "00000HHHHHH00000",
@@ -68,7 +68,7 @@ for(let j=-1; j<=h; j++){
     if(touching){
       ctx.fillRect(
         Math.floor(x+i*scale),
-        Math.floor(y+j*scale),
+        Math.floor(y+j*scale + (frame?2:0)),
         scale,scale
       );
     }
@@ -91,7 +91,7 @@ for(let j=0;j<h;j++){
 
     ctx.fillRect(
       Math.floor(x+i*scale),
-      Math.floor(y+j*scale),
+      Math.floor(y+j*scale + (frame?2:0)),
       scale,scale
     );
   }

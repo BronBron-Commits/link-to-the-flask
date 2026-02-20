@@ -4,30 +4,23 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 let joy = { x: 0, y: 0 };
-
 const tileSize = 40;
 
-// PLAYER in world coords (grid snapped)
-let player = {
-    x: 0,
-    y: 0
-};
+let player = { x: 0, y: 0 };
 
-// CAMERA has real position + target
-let camera = {
-    x: 0,
-    y: 0,
-    targetX: 0,
-    targetY: 0
-};
-
-// camera smoothing (lower = smoother/slower)
+let camera = { x:0, y:0, targetX:0, targetY:0 };
 const cameraLerp = 0.12;
 
-// grid step timing
 const moveDelay = 800;
 let lastMove = 0;
 
+/* --- WALK ANIMATION STATE --- */
+let walking = false;
+let walkTimer = 0;
+let walkFrame = 0;
+const walkDuration = 260;
+
+/* movement */
 function tryMove(){
     const now = Date.now();
     if(now - lastMove < moveDelay) return;
@@ -43,10 +36,14 @@ function tryMove(){
     player.x += dx * tileSize;
     player.y += dy * tileSize;
 
+    /* trigger animation */
+    walking = true;
+    walkTimer = walkDuration;
+    walkFrame ^= 1;
+
     lastMove = now;
 }
 
-// Smooth camera follow
 function update(){
     tryMove();
 
@@ -55,48 +52,44 @@ function update(){
 
     camera.x += (camera.targetX - camera.x) * cameraLerp;
     camera.y += (camera.targetY - camera.y) * cameraLerp;
+
+    if(walking){
+        walkTimer -= 33;
+        if(walkTimer <= 0) walking = false;
+    }
 }
 
-// draw checkerboard relative to camera
 function drawFloor(){
-
     const startX = Math.floor((camera.x - canvas.width/2) / tileSize) * tileSize;
     const startY = Math.floor((camera.y - canvas.height/2) / tileSize) * tileSize;
 
-    for(let y = startY; y < camera.y + canvas.height/2 + tileSize; y += tileSize){
-        for(let x = startX; x < camera.x + canvas.width/2 + tileSize; x += tileSize){
-
+    for(let y=startY; y<camera.y+canvas.height/2+tileSize; y+=tileSize){
+        for(let x=startX; x<camera.x+canvas.width/2+tileSize; x+=tileSize){
             const screenX = x - camera.x + canvas.width/2;
             const screenY = y - camera.y + canvas.height/2;
 
-            const isWhite = ((x/tileSize + y/tileSize) % 2 === 0);
-            ctx.fillStyle = isWhite ? "#fff" : "#000";
-            ctx.fillRect(screenX, screenY, tileSize, tileSize);
+            ctx.fillStyle = ((x/tileSize + y/tileSize)%2===0) ? "#fff" : "#000";
+            ctx.fillRect(screenX,screenY,tileSize,tileSize);
         }
     }
 }
 
 function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
-
     drawFloor();
 
-    // player always centered on screen
     drawWizard(
         ctx,
         canvas.width/2,
         canvas.height/2,
-        4
+        4,
+        walking ? walkFrame : 0
     );
 }
 
-setInterval(()=>{
-    update();
-    draw();
-},33);
+setInterval(()=>{ update(); draw(); },33);
 
-/* ---------- JOYSTICK ---------- */
-
+/* joystick */
 const stick = document.getElementById("stick");
 const knob = document.getElementById("knob");
 let dragging=false;
@@ -107,8 +100,7 @@ window.addEventListener("touchend",()=>{
     dragging=false;
     knob.style.left="40px";
     knob.style.top="40px";
-    joy.x=0;
-    joy.y=0;
+    joy.x=0; joy.y=0;
 });
 
 window.addEventListener("touchmove",e=>{
@@ -122,7 +114,6 @@ window.addEventListener("touchmove",e=>{
 
     const dist=Math.sqrt(x*x+y*y);
     const max=50;
-
     if(dist>max){ x=x/dist*max; y=y/dist*max; }
 
     knob.style.left=(40+x)+"px";
