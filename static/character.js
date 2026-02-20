@@ -1,17 +1,16 @@
 export function drawWizard(ctx, x, y, scale=4){
-
 const pixels = [
-"000HHHHHH000",
-"00HHHHHHHH00",
-"0HHHHHHHHHH0",
-"0H33333333H0",
-"HH3SSSSSS3HH",
-"H33SSSSSS33H",
-"H3SS0SS0SS3H",
-"0H3SSSSSS3H0",
-"0H03MMMM30H0",
-"0H03BBBB30H0",
-"0H33BBBB33H0",
+"000PPPPPP000",
+"00PPHHHHPP00",
+"0PPHHHHHHPP0",
+"0PH3333333HP",
+"PP3SSSSSS3PP",
+"P33SSSSSS33P",
+"P3SSGSSGSS3P",
+"0P3SSSSSS3P0",
+"0P03MMMM30P0",
+"0P03BBBB30P0",
+"0P33BBBB33P0",
 "0033BBBB3300",
 "003BBBBBB300",
 "03B33BB33B30",
@@ -26,7 +25,9 @@ const colors = {
 "S": "#f1c27d",   // skin
 "M": "#b85c38",   // mouth
 "B": "#3b2a1a",   // beard
-"H": "#f4d03f"    // blonde hair
+"H": "#f4d03f",   // blonde hair
+"G": "#0b7a0b",   // darker green iris
+"P": "#4b0082"    // purple hood
 };
 
 for(let j=0; j<pixels.length; j++){
