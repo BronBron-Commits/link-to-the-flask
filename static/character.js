@@ -25,13 +25,22 @@ const pixels = [
 
 const colors = {
 "0": null,
-"3": "#6a3dad",   // robe
-"S": "#f1c27d",   // skin
-"H": "#6b3f1d",   // hair (brown)
-"W": "#ffffff",   // eye white
-"K": "#000000",   // pupil
-"N": "#e0ac69"    // nose bridge
+"3": "#6a3dad",
+"S": "#f1c27d",
+"W": "#ffffff",
+"K": "#000000",
+"N": "#e0ac69"
 };
+
+/* deterministic pseudo-random brown per pixel */
+function hairColor(i,j){
+    const seed = (i*928371 + j*12377) % 100;
+    const base = [122,74,38];
+
+    if(seed < 33) return "rgb(122,74,38)";     // mid brown
+    if(seed < 66) return "rgb(105,63,32)";     // darker
+    return "rgb(145,95,55)";                   // lighter
+}
 
 const h = pixels.length;
 const w = Math.max(...pixels.map(r => r.length));
@@ -67,9 +76,17 @@ for(let j=-1; j<=h; j++){
 /* sprite */
 for(let j=0;j<h;j++){
   for(let i=0;i<w;i++){
-    const c=colors[cell(i,j)];
-    if(!c) continue;
-    ctx.fillStyle=c;
+    const ch = cell(i,j);
+    if(ch==="0") continue;
+
+    if(ch==="H"){
+        ctx.fillStyle = hairColor(i,j); // stable variation
+    } else {
+        const c = colors[ch];
+        if(!c) continue;
+        ctx.fillStyle = c;
+    }
+
     ctx.fillRect(
       Math.floor(x+i*scale),
       Math.floor(y+j*scale),
