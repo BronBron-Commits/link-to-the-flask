@@ -1,33 +1,34 @@
 export function drawWizard(ctx, x, y, scale=4){
+
 const pixels = [
-"000PPPPPP000",
-"00PPHHHHPP00",
-"0PPHHHHHHPP0",
-"0PH3333333HP",
-"PP3SSSSSS3PP",
-"P33SSSSSS33P",
-"P3SSGSSGSS3P",
-"0P3SSSSSS3P0",
-"0P03MMMM30P0",
-"0P03BBBB30P0",
-"0P33BBBB33P0",
-"0033BBBB3300",
-"003BBBBBB300",
-"03B33BB33B30",
-"033333333330",
-"003333333300",
-"000333333000"
+"0000HHHHHHHH0000",
+"000HHHHHHHHHHH00",
+"00HHHHHHHHHHHHH0",
+"0HHHHHHHHHHHHHH0",
+"0H333333333333H0",
+"HH33SSSSSSSS33HH",
+"H333SSWWSSWW333H",
+"H33SSSWKSSKWSS3H",
+"H33SSSSKSSKSS33H",
+"0H33MMMMMMMM33H0",
+"0H333333333333H0",
+"0H333333333333H0",
+"003333333333330",
+"003333333333330",
+"033333333333330",
+"033333333333330",
+"003333333333300",
+"000333333333000"
 ];
 
 const colors = {
 "0": null,
-"3": "#6a3dad",   // robe
-"S": "#f1c27d",   // skin
-"M": "#b85c38",   // mouth
-"B": "#3b2a1a",   // beard
-"H": "#f4d03f",   // blonde hair
-"G": "#0b7a0b",   // darker green iris
-"P": "#4b0082"    // purple hood
+"3": "#6a3dad",
+"S": "#f1c27d",
+"M": "#b85c38",
+"H": "#f4d03f",
+"W": "#ffffff",
+"K": "#000000"
 };
 
 for(let j=0; j<pixels.length; j++){
