@@ -25,18 +25,17 @@ const pixels = [
 
 const colors = {
 "0": null,
-"3": "#6a3dad",
-"S": "#f1c27d",
-"H": "#f4d03f",
-"W": "#ffffff",
-"K": "#000000",
-"N": "#e0ac69"
+"3": "#6a3dad",   // robe
+"S": "#f1c27d",   // skin
+"H": "#6b3f1d",   // hair (brown)
+"W": "#ffffff",   // eye white
+"K": "#000000",   // pupil
+"N": "#e0ac69"    // nose bridge
 };
 
 const h = pixels.length;
 const w = Math.max(...pixels.map(r => r.length));
 
-// Safe read: anything out of bounds (including short rows) is "0"
 function cell(ix, iy){
   if(iy < 0 || iy >= h) return "0";
   const row = pixels[iy];
@@ -44,47 +43,37 @@ function cell(ix, iy){
   return row[ix];
 }
 
-/* -------- OUTLINE (4-neighbor, outside shell) -------- */
+/* outline */
 ctx.fillStyle = "#000";
-
 const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
 
 for(let j=-1; j<=h; j++){
   for(let i=-1; i<=w; i++){
-
-    // skip solid sprite cells (treat missing as 0)
     if(cell(i,j) !== "0") continue;
-
-    let touching = false;
+    let touching=false;
     for(const [dx,dy] of dirs){
-      if(cell(i+dx, j+dy) !== "0"){
-        touching = true;
-        break;
-      }
+      if(cell(i+dx,j+dy)!=="0"){touching=true;break;}
     }
-
     if(touching){
       ctx.fillRect(
-        Math.floor(x + i*scale),
-        Math.floor(y + j*scale),
-        scale, scale
+        Math.floor(x+i*scale),
+        Math.floor(y+j*scale),
+        scale,scale
       );
     }
   }
 }
 
-/* -------- DRAW SPRITE -------- */
-for(let j=0; j<h; j++){
-  for(let i=0; i<w; i++){
-    const ch = cell(i,j);
-    const c = colors[ch];
+/* sprite */
+for(let j=0;j<h;j++){
+  for(let i=0;i<w;i++){
+    const c=colors[cell(i,j)];
     if(!c) continue;
-
-    ctx.fillStyle = c;
+    ctx.fillStyle=c;
     ctx.fillRect(
-      Math.floor(x + i*scale),
-      Math.floor(y + j*scale),
-      scale, scale
+      Math.floor(x+i*scale),
+      Math.floor(y+j*scale),
+      scale,scale
     );
   }
 }
