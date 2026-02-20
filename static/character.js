@@ -25,7 +25,6 @@ const pixels = [
 
 const colors = {
 "0": null,
-"3": "#6a3dad",
 "S": "#f1c27d",
 "W": "#ffffff",
 "K": "#000000",
@@ -33,14 +32,30 @@ const colors = {
 "G": "#f5c542"
 };
 
-/* deterministic pseudo-random brown per pixel */
+/* hair */
 function hairColor(i,j){
-    const seed = (i*928371 + j*12377) % 100;
-
-    if(seed < 33) return "rgb(122,74,38)";
-    if(seed < 66) return "rgb(105,63,32)";
-    return "rgb(145,95,55)";
+  const seed = (i*928371 + j*12377) % 100;
+  if(seed < 33) return "rgb(122,74,38)";
+  if(seed < 66) return "rgb(105,63,32)";
+  return "rgb(145,95,55)";
 }
+
+/* enchanted robe shimmer */
+const robePalette = [
+"#5b2fa0", // dark
+"#6a3dad", // base
+"#7c52c7", // light
+"#a884ff"  // glint
+];
+
+function robeColor(i,j,time){
+    // moving diagonal wave
+    const wave = Math.sin((i*0.8 + j*0.6) + time*0.004);
+    const idx = Math.floor((wave+1)*1.5); // 0-3
+    return robePalette[idx];
+}
+
+const t = performance.now();
 
 const h = pixels.length;
 const w = Math.max(...pixels.map(r => r.length));
@@ -68,7 +83,7 @@ for(let j=-1; j<=h; j++){
     if(touching){
       ctx.fillRect(
         Math.floor(x+i*scale),
-        Math.floor(y+j*scale + (frame?2:0)),
+        Math.floor(y+j*scale),
         scale,scale
       );
     }
@@ -82,16 +97,20 @@ for(let j=0;j<h;j++){
     if(ch==="0") continue;
 
     if(ch==="H"){
-        ctx.fillStyle = hairColor(i,j);
-    } else {
-        const c = colors[ch];
-        if(!c) continue;
-        ctx.fillStyle = c;
+      ctx.fillStyle = hairColor(i,j);
+    }
+    else if(ch==="3"){
+      ctx.fillStyle = robeColor(i,j,t);
+    }
+    else{
+      const c = colors[ch];
+      if(!c) continue;
+      ctx.fillStyle = c;
     }
 
     ctx.fillRect(
       Math.floor(x+i*scale),
-      Math.floor(y+j*scale + (frame?2:0)),
+      Math.floor(y+j*scale),
       scale,scale
     );
   }
