@@ -14,13 +14,11 @@ const cameraLerp = 0.12;
 const moveDelay = 800;
 let lastMove = 0;
 
-/* --- WALK ANIMATION STATE --- */
-let walking = false;
-let walkTimer = 0;
+/* --- WALK ANIMATION STATE (TIME BASED) --- */
 let walkFrame = 0;
-const walkDuration = 260;
+let animTimer = 0;
+const animSpeed = 120; // ms per frame
 
-/* movement */
 function tryMove(){
     const now = Date.now();
     if(now - lastMove < moveDelay) return;
@@ -36,15 +34,10 @@ function tryMove(){
     player.x += dx * tileSize;
     player.y += dy * tileSize;
 
-    /* trigger animation */
-    walking = true;
-    walkTimer = walkDuration;
-    walkFrame ^= 1;
-
     lastMove = now;
 }
 
-function update(){
+function update(dt){
     tryMove();
 
     camera.targetX = player.x;
@@ -53,9 +46,20 @@ function update(){
     camera.x += (camera.targetX - camera.x) * cameraLerp;
     camera.y += (camera.targetY - camera.y) * cameraLerp;
 
-    if(walking){
-        walkTimer -= 33;
-        if(walkTimer <= 0) walking = false;
+    /* animate ONLY while moving */
+    const moving =
+        Math.abs(camera.x - camera.targetX) > 0.5 ||
+        Math.abs(camera.y - camera.targetY) > 0.5;
+
+    if(moving){
+        animTimer += dt;
+        if(animTimer > animSpeed){
+            walkFrame ^= 1;
+            animTimer = 0;
+        }
+    }else{
+        walkFrame = 0;
+        animTimer = 0;
     }
 }
 
@@ -67,7 +71,6 @@ function drawFloor(){
         for(let x=startX; x<camera.x+canvas.width/2+tileSize; x+=tileSize){
             const screenX = x - camera.x + canvas.width/2;
             const screenY = y - camera.y + canvas.height/2;
-
             ctx.fillStyle = ((x/tileSize + y/tileSize)%2===0) ? "#fff" : "#000";
             ctx.fillRect(screenX,screenY,tileSize,tileSize);
         }
@@ -83,11 +86,22 @@ function draw(){
         canvas.width/2,
         canvas.height/2,
         4,
-        walking ? walkFrame : 0
+        walkFrame
     );
 }
 
-setInterval(()=>{ update(); draw(); },33);
+/* REAL FRAME LOOP */
+let last = performance.now();
+function loop(now){
+    const dt = now - last;
+    last = now;
+
+    update(dt);
+    draw();
+
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 
 /* joystick */
 const stick = document.getElementById("stick");
