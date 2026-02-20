@@ -6,52 +6,44 @@ const ctx = canvas.getContext("2d");
 let joy = { x: 0, y: 0 };
 
 const tileSize = 40;
+const moveDelay = 800;
 
-// Player stored in TILE coordinates now
 let player = {
     tx: 5,
     ty: 5,
     moving: false
 };
 
-// Convert tile → pixel
 function tileToPixel(t){ return t * tileSize + tileSize/4; }
 
-// Step movement (one tile at a time)
 function tryMove(dx, dy){
     if(player.moving) return;
 
     player.tx += dx;
     player.ty += dy;
 
-    // clamp inside board
     player.tx = Math.max(0, Math.min(Math.floor(canvas.width/tileSize)-1, player.tx));
     player.ty = Math.max(0, Math.min(Math.floor(canvas.height/tileSize)-1, player.ty));
 
     player.moving = true;
-
-    // small delay so holding stick doesn't spam moves
-    setTimeout(()=>player.moving=false,120);
+    setTimeout(()=>player.moving=false, moveDelay);
 }
 
-// read joystick → tile step
 function update(){
     if(Math.abs(joy.x) > 0.6) tryMove(Math.sign(joy.x),0);
     else if(Math.abs(joy.y) > 0.6) tryMove(0,Math.sign(joy.y));
 }
 
-// draw checkerboard
 function drawFloor(){
     for(let y=0; y<canvas.height; y+=tileSize){
         for(let x=0; x<canvas.width; x+=tileSize){
-            const isWhite = ((x/tileSize + y/tileSize) % 2 === 0);
-            ctx.fillStyle = isWhite ? "#fff" : "#000";
+            const isWhite=((x/tileSize+y/tileSize)%2===0);
+            ctx.fillStyle=isWhite?"#fff":"#000";
             ctx.fillRect(x,y,tileSize,tileSize);
         }
     }
 }
 
-// draw player
 function draw(){
     drawFloor();
     drawWizard(ctx, tileToPixel(player.tx), tileToPixel(player.ty), 4);
@@ -62,9 +54,8 @@ setInterval(()=>{
     draw();
 },33);
 
-// joystick
-const stick = document.getElementById("stick");
-const knob = document.getElementById("knob");
+const stick=document.getElementById("stick");
+const knob=document.getElementById("knob");
 let dragging=false;
 
 stick.addEventListener("touchstart",()=>dragging=true);
