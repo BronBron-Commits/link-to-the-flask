@@ -8,9 +8,9 @@ const pixels = [
 "0HHHH333333HHHH0",
 "HHH33SSSSSS33HHH",
 "HH33SWWNNWWS33HH",
-"HH3SSWKNNKWSS3HH",
-"HH3SSWKNNKWSS3HH",
-"HH3SSSSSSSSSS33HH",
+"HH33SWKNNKWS33HH",
+"HH33SWKNNKWS33HH",
+"HH333SSSSSS333HH",
 "0HH333SSSS333HH0",
 "HHH333333333HHH",
 "0HH333333333HH0",
@@ -35,11 +35,10 @@ const colors = {
 /* deterministic pseudo-random brown per pixel */
 function hairColor(i,j){
     const seed = (i*928371 + j*12377) % 100;
-    const base = [122,74,38];
 
-    if(seed < 33) return "rgb(122,74,38)";     // mid brown
-    if(seed < 66) return "rgb(105,63,32)";     // darker
-    return "rgb(145,95,55)";                   // lighter
+    if(seed < 33) return "rgb(122,74,38)";
+    if(seed < 66) return "rgb(105,63,32)";
+    return "rgb(145,95,55)";
 }
 
 const h = pixels.length;
@@ -59,10 +58,12 @@ const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
 for(let j=-1; j<=h; j++){
   for(let i=-1; i<=w; i++){
     if(cell(i,j) !== "0") continue;
+
     let touching=false;
     for(const [dx,dy] of dirs){
       if(cell(i+dx,j+dy)!=="0"){touching=true;break;}
     }
+
     if(touching){
       ctx.fillRect(
         Math.floor(x+i*scale),
@@ -80,7 +81,7 @@ for(let j=0;j<h;j++){
     if(ch==="0") continue;
 
     if(ch==="H"){
-        ctx.fillStyle = hairColor(i,j); // stable variation
+        ctx.fillStyle = hairColor(i,j);
     } else {
         const c = colors[ch];
         if(!c) continue;
