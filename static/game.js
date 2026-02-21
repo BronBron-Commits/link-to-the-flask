@@ -5,6 +5,11 @@ import { drawScepter } from "./weapon.js?v=1";
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+/* --- HAPTICS --- */
+function rumble(pattern=10){
+    if(navigator.vibrate) navigator.vibrate(pattern);
+}
+
 let joy = { x: 0, y: 0 };
 const tileSize = 40;
 
@@ -37,6 +42,8 @@ function tryMove(){
 
   player.x+=dx*tileSize;
   player.y+=dy*tileSize;
+    rumble(8); /* step tick */
+
 
   walking=true;
   walkFrame^=1;
