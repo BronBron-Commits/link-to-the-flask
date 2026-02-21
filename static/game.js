@@ -7,116 +7,303 @@ import { drawScepter } from "./weapon.js?v=1";
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-function rumble(ms=20){ navigator.vibrate?.(ms); }
-
-let chargeHapticTimer=0;
-function chargeHaptics(dt,p){
-  chargeHapticTimer-=dt;
-  if(chargeHapticTimer>0) return;
-  navigator.vibrate?.(6+Math.floor(p*40));
-  chargeHapticTimer=Math.max(12,70-Math.floor(p*50));
+/* --- HAPTICS --- */
+function rumble(ms=20){
+  if(navigator.vibrate) navigator.vibrate(ms);
 }
 
-let chargeSoundTimer=0;
+/* charge vibration ramp */
+let chargeHapticTimer = 0;
+function chargeHaptics(dt,p){
+  chargeHapticTimer -= dt;
+  if(chargeHapticTimer > 0) return;
 
-let joy={x:0,y:0};
-const tileSize=40;
-let player={x:0,y:0};
-let facing={x:1,y:0};
-let camera={x:0,y:0,targetX:0,targetY:0};
-const cameraLerp=0.12;
-const moveDelay=286;
-let lastMove=0;
+  const pulse    = 6 + Math.floor(p*40);
+  const interval = 70 - Math.floor(p*50);
 
-let walking=false,walkFrame=0,walkTimer=0;
-let idleTime=0,attackAnim=0;
-let charging=false,chargeMs=0;
-const chargeMaxMs=900,tapThresholdMs=180;
+  if(navigator.vibrate) navigator.vibrate(pulse);
+  chargeHapticTimer = Math.max(12, interval);
+}
 
-const btnA=document.getElementById("btnA");
-const btnB=document.getElementById("btnB");
-const chargeFill=document.getElementById("chargeFill");
+/* charge audio throttle */
+let chargeSoundTimer = 0;
 
-/* MOVEMENT */
+let joy = { x: 0, y: 0 };
+const tileSize = 40;
+
+let player = { x: 0, y: 0 };
+let facing = { x: 1, y: 0 };
+
+let camera = { x: 0, y: 0, targetX: 0, targetY: 0 };
+const cameraLerp = 0.12;
+
+const moveDelay = 286;
+let lastMove = 0;
+
+/* WALK STATE */
+let walking = false;
+let walkFrame = 0;
+let walkTimer = 0;
+
+/* IDLE TIMER */
+let idleTime = 0;
+let attackAnim = 0;
+
+/* CHARGE STATE */
+let charging = false;
+let chargeMs = 0;
+const chargeMaxMs = 900;
+const tapThresholdMs = 180;
+
+/* UI */
+const btnA = document.getElementById("btnA");
+const btnB = document.getElementById("btnB");
+const chargeFill = document.getElementById("chargeFill");
+
+/* =========================================================
+   INPUT: LEFT JOYSTICK (movement) - lock to one touch id
+   ========================================================= */
+
+const stick = document.getElementById("stick");
+const knob  = document.getElementById("knob");
+
+let stickTouchId = null;
+let stickDragging = false;
+
+function setStickFromClient(clientX, clientY){
+  const rect = stick.getBoundingClientRect();
+  let x = clientX - rect.left - 70;
+  let y = clientY - rect.top  - 70;
+
+  const dist = Math.sqrt(x*x + y*y);
+  const max = 50;
+  if(dist > max){ x = x/dist*max; y = y/dist*max; }
+
+  knob.style.left = (40 + x) + "px";
+  knob.style.top  = (40 + y) + "px";
+
+  joy.x = x/max;
+  joy.y = y/max;
+}
+
+function resetStick(){
+  stickDragging = false;
+  stickTouchId = null;
+  knob.style.left = "40px";
+  knob.style.top  = "40px";
+  joy.x = 0; joy.y = 0;
+}
+
+stick.addEventListener("touchstart", (e)=>{
+  e.preventDefault();
+  if(stickTouchId !== null) return;
+
+  const t = e.changedTouches[0];
+  stickTouchId = t.identifier;
+  stickDragging = true;
+  setStickFromClient(t.clientX, t.clientY);
+}, { passive:false });
+
+window.addEventListener("touchmove", (e)=>{
+  if(!stickDragging || stickTouchId === null) return;
+
+  // find our tracked touch by id
+  let t = null;
+  for(let i=0;i<e.touches.length;i++){
+    if(e.touches[i].identifier === stickTouchId){ t = e.touches[i]; break; }
+  }
+  if(!t) return;
+
+  setStickFromClient(t.clientX, t.clientY);
+}, { passive:false });
+
+window.addEventListener("touchend", (e)=>{
+  if(stickTouchId === null) return;
+
+  for(let i=0;i<e.changedTouches.length;i++){
+    if(e.changedTouches[i].identifier === stickTouchId){
+      resetStick();
+      break;
+    }
+  }
+}, { passive:false });
+
+window.addEventListener("touchcancel", (e)=>{
+  if(stickTouchId === null) return;
+
+  for(let i=0;i<e.changedTouches.length;i++){
+    if(e.changedTouches[i].identifier === stickTouchId){
+      resetStick();
+      break;
+    }
+  }
+}, { passive:false });
+
+/* =========================================================
+   MOVEMENT (grid step)
+   ========================================================= */
+
 function tryMove(){
-  const now=Date.now();
-  if(now-lastMove<moveDelay) return;
+  const now = Date.now();
+  if(now - lastMove < moveDelay) return;
 
-  let dx=0,dy=0;
-  if(Math.abs(joy.x)>Math.abs(joy.y)) dx=joy.x>0?1:-1;
-  else if(Math.abs(joy.y)>0) dy=joy.y>0?1:-1;
+  let dx = 0, dy = 0;
+
+  if(Math.abs(joy.x) > Math.abs(joy.y)) dx = joy.x > 0 ? 1 : -1;
+  else if(Math.abs(joy.y) > 0) dy = joy.y > 0 ? 1 : -1;
   else return;
 
-  facing.x=dx; facing.y=dy;
-  player.x+=dx*tileSize; player.y+=dy*tileSize;
+  if(dx || dy){ facing.x = dx; facing.y = dy; }
+
+  player.x += dx * tileSize;
+  player.y += dy * tileSize;
 
   rumble(8);
-  walking=true; walkFrame^=1; walkTimer=250; idleTime=0;
-  lastMove=now;
+
+  walking = true;
+  walkFrame ^= 1;
+  walkTimer = 250;
+  idleTime = 0;
+
+  lastMove = now;
 }
 
-/* SHOOT */
+/* =========================================================
+   SHOOTING (does NOT depend on joystick state)
+   ========================================================= */
+
+function aimDir(){
+  let dx = 0, dy = 0;
+  if(Math.abs(facing.x) > Math.abs(facing.y)) dx = facing.x > 0 ? 1 : -1;
+  else dy = facing.y > 0 ? 1 : -1;
+  return {dx,dy};
+}
+
 function fireNormal(){
-  const sx=canvas.width/2+38, sy=canvas.height/2+26;
-  let dx=Math.abs(facing.x)>Math.abs(facing.y)?(facing.x>0?1:-1):0;
-  let dy=dx?0:(facing.y>0?1:-1);
-  castAttack(sx,sy,dx,dy,{speed:22,life:1,rangeTiles:6,scaleBoost:1,trailCount:5});
-  sfxShoot(); rumble(30); attackAnim=1;
-}
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
 
-function fireCharged(p){
-  const sx=canvas.width/2+38, sy=canvas.height/2+26;
-  let dx=Math.abs(facing.x)>Math.abs(facing.y)?(facing.x>0?1:-1):0;
-  let dy=dx?0:(facing.y>0?1:-1);
+  const {dx,dy} = aimDir();
 
   castAttack(sx,sy,dx,dy,{
-    speed:30+p*70,
-    life:1.2+p*1.4,
-    rangeTiles:7+Math.round(p*6),
-    scaleBoost:1.8+p*1.6,
-    trailCount:7
+    speed:22, life:1, rangeTiles:6, scaleBoost:1, trailCount:5
   });
 
-  sfxCharged(p); rumble(140+Math.floor(p*180)); attackAnim=1;
+  sfxShoot();
+  rumble(30);
+  attackAnim = 1;
 }
 
-/* CHARGE */
+function fireCharged(power01){
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
+
+  const {dx,dy} = aimDir();
+
+  const speed = 30 + power01*70;
+  const scaleBoost = 1.8 + power01*1.6;
+  const rangeTiles = 7 + Math.round(power01*6);
+  const life = 1.2 + power01*1.4;
+
+  castAttack(sx,sy,dx,dy,{
+    speed, life, rangeTiles, scaleBoost, trailCount:7
+  });
+
+  sfxCharged(power01);
+  rumble(140 + Math.floor(power01*180));
+  attackAnim = 1;
+}
+
+function fireShotgun(){
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
+
+  const {dx,dy} = aimDir();
+
+  castShotgun(sx,sy,dx,dy);
+
+  sfxShotgun();
+  rumble(90);
+  attackAnim = 1;
+}
+
+/* =========================================================
+   CHARGE UI
+   ========================================================= */
+
 function setChargeUI(p){
-  chargeFill.style.background=`conic-gradient(rgba(180,80,255,0.9) ${Math.min(1,p)*360}deg, transparent 0deg)`;
+  const deg = Math.max(0, Math.min(1,p)) * 360;
+  chargeFill.style.background =
+    `conic-gradient(rgba(180,80,255,0.9) ${deg}deg, rgba(180,80,255,0.0) 0deg)`;
 }
 
-function beginCharge(){ startMusic(); charging=true; chargeMs=0; chargeHapticTimer=0; chargeSoundTimer=0; setChargeUI(0); rumble(12); }
-function endCharge(){ const p=chargeMs/chargeMaxMs; (chargeMs<tapThresholdMs?fireNormal:fireCharged)(p); charging=false; chargeMs=0; setChargeUI(0); }
+function beginCharge(){
+  startMusic();
+  charging = true;
+  chargeMs = 0;
+  chargeHapticTimer = 0;
+  chargeSoundTimer = 0;
+  setChargeUI(0);
+  rumble(12);
+}
 
-/* UPDATE */
+function endCharge(){
+  const p = Math.max(0, Math.min(1, chargeMs/chargeMaxMs));
+  if(chargeMs < tapThresholdMs) fireNormal();
+  else fireCharged(p);
+
+  charging = false;
+  chargeMs = 0;
+  setChargeUI(0);
+}
+
+/* =========================================================
+   UPDATE / DRAW
+   ========================================================= */
+
 function update(dt){
   tryMove();
-  camera.targetX=player.x; camera.targetY=player.y;
-  camera.x+=(camera.targetX-camera.x)*cameraLerp;
-  camera.y+=(camera.targetY-camera.y)*cameraLerp;
 
-  if(walking){walkTimer-=dt;if(walkTimer<=0)walking=false;}
-  else idleTime+=dt;
-  attackAnim=Math.max(0,attackAnim-dt*0.006);
+  camera.targetX = player.x;
+  camera.targetY = player.y;
+
+  camera.x += (camera.targetX - camera.x) * cameraLerp;
+  camera.y += (camera.targetY - camera.y) * cameraLerp;
+
+  if(walking){
+    walkTimer -= dt;
+    if(walkTimer <= 0) walking = false;
+  }
+
+  if(!walking) idleTime += dt;
+  attackAnim = Math.max(0, attackAnim - dt*0.006);
 
   if(charging){
-    chargeMs=Math.min(chargeMs+dt,chargeMaxMs);
-    const p=chargeMs/chargeMaxMs;
-    setChargeUI(p); chargeHaptics(dt,p);
-    chargeSoundTimer-=dt;
-    if(chargeSoundTimer<=0){sfxCharged(p*0.35);chargeSoundTimer=85;}
+    chargeMs = Math.min(chargeMs + dt, chargeMaxMs);
+    const p = chargeMs/chargeMaxMs;
+    setChargeUI(p);
+    chargeHaptics(dt,p);
+
+    chargeSoundTimer -= dt;
+    if(chargeSoundTimer <= 0){
+      sfxCharged(p*0.35);
+      chargeSoundTimer = 85;
+    }
   }
 }
 
-/* DRAW */
 function drawFloor(){
-  const sx=Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
-  const sy=Math.floor((camera.y-canvas.height/2)/tileSize)*tileSize;
-  for(let y=sy;y<camera.y+canvas.height/2+tileSize;y+=tileSize)
-    for(let x=sx;x<camera.x+canvas.width/2+tileSize;x+=tileSize){
+  const startX=Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
+  const startY=Math.floor((camera.y-canvas.height/2)/tileSize)*tileSize;
+
+  for(let y=startY;y<camera.y+canvas.height/2+tileSize;y+=tileSize){
+    for(let x=startX;x<camera.x+canvas.width/2+tileSize;x+=tileSize){
+      const screenX=x-camera.x+canvas.width/2;
+      const screenY=y-camera.y+canvas.height/2;
       ctx.fillStyle=((x/tileSize+y/tileSize)%2===0)?"#fff":"#000";
-      ctx.fillRect(x-camera.x+canvas.width/2,y-camera.y+canvas.height/2,tileSize,tileSize);
+      ctx.fillRect(screenX,screenY,tileSize,tileSize);
     }
+  }
 }
 
 function draw(){
@@ -124,46 +311,42 @@ function draw(){
   drawFloor();
   drawAttacks(ctx);
   drawWizard(ctx,canvas.width/2,canvas.height/2,4,walkFrame,idleTime,facing);
-  drawScepter(ctx,canvas.width/2+38,canvas.height/2+26,3,walkFrame,idleTime,attackAnim);
+
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
+  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim);
 }
 
-let last=performance.now();
-setInterval(()=>{const now=performance.now(),dt=now-last;last=now;update(dt);updateAttacks(dt);draw();},33);
+/* =========================================================
+   MAIN LOOP
+   ========================================================= */
 
-/* MULTI-TOUCH JOYSTICK */
-const stick=document.getElementById("stick");
-const knob=document.getElementById("knob");
-let stickTouchId=null;
+let last = performance.now();
+setInterval(()=>{
+  const now = performance.now();
+  const dt = now - last; last = now;
 
-stick.addEventListener("touchstart",e=>{stickTouchId=e.changedTouches[0].identifier;},{passive:true});
+  update(dt);
+  updateAttacks(dt);
+  draw();
+}, 33);
 
-window.addEventListener("touchend",e=>{
-  for(const t of e.changedTouches) if(t.identifier===stickTouchId){
-    stickTouchId=null; knob.style.left="40px"; knob.style.top="40px"; joy={x:0,y:0};
-  }
-});
+/* =========================================================
+   BUTTONS: MULTI-TOUCH SAFE (NO CLICK EVENTS)
+   - IMPORTANT: using click on mobile can cancel other touches
+   ========================================================= */
 
-window.addEventListener("touchmove",e=>{
-  if(stickTouchId===null) return;
-  let t=[...e.touches].find(t=>t.identifier===stickTouchId); if(!t) return;
-  const r=stick.getBoundingClientRect();
-  let x=t.clientX-r.left-70,y=t.clientY-r.top-70;
-  const d=Math.hypot(x,y),m=50;if(d>m){x=x/d*m;y=y/d*m;}
-  knob.style.left=(40+x)+"px";knob.style.top=(40+y)+"px";joy={x:x/m,y:y/m};
-});
+function bindPressHold(el,onDown,onUp){
+  el.addEventListener("touchstart",(e)=>{ e.preventDefault(); onDown(); }, {passive:false});
+  el.addEventListener("touchend",(e)=>{ e.preventDefault(); onUp(); }, {passive:false});
+  el.addEventListener("touchcancel",(e)=>{ e.preventDefault(); onUp(); }, {passive:false});
 
-/* BUTTONS */
-function bindPressHold(el,d,u){
-  el.addEventListener("touchstart",e=>{e.preventDefault();d();},{passive:false});
-  el.addEventListener("touchend",e=>{e.preventDefault();u();},{passive:false});
-  el.addEventListener("mousedown",e=>{e.preventDefault();d();});
-  window.addEventListener("mouseup",e=>{if(charging){e.preventDefault();u();}});
+  // desktop fallback
+  el.addEventListener("mousedown",(e)=>{ e.preventDefault(); onDown(); });
+  window.addEventListener("mouseup",(e)=>{ if(charging){ e.preventDefault(); onUp(); }});
 }
-bindPressHold(btnA,beginCharge,endCharge);
 
-btnB.addEventListener("click",()=>{
-  const sx=canvas.width/2+38,sy=canvas.height/2+26;
-  let dx=Math.abs(facing.x)>Math.abs(facing.y)?(facing.x>0?1:-1):0;
-  let dy=dx?0:(facing.y>0?1:-1);
-  castShotgun(sx,sy,dx,dy); sfxShotgun(); attackAnim=1; rumble(90);
-});
+bindPressHold(btnA, beginCharge, endCharge);
+
+/* B: fire immediately on press; no-op on release */
+bindPressHold(btnB, ()=>{ fireShotgun(); }, ()=>{});
