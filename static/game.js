@@ -1,5 +1,5 @@
 import { startMusic } from "./music.js";
-import { sfxShotgun } from "./sfx.js";
+import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
@@ -18,12 +18,15 @@ function chargeHaptics(dt,p){
   chargeHapticTimer-=dt;
   if(chargeHapticTimer>0) return;
 
-  const pulse = 6 + Math.floor(p*40);        // stronger
-  const interval = 70 - Math.floor(p*50);    // faster pulses
+  const pulse = 6 + Math.floor(p*40);
+  const interval = 70 - Math.floor(p*50);
 
   if(navigator.vibrate) navigator.vibrate(pulse);
   chargeHapticTimer = Math.max(12,interval);
 }
+
+/* charge audio throttle */
+let chargeSoundTimer=0;
 
 let joy = { x: 0, y: 0 };
 const tileSize = 40;
@@ -42,7 +45,7 @@ let walking=false;
 let walkFrame=0;
 let walkTimer=0;
 
-/* IDLE TIMER (ms) */
+/* IDLE TIMER */
 let idleTime=0;
 let attackAnim=0;
 
@@ -55,6 +58,8 @@ const tapThresholdMs=180;
 const btnA = document.getElementById("btnA");
 const btnB = document.getElementById("btnB");
 const chargeFill = document.getElementById("chargeFill");
+
+/* ---------------- MOVEMENT ---------------- */
 
 function tryMove(){
   const now = Date.now();
@@ -81,6 +86,8 @@ function tryMove(){
   lastMove=now;
 }
 
+/* ---------------- SHOOTING ---------------- */
+
 function fireNormal(){
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
@@ -90,13 +97,10 @@ function fireNormal(){
   else dy=facing.y>0?1:-1;
 
   castAttack(sx,sy,dx,dy,{
-    speed: 22,
-    life: 1.0,
-    rangeTiles: 6,
-    scaleBoost: 1.0,
-    trailCount: 5
+    speed:22, life:1, rangeTiles:6, scaleBoost:1, trailCount:5
   });
 
+  sfxShoot();
   rumble(30);
   attackAnim=1;
 }
@@ -115,16 +119,15 @@ function fireCharged(power01){
   const life = 1.2 + power01*1.4;
 
   castAttack(sx,sy,dx,dy,{
-    speed,
-    life,
-    rangeTiles,
-    scaleBoost,
-    trailCount: 7
+    speed, life, rangeTiles, scaleBoost, trailCount:7
   });
 
+  sfxCharged(power01);
   rumble(140 + Math.floor(power01*180));
   attackAnim=1;
 }
+
+/* ---------------- CHARGE UI ---------------- */
 
 function setChargeUI(p){
   const deg = Math.max(0, Math.min(1,p)) * 360;
@@ -134,9 +137,10 @@ function setChargeUI(p){
 
 function beginCharge(){
   startMusic();
-  charging = true;
-  chargeMs = 0;
+  charging=true;
+  chargeMs=0;
   chargeHapticTimer=0;
+  chargeSoundTimer=0;
   setChargeUI(0);
   rumble(12);
 }
@@ -146,10 +150,12 @@ function endCharge(){
   if(chargeMs < tapThresholdMs) fireNormal();
   else fireCharged(p);
 
-  charging = false;
-  chargeMs = 0;
+  charging=false;
+  chargeMs=0;
   setChargeUI(0);
 }
+
+/* ---------------- UPDATE ---------------- */
 
 function update(dt){
   tryMove();
@@ -173,8 +179,17 @@ function update(dt){
     const p = chargeMs/chargeMaxMs;
     setChargeUI(p);
     chargeHaptics(dt,p);
+
+    /* throttled charge sound */
+    chargeSoundTimer -= dt;
+    if(chargeSoundTimer<=0){
+      sfxCharged(p*0.35);
+      chargeSoundTimer=85;
+    }
   }
 }
+
+/* ---------------- DRAW ---------------- */
 
 function drawFloor(){
   const startX=Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
@@ -184,7 +199,6 @@ function drawFloor(){
     for(let x=startX;x<camera.x+canvas.width/2+tileSize;x+=tileSize){
       const screenX=x-camera.x+canvas.width/2;
       const screenY=y-camera.y+canvas.height/2;
-
       ctx.fillStyle=((x/tileSize+y/tileSize)%2===0)?"#fff":"#000";
       ctx.fillRect(screenX,screenY,tileSize,tileSize);
     }
@@ -194,9 +208,7 @@ function drawFloor(){
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   drawFloor();
-
   drawAttacks(ctx);
-
   drawWizard(ctx,canvas.width/2,canvas.height/2,4,walkFrame,idleTime,facing);
 
   const sx = canvas.width/2 + 38;
@@ -204,17 +216,19 @@ function draw(){
   drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim);
 }
 
+/* ---------------- LOOP ---------------- */
+
 let last=performance.now();
 setInterval(()=>{
   const now=performance.now();
   const dt=now-last; last=now;
-
   update(dt);
   updateAttacks(dt);
   draw();
 },33);
 
-/* joystick */
+/* ---------------- INPUT ---------------- */
+
 const stick=document.getElementById("stick");
 const knob=document.getElementById("knob");
 let dragging=false;
@@ -247,7 +261,8 @@ window.addEventListener("touchmove",e=>{
   joy.y=y/max;
 });
 
-/* button handling */
+/* BUTTONS */
+
 function bindPressHold(el,onDown,onUp){
   el.addEventListener("touchstart",(e)=>{e.preventDefault();onDown();},{passive:false});
   el.addEventListener("touchend",(e)=>{e.preventDefault();onUp();},{passive:false});
