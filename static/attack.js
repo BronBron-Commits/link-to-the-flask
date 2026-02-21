@@ -74,10 +74,12 @@ export function updateAttacks(dt){
 }
 
 export function drawAttacks(ctx){
+    const SIZE_SCALE = 0.5;   // <<< 50% visual size
+
     for(const a of attacks){
         for(const t of a.trail)
-            drawProjectile(ctx,t.x,t.y,0.7,t.life);
+            drawProjectile(ctx,t.x,t.y,0.7*SIZE_SCALE,t.life);
 
-        drawProjectile(ctx,a.x,a.y,4*(a.scaleBoost||1),a.life);
+        drawProjectile(ctx,a.x,a.y,4*(a.scaleBoost||1)*SIZE_SCALE,a.life);
     }
 }
