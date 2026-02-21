@@ -99,7 +99,7 @@ function fireCharged(power01){
 
   // ridiculous fast: scale speed and range with power
   const speed = 30 + power01*70;        // 30 -> 100
-  const scaleBoost = 1.8 + power01*3.2; // 1.8 -> 5.0
+  const scaleBoost = 1.8 + power01*1.6; // 1.8 -> 5.0
   const rangeTiles = 7 + Math.round(power01*6); // 7 -> 13
   const life = 1.2 + power01*1.4;       // lasts longer
 
