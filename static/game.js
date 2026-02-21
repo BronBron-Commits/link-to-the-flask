@@ -1,4 +1,4 @@
-import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=2";
+import { castAttack, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
 
@@ -6,8 +6,8 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 /* --- HAPTICS --- */
-function rumble(pattern=10){
-    if(navigator.vibrate) navigator.vibrate(pattern);
+function rumble(ms=20){
+  if(navigator.vibrate) navigator.vibrate(ms);
 }
 
 let joy = { x: 0, y: 0 };
@@ -22,11 +22,23 @@ const cameraLerp = 0.12;
 const moveDelay = 286;
 let lastMove = 0;
 
+/* WALK STATE */
 let walking=false;
 let walkFrame=0;
 let walkTimer=0;
 
+/* IDLE TIMER (ms) */
 let idleTime=0;
+
+/* CHARGE STATE */
+let charging=false;
+let chargeMs=0;
+const chargeMaxMs=900;   // full charge at 900ms
+const tapThresholdMs=180;
+
+const btnA = document.getElementById("btnA");
+const btnB = document.getElementById("btnB");
+const chargeFill = document.getElementById("chargeFill");
 
 function tryMove(){
   const now = Date.now();
@@ -40,17 +52,89 @@ function tryMove(){
 
   if(dx||dy){facing.x=dx;facing.y=dy;}
 
-  player.x+=dx*tileSize;
-  player.y+=dy*tileSize;
-    rumble(8); /* step tick */
+  player.x += dx*tileSize;
+  player.y += dy*tileSize;
 
+  rumble(8);
 
   walking=true;
-  walkFrame^=1;
+  walkFrame ^= 1;
   walkTimer=250;
   idleTime=0;
 
   lastMove=now;
+}
+
+function fireShot(power01){
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.width/2 + 26; // keep same offset style as earlier (y based on canvas); corrected below
+}
+
+function fireNormal(){
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
+
+  let dx=0,dy=0;
+  if(Math.abs(facing.x)>Math.abs(facing.y)) dx=facing.x>0?1:-1;
+  else dy=facing.y>0?1:-1;
+
+  castAttack(sx,sy,dx,dy,{
+    speed: 22,
+    life: 1.0,
+    rangeTiles: 6,
+    scaleBoost: 1.0,
+    trailCount: 5
+  });
+
+  rumble(30);
+}
+
+function fireCharged(power01){
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
+
+  let dx=0,dy=0;
+  if(Math.abs(facing.x)>Math.abs(facing.y)) dx=facing.x>0?1:-1;
+  else dy=facing.y>0?1:-1;
+
+  // ridiculous fast: scale speed and range with power
+  const speed = 30 + power01*70;        // 30 -> 100
+  const scaleBoost = 1.8 + power01*3.2; // 1.8 -> 5.0
+  const rangeTiles = 7 + Math.round(power01*6); // 7 -> 13
+  const life = 1.2 + power01*1.4;       // lasts longer
+
+  castAttack(sx,sy,dx,dy,{
+    speed,
+    life,
+    rangeTiles,
+    scaleBoost,
+    trailCount: 7
+  });
+
+  rumble(140 + Math.floor(power01*180));
+}
+
+function setChargeUI(p){
+  const deg = Math.max(0, Math.min(1,p)) * 360;
+  chargeFill.style.background =
+    `conic-gradient(rgba(180,80,255,0.9) ${deg}deg, rgba(180,80,255,0.0) 0deg)`;
+}
+
+function beginCharge(){
+  charging = true;
+  chargeMs = 0;
+  setChargeUI(0);
+  rumble(12);
+}
+
+function endCharge(){
+  const p = Math.max(0, Math.min(1, chargeMs/chargeMaxMs));
+  if(chargeMs < tapThresholdMs) fireNormal();
+  else fireCharged(p);
+
+  charging = false;
+  chargeMs = 0;
+  setChargeUI(0);
 }
 
 function update(dt){
@@ -68,6 +152,11 @@ function update(dt){
   }
 
   if(!walking) idleTime+=dt;
+
+  if(charging){
+    chargeMs = Math.min(chargeMs + dt, chargeMaxMs);
+    setChargeUI(chargeMs/chargeMaxMs);
+  }
 }
 
 function drawFloor(){
@@ -108,7 +197,7 @@ setInterval(()=>{
   draw();
 },33);
 
-/* joystick */
+/* joystick (left) */
 const stick=document.getElementById("stick");
 const knob=document.getElementById("knob");
 let dragging=false;
@@ -141,25 +230,16 @@ window.addEventListener("touchmove",e=>{
   joy.y=y/max;
 });
 
-/* -------- BUTTONS -------- */
-window.action=function(btn){
+/* A button: press/hold/release */
+function bindPressHold(el, onDown, onUp){
+  el.addEventListener("touchstart", (e)=>{ e.preventDefault(); onDown(); }, {passive:false});
+  el.addEventListener("touchend",   (e)=>{ e.preventDefault(); onUp(); }, {passive:false});
 
-  const sx = canvas.width/2 + 38;
-  const sy = canvas.height/2 + 26;
-
-  let dx=0,dy=0;
-  if(Math.abs(facing.x)>Math.abs(facing.y)){
-    dx=facing.x>0?1:-1;
-  }else{
-    dy=facing.y>0?1:-1;
-  }
-
-  if(btn==="A"){
-    rumble([20,30,20]); /* short pulse */
-    castAttack(sx,sy,dx,dy);
-  }
-  else if(btn==="B"){
-    rumble([60,40,60]); /* heavier pulse */
-    castShotgun(sx,sy,dx,dy);
-  }
+  el.addEventListener("mousedown",  (e)=>{ e.preventDefault(); onDown(); });
+  window.addEventListener("mouseup",(e)=>{ if(charging){ e.preventDefault(); onUp(); }});
 }
+
+bindPressHold(btnA, beginCharge, endCharge);
+
+/* B button: simple shotgun later; for now just rumble so it isn't dead */
+btnB.addEventListener("click", ()=>rumble(40));
