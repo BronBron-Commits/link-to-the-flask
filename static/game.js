@@ -1,4 +1,4 @@
-import { castAttack, updateAttacks, drawAttacks } from "./attack.js?v=300";
+import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
 
@@ -242,4 +242,14 @@ function bindPressHold(el, onDown, onUp){
 bindPressHold(btnA, beginCharge, endCharge);
 
 /* B button: simple shotgun later; for now just rumble so it isn't dead */
-btnB.addEventListener("click", ()=>rumble(40));
+btnB.addEventListener("click", ()=>{
+  const sx = canvas.width/2 + 38;
+  const sy = canvas.height/2 + 26;
+
+  let dx=0,dy=0;
+  if(Math.abs(facing.x)>Math.abs(facing.y)) dx=facing.x>0?1:-1;
+  else dy=facing.y>0?1:-1;
+
+  castShotgun(sx,sy,dx,dy);
+  rumble(90);
+});

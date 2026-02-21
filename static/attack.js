@@ -2,9 +2,7 @@ import { drawProjectile } from "./projectile.js";
 
 export const attacks = [];
 
-/* castAttack supports options:
-   { speed, life, rangeTiles, scaleBoost, trailCount, trailFade }
-*/
+/* ---------- NORMAL / CHARGED SHOT ---------- */
 export function castAttack(x,y,dx,dy,opts={}){
     const speed = (opts.speed ?? 22);
     const life  = (opts.life  ?? 1.0);
@@ -17,40 +15,69 @@ export function castAttack(x,y,dx,dy,opts={}){
         startX:x,
         startY:y,
         trail:[],
-        rangeTiles: (opts.rangeTiles ?? 6),
-        scaleBoost: (opts.scaleBoost ?? 1),
-        trailCount: (opts.trailCount ?? 5),
-        trailFade:  (opts.trailFade  ?? 0.003)
+        rangeTiles:(opts.rangeTiles ?? 6),
+        scaleBoost:(opts.scaleBoost ?? 1),
+        trailCount:(opts.trailCount ?? 5),
+        trailFade:(opts.trailFade ?? 0.003)
     });
+}
+
+/* ---------- SHOTGUN ---------- */
+export function castShotgun(x,y,dx,dy){
+
+    const pellets = 6;
+    const spread = 0.75;
+    const speed = 24;
+
+    const base = Math.atan2(dy,dx);
+
+    for(let i=0;i<pellets;i++){
+        const t=(i/(pellets-1))-0.5;
+        const a=base+t*spread;
+
+        attacks.push({
+            x,y,
+            vx:Math.cos(a)*speed,
+            vy:Math.sin(a)*speed,
+            life:0.9,
+            startX:x,
+            startY:y,
+            trail:[],
+            rangeTiles:5,
+            scaleBoost:0.7,
+            trailCount:3,
+            trailFade:0.005
+        });
+    }
 }
 
 export function updateAttacks(dt){
     for(let i=attacks.length-1;i>=0;i--){
         const a=attacks[i];
 
-        a.x += a.vx;
-        a.y += a.vy;
+        a.x+=a.vx;
+        a.y+=a.vy;
 
         a.trail.push({x:a.x,y:a.y,life:1});
-        if(a.trail.length > a.trailCount) a.trail.shift();
+        if(a.trail.length>a.trailCount)a.trail.shift();
 
-        for(const t of a.trail) t.life -= dt * a.trailFade;
-        a.trail = a.trail.filter(t=>t.life>0);
+        for(const t of a.trail)t.life-=dt*a.trailFade;
+        a.trail=a.trail.filter(t=>t.life>0);
 
-        a.life -= dt * 0.00045;
+        a.life-=dt*0.00045;
 
-        const maxDist = a.rangeTiles * 40;
-        if(Math.abs(a.x-a.startX) > maxDist || Math.abs(a.y-a.startY) > maxDist) a.life = 0;
+        const maxDist=a.rangeTiles*40;
+        if(Math.abs(a.x-a.startX)>maxDist||Math.abs(a.y-a.startY)>maxDist)a.life=0;
 
-        if(a.life<=0) attacks.splice(i,1);
+        if(a.life<=0)attacks.splice(i,1);
     }
 }
 
 export function drawAttacks(ctx){
     for(const a of attacks){
-        for(const t of a.trail){
-            drawProjectile(ctx,t.x,t.y,0.8,t.life);
-        }
+        for(const t of a.trail)
+            drawProjectile(ctx,t.x,t.y,0.7,t.life);
+
         drawProjectile(ctx,a.x,a.y,4*(a.scaleBoost||1),a.life);
     }
 }
