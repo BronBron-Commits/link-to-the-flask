@@ -3,6 +3,9 @@ let master = null;
 let started = false;
 let loopTimer = null;
 
+/* whole-step transpose */
+const T = 1.12246;
+
 /* start from user input */
 export function startMusic(){
   if(!ctx){
@@ -21,6 +24,8 @@ export function startMusic(){
 
 /* ================= PAD VOICE ================= */
 function playVoice(freq, start, dur){
+  freq*=T;
+
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
@@ -50,6 +55,8 @@ function playChord(chord,time,len){
 
 /* ================= BASS ROOT-5TH ================= */
 function playBass(root,start,beat){
+  root*=T;
+
   const osc=ctx.createOscillator();
   const gain=ctx.createGain();
   const filter=ctx.createBiquadFilter();
@@ -127,7 +134,7 @@ function snare(time){
 /* ================= LOOP ================= */
 function playLoop(){
 
-  const bpm=130; // ~20% faster than 108
+  const bpm=156; // 20% faster than previous 130
   const beat=60/bpm;
   const measure=beat*4;
 
@@ -153,14 +160,13 @@ function playLoop(){
       playBass(root,t,beat);
       playChord(chords[i],t,measure*1.2);
 
-      /* drums */
       for(let b=0;b<4;b++){
         const bt=t+b*beat;
 
         hihat(bt);
         hihat(bt+beat*0.5);
 
-        if(b===1||b===3) snare(bt); // backbeat
+        if(b===1||b===3) snare(bt);
       }
 
       t+=measure;
