@@ -54,6 +54,7 @@ let charging = false;
 let chargeMs = 0;
 const chargeMaxMs = 900;
 const tapThresholdMs = 180;
+let chargeAutoReleased = false;
 
 /* UI */
 const btnA = document.getElementById("btnA");
@@ -240,6 +241,7 @@ function setChargeUI(p){
 function beginCharge(){
   startMusic();
   charging = true;
+  chargeAutoReleased = false;
   chargeMs = 0;
   chargeHapticTimer = 0;
   chargeSoundTimer = 0;
@@ -283,6 +285,11 @@ function update(dt){
     const p = chargeMs/chargeMaxMs;
     setChargeUI(p);
     chargeHaptics(dt,p);
+  if(!chargeAutoReleased && chargeMs >= chargeMaxMs){
+    chargeAutoReleased = true;
+    endCharge();
+    return;
+  }
 
     chargeSoundTimer -= dt;
     if(chargeSoundTimer <= 0){
