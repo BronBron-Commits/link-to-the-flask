@@ -1,6 +1,5 @@
-export function drawScepter(ctx, x, y, scale=4, frame=0){
+export function drawScepter(ctx, x, y, scale=4, frame=0, idle=0){
   // Small pixel-art scepter. Drawn relative to x,y (top-left).
-  // frame can be used later for subtle shimmer/idle offsets.
 
   const pixels = [
     "0000KKK0000",
@@ -29,16 +28,20 @@ export function drawScepter(ctx, x, y, scale=4, frame=0){
     "P": "#8d4bff"   // gem
   };
 
-  for(let j=0;j<pixels.length;j++){
+  // match character idle bob (pixel units)
+  const bob = Math.round(Math.sin(idle * 0.002) * 2);
+
+  for(let j=0; j<pixels.length; j++){
     const row = pixels[j];
-    for(let i=0;i<row.length;i++){
+    for(let i=0; i<row.length; i++){
       const ch = row[i];
       const c = colors[ch];
       if(!c) continue;
+
       ctx.fillStyle = c;
       ctx.fillRect(
         Math.floor(x + i*scale),
-        Math.floor(y + j*scale),
+        Math.floor(y + j*scale + bob),
         scale, scale
       );
     }

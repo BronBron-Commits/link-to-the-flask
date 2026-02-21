@@ -40,32 +40,33 @@ function hairColor(i,j){
 /* GOLD VARIATION (stable like hair) */
 function goldColor(i,j){
   const seed = (i*19349663 ^ j*83492791) & 255;
-
-  if(seed < 64)  return "#cfa72e"; // dark gold
-  if(seed < 128) return "#f5c542"; // base
-  if(seed < 192) return "#ffd95e"; // light
-  return "#fff1a8";                // highlight
+  if(seed < 64)  return "#cfa72e";
+  if(seed < 128) return "#f5c542";
+  if(seed < 192) return "#ffd95e";
+  return "#fff1a8";
 }
 
 /* enchanted robe shimmer */
 const robePalette = [
-"#5b2fa0",
-"#6a3dad",
-"#7c52c7",
-"#a884ff"
+  "#5b2fa0",
+  "#6a3dad",
+  "#7c52c7",
+  "#a884ff"
 ];
 
 function robeColor(i,j,time){
-    const wave = Math.sin((i*0.8 + j*0.6) + time*0.004);
-    const idx = Math.floor((wave+1)*1.5);
-    return robePalette[idx];
+  const wave = Math.sin((i*0.8 + j*0.6) + time*0.004);
+  const idx = Math.floor((wave + 1) * 1.5);
+  return robePalette[idx];
 }
 
 const t = performance.now();
 
 const h = pixels.length;
 const w = Math.max(...pixels.map(r => r.length));
-const breathe = Math.sin(idle*0.0015)*1.5;
+
+// idle bob (pixel units, slow)
+const bob = Math.round(Math.sin(idle * 0.002) * 2);
 
 function cell(ix, iy){
   if(iy < 0 || iy >= h) return "0";
@@ -82,46 +83,43 @@ for(let j=-1; j<=h; j++){
   for(let i=-1; i<=w; i++){
     if(cell(i,j) !== "0") continue;
 
-    let touching=false;
+    let touching = false;
     for(const [dx,dy] of dirs){
-      if(cell(i+dx,j+dy)!=="0"){touching=true;break;}
+      if(cell(i+dx,j+dy) !== "0"){ touching = true; break; }
     }
 
     if(touching){
       ctx.fillRect(
-        Math.floor(x+i*scale),
-        Math.floor(y+j*scale + breathe),
-        scale,scale
+        Math.floor(x + i*scale),
+        Math.floor(y + j*scale + bob),
+        scale, scale
       );
     }
   }
 }
 
 /* sprite */
-for(let j=0;j<h;j++){
-  for(let i=0;i<w;i++){
+for(let j=0; j<h; j++){
+  for(let i=0; i<w; i++){
     const ch = cell(i,j);
-    if(ch==="0") continue;
+    if(ch === "0") continue;
 
-    if(ch==="H"){
+    if(ch === "H"){
       ctx.fillStyle = hairColor(i,j);
-    }
-    else if(ch==="3"){
+    } else if(ch === "3"){
       ctx.fillStyle = robeColor(i,j,t);
-    }
-    else if(ch==="G"){
+    } else if(ch === "G"){
       ctx.fillStyle = goldColor(i,j);
-    }
-    else{
+    } else {
       const c = colors[ch];
       if(!c) continue;
       ctx.fillStyle = c;
     }
 
     ctx.fillRect(
-      Math.floor(x+i*scale),
-      Math.floor(y+j*scale + breathe),
-      scale,scale
+      Math.floor(x + i*scale),
+      Math.floor(y + j*scale + bob),
+      scale, scale
     );
   }
 }
