@@ -255,5 +255,6 @@ btnB.addEventListener("click", ()=>{
   else dy=facing.y>0?1:-1;
 
   castShotgun(sx,sy,dx,dy);
+  attackAnim=1;
   rumble(90);
 });
