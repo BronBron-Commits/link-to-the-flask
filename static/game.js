@@ -1,3 +1,4 @@
+import { castAttack, updateAttacks, drawAttacks } from "./attack.js?v=1";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
 
@@ -8,6 +9,7 @@ let joy = { x: 0, y: 0 };
 const tileSize = 40;
 
 let player = { x: 0, y: 0 };
+let facing={x:1,y:0};
 
 let camera = { x:0, y:0, targetX:0, targetY:0 };
 const cameraLerp = 0.12;
@@ -33,6 +35,7 @@ function tryMove(){
     else if(Math.abs(joy.y)>0) dy = joy.y>0?1:-1;
     else return;
 
+    if(dx||dy){facing.x=dx;facing.y=dy;}
     player.x+=dx*tileSize;
     player.y+=dy*tileSize;
 
@@ -81,6 +84,7 @@ function drawFloor(){
 function draw(){
     ctx.clearRect(0,0,canvas.width,canvas.height);
     drawFloor();
+    drawAttacks(ctx);
 
     drawWizard(
         ctx,
@@ -104,6 +108,7 @@ const now=performance.now();
 const dt=now-last; last=now;
 idleTime+=dt;
 update();
+    updateAttacks(dt);
 draw();
 },33);
 
@@ -128,3 +133,13 @@ knob.style.top=(40+y)+"px";
 joy.x=x/max;
 joy.y=y/max;
 });
+
+/* --- ATTACK BUTTON --- */
+window.action=function(btn){
+    if(btn!=="A") return;
+
+    const sx = canvas.width/2 + 38;
+    const sy = canvas.height/2 + 26;
+
+    castAttack(sx, sy, facing.x||1, facing.y||0);
+}
