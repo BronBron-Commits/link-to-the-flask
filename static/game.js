@@ -155,9 +155,11 @@ window.action=function(btn){
   }
 
   if(btn==="A"){
+    rumble([20,30,20]); /* short pulse */
     castAttack(sx,sy,dx,dy);
   }
   else if(btn==="B"){
+    rumble([60,40,60]); /* heavier pulse */
     castShotgun(sx,sy,dx,dy);
   }
 }
