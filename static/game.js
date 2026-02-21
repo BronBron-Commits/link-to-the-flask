@@ -1,4 +1,4 @@
-import { castAttack, updateAttacks, drawAttacks } from "./attack.js?v=1";
+import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=2";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
 
@@ -17,68 +17,63 @@ const cameraLerp = 0.12;
 const moveDelay = 286;
 let lastMove = 0;
 
-/* WALK STATE */
-let walking = false;
-let walkFrame = 0;
-let walkTimer = 0;
+let walking=false;
+let walkFrame=0;
+let walkTimer=0;
 
-/* IDLE TIMER (ms) */
-let idleTime = 0;
+let idleTime=0;
 
 function tryMove(){
   const now = Date.now();
-  if(now - lastMove < moveDelay) return;
+  if(now-lastMove < moveDelay) return;
 
-  let dx = 0, dy = 0;
+  let dx=0,dy=0;
 
-  if(Math.abs(joy.x) > Math.abs(joy.y)) dx = joy.x > 0 ? 1 : -1;
-  else if(Math.abs(joy.y) > 0) dy = joy.y > 0 ? 1 : -1;
+  if(Math.abs(joy.x)>Math.abs(joy.y)) dx = joy.x>0?1:-1;
+  else if(Math.abs(joy.y)>0) dy = joy.y>0?1:-1;
   else return;
 
-  if(dx || dy){ facing.x = dx; facing.y = dy; }
+  if(dx||dy){facing.x=dx;facing.y=dy;}
 
-  player.x += dx * tileSize;
-  player.y += dy * tileSize;
+  player.x+=dx*tileSize;
+  player.y+=dy*tileSize;
 
-  walking = true;
-  walkFrame ^= 1;
-  walkTimer = 250;
+  walking=true;
+  walkFrame^=1;
+  walkTimer=250;
+  idleTime=0;
 
-  // reset idle when moving
-  idleTime = 0;
-
-  lastMove = now;
+  lastMove=now;
 }
 
 function update(dt){
   tryMove();
 
-  camera.targetX = player.x;
-  camera.targetY = player.y;
+  camera.targetX=player.x;
+  camera.targetY=player.y;
 
-  camera.x += (camera.targetX - camera.x) * cameraLerp;
-  camera.y += (camera.targetY - camera.y) * cameraLerp;
+  camera.x+=(camera.targetX-camera.x)*cameraLerp;
+  camera.y+=(camera.targetY-camera.y)*cameraLerp;
 
   if(walking){
-    walkTimer -= dt;
-    if(walkTimer <= 0) walking = false;
+    walkTimer-=dt;
+    if(walkTimer<=0) walking=false;
   }
 
-  // accumulate idle only when not walking
-  if(!walking) idleTime += dt;
+  if(!walking) idleTime+=dt;
 }
 
 function drawFloor(){
-  const startX = Math.floor((camera.x - canvas.width/2) / tileSize) * tileSize;
-  const startY = Math.floor((camera.y - canvas.height/2) / tileSize) * tileSize;
+  const startX=Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
+  const startY=Math.floor((camera.y-canvas.height/2)/tileSize)*tileSize;
 
-  for(let y = startY; y < camera.y + canvas.height/2 + tileSize; y += tileSize){
-    for(let x = startX; x < camera.x + canvas.width/2 + tileSize; x += tileSize){
-      const screenX = x - camera.x + canvas.width/2;
-      const screenY = y - camera.y + canvas.height/2;
+  for(let y=startY;y<camera.y+canvas.height/2+tileSize;y+=tileSize){
+    for(let x=startX;x<camera.x+canvas.width/2+tileSize;x+=tileSize){
+      const screenX=x-camera.x+canvas.width/2;
+      const screenY=y-camera.y+canvas.height/2;
 
-      ctx.fillStyle = ((x/tileSize + y/tileSize) % 2 === 0) ? "#fff" : "#000";
-      ctx.fillRect(screenX, screenY, tileSize, tileSize);
+      ctx.fillStyle=((x/tileSize+y/tileSize)%2===0)?"#fff":"#000";
+      ctx.fillRect(screenX,screenY,tileSize,tileSize);
     }
   }
 }
@@ -87,78 +82,75 @@ function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
   drawFloor();
 
-  // attacks behind player
   drawAttacks(ctx);
 
-  // player centered
-  drawWizard(ctx, canvas.width/2, canvas.height/2, 4, walkFrame, idleTime);
+  drawWizard(ctx,canvas.width/2,canvas.height/2,4,walkFrame,idleTime);
 
-  // scepter in front of player
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
-  drawScepter(ctx, sx, sy, 3, walkFrame, idleTime);
+  drawScepter(ctx,sx,sy,3,walkFrame,idleTime);
 }
 
-let last = performance.now();
-setInterval(() => {
-  const now = performance.now();
-  const dt = now - last;
-  last = now;
+let last=performance.now();
+setInterval(()=>{
+  const now=performance.now();
+  const dt=now-last; last=now;
 
   update(dt);
   updateAttacks(dt);
   draw();
-}, 33);
+},33);
 
 /* joystick */
-const stick = document.getElementById("stick");
-const knob = document.getElementById("knob");
-let dragging = false;
+const stick=document.getElementById("stick");
+const knob=document.getElementById("knob");
+let dragging=false;
 
-stick.addEventListener("touchstart", () => dragging = true);
+stick.addEventListener("touchstart",()=>dragging=true);
 
-window.addEventListener("touchend", () => {
-  dragging = false;
-  knob.style.left = "40px";
-  knob.style.top = "40px";
-  joy.x = 0; joy.y = 0;
+window.addEventListener("touchend",()=>{
+  dragging=false;
+  knob.style.left="40px";
+  knob.style.top="40px";
+  joy.x=0;joy.y=0;
 });
 
-window.addEventListener("touchmove", e => {
-  if(!dragging) return;
+window.addEventListener("touchmove",e=>{
+  if(!dragging)return;
+  const rect=stick.getBoundingClientRect();
+  const t=e.touches[0];
 
-  const rect = stick.getBoundingClientRect();
-  const t = e.touches[0];
+  let x=t.clientX-rect.left-70;
+  let y=t.clientY-rect.top-70;
 
-  let x = t.clientX - rect.left - 70;
-  let y = t.clientY - rect.top - 70;
+  const dist=Math.sqrt(x*x+y*y);
+  const max=50;
+  if(dist>max){x=x/dist*max;y=y/dist*max;}
 
-  const dist = Math.sqrt(x*x + y*y);
-  const max = 50;
-  if(dist > max){ x = x/dist*max; y = y/dist*max; }
+  knob.style.left=(40+x)+"px";
+  knob.style.top=(40+y)+"px";
 
-  knob.style.left = (40 + x) + "px";
-  knob.style.top  = (40 + y) + "px";
-
-  joy.x = x/max;
-  joy.y = y/max;
+  joy.x=x/max;
+  joy.y=y/max;
 });
 
-/* --- ATTACK BUTTON --- */
-window.action = function(btn){
-  if(btn !== "A") return;
+/* -------- BUTTONS -------- */
+window.action=function(btn){
 
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
 
-  let dx = 0, dy = 0;
-  if(Math.abs(facing.x) > Math.abs(facing.y)){
-    dx = facing.x > 0 ? 1 : -1;
-    dy = 0;
-  } else {
-    dx = 0;
-    dy = facing.y > 0 ? 1 : -1;
+  let dx=0,dy=0;
+  if(Math.abs(facing.x)>Math.abs(facing.y)){
+    dx=facing.x>0?1:-1;
+  }else{
+    dy=facing.y>0?1:-1;
   }
 
-  castAttack(sx, sy, dx, dy);
-};
+  if(btn==="A"){
+    castAttack(sx,sy,dx,dy);
+  }
+  else if(btn==="B"){
+    castShotgun(sx,sy,dx,dy);
+  }
+}
