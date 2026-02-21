@@ -29,6 +29,7 @@ let walkTimer=0;
 
 /* IDLE TIMER (ms) */
 let idleTime=0;
+let attackAnim=0;
 
 /* CHARGE STATE */
 let charging=false;
@@ -87,6 +88,7 @@ function fireNormal(){
   });
 
   rumble(30);
+attackAnim=1;
 }
 
 function fireCharged(power01){
@@ -112,6 +114,7 @@ function fireCharged(power01){
   });
 
   rumble(140 + Math.floor(power01*180));
+attackAnim=1;
 }
 
 function setChargeUI(p){
@@ -152,6 +155,7 @@ function update(dt){
   }
 
   if(!walking) idleTime+=dt;
+attackAnim=Math.max(0,attackAnim-dt*0.006);
 
   if(charging){
     chargeMs = Math.min(chargeMs + dt, chargeMaxMs);
@@ -184,7 +188,7 @@ function draw(){
 
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
-  drawScepter(ctx,sx,sy,3,walkFrame,idleTime);
+  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim);
 }
 
 let last=performance.now();
