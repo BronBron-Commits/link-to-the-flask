@@ -65,7 +65,7 @@ const t = performance.now();
 
 const h = pixels.length;
 const w = Math.max(...pixels.map(r => r.length));
-const breathe = Math.sin(idle*0.003)*1.5;
+const breathe = Math.sin(idle*0.0015)*1.5;
 
 function cell(ix, iy){
   if(iy < 0 || iy >= h) return "0";
@@ -90,7 +90,7 @@ for(let j=-1; j<=h; j++){
     if(touching){
       ctx.fillRect(
         Math.floor(x+i*scale),
-        Math.floor(y+j*scale),
+        Math.floor(y+j*scale + breathe),
         scale,scale
       );
     }
@@ -120,7 +120,7 @@ for(let j=0;j<h;j++){
 
     ctx.fillRect(
       Math.floor(x+i*scale),
-      Math.floor(y+j*scale),
+      Math.floor(y+j*scale + breathe),
       scale,scale
     );
   }
