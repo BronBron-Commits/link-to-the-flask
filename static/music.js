@@ -53,6 +53,40 @@ function playChord(chord,time,len){
   for(const f of chord) playVoice(f,time,len);
 }
 
+/* ================= LEAD MELODY ================= */
+function playLead(chord,start,beat){
+
+  const notes = [
+    chord[2]*2,
+    chord[3]*2,
+    chord[1]*2,
+    chord[2]*2
+  ];
+
+  for(let i=0;i<notes.length;i++){
+
+    const t = start + i*(beat*0.5);
+    const freq = notes[i]*T;
+
+    const osc=ctx.createOscillator();
+    const gain=ctx.createGain();
+
+    osc.type="sine";
+
+    osc.frequency.setValueAtTime(freq,t);
+
+    gain.gain.setValueAtTime(0.0001,t);
+    gain.gain.linearRampToValueAtTime(0.10,t+0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001,t+beat*0.45);
+
+    osc.connect(gain);
+    gain.connect(master);
+
+    osc.start(t);
+    osc.stop(t+beat*0.5);
+  }
+}
+
 /* ================= BASS ROOT-5TH ================= */
 function playBass(root,start,beat){
   root*=T;
@@ -134,7 +168,7 @@ function snare(time){
 /* ================= LOOP ================= */
 function playLoop(){
 
-  const bpm=156; // 20% faster than previous 130
+  const bpm=156;
   const beat=60/bpm;
   const measure=beat*4;
 
@@ -159,6 +193,7 @@ function playLoop(){
       const root=chords[i][0]/2;
       playBass(root,t,beat);
       playChord(chords[i],t,measure*1.2);
+      playLead(chords[i],t,beat);
 
       for(let b=0;b<4;b++){
         const bt=t+b*beat;
