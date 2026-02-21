@@ -180,7 +180,7 @@ function draw(){
 
   drawAttacks(ctx);
 
-  drawWizard(ctx,canvas.width/2,canvas.height/2,4,walkFrame,idleTime);
+  drawWizard(ctx,canvas.width/2,canvas.height/2,4,walkFrame,idleTime,facing);
 
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
