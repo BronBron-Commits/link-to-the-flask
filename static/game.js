@@ -1,4 +1,5 @@
 import { startMusic } from "./music.js";
+import { sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
@@ -265,6 +266,7 @@ btnB.addEventListener("click",()=>{
   else dy=facing.y>0?1:-1;
 
   castShotgun(sx,sy,dx,dy);
+  sfxShotgun();
   attackAnim=1;
   rumble(90);
 });
