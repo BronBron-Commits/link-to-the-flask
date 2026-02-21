@@ -2,7 +2,7 @@ import { startMusic } from "./music.js";
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
-import { drawScepter } from "./weapon.js?v=1";
+import { drawScepter } from "./weapon.js?v=2";
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -321,7 +321,7 @@ function draw(){
 
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
-  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim);
+  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim,charging);
 }
 
 /* =========================================================
