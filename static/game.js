@@ -10,6 +10,19 @@ function rumble(ms=20){
   if(navigator.vibrate) navigator.vibrate(ms);
 }
 
+/* charge vibration ramp */
+let chargeHapticTimer=0;
+function chargeHaptics(dt,p){
+  chargeHapticTimer-=dt;
+  if(chargeHapticTimer>0) return;
+
+  const pulse = 6 + Math.floor(p*40);        // stronger
+  const interval = 70 - Math.floor(p*50);    // faster pulses
+
+  if(navigator.vibrate) navigator.vibrate(pulse);
+  chargeHapticTimer = Math.max(12,interval);
+}
+
 let joy = { x: 0, y: 0 };
 const tileSize = 40;
 
@@ -34,7 +47,7 @@ let attackAnim=0;
 /* CHARGE STATE */
 let charging=false;
 let chargeMs=0;
-const chargeMaxMs=900;   // full charge at 900ms
+const chargeMaxMs=900;
 const tapThresholdMs=180;
 
 const btnA = document.getElementById("btnA");
@@ -66,11 +79,6 @@ function tryMove(){
   lastMove=now;
 }
 
-function fireShot(power01){
-  const sx = canvas.width/2 + 38;
-  const sy = canvas.width/2 + 26; // keep same offset style as earlier (y based on canvas); corrected below
-}
-
 function fireNormal(){
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
@@ -88,7 +96,7 @@ function fireNormal(){
   });
 
   rumble(30);
-attackAnim=1;
+  attackAnim=1;
 }
 
 function fireCharged(power01){
@@ -99,11 +107,10 @@ function fireCharged(power01){
   if(Math.abs(facing.x)>Math.abs(facing.y)) dx=facing.x>0?1:-1;
   else dy=facing.y>0?1:-1;
 
-  // ridiculous fast: scale speed and range with power
-  const speed = 30 + power01*70;        // 30 -> 100
-  const scaleBoost = 1.8 + power01*1.6; // 1.8 -> 5.0
-  const rangeTiles = 7 + Math.round(power01*6); // 7 -> 13
-  const life = 1.2 + power01*1.4;       // lasts longer
+  const speed = 30 + power01*70;
+  const scaleBoost = 1.8 + power01*1.6;
+  const rangeTiles = 7 + Math.round(power01*6);
+  const life = 1.2 + power01*1.4;
 
   castAttack(sx,sy,dx,dy,{
     speed,
@@ -114,7 +121,7 @@ function fireCharged(power01){
   });
 
   rumble(140 + Math.floor(power01*180));
-attackAnim=1;
+  attackAnim=1;
 }
 
 function setChargeUI(p){
@@ -126,6 +133,7 @@ function setChargeUI(p){
 function beginCharge(){
   charging = true;
   chargeMs = 0;
+  chargeHapticTimer=0;
   setChargeUI(0);
   rumble(12);
 }
@@ -155,11 +163,13 @@ function update(dt){
   }
 
   if(!walking) idleTime+=dt;
-attackAnim=Math.max(0,attackAnim-dt*0.006);
+  attackAnim=Math.max(0,attackAnim-dt*0.006);
 
   if(charging){
     chargeMs = Math.min(chargeMs + dt, chargeMaxMs);
-    setChargeUI(chargeMs/chargeMaxMs);
+    const p = chargeMs/chargeMaxMs;
+    setChargeUI(p);
+    chargeHaptics(dt,p);
   }
 }
 
@@ -201,7 +211,7 @@ setInterval(()=>{
   draw();
 },33);
 
-/* joystick (left) */
+/* joystick */
 const stick=document.getElementById("stick");
 const knob=document.getElementById("knob");
 let dragging=false;
@@ -234,19 +244,17 @@ window.addEventListener("touchmove",e=>{
   joy.y=y/max;
 });
 
-/* A button: press/hold/release */
-function bindPressHold(el, onDown, onUp){
-  el.addEventListener("touchstart", (e)=>{ e.preventDefault(); onDown(); }, {passive:false});
-  el.addEventListener("touchend",   (e)=>{ e.preventDefault(); onUp(); }, {passive:false});
-
-  el.addEventListener("mousedown",  (e)=>{ e.preventDefault(); onDown(); });
-  window.addEventListener("mouseup",(e)=>{ if(charging){ e.preventDefault(); onUp(); }});
+/* button handling */
+function bindPressHold(el,onDown,onUp){
+  el.addEventListener("touchstart",(e)=>{e.preventDefault();onDown();},{passive:false});
+  el.addEventListener("touchend",(e)=>{e.preventDefault();onUp();},{passive:false});
+  el.addEventListener("mousedown",(e)=>{e.preventDefault();onDown();});
+  window.addEventListener("mouseup",(e)=>{if(charging){e.preventDefault();onUp();}});
 }
 
-bindPressHold(btnA, beginCharge, endCharge);
+bindPressHold(btnA,beginCharge,endCharge);
 
-/* B button: simple shotgun later; for now just rumble so it isn't dead */
-btnB.addEventListener("click", ()=>{
+btnB.addEventListener("click",()=>{
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
 
