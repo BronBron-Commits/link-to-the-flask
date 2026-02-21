@@ -1,3 +1,4 @@
+import { startMusic } from "./music.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
@@ -131,6 +132,7 @@ function setChargeUI(p){
 }
 
 function beginCharge(){
+  startMusic();
   charging = true;
   chargeMs = 0;
   chargeHapticTimer=0;
