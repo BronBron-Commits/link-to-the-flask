@@ -141,5 +141,14 @@ window.action=function(btn){
     const sx = canvas.width/2 + 38;
     const sy = canvas.height/2 + 26;
 
-    castAttack(sx, sy, facing.x||1, facing.y||0);
+    let dx=0, dy=0;
+    if(Math.abs(facing.x) > Math.abs(facing.y)) {
+        dx = facing.x > 0 ? 1 : -1;
+        dy = 0;
+    } else {
+        dx = 0;
+        dy = facing.y > 0 ? 1 : -1;
+    }
+
+    castAttack(sx, sy, dx, dy);
 }
