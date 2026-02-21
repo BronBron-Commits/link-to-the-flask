@@ -42,7 +42,7 @@ function voice(freq,time,duration,type="triangle",vol=0.15,cut=1400){
 }
 
 /* ---------------- SCALE ---------------- */
-const scale=[261.63,293.66,329.63,392.00,440.00,523.25];
+const scale=[261.63,293.66,329.63,349.23,392.00,440.00,493.88,523.25];
 
 /* chord helper */
 function chord(root,time){
