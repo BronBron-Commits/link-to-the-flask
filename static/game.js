@@ -1,4 +1,5 @@
 import { drawWizard } from "./character.js?v=2";
+import { drawScepter } from "./weapon.js?v=1";
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
@@ -89,6 +90,12 @@ function draw(){
         walkFrame,
         idleTime
     );
+
+    // scepter: position relative to centered player
+    // tweak these offsets to move it into the hand
+    const sx = canvas.width/2 + 38;
+    const sy = canvas.height/2 + 26;
+    drawScepter(ctx, sx, sy, 3, walkFrame);
 }
 
 let last=performance.now();
