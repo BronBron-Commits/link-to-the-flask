@@ -27,6 +27,29 @@ resizeCanvas();
 /* =========================
    CORE STATE
 ========================= */
+// =========================
+// CASTLE
+// =========================
+
+const castle = {
+  x: 0,        // centered horizontally in world
+  y: -900,     // north of center
+  width: 900,
+  height: 600,
+  wallThickness: 40
+};
+
+// =========================
+// MOAT
+// =========================
+
+const moat = {
+  padding: 140,     // distance from castle walls
+  width: 120        // thickness of water ring
+};
+
+let waterTime = 0;
+
 
 // =========================
 // PLAYER STATS
@@ -336,6 +359,8 @@ function releaseCharge(){
 
 function update(dt){
 
+waterTime += dt * 0.002;
+
   // =========================
   // ULTIMATE
   // =========================
@@ -474,10 +499,102 @@ if (energy > maxEnergy) energy = maxEnergy;
 ========================= */
 
 
+function drawMoat() {
+
+  const screenX = castle.x - camera.x + canvas.width/2;
+  const screenY = castle.y - camera.y + canvas.height/2;
+
+  const outerW = castle.width + moat.padding * 2;
+  const outerH = castle.height + moat.padding * 2;
+
+  const innerW = outerW - moat.width * 2;
+  const innerH = outerH - moat.width * 2;
+
+  ctx.save();
+
+  // Create clipping region for water ring
+  ctx.beginPath();
+  ctx.rect(screenX - outerW/2, screenY - outerH/2, outerW, outerH);
+  ctx.rect(screenX - innerW/2, screenY - innerH/2, innerW, innerH);
+  ctx.clip("evenodd");
+
+  const tileSize = 40;
+
+  for (let y = -outerH/2; y < outerH/2; y += tileSize) {
+    for (let x = -outerW/2; x < outerW/2; x += tileSize) {
+
+      const wx = x + screenX;
+      const wy = y + screenY;
+
+      // shimmer waves
+      const wave =
+        Math.sin((wx + waterTime * 300) * 0.01) +
+        Math.cos((wy - waterTime * 250) * 0.01);
+
+      const brightness = 80 + wave * 20;
+
+      ctx.fillStyle = `rgb(${brightness*0.4}, ${brightness*0.6}, ${brightness})`;
+      ctx.fillRect(wx, wy, tileSize, tileSize);
+    }
+  }
+
+  ctx.restore();
+}
 
 
+function drawCastle() {
 
+  const screenX = castle.x - camera.x + canvas.width/2;
+  const screenY = castle.y - camera.y + canvas.height/2;
 
+  const w = castle.width;
+  const h = castle.height;
+  const t = castle.wallThickness;
+
+  ctx.save();
+
+  // Base stone color
+  ctx.fillStyle = "#5a5a63";
+  ctx.fillRect(screenX - w/2, screenY - h/2, w, h);
+
+  // Inner courtyard
+  ctx.fillStyle = "#2e2e33";
+  ctx.fillRect(
+    screenX - w/2 + t,
+    screenY - h/2 + t,
+    w - t*2,
+    h - t*2
+  );
+
+  // Towers (4 corners)
+  const towerRadius = 90;
+
+  ctx.fillStyle = "#6a6a75";
+
+  const corners = [
+    [-w/2, -h/2],
+    [ w/2, -h/2],
+    [-w/2,  h/2],
+    [ w/2,  h/2]
+  ];
+
+  corners.forEach(([ox, oy]) => {
+    ctx.beginPath();
+    ctx.arc(screenX + ox, screenY + oy, towerRadius, 0, Math.PI*2);
+    ctx.fill();
+  });
+
+  // Gate (south side)
+  ctx.fillStyle = "#2a1f15";
+  ctx.fillRect(
+    screenX - 80,
+    screenY + h/2 - 20,
+    160,
+    120
+  );
+
+  ctx.restore();
+}
 
 
 
@@ -579,7 +696,7 @@ function drawFloor(){
 
       // Base Albedo variation
       const noise = (Math.sin(x*0.05) + Math.cos(y*0.05)) * 0.5;
-      const base = 180 + noise * 20;
+      const base = 120 + noise * 30;
 
       // Fake normal from tile slope pattern
       const nx = Math.sin(x*0.02) * 0.5;
@@ -705,8 +822,10 @@ function draw(){
     ctx.translate(shakeX, shakeY);
   }
 
-  drawFloor();
-  drawAttacks(ctx);
+drawFloor();
+drawMoat();
+drawCastle();
+drawAttacks(ctx);
 
   // Darken screen
   if (ulting) {
