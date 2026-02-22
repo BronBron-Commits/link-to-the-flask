@@ -5,96 +5,25 @@
 <title>Engine View</title>
 
 <style>
-body{background:#111;color:white;text-align:center;font-family:sans-serif;margin:0}
-canvas{background:#222;margin-top:10px}
+  html, body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #000;
+  }
 
-#controls{
-position:fixed;
-bottom:20px;
-left:0; right:0;
-display:flex;
-justify-content:space-between;
-padding:0 20px;
-}
-
-#stick{
-width:140px;height:140px;
-background:#333;border-radius:50%;
-position:relative;
-touch-action:none;
-}
-#knob{
-width:60px;height:60px;
-background:#888;border-radius:50%;
-position:absolute;
-left:40px;top:40px;
-}
-
-.buttons{
-display:flex;
-flex-direction:column;
-gap:14px;
-align-items:flex-end;
-}
-
-button{
-font-size:18px;
-padding:18px 24px;
-border:none;
-border-radius:12px;
-background:#555;color:white;
-touch-action:none;
-}
-
-#btnA{
-width:86px;
-height:86px;
-border-radius:50%;
-font-weight:bold;
-position:relative;
-}
-
-#btnA .ring{
-position:absolute;
-inset:-6px;
-border-radius:50%;
-border:4px solid rgba(180,80,255,0.25);
-pointer-events:none;
-}
-
-#btnA .fill{
-position:absolute;
-inset:-6px;
-border-radius:50%;
-background:conic-gradient(rgba(180,80,255,0.9) 0deg, rgba(180,80,255,0.0) 0deg);
-mask:radial-gradient(transparent 58%, black 60%);
--webkit-mask:radial-gradient(transparent 58%, black 60%);
-pointer-events:none;
-}
+  canvas {
+    display: block;
+    background: #222;
+  }
 </style>
 </head>
 <body>
 
-<canvas id="game" width="400" height="400"></canvas>
+<canvas id="game"></canvas>
 
-<div id="controls">
-  <div id="stick"><div id="knob"></div></div>
-
-  <div class="buttons">
-    <button id="btnA">
-      A
-      <div class="ring"></div>
-      <div class="fill" id="chargeFill"></div>
-    </button>
-    <button id="btnB">B</button>
-  </div>
-</div>
-
-<!-- AUDIO ENGINE -->
 <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
-
-<!-- GAME -->
-<script type="module" src="/static/game.js?v=400"></script>
+<script type="module" src="/static/game.js?v=402"></script>
 
 </body>
 </html>
