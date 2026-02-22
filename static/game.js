@@ -28,6 +28,37 @@ resizeCanvas();
    CORE STATE
 ========================= */
 
+// =========================
+// PLAYER STATS
+// =========================
+
+let maxHealth = 100;
+let health = 100;
+
+let maxEnergy = 100;
+let energy = 100;
+
+// cooldown duration for charged E
+const eCooldownMs = 800;
+
+// cooldown trackers
+let cooldowns = {
+  q: 0,
+  w: 0,
+  e: 0,
+  r: 0
+};
+
+// cooldown durations
+const cooldownDurations = {
+  q: 800,
+  w: 2000,
+  e: eCooldownMs,
+  r: 6000
+};
+
+
+
 let player = { x: 0, y: 0 };
 let facing = { x: 1, y: 0 };
 
@@ -46,7 +77,7 @@ let chargeMs = 0;
 const chargeMaxMs = 900;
 let chargeAutoReleased = false;
 let chargeSoundTimer = 0;
-const eCooldownMs = 800;   // change duration here
+
 let eCooldownTimer = 0;
 let qKeyHeld = false;
 let wKeyHeld = false;
@@ -235,6 +266,8 @@ function sfxUltimateBoom() {
   osc.start();
   osc.stop(audioCtx.currentTime + 0.5);
 }
+
+
 function fireNormal(){
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
@@ -247,6 +280,7 @@ function fireNormal(){
 
   sfxShoot();
   attackAnim = 1;
+cooldowns.q = cooldownDurations.q;
 }
 
 function fireCharged(power01){
@@ -277,6 +311,7 @@ function fireShotgun(){
   castShotgun(sx,sy,dx,dy);
   sfxShotgun();
   attackAnim = 1;
+cooldowns.w = cooldownDurations.w;
 }
 
 function releaseCharge(){
@@ -289,6 +324,7 @@ function releaseCharge(){
   chargeSoundTimer = 0;
 
   eCooldownTimer = eCooldownMs;
+  cooldowns.e = cooldownDurations.e;
 }
 
 function update(dt){
@@ -304,6 +340,7 @@ function update(dt){
     if (!ultBurstTriggered && ultTimer >= ultWindup) {
       ultBurstTriggered = true;
       triggerUltimateBurst();
+      cooldowns.r = cooldownDurations.r;
 
       if (ultNoiseOsc) {
         ultNoiseOsc.stop();
@@ -389,10 +426,133 @@ function update(dt){
     screenShake -= dt * 0.06;
     if (screenShake < 0) screenShake = 0;
   }
+
+// =========================
+// COOLDOWN DECAY
+// =========================
+
+for (let key in cooldowns) {
+  if (cooldowns[key] > 0) {
+    cooldowns[key] -= dt;
+    if (cooldowns[key] < 0) cooldowns[key] = 0;
+  }
 }
+
+}
+
+
+
+
+
+
+
+
 /* =========================
    DRAW
 ========================= */
+
+
+
+
+
+
+
+
+
+
+function drawHUD(logicalW, logicalH) {
+
+  const hudHeight = 120;
+  const barWidth = 300;
+  const barHeight = 18;
+  const centerX = logicalW / 2;
+  const bottomY = logicalH - 30;
+
+  // HUD background
+  ctx.fillStyle = "rgba(0,0,0,0.6)";
+  ctx.fillRect(0, logicalH - hudHeight, logicalW, hudHeight);
+
+  // =========================
+  // HEALTH BAR
+  // =========================
+
+  const healthPercent = health / maxHealth;
+
+  ctx.fillStyle = "#400";
+  ctx.fillRect(centerX - barWidth/2, bottomY - 50, barWidth, barHeight);
+
+  ctx.fillStyle = "#e22";
+  ctx.fillRect(
+    centerX - barWidth/2,
+    bottomY - 50,
+    barWidth * healthPercent,
+    barHeight
+  );
+
+  // =========================
+  // ENERGY BAR
+  // =========================
+
+  const energyPercent = energy / maxEnergy;
+
+  ctx.fillStyle = "#002";
+  ctx.fillRect(centerX - barWidth/2, bottomY - 25, barWidth, barHeight);
+
+  ctx.fillStyle = "#2af";
+  ctx.fillRect(
+    centerX - barWidth/2,
+    bottomY - 25,
+    barWidth * energyPercent,
+    barHeight
+  );
+
+  // =========================
+  // ABILITY ICONS
+  // =========================
+
+  const abilities = ["q","w","e","r"];
+  const size = 50;
+  const spacing = 70;
+  const startX = centerX - (spacing * 1.5);
+
+  ctx.font = "20px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  abilities.forEach((key, i) => {
+
+    const x = startX + i * spacing;
+    const y = logicalH - 80;
+
+    // base box
+    ctx.fillStyle = "#222";
+    ctx.fillRect(x - size/2, y - size/2, size, size);
+
+    // cooldown overlay
+    if (cooldowns[key] > 0) {
+
+      const percent = cooldowns[key] / cooldownDurations[key];
+
+      ctx.fillStyle = "rgba(0,0,0,0.7)";
+      ctx.fillRect(
+        x - size/2,
+        y - size/2,
+        size,
+        size * percent
+      );
+
+      ctx.fillStyle = "#fff";
+      ctx.fillText(
+        (cooldowns[key] / 1000).toFixed(1),
+        x,
+        y
+      );
+    } else {
+      ctx.fillStyle = "#fff";
+      ctx.fillText(key.toUpperCase(), x, y);
+    }
+  });
+}
 
 function drawFloor(){
   const tileSize = 40;
@@ -568,6 +728,9 @@ function draw(){
   if (screenShake > 0) {
     ctx.restore();
   }
+
+drawHUD(logicalW, logicalH);
+
 }
 /* =========================
    MAIN LOOP
