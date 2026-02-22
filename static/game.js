@@ -39,7 +39,8 @@ let walkFrame = 0;
 let walkTimer = 0;
 let idleTime = 0;
 let attackAnim = 0;
-
+let ultNoiseOsc = null;
+let ultNoiseGain = null;
 let charging = false;
 let chargeMs = 0;
 const chargeMaxMs = 900;
@@ -58,7 +59,10 @@ const moveSpeed = 6;
 
 let ulting = false;
 let ultTimer = 0;
-const ultDuration = 2000; // 2 seconds
+
+const ultWindup = 500;      // delay before lightning
+const ultActive = 1500;     // ring duration
+const ultTotal = ultWindup + ultActive;
 /* =========================
    MUSIC START (Browser unlock)
 ========================= */
@@ -114,6 +118,28 @@ if (key === "e" && !charging && eCooldownTimer <= 0 && !eKeyHeld) {
 if (key === "r" && !ulting) {
   ulting = true;
   ultTimer = 0;
+
+  // electrical windup noise
+  const ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+
+  ultNoiseOsc = ctxAudio.createOscillator();
+  ultNoiseGain = ctxAudio.createGain();
+
+  ultNoiseOsc.type = "sawtooth";
+  ultNoiseOsc.frequency.value = 90;
+
+  ultNoiseGain.gain.value = 0.05;
+
+  ultNoiseOsc.connect(ultNoiseGain);
+  ultNoiseGain.connect(ctxAudio.destination);
+
+  ultNoiseOsc.start();
+
+  // ramp pitch upward
+  ultNoiseOsc.frequency.linearRampToValueAtTime(
+    400,
+    ctxAudio.currentTime + ultWindup / 1000
+  );
 }
 
   if (key >= "1" && key <= "9") {
@@ -252,7 +278,12 @@ function update(dt){
 if (ulting) {
   ultTimer += dt;
 
-  if (ultTimer >= ultDuration) {
+  if (ultTimer >= ultTotal) {
+ 
+    if (ultNoiseOsc) {
+  ultNoiseOsc.stop();
+  ultNoiseOsc = null;
+}
     ulting = false;
     ultTimer = 0;
   }
@@ -330,26 +361,47 @@ function drawUltimateHalo() {
   const centerX = logicalW / 2;
   const centerY = logicalH / 2 - 20;
 
-  const radius = 120;
-  const segments = 14;
-  const rotation = ultTimer * 0.004;
+  const radius = 140;
+
+  // only draw ring after windup
+  if (ultTimer < ultWindup) return;
+
+  const activeTime = ultTimer - ultWindup;
+  const progress = activeTime / ultActive;
+
+  const rotation = activeTime * 0.004;
 
   ctx.save();
   ctx.translate(centerX, centerY);
   ctx.rotate(rotation);
 
+  // glowing perimeter circle
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = "rgba(100,180,255,0.8)";
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // animated lightning segments around perimeter
+  const segments = 20;
+
   for (let i = 0; i < segments; i++) {
     const angle = (Math.PI * 2 / segments) * i;
 
-    const x = Math.cos(angle) * radius;
-    const y = Math.sin(angle) * radius;
+    const jitter = (Math.random() - 0.5) * 8;
 
-    ctx.strokeStyle = `hsl(${200 + Math.sin(ultTimer*0.02)*40}, 100%, 60%)`;
-    ctx.lineWidth = 4;
+    const x1 = Math.cos(angle) * radius;
+    const y1 = Math.sin(angle) * radius;
+
+    const x2 = Math.cos(angle + 0.15) * (radius + jitter);
+    const y2 = Math.sin(angle + 0.15) * (radius + jitter);
+
+    ctx.strokeStyle = `hsl(${200 + Math.sin(activeTime*0.02)*40},100%,65%)`;
+    ctx.lineWidth = 3;
 
     ctx.beginPath();
-    ctx.moveTo(0, 0);
-    ctx.lineTo(x, y);
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
     ctx.stroke();
   }
 
@@ -365,11 +417,11 @@ function draw(){
   drawAttacks(ctx);
 
   // Darken screen
-  if (ulting) {
-    const darkness = Math.min(1, ultTimer / 600);
-    ctx.fillStyle = `rgba(0,0,0,${0.6 * darkness})`;
-    ctx.fillRect(0,0,logicalW,logicalH);
-  }
+if (ulting) {
+  const fadeIn = Math.min(1, ultTimer / ultWindup);
+  ctx.fillStyle = `rgba(0,0,0,${0.7 * fadeIn})`;
+  ctx.fillRect(0,0,logicalW,logicalH);
+}
 
   // Raise wizard slightly
   let raiseOffset = 0;
