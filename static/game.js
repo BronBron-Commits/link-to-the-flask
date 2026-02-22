@@ -57,6 +57,13 @@ const cooldownDurations = {
   r: 6000
 };
 
+// HUD press animation timers
+let hudPulse = {
+  q: 0,
+  w: 0,
+  e: 0,
+  r: 0
+};
 
 
 let player = { x: 0, y: 0 };
@@ -130,56 +137,46 @@ canvas.addEventListener("mousedown", (e) => {
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
 
-if (key === "q" && !qKeyHeld) {
-  qKeyHeld = true;
-  fireNormal();
-}
+  if (key === "q" && !qKeyHeld && cooldowns.q <= 0) {
+    qKeyHeld = true;
+    fireNormal();
+  }
 
-if (key === "w" && !wKeyHeld) {
-  wKeyHeld = true;
-  fireShotgun();
-}
+  if (key === "w" && !wKeyHeld && cooldowns.w <= 0) {
+    wKeyHeld = true;
+    fireShotgun();
+  }
 
-if (key === "e" && !charging && eCooldownTimer <= 0 && !eKeyHeld) {
-  eKeyHeld = true;
-  charging = true;
-  chargeMs = 0;
-  chargeAutoReleased = false;
-  chargeSoundTimer = 0;
-}
+  if (key === "e" && !charging && cooldowns.e <= 0 && !eKeyHeld) {
+    eKeyHeld = true;
+    charging = true;
+    chargeMs = 0;
+    chargeAutoReleased = false;
+    chargeSoundTimer = 0;
+  }
 
-if (key === "r" && !ulting) {
-  ulting = true;
-  ultTimer = 0;
+  if (key === "r" && !ulting && cooldowns.r <= 0) {
+    ulting = true;
+    ultTimer = 0;
 
-  // electrical windup noise
-  const ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+    const ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
+    ultNoiseOsc = ctxAudio.createOscillator();
+    ultNoiseGain = ctxAudio.createGain();
 
-  ultNoiseOsc = ctxAudio.createOscillator();
-  ultNoiseGain = ctxAudio.createGain();
+    ultNoiseOsc.type = "sawtooth";
+    ultNoiseOsc.frequency.value = 90;
+    ultNoiseGain.gain.value = 0.05;
 
-  ultNoiseOsc.type = "sawtooth";
-  ultNoiseOsc.frequency.value = 90;
+    ultNoiseOsc.connect(ultNoiseGain);
+    ultNoiseGain.connect(ctxAudio.destination);
+    ultNoiseOsc.start();
 
-  ultNoiseGain.gain.value = 0.05;
-
-  ultNoiseOsc.connect(ultNoiseGain);
-  ultNoiseGain.connect(ctxAudio.destination);
-
-  ultNoiseOsc.start();
-
-  // ramp pitch upward
-  ultNoiseOsc.frequency.linearRampToValueAtTime(
-    400,
-    ctxAudio.currentTime + ultWindup / 1000
-  );
-}
-
-  if (key >= "1" && key <= "9") {
-    console.log("Use item slot", key);
+    ultNoiseOsc.frequency.linearRampToValueAtTime(
+      400,
+      ctxAudio.currentTime + ultWindup / 1000
+    );
   }
 });
-
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
 
@@ -269,6 +266,7 @@ function sfxUltimateBoom() {
 
 
 function fireNormal(){
+  hudPulse.q = 200;
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
 
@@ -303,6 +301,7 @@ function fireCharged(power01){
 }
 
 function fireShotgun(){
+  hudPulse.w = 200;
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
 
@@ -315,6 +314,7 @@ cooldowns.w = cooldownDurations.w;
 }
 
 function releaseCharge(){
+  hudPulse.e = 200;
   const p = Math.min(1, chargeMs / chargeMaxMs);
 
   fireCharged(p);
@@ -438,6 +438,14 @@ for (let key in cooldowns) {
   }
 }
 
+
+for (let key in hudPulse) {
+  if (hudPulse[key] > 0) {
+    hudPulse[key] -= dt;
+    if (hudPulse[key] < 0) hudPulse[key] = 0;
+  }
+}
+
 }
 
 
@@ -468,50 +476,26 @@ function drawHUD(logicalW, logicalH) {
   const centerX = logicalW / 2;
   const bottomY = logicalH - 30;
 
-  // HUD background
   ctx.fillStyle = "rgba(0,0,0,0.6)";
   ctx.fillRect(0, logicalH - hudHeight, logicalW, hudHeight);
 
-  // =========================
-  // HEALTH BAR
-  // =========================
-
+  // HEALTH
   const healthPercent = health / maxHealth;
-
   ctx.fillStyle = "#400";
   ctx.fillRect(centerX - barWidth/2, bottomY - 50, barWidth, barHeight);
-
   ctx.fillStyle = "#e22";
-  ctx.fillRect(
-    centerX - barWidth/2,
-    bottomY - 50,
-    barWidth * healthPercent,
-    barHeight
-  );
+  ctx.fillRect(centerX - barWidth/2, bottomY - 50, barWidth * healthPercent, barHeight);
 
-  // =========================
-  // ENERGY BAR
-  // =========================
-
+  // ENERGY
   const energyPercent = energy / maxEnergy;
-
   ctx.fillStyle = "#002";
   ctx.fillRect(centerX - barWidth/2, bottomY - 25, barWidth, barHeight);
-
   ctx.fillStyle = "#2af";
-  ctx.fillRect(
-    centerX - barWidth/2,
-    bottomY - 25,
-    barWidth * energyPercent,
-    barHeight
-  );
+  ctx.fillRect(centerX - barWidth/2, bottomY - 25, barWidth * energyPercent, barHeight);
 
-  // =========================
-  // ABILITY ICONS
-  // =========================
-
+  // ABILITIES
   const abilities = ["q","w","e","r"];
-  const size = 50;
+  const baseSize = 50;
   const spacing = 70;
   const startX = centerX - (spacing * 1.5);
 
@@ -521,36 +505,42 @@ function drawHUD(logicalW, logicalH) {
 
   abilities.forEach((key, i) => {
 
+    const pulse = hudPulse[key] / 200;
+    const scale = 1 + pulse * 0.15;
+    const size = baseSize * scale;
+
     const x = startX + i * spacing;
     const y = logicalH - 80;
 
-    // base box
-    ctx.fillStyle = "#222";
-    ctx.fillRect(x - size/2, y - size/2, size, size);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.scale(scale, scale);
 
-    // cooldown overlay
+    ctx.fillStyle = "#222";
+    ctx.fillRect(-baseSize/2, -baseSize/2, baseSize, baseSize);
+
     if (cooldowns[key] > 0) {
 
       const percent = cooldowns[key] / cooldownDurations[key];
 
       ctx.fillStyle = "rgba(0,0,0,0.7)";
       ctx.fillRect(
-        x - size/2,
-        y - size/2,
-        size,
-        size * percent
+        -baseSize/2,
+        -baseSize/2,
+        baseSize,
+        baseSize * percent
       );
 
       ctx.fillStyle = "#fff";
-      ctx.fillText(
-        (cooldowns[key] / 1000).toFixed(1),
-        x,
-        y
-      );
+      ctx.fillText((cooldowns[key] / 1000).toFixed(1), 0, 0);
+
     } else {
-      ctx.fillStyle = "#fff";
-      ctx.fillText(key.toUpperCase(), x, y);
+
+      ctx.fillStyle = pulse > 0 ? "#fff" : "#aaa";
+      ctx.fillText(key.toUpperCase(), 0, 0);
     }
+
+    ctx.restore();
   });
 }
 
@@ -570,7 +560,7 @@ function drawFloor(){
 }
 
 function triggerUltimateBurst() {
-
+  hudPulse.r = 300;
   const dpr = window.devicePixelRatio || 1;
   const logicalW = canvas.width / dpr;
   const logicalH = canvas.height / dpr;
