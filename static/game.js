@@ -235,15 +235,29 @@ window.addEventListener("keyup", (e) => {
 
 function drawFishingPole(ctx, x, y, scale, facing) {
 
-ctx.save();
+  ctx.save();
 
-const offsetX = 14;
-const offsetY = 18;
+  // ------------------------
+  // FLOAT / BOB OFFSET
+  // ------------------------
+  let floatOffset = 0;
 
-ctx.translate(x + offsetX, y + offsetY);
+  if (walking) {
+    floatOffset = Math.sin(performance.now() * 0.015) * 2;
+  } else {
+    floatOffset = Math.sin(idleTime * 0.004) * 1.5;
+  }
 
-const weaponScale = scale * 0.6;
-ctx.scale(weaponScale, weaponScale);
+  // ------------------------
+  // POSITION OFFSET
+  // ------------------------
+  const offsetX = 14;
+  const offsetY = 18 + floatOffset;
+
+  ctx.translate(x + offsetX, y + offsetY);
+
+  const weaponScale = scale * 0.6;
+  ctx.scale(weaponScale, weaponScale);
 
   // Flip if facing left
   if (facing.x < 0) {
