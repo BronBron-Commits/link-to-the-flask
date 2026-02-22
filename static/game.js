@@ -30,6 +30,8 @@ let chargeAutoReleased = false;
 let chargeSoundTimer = 0;
 const eCooldownMs = 800;   // change duration here
 let eCooldownTimer = 0;
+let qKeyHeld = false;
+let wKeyHeld = false;
 let eKeyHeld = false;
 let moveTarget = null;
 const moveSpeed = 6;
@@ -68,8 +70,15 @@ canvas.addEventListener("mousedown", (e) => {
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
 
-  if (key === "q") fireNormal();
-  if (key === "w") fireShotgun();
+if (key === "q" && !qKeyHeld) {
+  qKeyHeld = true;
+  fireNormal();
+}
+
+if (key === "w" && !wKeyHeld) {
+  wKeyHeld = true;
+  fireShotgun();
+}
 
 if (key === "e" && !charging && eCooldownTimer <= 0 && !eKeyHeld) {
   eKeyHeld = true;
@@ -89,13 +98,16 @@ if (key === "e" && !charging && eCooldownTimer <= 0 && !eKeyHeld) {
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
 
-if (key === "e") {
-  eKeyHeld = false;
+  if (key === "e") {
+    eKeyHeld = false;
 
-  if (charging) {
-    releaseCharge();
+    if (charging) {
+      releaseCharge();
+    }
   }
-}
+
+  if (key === "q") qKeyHeld = false;
+  if (key === "w") wKeyHeld = false;
 });
 
 /* =========================
