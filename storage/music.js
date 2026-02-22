@@ -9,6 +9,7 @@ const T = 0.8409;
 export function startMusic(){
   if(!ctx){
     ctx = new (window.AudioContext || window.webkitAudioContext)();
+    window.__musicCtx = ctx;
     master = ctx.createGain();
     master.gain.value = 0.18;
     master.connect(ctx.destination);

@@ -1,4 +1,4 @@
-import { startMusic } from "./music.js";
+
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
@@ -116,18 +116,7 @@ const ultActive = 1500;     // ring duration
 const ultTotal = ultWindup + ultActive;
 let ultBurstTriggered = false;
 let screenShake = 0;
-/* =========================
-   MUSIC START (Browser unlock)
-========================= */
 
-let musicStarted = false;
-
-window.addEventListener("mousedown", () => {
-  if (!musicStarted) {
-    startMusic();
-    musicStarted = true;
-  }
-});
 /* =========================
    RIGHT CLICK MOVE
 ========================= */
@@ -167,6 +156,7 @@ window.addEventListener("keydown", (e) => {
     chargeAutoReleased = false;
     chargeSoundTimer = 0;
   }
+
 
   if (key === "r" && !ulting && cooldowns.r <= 0 && energy >= energyCosts.r) {
     energy -= energyCosts.r;
@@ -263,7 +253,7 @@ function aimDir(){
 
 function sfxUltimateBoom() {
   const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
+  window.__musicCtx = ctx;
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
 
@@ -570,16 +560,40 @@ ctx.fillStyle = canAfford ? "#222" : "#111";
 }
 
 function drawFloor(){
-  const tileSize = 40;
-  const startX=Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
-  const startY=Math.floor((camera.y-canvas.height/2)/tileSize)*tileSize;
 
-  for(let y=startY;y<camera.y+canvas.height/2+tileSize;y+=tileSize){
-    for(let x=startX;x<camera.x+canvas.width/2+tileSize;x+=tileSize){
-      const screenX=x-camera.x+canvas.width/2;
-      const screenY=y-camera.y+canvas.height/2;
-      ctx.fillStyle=((x/tileSize+y/tileSize)%2===0)?"#fff":"#000";
-      ctx.fillRect(screenX,screenY,tileSize,tileSize);
+  const tileSize = 40;
+  const startX = Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
+  const startY = Math.floor((camera.y-canvas.height/2)/tileSize)*tileSize;
+
+  // Fake directional light (top-left)
+  const lightDir = { x: -0.6, y: -0.8 };
+  const lightLen = Math.hypot(lightDir.x, lightDir.y);
+  lightDir.x /= lightLen;
+  lightDir.y /= lightLen;
+
+  for(let y=startY; y<camera.y+canvas.height/2+tileSize; y+=tileSize){
+    for(let x=startX; x<camera.x+canvas.width/2+tileSize; x+=tileSize){
+
+      const screenX = x-camera.x+canvas.width/2;
+      const screenY = y-camera.y+canvas.height/2;
+
+      // Base Albedo variation
+      const noise = (Math.sin(x*0.05) + Math.cos(y*0.05)) * 0.5;
+      const base = 180 + noise * 20;
+
+      // Fake normal from tile slope pattern
+      const nx = Math.sin(x*0.02) * 0.5;
+      const ny = Math.cos(y*0.02) * 0.5;
+
+      const dot = Math.max(0, nx*lightDir.x + ny*lightDir.y);
+
+      // Roughness variation
+      const rough = 0.4 + (Math.sin((x+y)*0.03) * 0.2);
+
+      const brightness = base * (0.6 + dot*0.6) * (1 - rough*0.3);
+
+      ctx.fillStyle = `rgb(${brightness},${brightness},${brightness})`;
+      ctx.fillRect(screenX, screenY, tileSize, tileSize);
     }
   }
 }
