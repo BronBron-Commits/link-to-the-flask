@@ -3,17 +3,14 @@ let master = null;
 let started = false;
 let loopTimer = null;
 
-/* whole-step transpose (keep exact) */
 const T = 1.12246;
-
-/* how many full A cycles before switching to B */
-const SONG_A_LOOPS = 4;
+const PART_LOOPS = 2;   // play each section twice
 
 export function startMusic(){
   if(!ctx){
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
-    master.gain.value = 0.18;
+    master.gain.value = 0.12;
     master.connect(ctx.destination);
   }
 
@@ -24,7 +21,7 @@ export function startMusic(){
   playLoop();
 }
 
-/* ================= PAD VOICE (keep exact) ================= */
+/* ================= PAD ================= */
 function playVoice(freq, start, dur){
   freq *= T;
 
@@ -46,8 +43,8 @@ function playVoice(freq, start, dur){
   filter.Q.value = 0.8;
 
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.linearRampToValueAtTime(0.18, start + 0.35);
-  gain.gain.linearRampToValueAtTime(0.16, start + dur * 0.7);
+  gain.gain.linearRampToValueAtTime(0.06, start + 0.35);
+  gain.gain.linearRampToValueAtTime(0.05, start + dur * 0.7);
   gain.gain.linearRampToValueAtTime(0.0001, start + dur + 0.9);
 
   pan.pan.setValueAtTime((Math.random()*0.4)-0.2, start);
@@ -68,7 +65,7 @@ function playChord(chord, time, length){
   for(const f of chord) playVoice(f, time, length);
 }
 
-/* ================= LEAD MELODY (keep exact) ================= */
+/* ================= LEAD ================= */
 function playLead(chord, start, beat){
   const notes = [
     chord[2]*2,
@@ -88,7 +85,7 @@ function playLead(chord, start, beat){
     osc.frequency.setValueAtTime(freq, t);
 
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(0.10, t + 0.03);
+    gain.gain.linearRampToValueAtTime(0.06, t + 0.03);
     gain.gain.exponentialRampToValueAtTime(0.0001, t + beat*0.45);
 
     osc.connect(gain);
@@ -99,7 +96,7 @@ function playLead(chord, start, beat){
   }
 }
 
-/* ================= BASS ROOT-5TH (keep exact) ================= */
+/* ================= BASS ================= */
 function playBass(root, start, beat){
   root *= T;
 
@@ -117,8 +114,8 @@ function playBass(root, start, beat){
   osc.frequency.setValueAtTime(fifth, start + beat*2);
 
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.linearRampToValueAtTime(0.32, start + 0.02);
-  gain.gain.linearRampToValueAtTime(0.25, start + beat*3.5);
+  gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
+  gain.gain.linearRampToValueAtTime(0.15, start + beat*3.5);
   gain.gain.linearRampToValueAtTime(0.0001, start + beat*4);
 
   osc.connect(filter);
@@ -129,7 +126,7 @@ function playBass(root, start, beat){
   osc.stop(start + beat*4 + 0.1);
 }
 
-/* ================= HIHAT (keep exact) ================= */
+/* ================= HIHAT ================= */
 function hihat(time){
   const noise = ctx.createBufferSource();
   const buffer = ctx.createBuffer(1, ctx.sampleRate*0.02, ctx.sampleRate);
@@ -139,10 +136,10 @@ function hihat(time){
 
   const hp = ctx.createBiquadFilter();
   hp.type = "highpass";
-  hp.frequency.value = 7000;
+  hp.frequency.value = 8000;
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.12, time);
+  gain.gain.setValueAtTime(0.20, time);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.02);
 
   noise.connect(hp);
@@ -153,7 +150,7 @@ function hihat(time){
   noise.stop(time + 0.03);
 }
 
-/* ================= SNARE (keep exact) ================= */
+/* ================= SNARE ================= */
 function snare(time){
   const noise = ctx.createBufferSource();
   const buffer = ctx.createBuffer(1, ctx.sampleRate*0.2, ctx.sampleRate);
@@ -163,10 +160,10 @@ function snare(time){
 
   const bp = ctx.createBiquadFilter();
   bp.type = "bandpass";
-  bp.frequency.value = 1800;
+  bp.frequency.value = 2000;
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.35, time);
+  gain.gain.setValueAtTime(0.50, time);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.18);
 
   noise.connect(bp);
@@ -177,13 +174,12 @@ function snare(time){
   noise.stop(time + 0.2);
 }
 
-/* ================= LOOP WITH SONG A -> SONG B ================= */
+/* ================= LOOP A ↔ B (2x each) ================= */
 function playLoop(){
-  const bpm = 156;                 // KEEP EXACT
+  const bpm = 156;
   const beat = 60 / bpm;
   const measure = beat * 4;
 
-  // Song A (your current chords, unchanged)
   const songA = [
     [261.63,329.63,392.00,523.25],
     [220.00,261.63,329.63,392.00],
@@ -195,7 +191,6 @@ function playLoop(){
     [174.61,261.63,349.23,440.00]
   ];
 
-  // Song B (new progression, same voicing style / length)
   const songB = [
     [220.00,261.63,329.63,440.00],
     [174.61,220.00,293.66,349.23],
@@ -208,17 +203,14 @@ function playLoop(){
   ];
 
   let active = songA;
-  let loopsA = 0;
-
+  let loopCount = 0;
   let t = ctx.currentTime + 0.12;
 
   function schedule(){
-    if(ctx.state === "suspended") ctx.resume().catch(()=>{});
-
     for(let i=0;i<active.length;i++){
       const chord = active[i];
-
       const root = chord[0] / 2;
+
       playBass(root, t, beat);
       playChord(chord, t, measure*1.2);
       playLead(chord, t, beat);
@@ -233,17 +225,14 @@ function playLoop(){
       t += measure;
     }
 
-    // end-of-cycle switch logic (ONLY changes chord list)
-    if(active === songA){
-      loopsA++;
-      if(loopsA >= SONG_A_LOOPS){
-        active = songB;
-      }
+    loopCount++;
+    if(loopCount >= PART_LOOPS){
+      active = (active === songA) ? songB : songA;
+      loopCount = 0;
     }
   }
 
   schedule();
-
   if(loopTimer) clearInterval(loopTimer);
-  loopTimer = setInterval(schedule, measure*active.length*1000);
+  loopTimer = setInterval(schedule, measure * songA.length * 1000);
 }
