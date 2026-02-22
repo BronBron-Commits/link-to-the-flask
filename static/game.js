@@ -696,6 +696,102 @@ function drawCourtyard() {
 
   ctx.restore();
 }
+
+function drawRiver() {
+
+  const centerX = castle.x;
+  const centerY = castle.y + courtyard.offsetY + 20;
+
+  const screenX = centerX - camera.x + canvas.width/2;
+  const screenY = centerY - camera.y + canvas.height/2;
+
+  const h = courtyard.height;
+
+  const riverTop = screenY + h/2 + 400;
+  const riverHeight = 200;
+
+  ctx.save();
+
+  // =========================
+  // CLIP TO RIVER AREA
+  // =========================
+  ctx.beginPath();
+  ctx.rect(0, riverTop, canvas.width, riverHeight);
+  ctx.clip();
+
+  // =========================
+  // WATER BASE
+  // =========================
+  const tileSize = 20;
+
+  for (let y = 0; y < riverHeight; y += tileSize) {
+    for (let x = 0; x < canvas.width; x += tileSize) {
+
+      const wave = Math.sin((x * 0.02) + waterTime * 3) * 8;
+
+      const brightness =
+        80 +
+        Math.sin((x + waterTime * 300) * 0.01) * 15 +
+        Math.cos((y - waterTime * 250) * 0.01) * 10;
+
+      ctx.fillStyle = `rgb(${brightness*0.35}, ${brightness*0.6}, ${brightness})`;
+
+      ctx.fillRect(
+        x,
+        riverTop + y + wave,
+        tileSize,
+        tileSize
+      );
+    }
+  }
+
+  // =========================
+  // REFLECTION
+  // =========================
+  ctx.save();
+
+  ctx.translate(0, riverTop * 2);
+  ctx.scale(1, -1);
+
+  const distortion = Math.sin(waterTime * 4) * 4;
+  ctx.translate(distortion, 0);
+
+  ctx.globalAlpha = 0.25;
+
+  // Castle reflection
+  drawCastle();
+
+  // Player reflection
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = canvas.width / dpr;
+  const logicalH = canvas.height / dpr;
+
+  drawWizard(
+    ctx,
+    logicalW/2,
+    logicalH/2,
+    4,
+    walkFrame,
+    idleTime,
+    facing
+  );
+
+  drawScepter(
+    ctx,
+    logicalW/2 + 38,
+    logicalH/2 + 26,
+    3,
+    walkFrame,
+    idleTime,
+    attackAnim,
+    charging
+  );
+
+  ctx.restore(); // reflection
+
+  ctx.restore(); // clip
+}
+
 function drawMoat() {
 
   const screenX = castle.x - camera.x + canvas.width/2;
@@ -1022,6 +1118,7 @@ function draw(){
 drawFloor();
 drawMoat();
 drawCourtyard();
+drawRiver(); 
 drawCastle();
 drawAttacks(ctx);
 
