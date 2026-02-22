@@ -52,7 +52,13 @@ let wKeyHeld = false;
 let eKeyHeld = false;
 let moveTarget = null;
 const moveSpeed = 6;
+/* =========================
+   ULTIMATE STATE
+========================= */
 
+let ulting = false;
+let ultTimer = 0;
+const ultDuration = 2000; // 2 seconds
 /* =========================
    MUSIC START (Browser unlock)
 ========================= */
@@ -105,7 +111,10 @@ if (key === "e" && !charging && eCooldownTimer <= 0 && !eKeyHeld) {
   chargeSoundTimer = 0;
 }
 
-  if (key === "r") console.log("Ultimate reserved");
+if (key === "r" && !ulting) {
+  ulting = true;
+  ultTimer = 0;
+}
 
   if (key >= "1" && key <= "9") {
     console.log("Use item slot", key);
@@ -240,9 +249,18 @@ function releaseCharge(){
 ========================= */
 
 function update(dt){
+if (ulting) {
+  ultTimer += dt;
 
+  if (ultTimer >= ultDuration) {
+    ulting = false;
+    ultTimer = 0;
+  }
+}
 
+if (!ulting) {
   tryMove(dt);
+}
 
   if (eCooldownTimer > 0) {
   eCooldownTimer -= dt;
@@ -305,34 +323,89 @@ function drawFloor(){
   }
 }
 
+function drawUltimateHalo() {
+  const logicalW = canvas.width / (window.devicePixelRatio || 1);
+  const logicalH = canvas.height / (window.devicePixelRatio || 1);
+
+  const centerX = logicalW / 2;
+  const centerY = logicalH / 2 - 20;
+
+  const radius = 120;
+  const segments = 14;
+  const rotation = ultTimer * 0.004;
+
+  ctx.save();
+  ctx.translate(centerX, centerY);
+  ctx.rotate(rotation);
+
+  for (let i = 0; i < segments; i++) {
+    const angle = (Math.PI * 2 / segments) * i;
+
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+
+    ctx.strokeStyle = `hsl(${200 + Math.sin(ultTimer*0.02)*40}, 100%, 60%)`;
+    ctx.lineWidth = 4;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
 function draw(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const logicalW = canvas.width / (window.devicePixelRatio || 1);
+  const logicalH = canvas.height / (window.devicePixelRatio || 1);
+
   drawFloor();
   drawAttacks(ctx);
-  drawWizard(ctx,canvas.width/2,canvas.height/2,4,walkFrame,idleTime,facing);
 
-  const sx = canvas.width/2 + 38;
-  const sy = canvas.height/2 + 26;
-  let shakeX = 0;
-let shakeY = 0;
+  // Darken screen
+  if (ulting) {
+    const darkness = Math.min(1, ultTimer / 600);
+    ctx.fillStyle = `rgba(0,0,0,${0.6 * darkness})`;
+    ctx.fillRect(0,0,logicalW,logicalH);
+  }
 
-if (charging) {
-  const intensity = chargeMs / chargeMaxMs;
-  shakeX = (Math.random() - 0.5) * 6 * intensity;
-  shakeY = (Math.random() - 0.5) * 6 * intensity;
+  // Raise wizard slightly
+  let raiseOffset = 0;
+  if (ulting) {
+    const progress = Math.min(1, ultTimer / 400);
+    raiseOffset = -20 * progress;
+  }
+
+  drawWizard(
+    ctx,
+    logicalW/2,
+    logicalH/2 + raiseOffset,
+    4,
+    walkFrame,
+    idleTime,
+    facing
+  );
+
+  const sx = logicalW/2 + 38;
+  const sy = logicalH/2 + 26;
+
+  drawScepter(ctx,
+    sx,
+    sy,
+    3,
+    walkFrame,
+    idleTime,
+    attackAnim,
+    charging
+  );
+
+  // Draw halo LAST (on top)
+  if (ulting) {
+    drawUltimateHalo();
+  }
 }
-
-drawScepter(ctx,
-  sx + shakeX,
-  sy + shakeY,
-  3,
-  walkFrame,
-  idleTime,
-  attackAnim,
-  charging
-);
-}
-
 /* =========================
    MAIN LOOP
 ========================= */
