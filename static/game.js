@@ -27,6 +27,7 @@ let charging = false;
 let chargeMs = 0;
 const chargeMaxMs = 900;
 let chargeAutoReleased = false;
+let chargeSoundTimer = 0;
 let moveTarget = null;
 const moveSpeed = 6;
 
@@ -67,11 +68,12 @@ window.addEventListener("keydown", (e) => {
   if (key === "q") fireNormal();
   if (key === "w") fireShotgun();
 
-  if (key === "e" && !charging) {
-    charging = true;
-    chargeMs = 0;
-    chargeAutoReleased = false;
-  }
+if (key === "e" && !charging) {
+  charging = true;
+  chargeMs = 0;
+  chargeAutoReleased = false;
+  chargeSoundTimer = 0;
+}
 
   if (key === "r") console.log("Ultimate reserved");
 
@@ -184,7 +186,6 @@ function fireShotgun(){
   attackAnim = 1;
 }
 
-
 function releaseCharge(){
   const p = Math.min(1, chargeMs / chargeMaxMs);
 
@@ -192,6 +193,7 @@ function releaseCharge(){
 
   charging = false;
   chargeMs = 0;
+  chargeSoundTimer = 0;
 }
 
 /* =========================
@@ -221,6 +223,15 @@ function update(dt){
 
 if (charging) {
   chargeMs += dt;
+
+  const power = chargeMs / chargeMaxMs;
+
+  // play rising charge tone repeatedly
+  chargeSoundTimer -= dt;
+  if (chargeSoundTimer <= 0) {
+    sfxCharged(power * 0.35); // low volume pulse
+    chargeSoundTimer = 90 - power * 60; // pulses get faster
+  }
 
   if (chargeMs >= chargeMaxMs && !chargeAutoReleased) {
     chargeAutoReleased = true;
@@ -257,7 +268,24 @@ function draw(){
 
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
-  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim,false);
+  let shakeX = 0;
+let shakeY = 0;
+
+if (charging) {
+  const intensity = chargeMs / chargeMaxMs;
+  shakeX = (Math.random() - 0.5) * 6 * intensity;
+  shakeY = (Math.random() - 0.5) * 6 * intensity;
+}
+
+drawScepter(ctx,
+  sx + shakeX,
+  sy + shakeY,
+  3,
+  walkFrame,
+  idleTime,
+  attackAnim,
+  charging
+);
 }
 
 /* =========================
