@@ -63,7 +63,7 @@ const courtyard = {
 // =========================
 // PLAYER STATS
 // =========================
-
+let activeWeapon = 1; // 1 = scepter, 2 = fishing pole
 let maxHealth = 100;
 let health = 100;
 
@@ -167,7 +167,8 @@ canvas.addEventListener("mousedown", (e) => {
 
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
-
+if (key === "1") activeWeapon = 1;
+if (key === "2") activeWeapon = 2;
   if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
     qKeyHeld = true;
     energy -= energyCosts.q;
@@ -231,6 +232,48 @@ window.addEventListener("keyup", (e) => {
   }
 });
 
+
+function drawFishingPole(ctx, x, y, scale, facing) {
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(scale, scale);
+
+  // Flip for left facing
+  if (facing.x < 0) {
+    ctx.scale(-1, 1);
+  }
+
+  // Rod shaft
+  ctx.strokeStyle = "#5b3a1a";
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(0, 0);
+  ctx.lineTo(18, -42);
+  ctx.stroke();
+
+  // Reel
+  ctx.fillStyle = "#222";
+  ctx.beginPath();
+  ctx.arc(4, -6, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Line
+  ctx.strokeStyle = "rgba(230,230,230,0.7)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(18, -42);
+  ctx.lineTo(18, -10);
+  ctx.stroke();
+
+  // Hook
+  ctx.fillStyle = "#ccc";
+  ctx.beginPath();
+  ctx.arc(18, -8, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
 /* =========================
    MOVEMENT
 ========================= */
@@ -712,18 +755,14 @@ function drawRiver() {
 
   ctx.save();
 
-  // =========================
-  // CLIP TO RIVER AREA
-  // =========================
+  // Clip river region
   ctx.beginPath();
   ctx.rect(0, riverTop, canvas.width, riverHeight);
   ctx.clip();
 
-  // =========================
-  // WATER BASE
-  // =========================
   const tileSize = 20;
 
+  // WATER
   for (let y = 0; y < riverHeight; y += tileSize) {
     for (let x = 0; x < canvas.width; x += tileSize) {
 
@@ -736,32 +775,18 @@ function drawRiver() {
 
       ctx.fillStyle = `rgb(${brightness*0.35}, ${brightness*0.6}, ${brightness})`;
 
-      ctx.fillRect(
-        x,
-        riverTop + y + wave,
-        tileSize,
-        tileSize
-      );
+      ctx.fillRect(x, riverTop + y + wave, tileSize, tileSize);
     }
   }
 
-  // =========================
   // REFLECTION
-  // =========================
   ctx.save();
-
   ctx.translate(0, riverTop * 2);
   ctx.scale(1, -1);
-
-  const distortion = Math.sin(waterTime * 4) * 4;
-  ctx.translate(distortion, 0);
-
   ctx.globalAlpha = 0.25;
 
-  // Castle reflection
   drawCastle();
 
-  // Player reflection
   const dpr = window.devicePixelRatio || 1;
   const logicalW = canvas.width / dpr;
   const logicalH = canvas.height / dpr;
@@ -776,19 +801,32 @@ function drawRiver() {
     facing
   );
 
-  drawScepter(
-    ctx,
-    logicalW/2 + 38,
-    logicalH/2 + 26,
-    3,
-    walkFrame,
-    idleTime,
-    attackAnim,
-    charging
-  );
+  if (activeWeapon === 1) {
+
+    drawScepter(
+      ctx,
+      logicalW/2 + 38,
+      logicalH/2 + 26,
+      3,
+      walkFrame,
+      idleTime,
+      attackAnim,
+      charging
+    );
+
+  } else if (activeWeapon === 2) {
+
+    drawFishingPole(
+      ctx,
+      logicalW/2 + 38,
+      logicalH/2 + 26,
+      3,
+      facing
+    );
+
+  }
 
   ctx.restore(); // reflection
-
   ctx.restore(); // clip
 }
 
@@ -1101,13 +1139,13 @@ function draw(){
 
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  const logicalW = canvas.width / (window.devicePixelRatio || 1);
-  const logicalH = canvas.height / (window.devicePixelRatio || 1);
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = canvas.width / dpr;
+  const logicalH = canvas.height / dpr;
 
   // =========================
-  // SCREEN SHAKE (FIXED)
+  // SCREEN SHAKE
   // =========================
-
   if (screenShake > 0) {
     const shakeX = (Math.random() - 0.5) * screenShake;
     const shakeY = (Math.random() - 0.5) * screenShake;
@@ -1115,21 +1153,27 @@ function draw(){
     ctx.translate(shakeX, shakeY);
   }
 
-drawFloor();
-drawMoat();
-drawCourtyard();
-drawRiver(); 
-drawCastle();
-drawAttacks(ctx);
+  // ===== WORLD DRAW ORDER (FIXED) =====
+  drawFloor();
+  drawMoat();
+  drawCastle();        // castle BEFORE courtyard
+  drawCourtyard();     // courtyard (house + hedges)
+  drawRiver();         // river LAST (because it clips)
 
-  // Darken screen
+  drawAttacks(ctx);
+
+  // =========================
+  // Darken screen during ult
+  // =========================
   if (ulting) {
     const fadeIn = Math.min(1, ultTimer / ultWindup);
     ctx.fillStyle = `rgba(0,0,0,${0.7 * fadeIn})`;
     ctx.fillRect(0,0,logicalW,logicalH);
   }
 
-  // Raise wizard slightly
+  // =========================
+  // Wizard
+  // =========================
   let raiseOffset = 0;
   if (ulting) {
     const progress = Math.min(1, ultTimer / 400);
@@ -1149,6 +1193,8 @@ drawAttacks(ctx);
   const sx = logicalW/2 + 38;
   const sy = logicalH/2 + 26;
 
+if (activeWeapon === 1) {
+
   drawScepter(
     ctx,
     sx,
@@ -1160,20 +1206,27 @@ drawAttacks(ctx);
     charging
   );
 
+} else if (activeWeapon === 2) {
+
+  drawFishingPole(
+    ctx,
+    sx,
+    sy,
+    3,
+    facing
+  );
+
+}
+
   if (ulting) {
     drawUltimateHalo();
   }
-
-  // =========================
-  // RESTORE SHAKE
-  // =========================
 
   if (screenShake > 0) {
     ctx.restore();
   }
 
-drawHUD(logicalW, logicalH);
-
+  drawHUD(logicalW, logicalH);
 }
 /* =========================
    MAIN LOOP
