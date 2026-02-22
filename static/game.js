@@ -7,6 +7,7 @@ import { drawScepter } from "./weapon.js?v=2";
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
 
@@ -510,8 +511,6 @@ if (energy > maxEnergy) energy = maxEnergy;
 function drawCourtyard() {
 
   const centerX = castle.x;
-
-  // PUSH COURTYARD DOWN SLIGHTLY (visual separation from moat)
   const centerY = castle.y + courtyard.offsetY + 20;
 
   const screenX = centerX - camera.x + canvas.width/2;
@@ -523,58 +522,50 @@ function drawCourtyard() {
   ctx.save();
 
   // =========================
-  // Base Grass
+  // PBR GRASS
   // =========================
 
-// =========================
-// PBR-STYLE GRASS
-// =========================
+  const tileSize = 32;
 
-const tileSize = 32;
+  const lightDir = { x: -0.4, y: -0.9 };
+  const len = Math.hypot(lightDir.x, lightDir.y);
+  lightDir.x /= len;
+  lightDir.y /= len;
 
-// fake sun direction
-const lightDir = { x: -0.4, y: -0.9 };
-const len = Math.hypot(lightDir.x, lightDir.y);
-lightDir.x /= len;
-lightDir.y /= len;
+  for (let y = -h/2; y < h/2; y += tileSize) {
+    for (let x = -w/2; x < w/2; x += tileSize) {
 
-for (let y = -h/2; y < h/2; y += tileSize) {
-  for (let x = -w/2; x < w/2; x += tileSize) {
+      const worldX = castle.x + x;
+      const worldY = castle.y + courtyard.offsetY + y;
 
-    const worldX = castle.x + x;
-    const worldY = castle.y + courtyard.offsetY + y;
+      const sx = screenX + x;
+      const sy = screenY + y;
 
-    const sx = screenX + x;
-    const sy = screenY + y;
+      const n1 = Math.sin(worldX * 0.03) * 0.5;
+      const n2 = Math.cos(worldY * 0.04) * 0.5;
+      const noise = (n1 + n2);
 
-    // Albedo noise
-    const n1 = Math.sin(worldX * 0.03) * 0.5;
-    const n2 = Math.cos(worldY * 0.04) * 0.5;
-    const noise = (n1 + n2);
+      const baseGreen = 90 + noise * 25;
 
-    const baseGreen = 90 + noise * 25;
+      const nx = Math.sin(worldX * 0.05) * 0.6;
+      const ny = Math.cos(worldY * 0.05) * 0.6;
 
-    // Fake micro-normal
-    const nx = Math.sin(worldX * 0.05) * 0.6;
-    const ny = Math.cos(worldY * 0.05) * 0.6;
+      const dot = Math.max(0, nx * lightDir.x + ny * lightDir.y);
+      const rough = 0.5 + Math.sin((worldX + worldY) * 0.02) * 0.2;
 
-    const dot = Math.max(0, nx * lightDir.x + ny * lightDir.y);
+      const brightness = baseGreen * (0.6 + dot * 0.6) * (1 - rough * 0.25);
 
-    // Roughness
-    const rough = 0.5 + Math.sin((worldX + worldY) * 0.02) * 0.2;
+      const r = brightness * 0.4;
+      const g = brightness;
+      const b = brightness * 0.35;
 
-    const brightness = baseGreen * (0.6 + dot * 0.6) * (1 - rough * 0.25);
-
-    const r = brightness * 0.4;
-    const g = brightness;
-    const b = brightness * 0.35;
-
-    ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
-    ctx.fillRect(sx, sy, tileSize, tileSize);
+      ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+      ctx.fillRect(sx, sy, tileSize, tileSize);
+    }
   }
-}
+
   // =========================
-  // NEXT-LEVEL PBR BRICK PATH
+  // BRICK PATH
   // =========================
 
   const pathWidth = 260;
@@ -582,93 +573,122 @@ for (let y = -h/2; y < h/2; y += tileSize) {
   const brickH = 22;
   const mortar = 4;
 
-const brickLight = { x: -0.5, y: -0.8 };
-const brickLen = Math.hypot(brickLight.x, brickLight.y);
-brickLight.x /= brickLen;
-brickLight.y /= brickLen;
+  const brickLight = { x: -0.5, y: -0.8 };
+  const brickLen = Math.hypot(brickLight.x, brickLight.y);
+  brickLight.x /= brickLen;
+  brickLight.y /= brickLen;
 
-  for (let y = -h/2; y < h/2; y += brickH + mortar) {
+  function drawBrickField(startX, startY, width, height) {
+    for (let y = 0; y < height; y += brickH + mortar) {
 
-    const row = Math.floor(y / (brickH + mortar));
-    const stagger = row % 2 === 0 ? 0 : brickW/2;
+      const row = Math.floor(y / (brickH + mortar));
+      const stagger = row % 2 === 0 ? 0 : brickW/2;
 
-    for (let x = -pathWidth/2; x < pathWidth/2; x += brickW) {
+      for (let x = 0; x < width; x += brickW) {
 
-      const bx = screenX + x + stagger;
-      const by = screenY + y;
+        const bx = startX + x + stagger;
+        const by = startY + y;
 
-      // World position for noise
-      const wx = castle.x + x;
-      const wy = castle.y + courtyard.offsetY + y;
+        const wx = bx + camera.x - canvas.width/2;
+        const wy = by + camera.y - canvas.height/2;
 
-      // Albedo variation
-      const noise =
-        Math.sin(wx * 0.05) * 0.5 +
-        Math.cos(wy * 0.05) * 0.5;
+        const noise =
+          Math.sin(wx * 0.05) * 0.5 +
+          Math.cos(wy * 0.05) * 0.5;
 
-      const baseRed = 150 + noise * 30;
-      const baseGreen = 35 + noise * 8;
-      const baseBlue = 30 + noise * 6;
+        const baseRed = 150 + noise * 30;
+        const baseGreen = 35 + noise * 8;
+        const baseBlue = 30 + noise * 6;
 
-      // Fake micro normal
-      const nx = Math.sin(wx * 0.1) * 0.4;
-      const ny = Math.cos(wy * 0.1) * 0.4;
+        const nx = Math.sin(wx * 0.1) * 0.4;
+        const ny = Math.cos(wy * 0.1) * 0.4;
 
-      const dot = Math.max(0, nx*brickLight.x + ny*brickLight.y);
+        const dot = Math.max(0, nx*brickLight.x + ny*brickLight.y);
+        const rough = 0.6 + Math.sin((wx+wy)*0.03)*0.2;
+        const brightness = (0.65 + dot*0.6) * (1 - rough*0.2);
 
-      // Roughness variation
-      const rough = 0.6 + Math.sin((wx+wy)*0.03)*0.2;
+        const r = (baseRed * brightness) | 0;
+        const g = (baseGreen * brightness) | 0;
+        const b = (baseBlue * brightness) | 0;
 
-      const brightness = (0.65 + dot*0.6) * (1 - rough*0.2);
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(bx, by, brickW - mortar, brickH);
 
-      const r = (baseRed * brightness) | 0;
-      const g = (baseGreen * brightness) | 0;
-      const b = (baseBlue * brightness) | 0;
+        ctx.fillStyle = "rgba(0,0,0,0.15)";
+        ctx.fillRect(bx, by + brickH - 3, brickW - mortar, 3);
 
-      // Draw brick body
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      ctx.fillRect(bx, by, brickW - mortar, brickH);
-
-      // Subtle bottom shadow (bevel illusion)
-      ctx.fillStyle = "rgba(0,0,0,0.15)";
-      ctx.fillRect(bx, by + brickH - 3, brickW - mortar, 3);
-
-      // Top highlight edge
-      ctx.fillStyle = "rgba(255,200,180,0.12)";
-      ctx.fillRect(bx, by, brickW - mortar, 2);
+        ctx.fillStyle = "rgba(255,200,180,0.12)";
+        ctx.fillRect(bx, by, brickW - mortar, 2);
+      }
     }
   }
 
-  // Mortar overlay grid (adds depth)
-  ctx.fillStyle = "rgba(40,20,20,0.6)";
-  for (let y = -h/2; y < h/2; y += brickH + mortar) {
-    ctx.fillRect(
-      screenX - pathWidth/2,
-      screenY + y + brickH,
-      pathWidth,
-      mortar
-    );
-  }
+  const verticalPathX = screenX - pathWidth/2;
+  const verticalPathY = screenY - h/2;
+
+  drawBrickField(verticalPathX, verticalPathY, pathWidth, h);
+
+  drawBrickField(
+    screenX - pathWidth/2,
+    screenY + h/2,
+    pathWidth,
+    400
+  );
 
   // =========================
-  // Hedge Rows (moved outward + full length)
+  // HOUSE (computed AFTER pathWidth exists)
+  // =========================
+
+  const hedgeEndY = screenY + (h/2 - 30);
+  const houseY = hedgeEndY + 120;
+  const houseX = screenX - pathWidth/2 - 260;
+
+  const houseW = 180;
+  const houseH = 140;
+
+  ctx.fillStyle = "#8b5a2b";
+  ctx.fillRect(
+    houseX - houseW/2,
+    houseY - houseH,
+    houseW,
+    houseH
+  );
+
+  ctx.fillStyle = "#5a2b1a";
+  ctx.beginPath();
+  ctx.moveTo(houseX - houseW/2 - 20, houseY - houseH);
+  ctx.lineTo(houseX + houseW/2 + 20, houseY - houseH);
+  ctx.lineTo(houseX, houseY - houseH - 80);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "#3a1d0f";
+  ctx.fillRect(
+    houseX - 20,
+    houseY - 60,
+    40,
+    60
+  );
+
+  ctx.fillStyle = "#aee2ff";
+  ctx.fillRect(houseX - 50, houseY - 100, 30, 30);
+  ctx.fillRect(houseX + 20, houseY - 100, 30, 30);
+
+  // =========================
+  // HEDGES
   // =========================
 
   const bushRadius = 22;
-
-  // Distance from path edge
   const hedgeOffset = pathWidth/2 + 80;
 
   ctx.fillStyle = "#1f4f1f";
 
   for (let y = -h/2 + 30; y <= h/2 - 30; y += 55) {
 
-    // Left hedge row
     ctx.beginPath();
     ctx.arc(screenX - hedgeOffset, screenY + y, bushRadius, 0, Math.PI*2);
     ctx.fill();
 
-    // Right hedge row
     ctx.beginPath();
     ctx.arc(screenX + hedgeOffset, screenY + y, bushRadius, 0, Math.PI*2);
     ctx.fill();
