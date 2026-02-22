@@ -7,29 +7,9 @@ import { drawScepter } from "./weapon.js?v=2";
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
-/* --- HAPTICS --- */
-function rumble(ms=20){
-  if(navigator.vibrate) navigator.vibrate(ms);
-}
-
-/* charge vibration ramp */
-let chargeHapticTimer = 0;
-function chargeHaptics(dt,p){
-  chargeHapticTimer -= dt;
-  if(chargeHapticTimer > 0) return;
-
-  const pulse    = 6 + Math.floor(p*40);
-  const interval = 70 - Math.floor(p*50);
-
-  if(navigator.vibrate) navigator.vibrate(pulse);
-  chargeHapticTimer = Math.max(12, interval);
-}
-
-/* charge audio throttle */
-let chargeSoundTimer = 0;
-
-let joy = { x: 0, y: 0 };
-const tileSize = 40;
+/* =========================
+   CORE STATE
+========================= */
 
 let player = { x: 0, y: 0 };
 let facing = { x: 1, y: 0 };
@@ -37,147 +17,127 @@ let facing = { x: 1, y: 0 };
 let camera = { x: 0, y: 0, targetX: 0, targetY: 0 };
 const cameraLerp = 0.12;
 
-const moveDelay = 286;
-let lastMove = 0;
-
-/* WALK STATE */
 let walking = false;
 let walkFrame = 0;
 let walkTimer = 0;
-
-/* IDLE TIMER */
 let idleTime = 0;
 let attackAnim = 0;
 
-/* CHARGE STATE */
 let charging = false;
 let chargeMs = 0;
 const chargeMaxMs = 900;
-const tapThresholdMs = 180;
 let chargeAutoReleased = false;
+let moveTarget = null;
+const moveSpeed = 6;
 
-/* UI */
-const btnA = document.getElementById("btnA");
-const btnB = document.getElementById("btnB");
-const chargeFill = document.getElementById("chargeFill");
+/* =========================
+   MUSIC START (Browser unlock)
+========================= */
 
-/* =========================================================
-   INPUT: LEFT JOYSTICK (movement) - lock to one touch id
-   ========================================================= */
+let musicStarted = false;
 
-const stick = document.getElementById("stick");
-const knob  = document.getElementById("knob");
-
-let stickTouchId = null;
-let stickDragging = false;
-
-function setStickFromClient(clientX, clientY){
-  const rect = stick.getBoundingClientRect();
-  let x = clientX - rect.left - 70;
-  let y = clientY - rect.top  - 70;
-
-  const dist = Math.sqrt(x*x + y*y);
-  const max = 50;
-  if(dist > max){ x = x/dist*max; y = y/dist*max; }
-
-  knob.style.left = (40 + x) + "px";
-  knob.style.top  = (40 + y) + "px";
-
-  joy.x = x/max;
-  joy.y = y/max;
-}
-
-function resetStick(){
-  stickDragging = false;
-  stickTouchId = null;
-  knob.style.left = "40px";
-  knob.style.top  = "40px";
-  joy.x = 0; joy.y = 0;
-}
-
-stick.addEventListener("touchstart", (e)=>{
-  e.preventDefault();
-  if(stickTouchId !== null) return;
-
-  const t = e.changedTouches[0];
-  stickTouchId = t.identifier;
-  stickDragging = true;
-  setStickFromClient(t.clientX, t.clientY);
-}, { passive:false });
-
-window.addEventListener("touchmove", (e)=>{
-  if(!stickDragging || stickTouchId === null) return;
-
-  // find our tracked touch by id
-  let t = null;
-  for(let i=0;i<e.touches.length;i++){
-    if(e.touches[i].identifier === stickTouchId){ t = e.touches[i]; break; }
+window.addEventListener("mousedown", () => {
+  if (!musicStarted) {
+    startMusic();
+    musicStarted = true;
   }
-  if(!t) return;
+});
+/* =========================
+   RIGHT CLICK MOVE
+========================= */
 
-  setStickFromClient(t.clientX, t.clientY);
-}, { passive:false });
+canvas.addEventListener("contextmenu", e => e.preventDefault());
 
-window.addEventListener("touchend", (e)=>{
-  if(stickTouchId === null) return;
+canvas.addEventListener("mousedown", (e) => {
+  if (e.button !== 2) return; // right click
 
-  for(let i=0;i<e.changedTouches.length;i++){
-    if(e.changedTouches[i].identifier === stickTouchId){
-      resetStick();
-      break;
-    }
+  const rect = canvas.getBoundingClientRect();
+  const worldX = camera.x - canvas.width/2 + (e.clientX - rect.left);
+  const worldY = camera.y - canvas.height/2 + (e.clientY - rect.top);
+
+  moveTarget = { x: worldX, y: worldY };
+});
+
+/* =========================
+   KEYBOARD INPUT
+========================= */
+window.addEventListener("keydown", (e) => {
+  const key = e.key.toLowerCase();
+
+  if (key === "q") fireNormal();
+  if (key === "w") fireShotgun();
+
+  if (key === "e" && !charging) {
+    charging = true;
+    chargeMs = 0;
+    chargeAutoReleased = false;
   }
-}, { passive:false });
 
-window.addEventListener("touchcancel", (e)=>{
-  if(stickTouchId === null) return;
+  if (key === "r") console.log("Ultimate reserved");
 
-  for(let i=0;i<e.changedTouches.length;i++){
-    if(e.changedTouches[i].identifier === stickTouchId){
-      resetStick();
-      break;
-    }
+  if (key >= "1" && key <= "9") {
+    console.log("Use item slot", key);
   }
-}, { passive:false });
+});
 
-/* =========================================================
-   MOVEMENT (grid step)
-   ========================================================= */
+window.addEventListener("keyup", (e) => {
+  const key = e.key.toLowerCase();
 
-function tryMove(){
-  const now = Date.now();
-  if(now - lastMove < moveDelay) return;
+  if (key === "e" && charging) {
+    releaseCharge();
+  }
+});
 
-  let dx = 0, dy = 0;
+/* =========================
+   MOVEMENT
+========================= */
 
-  if(Math.abs(joy.x) > Math.abs(joy.y)) dx = joy.x > 0 ? 1 : -1;
-  else if(Math.abs(joy.y) > 0) dy = joy.y > 0 ? 1 : -1;
-  else return;
+function tryMove(dt){
+  if(!moveTarget) return;
 
-  if(dx || dy){ facing.x = dx; facing.y = dy; }
+  const dx = moveTarget.x - player.x;
+  const dy = moveTarget.y - player.y;
+  const dist = Math.hypot(dx, dy);
 
-  player.x += dx * tileSize;
-  player.y += dy * tileSize;
+  if(dist < 4){
+    moveTarget = null;
+    walking = false;
+    return;
+  }
 
-  rumble(8);
+  const nx = dx / dist;
+  const ny = dy / dist;
+
+  player.x += nx * moveSpeed;
+  player.y += ny * moveSpeed;
+
+  // SNAP FACING TO CARDINAL ONLY
+  if (Math.abs(nx) > Math.abs(ny)) {
+    facing.x = nx > 0 ? 1 : -1;
+    facing.y = 0;
+  } else {
+    facing.y = ny > 0 ? 1 : -1;
+    facing.x = 0;
+  }
 
   walking = true;
-  walkFrame ^= 1;
-  walkTimer = 250;
   idleTime = 0;
-
-  lastMove = now;
 }
 
-/* =========================================================
-   SHOOTING (does NOT depend on joystick state)
-   ========================================================= */
+/* =========================
+   SHOOTING
+========================= */
 
 function aimDir(){
   let dx = 0, dy = 0;
-  if(Math.abs(facing.x) > Math.abs(facing.y)) dx = facing.x > 0 ? 1 : -1;
-  else dy = facing.y > 0 ? 1 : -1;
-  return {dx,dy};
+
+  if (Math.abs(facing.x) > Math.abs(facing.y)) {
+    dx = facing.x > 0 ? 1 : -1;
+  } else {
+    dy = facing.y > 0 ? 1 : -1;
+  }
+
+  return { dx, dy };
 }
 
 function fireNormal(){
@@ -191,7 +151,6 @@ function fireNormal(){
   });
 
   sfxShoot();
-  rumble(30);
   attackAnim = 1;
 }
 
@@ -211,7 +170,6 @@ function fireCharged(power01){
   });
 
   sfxCharged(power01);
-  rumble(140 + Math.floor(power01*180));
   attackAnim = 1;
 }
 
@@ -222,49 +180,26 @@ function fireShotgun(){
   const {dx,dy} = aimDir();
 
   castShotgun(sx,sy,dx,dy);
-
   sfxShotgun();
-  rumble(90);
   attackAnim = 1;
 }
 
-/* =========================================================
-   CHARGE UI
-   ========================================================= */
 
-function setChargeUI(p){
-  const deg = Math.max(0, Math.min(1,p)) * 360;
-  chargeFill.style.background =
-    `conic-gradient(rgba(180,80,255,0.9) ${deg}deg, rgba(180,80,255,0.0) 0deg)`;
-}
+function releaseCharge(){
+  const p = Math.min(1, chargeMs / chargeMaxMs);
 
-function beginCharge(){
-  startMusic();
-  charging = true;
-  chargeAutoReleased = false;
-  chargeMs = 0;
-  chargeHapticTimer = 0;
-  chargeSoundTimer = 0;
-  setChargeUI(0);
-  rumble(12);
-}
-
-function endCharge(){
-  const p = Math.max(0, Math.min(1, chargeMs/chargeMaxMs));
-  if(chargeMs < tapThresholdMs) fireNormal();
-  else fireCharged(p);
+  fireCharged(p);
 
   charging = false;
   chargeMs = 0;
-  setChargeUI(0);
 }
 
-/* =========================================================
-   UPDATE / DRAW
-   ========================================================= */
+/* =========================
+   UPDATE
+========================= */
 
 function update(dt){
-  tryMove();
+  tryMove(dt);
 
   camera.targetX = player.x;
   camera.targetY = player.y;
@@ -274,32 +209,33 @@ function update(dt){
 
   if(walking){
     walkTimer -= dt;
-    if(walkTimer <= 0) walking = false;
+    if(walkTimer <= 0){
+      walkFrame ^= 1;
+      walkTimer = 200;
+    }
+  } else {
+    idleTime += dt;
   }
 
-  if(!walking) idleTime += dt;
   attackAnim = Math.max(0, attackAnim - dt*0.006);
 
-  if(charging){
-    chargeMs = Math.min(chargeMs + dt, chargeMaxMs);
-    const p = chargeMs/chargeMaxMs;
-    setChargeUI(p);
-    chargeHaptics(dt,p);
-  if(!chargeAutoReleased && chargeMs >= chargeMaxMs){
-    chargeAutoReleased = true;
-    endCharge();
-    return;
-  }
+if (charging) {
+  chargeMs += dt;
 
-    chargeSoundTimer -= dt;
-    if(chargeSoundTimer <= 0){
-      sfxCharged(p*0.35);
-      chargeSoundTimer = 85;
-    }
+  if (chargeMs >= chargeMaxMs && !chargeAutoReleased) {
+    chargeAutoReleased = true;
+    releaseCharge();
   }
 }
 
+}
+
+/* =========================
+   DRAW
+========================= */
+
 function drawFloor(){
+  const tileSize = 40;
   const startX=Math.floor((camera.x-canvas.width/2)/tileSize)*tileSize;
   const startY=Math.floor((camera.y-canvas.height/2)/tileSize)*tileSize;
 
@@ -321,39 +257,20 @@ function draw(){
 
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
-  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim,charging);
+  drawScepter(ctx,sx,sy,3,walkFrame,idleTime,attackAnim,false);
 }
 
-/* =========================================================
+/* =========================
    MAIN LOOP
-   ========================================================= */
+========================= */
 
 let last = performance.now();
 setInterval(()=>{
   const now = performance.now();
-  const dt = now - last; last = now;
+  const dt = now - last; 
+  last = now;
 
   update(dt);
   updateAttacks(dt);
   draw();
-}, 33);
-
-/* =========================================================
-   BUTTONS: MULTI-TOUCH SAFE (NO CLICK EVENTS)
-   - IMPORTANT: using click on mobile can cancel other touches
-   ========================================================= */
-
-function bindPressHold(el,onDown,onUp){
-  el.addEventListener("touchstart",(e)=>{ e.preventDefault(); onDown(); }, {passive:false});
-  el.addEventListener("touchend",(e)=>{ e.preventDefault(); onUp(); }, {passive:false});
-  el.addEventListener("touchcancel",(e)=>{ e.preventDefault(); onUp(); }, {passive:false});
-
-  // desktop fallback
-  el.addEventListener("mousedown",(e)=>{ e.preventDefault(); onDown(); });
-  window.addEventListener("mouseup",(e)=>{ if(charging){ e.preventDefault(); onUp(); }});
-}
-
-bindPressHold(btnA, beginCharge, endCharge);
-
-/* B: fire immediately on press; no-op on release */
-bindPressHold(btnB, ()=>{ fireShotgun(); }, ()=>{});
+}, 16);
