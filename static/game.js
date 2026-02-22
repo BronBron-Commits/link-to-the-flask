@@ -63,6 +63,7 @@ let ultTimer = 0;
 const ultWindup = 500;      // delay before lightning
 const ultActive = 1500;     // ring duration
 const ultTotal = ultWindup + ultActive;
+let ultBurstTriggered = false;
 /* =========================
    MUSIC START (Browser unlock)
 ========================= */
@@ -214,6 +215,25 @@ function aimDir(){
   return { dx, dy };
 }
 
+function sfxUltimateBoom() {
+  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(120, audioCtx.currentTime);
+  osc.frequency.exponentialRampToValueAtTime(40, audioCtx.currentTime + 0.4);
+
+  gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.5);
+
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  osc.start();
+  osc.stop(audioCtx.currentTime + 0.5);
+}
 function fireNormal(){
   const sx = canvas.width/2 + 38;
   const sy = canvas.height/2 + 26;
@@ -270,38 +290,64 @@ function releaseCharge(){
   eCooldownTimer = eCooldownMs;
 }
 
-/* =========================
-   UPDATE
-========================= */
-
 function update(dt){
-if (ulting) {
-  ultTimer += dt;
 
-  if (ultTimer >= ultTotal) {
- 
-    if (ultNoiseOsc) {
-  ultNoiseOsc.stop();
-  ultNoiseOsc = null;
-}
-    ulting = false;
-    ultTimer = 0;
+  // =========================
+  // ULTIMATE
+  // =========================
+
+  if (ulting) {
+
+    ultTimer += dt;
+
+    // Fire burst exactly once after windup finishes
+    if (!ultBurstTriggered && ultTimer >= ultWindup) {
+      ultBurstTriggered = true;
+      triggerUltimateBurst();
+
+      // stop windup noise
+      if (ultNoiseOsc) {
+        ultNoiseOsc.stop();
+        ultNoiseOsc = null;
+      }
+    }
+
+    if (ultTimer >= ultTotal) {
+      ulting = false;
+      ultTimer = 0;
+      ultBurstTriggered = false;
+    }
   }
-}
 
-if (!ulting) {
-  tryMove(dt);
-}
+  // =========================
+  // MOVEMENT (disabled during ult)
+  // =========================
+
+  if (!ulting) {
+    tryMove(dt);
+  }
+
+  // =========================
+  // COOLDOWNS
+  // =========================
 
   if (eCooldownTimer > 0) {
-  eCooldownTimer -= dt;
-}
+    eCooldownTimer -= dt;
+  }
+
+  // =========================
+  // CAMERA
+  // =========================
 
   camera.targetX = player.x;
   camera.targetY = player.y;
 
   camera.x += (camera.targetX - camera.x) * cameraLerp;
   camera.y += (camera.targetY - camera.y) * cameraLerp;
+
+  // =========================
+  // WALK ANIMATION
+  // =========================
 
   if(walking){
     walkTimer -= dt;
@@ -315,24 +361,26 @@ if (!ulting) {
 
   attackAnim = Math.max(0, attackAnim - dt*0.006);
 
-if (charging) {
-  chargeMs += dt;
+  // =========================
+  // CHARGING
+  // =========================
 
-  const power = chargeMs / chargeMaxMs;
+  if (charging) {
+    chargeMs += dt;
 
-  // play rising charge tone repeatedly
-  chargeSoundTimer -= dt;
-  if (chargeSoundTimer <= 0) {
-    sfxCharged(power * 0.35); // low volume pulse
-    chargeSoundTimer = 90 - power * 60; // pulses get faster
+    const power = chargeMs / chargeMaxMs;
+
+    chargeSoundTimer -= dt;
+    if (chargeSoundTimer <= 0) {
+      sfxCharged(power * 0.35);
+      chargeSoundTimer = 90 - power * 60;
+    }
+
+    if (chargeMs >= chargeMaxMs && !chargeAutoReleased) {
+      chargeAutoReleased = true;
+      releaseCharge();
+    }
   }
-
-  if (chargeMs >= chargeMaxMs && !chargeAutoReleased) {
-    chargeAutoReleased = true;
-    releaseCharge();
-  }
-}
-
 }
 
 /* =========================
@@ -354,47 +402,80 @@ function drawFloor(){
   }
 }
 
-function drawUltimateHalo() {
-  const logicalW = canvas.width / (window.devicePixelRatio || 1);
-  const logicalH = canvas.height / (window.devicePixelRatio || 1);
+function triggerUltimateBurst() {
+
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = canvas.width / dpr;
+  const logicalH = canvas.height / dpr;
 
   const centerX = logicalW / 2;
-  const centerY = logicalH / 2 - 20;
+  const centerY = logicalH / 2;
+
+  const radius = 140;
+  const shots = 48; // huge burst
+
+  for (let i = 0; i < shots; i++) {
+
+    const angle = (Math.PI * 2 / shots) * i;
+
+    const dx = Math.cos(angle);
+    const dy = Math.sin(angle);
+
+    const spawnX = centerX + dx * radius;
+    const spawnY = centerY + dy * radius;
+
+    castAttack(spawnX, spawnY, dx, dy, {
+      speed: 28,
+      life: 1.4,
+      rangeTiles: 8,
+      scaleBoost: 1.6,
+      trailCount: 6
+    });
+  }
+
+  sfxUltimateBoom();
+}
+function drawUltimateHalo() {
+  const dpr = window.devicePixelRatio || 1;
+  const logicalW = canvas.width / dpr;
+  const logicalH = canvas.height / dpr;
+
+  // EXACT same position wizard is drawn at
+  const centerX = logicalW / 2;
+  const centerY = logicalH / 2;
 
   const radius = 140;
 
-  // only draw ring after windup
+  // only draw ring after windup delay
   if (ultTimer < ultWindup) return;
 
   const activeTime = ultTimer - ultWindup;
-  const progress = activeTime / ultActive;
-
   const rotation = activeTime * 0.004;
 
   ctx.save();
   ctx.translate(centerX, centerY);
   ctx.rotate(rotation);
 
-  // glowing perimeter circle
+  // main glowing perimeter
   ctx.lineWidth = 6;
-  ctx.strokeStyle = "rgba(100,180,255,0.8)";
+  ctx.strokeStyle = "rgba(100,180,255,0.85)";
   ctx.beginPath();
   ctx.arc(0, 0, radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // animated lightning segments around perimeter
-  const segments = 20;
+  // crackling lightning segments
+  const segments = 24;
 
   for (let i = 0; i < segments; i++) {
     const angle = (Math.PI * 2 / segments) * i;
 
-    const jitter = (Math.random() - 0.5) * 8;
+    const jitter = (Math.random() - 0.5) * 10;
 
     const x1 = Math.cos(angle) * radius;
     const y1 = Math.sin(angle) * radius;
 
-    const x2 = Math.cos(angle + 0.15) * (radius + jitter);
-    const y2 = Math.sin(angle + 0.15) * (radius + jitter);
+    const x2 = Math.cos(angle + 0.12) * (radius + jitter);
+    const y2 = Math.sin(angle + 0.12) * (radius + jitter);
 
     ctx.strokeStyle = `hsl(${200 + Math.sin(activeTime*0.02)*40},100%,65%)`;
     ctx.lineWidth = 3;
