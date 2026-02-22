@@ -41,19 +41,27 @@ function playPadChord(chord, start, beat){
   }
 }
 
-/* ================= MELODIC 808 ================= */
-function play808Melodic(chord, start, beat, measure){
-  const root = chord[0] * T / 2;
+/* ================= EIGHTH NOTE BASS ================= */
+function play808Groove(chord, start, beat){
+  const root  = chord[0] * T / 2;
+  const third = chord[1] * T / 2;
   const fifth = chord[2] * T / 2;
 
-  const notes = [
-    {freq: root,  time: start},                   // beat 1
-    {freq: fifth, time: start + beat*1.5},        // upbeat of 2
-    {freq: root,  time: start + beat*2},          // beat 3
-    {freq: fifth, time: start + beat*3.5}         // approach into next bar
+  const sixteenth = beat / 4;
+  const sustain = beat / 2;   // eighth note length
+
+  const pattern = [
+    {freq: root,  time: start},
+    {freq: third, time: start + beat + sixteenth},
+    {freq: fifth, time: start + beat + sixteenth*2},
+    {freq: third, time: start + beat + sixteenth*3},
+    {freq: root,  time: start + beat*2},
+    {freq: third, time: start + beat*3 + sixteenth},
+    {freq: fifth, time: start + beat*3 + sixteenth*2},
+    {freq: third, time: start + beat*3 + sixteenth*3}
   ];
 
-  for(const n of notes){
+  for(const n of pattern){
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
@@ -61,14 +69,14 @@ function play808Melodic(chord, start, beat, measure){
     osc.frequency.setValueAtTime(n.freq, n.time);
 
     gain.gain.setValueAtTime(0.0001, n.time);
-    gain.gain.linearRampToValueAtTime(0.65, n.time + 0.02);
-    gain.gain.exponentialRampToValueAtTime(0.0001, n.time + beat*0.8);
+    gain.gain.linearRampToValueAtTime(0.7, n.time + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, n.time + sustain);
 
     osc.connect(gain);
     gain.connect(master);
 
     osc.start(n.time);
-    osc.stop(n.time + beat);
+    osc.stop(n.time + sustain);
   }
 }
 
@@ -122,7 +130,7 @@ function snare(time){
 
 /* ================= LOOP ================= */
 function playLoop(){
-  const bpm = 224;
+  const bpm = 224 * 0.75;
   const beat = 60 / bpm;
   const measure = beat * 4;
 
@@ -135,7 +143,7 @@ function playLoop(){
     for(let bar=0; bar<4; bar++){
       const chord = (bar % 2 === 0) ? Bb : Ab;
 
-      play808Melodic(chord, t, beat, measure);
+      play808Groove(chord, t, beat);
 
       for(let b=0; b<4; b++){
         hat(t + b*beat);
