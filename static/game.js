@@ -49,6 +49,19 @@ let cooldowns = {
   r: 0
 };
 
+// =========================
+// ENERGY COSTS
+// =========================
+
+const energyCosts = {
+  q: 15,
+  w: 30,
+  e: 40,
+  r: 60
+};
+
+const energyRegenPerSecond = 18;
+
 // cooldown durations
 const cooldownDurations = {
   q: 800,
@@ -131,31 +144,33 @@ canvas.addEventListener("mousedown", (e) => {
   moveTarget = { x: worldX, y: worldY };
 });
 
-/* =========================
-   KEYBOARD INPUT
-========================= */
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
 
-  if (key === "q" && !qKeyHeld && cooldowns.q <= 0) {
+  if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
     qKeyHeld = true;
+    energy -= energyCosts.q;
     fireNormal();
   }
 
-  if (key === "w" && !wKeyHeld && cooldowns.w <= 0) {
+  if (key === "w" && !wKeyHeld && cooldowns.w <= 0 && energy >= energyCosts.w) {
     wKeyHeld = true;
+    energy -= energyCosts.w;
     fireShotgun();
   }
 
-  if (key === "e" && !charging && cooldowns.e <= 0 && !eKeyHeld) {
+  if (key === "e" && !charging && cooldowns.e <= 0 && energy >= energyCosts.e && !eKeyHeld) {
     eKeyHeld = true;
+    energy -= energyCosts.e;
     charging = true;
     chargeMs = 0;
     chargeAutoReleased = false;
     chargeSoundTimer = 0;
   }
 
-  if (key === "r" && !ulting && cooldowns.r <= 0) {
+  if (key === "r" && !ulting && cooldowns.r <= 0 && energy >= energyCosts.r) {
+    energy -= energyCosts.r;
+
     ulting = true;
     ultTimer = 0;
 
@@ -177,8 +192,13 @@ window.addEventListener("keydown", (e) => {
     );
   }
 });
+
+
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
+
+  if (key === "q") qKeyHeld = false;
+  if (key === "w") wKeyHeld = false;
 
   if (key === "e") {
     eKeyHeld = false;
@@ -187,9 +207,6 @@ window.addEventListener("keyup", (e) => {
       releaseCharge();
     }
   }
-
-  if (key === "q") qKeyHeld = false;
-  if (key === "w") wKeyHeld = false;
 });
 
 /* =========================
@@ -446,9 +463,16 @@ for (let key in hudPulse) {
   }
 }
 
+
+// =========================
+// ENERGY REGEN
+// =========================
+
+energy += energyRegenPerSecond * (dt / 1000);
+if (energy > maxEnergy) energy = maxEnergy;
+
+
 }
-
-
 
 
 
@@ -516,7 +540,8 @@ function drawHUD(logicalW, logicalH) {
     ctx.translate(x, y);
     ctx.scale(scale, scale);
 
-    ctx.fillStyle = "#222";
+let canAfford = energy >= energyCosts[key];
+ctx.fillStyle = canAfford ? "#222" : "#111";
     ctx.fillRect(-baseSize/2, -baseSize/2, baseSize, baseSize);
 
     if (cooldowns[key] > 0) {
@@ -536,7 +561,7 @@ function drawHUD(logicalW, logicalH) {
 
     } else {
 
-      ctx.fillStyle = pulse > 0 ? "#fff" : "#aaa";
+      ctx.fillStyle = canAfford ? "#fff" : "#555";
       ctx.fillText(key.toUpperCase(), 0, 0);
     }
 
