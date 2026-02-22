@@ -28,6 +28,9 @@ let chargeMs = 0;
 const chargeMaxMs = 900;
 let chargeAutoReleased = false;
 let chargeSoundTimer = 0;
+const eCooldownMs = 800;   // change duration here
+let eCooldownTimer = 0;
+let eKeyHeld = false;
 let moveTarget = null;
 const moveSpeed = 6;
 
@@ -68,7 +71,8 @@ window.addEventListener("keydown", (e) => {
   if (key === "q") fireNormal();
   if (key === "w") fireShotgun();
 
-if (key === "e" && !charging) {
+if (key === "e" && !charging && eCooldownTimer <= 0 && !eKeyHeld) {
+  eKeyHeld = true;
   charging = true;
   chargeMs = 0;
   chargeAutoReleased = false;
@@ -85,9 +89,13 @@ if (key === "e" && !charging) {
 window.addEventListener("keyup", (e) => {
   const key = e.key.toLowerCase();
 
-  if (key === "e" && charging) {
+if (key === "e") {
+  eKeyHeld = false;
+
+  if (charging) {
     releaseCharge();
   }
+}
 });
 
 /* =========================
@@ -194,6 +202,8 @@ function releaseCharge(){
   charging = false;
   chargeMs = 0;
   chargeSoundTimer = 0;
+
+  eCooldownTimer = eCooldownMs;
 }
 
 /* =========================
@@ -201,7 +211,13 @@ function releaseCharge(){
 ========================= */
 
 function update(dt){
+
+
   tryMove(dt);
+
+  if (eCooldownTimer > 0) {
+  eCooldownTimer -= dt;
+}
 
   camera.targetX = player.x;
   camera.targetY = player.y;
