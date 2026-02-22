@@ -28,29 +28,40 @@ export function startMusic(){
 function playVoice(freq, start, dur){
   freq *= T;
 
-  const osc = ctx.createOscillator();
+  const osc1 = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
+  const pan = ctx.createStereoPanner();
 
-  osc.type = "triangle";
+  osc1.type = "sawtooth";
+  osc2.type = "sawtooth";
+
+  osc1.frequency.setValueAtTime(freq, start);
+  osc2.frequency.setValueAtTime(freq * 1.008, start);
 
   filter.type = "lowpass";
-  filter.frequency.value = 1200;
-  filter.Q.value = 0.7;
-
-  osc.frequency.setValueAtTime(freq, start);
+  filter.frequency.setValueAtTime(600, start);
+  filter.frequency.linearRampToValueAtTime(1800, start + dur * 0.6);
+  filter.Q.value = 0.8;
 
   gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.linearRampToValueAtTime(0.22, start + 0.20);
-  gain.gain.linearRampToValueAtTime(0.18, start + dur * 0.65);
-  gain.gain.linearRampToValueAtTime(0.0001, start + dur + 0.7);
+  gain.gain.linearRampToValueAtTime(0.18, start + 0.35);
+  gain.gain.linearRampToValueAtTime(0.16, start + dur * 0.7);
+  gain.gain.linearRampToValueAtTime(0.0001, start + dur + 0.9);
 
-  osc.connect(filter);
+  pan.pan.setValueAtTime((Math.random()*0.4)-0.2, start);
+
+  osc1.connect(filter);
+  osc2.connect(filter);
   filter.connect(gain);
-  gain.connect(master);
+  gain.connect(pan);
+  pan.connect(master);
 
-  osc.start(start);
-  osc.stop(start + dur + 1.0);
+  osc1.start(start);
+  osc2.start(start);
+  osc1.stop(start + dur + 1.2);
+  osc2.stop(start + dur + 1.2);
 }
 
 function playChord(chord, time, length){
