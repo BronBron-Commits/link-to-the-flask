@@ -235,45 +235,55 @@ window.addEventListener("keyup", (e) => {
 
 function drawFishingPole(ctx, x, y, scale, facing) {
 
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
+ctx.save();
 
-  // Flip for left facing
+const offsetX = 14;
+const offsetY = 18;
+
+ctx.translate(x + offsetX, y + offsetY);
+
+const weaponScale = scale * 0.6;
+ctx.scale(weaponScale, weaponScale);
+
+  // Flip if facing left
   if (facing.x < 0) {
     ctx.scale(-1, 1);
   }
 
   // Rod shaft
   ctx.strokeStyle = "#5b3a1a";
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(18, -42);
+  ctx.lineTo(12, -28);
   ctx.stroke();
 
   // Reel
   ctx.fillStyle = "#222";
   ctx.beginPath();
-  ctx.arc(4, -6, 4, 0, Math.PI * 2);
+  ctx.arc(3, -4, 3, 0, Math.PI * 2);
   ctx.fill();
 
   // Line
   ctx.strokeStyle = "rgba(230,230,230,0.7)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(18, -42);
-  ctx.lineTo(18, -10);
+  ctx.moveTo(12, -28);
+  ctx.lineTo(12, -6);
   ctx.stroke();
 
   // Hook
   ctx.fillStyle = "#ccc";
   ctx.beginPath();
-  ctx.arc(18, -8, 2, 0, Math.PI * 2);
+  ctx.arc(12, -5, 1.5, 0, Math.PI * 2);
   ctx.fill();
 
   ctx.restore();
 }
+
+
+
+
 /* =========================
    MOVEMENT
 ========================= */
