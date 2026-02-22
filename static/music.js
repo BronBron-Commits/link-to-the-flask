@@ -3,151 +3,97 @@ let master = null;
 let started = false;
 let loopTimer = null;
 
-const T = 1.12246;
-const PART_LOOPS = 2;   // play each section twice
+/* -3 semitones */
+const T = 0.8409;
 
 export function startMusic(){
   if(!ctx){
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
-    master.gain.value = 0.12;
+    master.gain.value = 0.18;
     master.connect(ctx.destination);
   }
-
   if(ctx.state === "suspended") ctx.resume().catch(()=>{});
   if(started) return;
   started = true;
-
   playLoop();
 }
 
-/* ================= PAD ================= */
-function playVoice(freq, start, dur){
-  freq *= T;
-
-  const osc1 = ctx.createOscillator();
-  const osc2 = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
-  const pan = ctx.createStereoPanner();
-
-  osc1.type = "sawtooth";
-  osc2.type = "sawtooth";
-
-  osc1.frequency.setValueAtTime(freq, start);
-  osc2.frequency.setValueAtTime(freq * 1.008, start);
-
-  filter.type = "lowpass";
-  filter.frequency.setValueAtTime(600, start);
-  filter.frequency.linearRampToValueAtTime(1800, start + dur * 0.6);
-  filter.Q.value = 0.8;
-
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.linearRampToValueAtTime(0.06, start + 0.35);
-  gain.gain.linearRampToValueAtTime(0.05, start + dur * 0.7);
-  gain.gain.linearRampToValueAtTime(0.0001, start + dur + 0.9);
-
-  pan.pan.setValueAtTime((Math.random()*0.4)-0.2, start);
-
-  osc1.connect(filter);
-  osc2.connect(filter);
-  filter.connect(gain);
-  gain.connect(pan);
-  pan.connect(master);
-
-  osc1.start(start);
-  osc2.start(start);
-  osc1.stop(start + dur + 1.2);
-  osc2.stop(start + dur + 1.2);
-}
-
-function playChord(chord, time, length){
-  for(const f of chord) playVoice(f, time, length);
-}
-
-/* ================= LEAD ================= */
-function playLead(chord, start, beat){
-  const notes = [
-    chord[2]*2,
-    chord[3]*2,
-    chord[1]*2,
-    chord[2]*2
-  ];
-
-  for(let i=0;i<notes.length;i++){
-    const t = start + i*(beat*0.5);
-    const freq = notes[i]*T;
-
+/* ================= REGGAE PAD ================= */
+function playPadChord(chord, start, beat){
+  for(const note of chord){
+    const freq = note * T;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
 
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(freq, t);
+    osc.type = "sawtooth";
+    osc.frequency.setValueAtTime(freq, start);
 
-    gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.linearRampToValueAtTime(0.06, t + 0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + beat*0.45);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.linearRampToValueAtTime(0.12, start + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + beat*0.3);
 
     osc.connect(gain);
     gain.connect(master);
 
-    osc.start(t);
-    osc.stop(t + beat*0.5);
+    osc.start(start);
+    osc.stop(start + beat*0.35);
   }
 }
 
-/* ================= BASS ================= */
-function playBass(root, start, beat){
-  root *= T;
+/* ================= MELODIC 808 ================= */
+function play808Melodic(chord, start, beat, measure){
+  const root = chord[0] * T / 2;
+  const fifth = chord[2] * T / 2;
 
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
-  const filter = ctx.createBiquadFilter();
+  const notes = [
+    {freq: root,  time: start},                   // beat 1
+    {freq: fifth, time: start + beat*1.5},        // upbeat of 2
+    {freq: root,  time: start + beat*2},          // beat 3
+    {freq: fifth, time: start + beat*3.5}         // approach into next bar
+  ];
 
-  osc.type = "sawtooth";
-  filter.type = "lowpass";
-  filter.frequency.value = 420;
+  for(const n of notes){
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-  const fifth = root * 1.5;
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(n.freq, n.time);
 
-  osc.frequency.setValueAtTime(root, start);
-  osc.frequency.setValueAtTime(fifth, start + beat*2);
+    gain.gain.setValueAtTime(0.0001, n.time);
+    gain.gain.linearRampToValueAtTime(0.65, n.time + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, n.time + beat*0.8);
 
-  gain.gain.setValueAtTime(0.0001, start);
-  gain.gain.linearRampToValueAtTime(0.18, start + 0.02);
-  gain.gain.linearRampToValueAtTime(0.15, start + beat*3.5);
-  gain.gain.linearRampToValueAtTime(0.0001, start + beat*4);
+    osc.connect(gain);
+    gain.connect(master);
 
-  osc.connect(filter);
-  filter.connect(gain);
-  gain.connect(master);
-
-  osc.start(start);
-  osc.stop(start + beat*4 + 0.1);
+    osc.start(n.time);
+    osc.stop(n.time + beat);
+  }
 }
 
 /* ================= HIHAT ================= */
-function hihat(time){
+function hat(time){
   const noise = ctx.createBufferSource();
-  const buffer = ctx.createBuffer(1, ctx.sampleRate*0.02, ctx.sampleRate);
+  const buffer = ctx.createBuffer(1, ctx.sampleRate*0.015, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for(let i=0;i<data.length;i++) data[i] = Math.random()*2 - 1;
   noise.buffer = buffer;
 
   const hp = ctx.createBiquadFilter();
   hp.type = "highpass";
-  hp.frequency.value = 8000;
+  hp.frequency.value = 9000;
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.20, time);
-  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.02);
+  gain.gain.setValueAtTime(0.15, time);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.04);
 
   noise.connect(hp);
   hp.connect(gain);
   gain.connect(master);
 
   noise.start(time);
-  noise.stop(time + 0.03);
+  noise.stop(time + 0.05);
 }
 
 /* ================= SNARE ================= */
@@ -160,10 +106,10 @@ function snare(time){
 
   const bp = ctx.createBiquadFilter();
   bp.type = "bandpass";
-  bp.frequency.value = 2000;
+  bp.frequency.value = 2500;
 
   const gain = ctx.createGain();
-  gain.gain.setValueAtTime(0.50, time);
+  gain.gain.setValueAtTime(0.9, time);
   gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.18);
 
   noise.connect(bp);
@@ -171,68 +117,38 @@ function snare(time){
   gain.connect(master);
 
   noise.start(time);
-  noise.stop(time + 0.2);
+  noise.stop(time + 0.25);
 }
 
-/* ================= LOOP A ↔ B (2x each) ================= */
+/* ================= LOOP ================= */
 function playLoop(){
-  const bpm = 156;
+  const bpm = 224;
   const beat = 60 / bpm;
   const measure = beat * 4;
 
-  const songA = [
-    [261.63,329.63,392.00,523.25],
-    [220.00,261.63,329.63,392.00],
-    [196.00,246.94,329.63,392.00],
-    [174.61,220.00,293.66,349.23],
-    [196.00,261.63,329.63,392.00],
-    [220.00,261.63,329.63,440.00],
-    [164.81,246.94,329.63,392.00],
-    [174.61,261.63,349.23,440.00]
-  ];
+  const Bb = [233.08, 293.66, 349.23];
+  const Ab = [207.65, 261.63, 311.13];
 
-  const songB = [
-    [220.00,261.63,329.63,440.00],
-    [174.61,220.00,293.66,349.23],
-    [261.63,329.63,392.00,523.25],
-    [196.00,246.94,329.63,392.00],
-    [220.00,261.63,329.63,440.00],
-    [196.00,246.94,329.63,392.00],
-    [174.61,220.00,293.66,349.23],
-    [164.81,207.65,246.94,329.63]
-  ];
-
-  let active = songA;
-  let loopCount = 0;
-  let t = ctx.currentTime + 0.12;
+  let t = ctx.currentTime + 0.1;
 
   function schedule(){
-    for(let i=0;i<active.length;i++){
-      const chord = active[i];
-      const root = chord[0] / 2;
+    for(let bar=0; bar<4; bar++){
+      const chord = (bar % 2 === 0) ? Bb : Ab;
 
-      playBass(root, t, beat);
-      playChord(chord, t, measure*1.2);
-      playLead(chord, t, beat);
+      play808Melodic(chord, t, beat, measure);
 
-      for(let b=0;b<4;b++){
-        const bt = t + b*beat;
-        hihat(bt);
-        hihat(bt + beat*0.5);
-        if(b===1 || b===3) snare(bt);
+      for(let b=0; b<4; b++){
+        hat(t + b*beat);
+        playPadChord(chord, t + b*beat + beat*0.5, beat);
       }
 
-      t += measure;
-    }
+      snare(t + beat*2);
 
-    loopCount++;
-    if(loopCount >= PART_LOOPS){
-      active = (active === songA) ? songB : songA;
-      loopCount = 0;
+      t += measure;
     }
   }
 
   schedule();
   if(loopTimer) clearInterval(loopTimer);
-  loopTimer = setInterval(schedule, measure * songA.length * 1000);
+  loopTimer = setInterval(schedule, measure * 4 * 1000);
 }
