@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<style>
+body{
+  margin:0;
+  background:#000;
+  overflow:hidden;
+  touch-action:none;
+  font-family:sans-serif;
+}
+
+#game{
+  position:absolute;
+  left:0;top:0;
+}
+
+/* joystick */
+#stick{
+  position:absolute;
+  left:30px;
+  bottom:30px;
+  width:140px;
+  height:140px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.08);
+}
+#knob{
+  position:absolute;
+  left:40px;
+  top:40px;
+  width:60px;
+  height:60px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.35);
+}
+
+/* buttons */
+.gameBtn{
+  position:absolute;
+  width:95px;
+  height:95px;
+  border-radius:50%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:bold;
+  color:white;
+  user-select:none;
+}
+
+#btnA{ right:40px; bottom:70px; background:#7a3cff; }
+#btnB{ right:150px; bottom:150px; background:#a94cff; }
+#btnC{ right:260px; bottom:110px; background:#ff3c7a; } /* NEW BUTTON */
+
+#chargeFill{
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+  pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<canvas id="game" width="800" height="600"></canvas>
+
+<div id="stick"><div id="knob"></div></div>
+
+<div id="btnA" class="gameBtn">A<div id="chargeFill"></div></div>
+<div id="btnB" class="gameBtn">B</div>
+<div id="btnC" class="gameBtn">C</div>
+<div id="btnC" class="gameBtn">C</div>
+
+<script type="module" src="/static/game.js?v=600"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+
+/* --- C BUTTON --- */
+.cBtn{
+  position:absolute;
+  right:110px;
+  bottom:110px;
+  width:85px;
+  height:85px;
+  border-radius:22px;
+  background: radial-gradient(circle at 30% 30%, #7cf0ff, #167a9c);
+  border:3px solid #b6f6ff;
+  box-shadow:
+    0 0 14px rgba(0,255,255,.45),
+    inset 0 0 10px rgba(255,255,255,.35);
+  color:white;
+  font-weight:bold;
+  font-size:28px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  user-select:none;
+  touch-action:none;
+}
+
+.cBtn:active{
+  transform:scale(0.93);
+  box-shadow:
+    0 0 20px rgba(0,255,255,.8),
+    inset 0 0 18px rgba(255,255,255,.6);
+}

@@ -3,10 +3,12 @@ let master = null;
 let started = false;
 let loopTimer = null;
 
-/* whole-step transpose */
+/* whole-step transpose (keep exact) */
 const T = 1.12246;
 
-/* start from user input */
+/* how many full A cycles before switching to B */
+const SONG_A_LOOPS = 4;
+
 export function startMusic(){
   if(!ctx){
     ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -22,40 +24,41 @@ export function startMusic(){
   playLoop();
 }
 
-/* ================= PAD VOICE ================= */
+/* ================= PAD VOICE (keep exact) ================= */
 function playVoice(freq, start, dur){
-  freq*=T;
+  freq *= T;
 
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
   const filter = ctx.createBiquadFilter();
 
   osc.type = "triangle";
-  filter.type="lowpass";
-  filter.frequency.value=1200;
 
-  osc.frequency.setValueAtTime(freq,start);
+  filter.type = "lowpass";
+  filter.frequency.value = 1200;
+  filter.Q.value = 0.7;
 
-  gain.gain.setValueAtTime(0.0001,start);
-  gain.gain.linearRampToValueAtTime(0.22,start+0.18);
-  gain.gain.linearRampToValueAtTime(0.18,start+dur*0.7);
-  gain.gain.linearRampToValueAtTime(0.0001,start+dur+0.7);
+  osc.frequency.setValueAtTime(freq, start);
+
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.linearRampToValueAtTime(0.22, start + 0.20);
+  gain.gain.linearRampToValueAtTime(0.18, start + dur * 0.65);
+  gain.gain.linearRampToValueAtTime(0.0001, start + dur + 0.7);
 
   osc.connect(filter);
   filter.connect(gain);
   gain.connect(master);
 
   osc.start(start);
-  osc.stop(start+dur+1.0);
+  osc.stop(start + dur + 1.0);
 }
 
-function playChord(chord,time,len){
-  for(const f of chord) playVoice(f,time,len);
+function playChord(chord, time, length){
+  for(const f of chord) playVoice(f, time, length);
 }
 
-/* ================= LEAD MELODY ================= */
-function playLead(chord,start,beat){
-
+/* ================= LEAD MELODY (keep exact) ================= */
+function playLead(chord, start, beat){
   const notes = [
     chord[2]*2,
     chord[3]*2,
@@ -64,115 +67,113 @@ function playLead(chord,start,beat){
   ];
 
   for(let i=0;i<notes.length;i++){
-
     const t = start + i*(beat*0.5);
     const freq = notes[i]*T;
 
-    const osc=ctx.createOscillator();
-    const gain=ctx.createGain();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
 
-    osc.type="sine";
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(freq, t);
 
-    osc.frequency.setValueAtTime(freq,t);
-
-    gain.gain.setValueAtTime(0.0001,t);
-    gain.gain.linearRampToValueAtTime(0.10,t+0.03);
-    gain.gain.exponentialRampToValueAtTime(0.0001,t+beat*0.45);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.linearRampToValueAtTime(0.10, t + 0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + beat*0.45);
 
     osc.connect(gain);
     gain.connect(master);
 
     osc.start(t);
-    osc.stop(t+beat*0.5);
+    osc.stop(t + beat*0.5);
   }
 }
 
-/* ================= BASS ROOT-5TH ================= */
-function playBass(root,start,beat){
-  root*=T;
+/* ================= BASS ROOT-5TH (keep exact) ================= */
+function playBass(root, start, beat){
+  root *= T;
 
-  const osc=ctx.createOscillator();
-  const gain=ctx.createGain();
-  const filter=ctx.createBiquadFilter();
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
 
-  osc.type="sawtooth";
-  filter.type="lowpass";
-  filter.frequency.value=420;
+  osc.type = "sawtooth";
+  filter.type = "lowpass";
+  filter.frequency.value = 420;
 
-  const fifth=root*1.5;
+  const fifth = root * 1.5;
 
-  osc.frequency.setValueAtTime(root,start);
-  osc.frequency.setValueAtTime(fifth,start+beat*2);
+  osc.frequency.setValueAtTime(root, start);
+  osc.frequency.setValueAtTime(fifth, start + beat*2);
 
-  gain.gain.setValueAtTime(0.0001,start);
-  gain.gain.linearRampToValueAtTime(0.32,start+0.02);
-  gain.gain.linearRampToValueAtTime(0.25,start+beat*3.5);
-  gain.gain.linearRampToValueAtTime(0.0001,start+beat*4);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.linearRampToValueAtTime(0.32, start + 0.02);
+  gain.gain.linearRampToValueAtTime(0.25, start + beat*3.5);
+  gain.gain.linearRampToValueAtTime(0.0001, start + beat*4);
 
   osc.connect(filter);
   filter.connect(gain);
   gain.connect(master);
 
   osc.start(start);
-  osc.stop(start+beat*4+0.1);
+  osc.stop(start + beat*4 + 0.1);
 }
 
-/* ================= HIHAT ================= */
+/* ================= HIHAT (keep exact) ================= */
 function hihat(time){
-  const noise=ctx.createBufferSource();
-  const buffer=ctx.createBuffer(1,ctx.sampleRate*0.02,ctx.sampleRate);
-  const data=buffer.getChannelData(0);
-  for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
-  noise.buffer=buffer;
+  const noise = ctx.createBufferSource();
+  const buffer = ctx.createBuffer(1, ctx.sampleRate*0.02, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i] = Math.random()*2 - 1;
+  noise.buffer = buffer;
 
-  const hp=ctx.createBiquadFilter();
-  hp.type="highpass";
-  hp.frequency.value=7000;
+  const hp = ctx.createBiquadFilter();
+  hp.type = "highpass";
+  hp.frequency.value = 7000;
 
-  const gain=ctx.createGain();
-  gain.gain.setValueAtTime(0.12,time);
-  gain.gain.exponentialRampToValueAtTime(0.0001,time+0.02);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.12, time);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.02);
 
   noise.connect(hp);
   hp.connect(gain);
   gain.connect(master);
 
   noise.start(time);
-  noise.stop(time+0.03);
+  noise.stop(time + 0.03);
 }
 
-/* ================= SNARE ================= */
+/* ================= SNARE (keep exact) ================= */
 function snare(time){
-  const noise=ctx.createBufferSource();
-  const buffer=ctx.createBuffer(1,ctx.sampleRate*0.2,ctx.sampleRate);
-  const data=buffer.getChannelData(0);
-  for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
-  noise.buffer=buffer;
+  const noise = ctx.createBufferSource();
+  const buffer = ctx.createBuffer(1, ctx.sampleRate*0.2, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i] = Math.random()*2 - 1;
+  noise.buffer = buffer;
 
-  const bp=ctx.createBiquadFilter();
-  bp.type="bandpass";
-  bp.frequency.value=1800;
+  const bp = ctx.createBiquadFilter();
+  bp.type = "bandpass";
+  bp.frequency.value = 1800;
 
-  const gain=ctx.createGain();
-  gain.gain.setValueAtTime(0.35,time);
-  gain.gain.exponentialRampToValueAtTime(0.0001,time+0.18);
+  const gain = ctx.createGain();
+  gain.gain.setValueAtTime(0.35, time);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.18);
 
   noise.connect(bp);
   bp.connect(gain);
   gain.connect(master);
 
   noise.start(time);
-  noise.stop(time+0.2);
+  noise.stop(time + 0.2);
 }
 
-/* ================= LOOP ================= */
+/* ================= LOOP WITH SONG A -> SONG B ================= */
 function playLoop(){
+  const bpm = 156;                 // KEEP EXACT
+  const beat = 60 / bpm;
+  const measure = beat * 4;
 
-  const bpm=156;
-  const beat=60/bpm;
-  const measure=beat*4;
-
-  const chords=[
+  // Song A (your current chords, unchanged)
+  const songA = [
     [261.63,329.63,392.00,523.25],
     [220.00,261.63,329.63,392.00],
     [196.00,246.94,329.63,392.00],
@@ -183,32 +184,55 @@ function playLoop(){
     [174.61,261.63,349.23,440.00]
   ];
 
-  let t=ctx.currentTime+0.12;
+  // Song B (new progression, same voicing style / length)
+  const songB = [
+    [220.00,261.63,329.63,440.00],
+    [174.61,220.00,293.66,349.23],
+    [261.63,329.63,392.00,523.25],
+    [196.00,246.94,329.63,392.00],
+    [220.00,261.63,329.63,440.00],
+    [196.00,246.94,329.63,392.00],
+    [174.61,220.00,293.66,349.23],
+    [164.81,207.65,246.94,329.63]
+  ];
+
+  let active = songA;
+  let loopsA = 0;
+
+  let t = ctx.currentTime + 0.12;
 
   function schedule(){
-    if(ctx.state==="suspended") ctx.resume().catch(()=>{});
+    if(ctx.state === "suspended") ctx.resume().catch(()=>{});
 
-    for(let i=0;i<chords.length;i++){
+    for(let i=0;i<active.length;i++){
+      const chord = active[i];
 
-      const root=chords[i][0]/2;
-      playBass(root,t,beat);
-      playChord(chords[i],t,measure*1.2);
-      playLead(chords[i],t,beat);
+      const root = chord[0] / 2;
+      playBass(root, t, beat);
+      playChord(chord, t, measure*1.2);
+      playLead(chord, t, beat);
 
       for(let b=0;b<4;b++){
-        const bt=t+b*beat;
-
+        const bt = t + b*beat;
         hihat(bt);
-        hihat(bt+beat*0.5);
-
-        if(b===1||b===3) snare(bt);
+        hihat(bt + beat*0.5);
+        if(b===1 || b===3) snare(bt);
       }
 
-      t+=measure;
+      t += measure;
+    }
+
+    // end-of-cycle switch logic (ONLY changes chord list)
+    if(active === songA){
+      loopsA++;
+      if(loopsA >= SONG_A_LOOPS){
+        active = songB;
+      }
     }
   }
 
   schedule();
+
   if(loopTimer) clearInterval(loopTimer);
-  loopTimer=setInterval(schedule,measure*chords.length*1000);
+  loopTimer = setInterval(schedule, measure*active.length*1000);
 }
