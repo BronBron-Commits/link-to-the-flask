@@ -60,10 +60,11 @@ const moveSpeed = 6;
 let ulting = false;
 let ultTimer = 0;
 
-const ultWindup = 500;      // delay before lightning
+const ultWindup = 1500;      // delay before lightning
 const ultActive = 1500;     // ring duration
 const ultTotal = ultWindup + ultActive;
 let ultBurstTriggered = false;
+let screenShake = 0;
 /* =========================
    MUSIC START (Browser unlock)
 ========================= */
@@ -300,12 +301,10 @@ function update(dt){
 
     ultTimer += dt;
 
-    // Fire burst exactly once after windup finishes
     if (!ultBurstTriggered && ultTimer >= ultWindup) {
       ultBurstTriggered = true;
       triggerUltimateBurst();
 
-      // stop windup noise
       if (ultNoiseOsc) {
         ultNoiseOsc.stop();
         ultNoiseOsc = null;
@@ -381,8 +380,16 @@ function update(dt){
       releaseCharge();
     }
   }
-}
 
+  // =========================
+  // SCREEN SHAKE DECAY (FIXED)
+  // =========================
+
+  if (screenShake > 0) {
+    screenShake -= dt * 0.06;
+    if (screenShake < 0) screenShake = 0;
+  }
+}
 /* =========================
    DRAW
 ========================= */
@@ -434,6 +441,7 @@ function triggerUltimateBurst() {
   }
 
   sfxUltimateBoom();
+  screenShake = 25;   // strength of shake
 }
 function drawUltimateHalo() {
   const dpr = window.devicePixelRatio || 1;
@@ -488,21 +496,35 @@ function drawUltimateHalo() {
 
   ctx.restore();
 }
+
+
 function draw(){
+
   ctx.clearRect(0,0,canvas.width,canvas.height);
 
   const logicalW = canvas.width / (window.devicePixelRatio || 1);
   const logicalH = canvas.height / (window.devicePixelRatio || 1);
 
+  // =========================
+  // SCREEN SHAKE (FIXED)
+  // =========================
+
+  if (screenShake > 0) {
+    const shakeX = (Math.random() - 0.5) * screenShake;
+    const shakeY = (Math.random() - 0.5) * screenShake;
+    ctx.save();
+    ctx.translate(shakeX, shakeY);
+  }
+
   drawFloor();
   drawAttacks(ctx);
 
   // Darken screen
-if (ulting) {
-  const fadeIn = Math.min(1, ultTimer / ultWindup);
-  ctx.fillStyle = `rgba(0,0,0,${0.7 * fadeIn})`;
-  ctx.fillRect(0,0,logicalW,logicalH);
-}
+  if (ulting) {
+    const fadeIn = Math.min(1, ultTimer / ultWindup);
+    ctx.fillStyle = `rgba(0,0,0,${0.7 * fadeIn})`;
+    ctx.fillRect(0,0,logicalW,logicalH);
+  }
 
   // Raise wizard slightly
   let raiseOffset = 0;
@@ -524,7 +546,8 @@ if (ulting) {
   const sx = logicalW/2 + 38;
   const sy = logicalH/2 + 26;
 
-  drawScepter(ctx,
+  drawScepter(
+    ctx,
     sx,
     sy,
     3,
@@ -534,9 +557,16 @@ if (ulting) {
     charging
   );
 
-  // Draw halo LAST (on top)
   if (ulting) {
     drawUltimateHalo();
+  }
+
+  // =========================
+  // RESTORE SHAKE
+  // =========================
+
+  if (screenShake > 0) {
+    ctx.restore();
   }
 }
 /* =========================
