@@ -49,7 +49,15 @@ const moat = {
 };
 
 let waterTime = 0;
+// =========================
+// COURTYARD
+// =========================
 
+const courtyard = {
+  width: castle.width + 300,   // wider than castle
+  height: 800,                 // deeper ceremonial space
+  offsetY: castle.height/2 + 450   // well south of castle walls
+};
 
 // =========================
 // PLAYER STATS
@@ -499,6 +507,175 @@ if (energy > maxEnergy) energy = maxEnergy;
 ========================= */
 
 
+function drawCourtyard() {
+
+  const centerX = castle.x;
+
+  // PUSH COURTYARD DOWN SLIGHTLY (visual separation from moat)
+  const centerY = castle.y + courtyard.offsetY + 20;
+
+  const screenX = centerX - camera.x + canvas.width/2;
+  const screenY = centerY - camera.y + canvas.height/2;
+
+  const w = courtyard.width;
+  const h = courtyard.height;
+
+  ctx.save();
+
+  // =========================
+  // Base Grass
+  // =========================
+
+// =========================
+// PBR-STYLE GRASS
+// =========================
+
+const tileSize = 32;
+
+// fake sun direction
+const lightDir = { x: -0.4, y: -0.9 };
+const len = Math.hypot(lightDir.x, lightDir.y);
+lightDir.x /= len;
+lightDir.y /= len;
+
+for (let y = -h/2; y < h/2; y += tileSize) {
+  for (let x = -w/2; x < w/2; x += tileSize) {
+
+    const worldX = castle.x + x;
+    const worldY = castle.y + courtyard.offsetY + y;
+
+    const sx = screenX + x;
+    const sy = screenY + y;
+
+    // Albedo noise
+    const n1 = Math.sin(worldX * 0.03) * 0.5;
+    const n2 = Math.cos(worldY * 0.04) * 0.5;
+    const noise = (n1 + n2);
+
+    const baseGreen = 90 + noise * 25;
+
+    // Fake micro-normal
+    const nx = Math.sin(worldX * 0.05) * 0.6;
+    const ny = Math.cos(worldY * 0.05) * 0.6;
+
+    const dot = Math.max(0, nx * lightDir.x + ny * lightDir.y);
+
+    // Roughness
+    const rough = 0.5 + Math.sin((worldX + worldY) * 0.02) * 0.2;
+
+    const brightness = baseGreen * (0.6 + dot * 0.6) * (1 - rough * 0.25);
+
+    const r = brightness * 0.4;
+    const g = brightness;
+    const b = brightness * 0.35;
+
+    ctx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
+    ctx.fillRect(sx, sy, tileSize, tileSize);
+  }
+}
+  // =========================
+  // NEXT-LEVEL PBR BRICK PATH
+  // =========================
+
+  const pathWidth = 260;
+  const brickW = 46;
+  const brickH = 22;
+  const mortar = 4;
+
+const brickLight = { x: -0.5, y: -0.8 };
+const brickLen = Math.hypot(brickLight.x, brickLight.y);
+brickLight.x /= brickLen;
+brickLight.y /= brickLen;
+
+  for (let y = -h/2; y < h/2; y += brickH + mortar) {
+
+    const row = Math.floor(y / (brickH + mortar));
+    const stagger = row % 2 === 0 ? 0 : brickW/2;
+
+    for (let x = -pathWidth/2; x < pathWidth/2; x += brickW) {
+
+      const bx = screenX + x + stagger;
+      const by = screenY + y;
+
+      // World position for noise
+      const wx = castle.x + x;
+      const wy = castle.y + courtyard.offsetY + y;
+
+      // Albedo variation
+      const noise =
+        Math.sin(wx * 0.05) * 0.5 +
+        Math.cos(wy * 0.05) * 0.5;
+
+      const baseRed = 150 + noise * 30;
+      const baseGreen = 35 + noise * 8;
+      const baseBlue = 30 + noise * 6;
+
+      // Fake micro normal
+      const nx = Math.sin(wx * 0.1) * 0.4;
+      const ny = Math.cos(wy * 0.1) * 0.4;
+
+      const dot = Math.max(0, nx*brickLight.x + ny*brickLight.y);
+
+      // Roughness variation
+      const rough = 0.6 + Math.sin((wx+wy)*0.03)*0.2;
+
+      const brightness = (0.65 + dot*0.6) * (1 - rough*0.2);
+
+      const r = (baseRed * brightness) | 0;
+      const g = (baseGreen * brightness) | 0;
+      const b = (baseBlue * brightness) | 0;
+
+      // Draw brick body
+      ctx.fillStyle = `rgb(${r},${g},${b})`;
+      ctx.fillRect(bx, by, brickW - mortar, brickH);
+
+      // Subtle bottom shadow (bevel illusion)
+      ctx.fillStyle = "rgba(0,0,0,0.15)";
+      ctx.fillRect(bx, by + brickH - 3, brickW - mortar, 3);
+
+      // Top highlight edge
+      ctx.fillStyle = "rgba(255,200,180,0.12)";
+      ctx.fillRect(bx, by, brickW - mortar, 2);
+    }
+  }
+
+  // Mortar overlay grid (adds depth)
+  ctx.fillStyle = "rgba(40,20,20,0.6)";
+  for (let y = -h/2; y < h/2; y += brickH + mortar) {
+    ctx.fillRect(
+      screenX - pathWidth/2,
+      screenY + y + brickH,
+      pathWidth,
+      mortar
+    );
+  }
+
+  // =========================
+  // Hedge Rows (moved outward + full length)
+  // =========================
+
+  const bushRadius = 22;
+
+  // Distance from path edge
+  const hedgeOffset = pathWidth/2 + 80;
+
+  ctx.fillStyle = "#1f4f1f";
+
+  for (let y = -h/2 + 30; y <= h/2 - 30; y += 55) {
+
+    // Left hedge row
+    ctx.beginPath();
+    ctx.arc(screenX - hedgeOffset, screenY + y, bushRadius, 0, Math.PI*2);
+    ctx.fill();
+
+    // Right hedge row
+    ctx.beginPath();
+    ctx.arc(screenX + hedgeOffset, screenY + y, bushRadius, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
 function drawMoat() {
 
   const screenX = castle.x - camera.x + canvas.width/2;
@@ -824,6 +1001,7 @@ function draw(){
 
 drawFloor();
 drawMoat();
+drawCourtyard();
 drawCastle();
 drawAttacks(ctx);
 
