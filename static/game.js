@@ -7,6 +7,7 @@ window.playerId = playerId;
 
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
+import { castLure, updateLures, drawLures } from "./lure.js";
 window.castAttack = castAttack;
 window.castShotgun = castShotgun;
 import { drawWizard } from "./character.js?v=2";
@@ -184,12 +185,15 @@ let facing = { x: 1, y: 0 };
 
 let camera = { x: 0, y: 0, targetX: 0, targetY: 0 };
 const cameraLerp = 0.12;
+window.camera = camera;
 
 let walking = false;
 let walkFrame = 0;
 let walkTimer = 0;
 let idleTime = 0;
 let attackAnim = 0;
+let fishingAnim = 0;
+let fishingAnimType = null; // 'q', 'w', 'e', 'r'
 let ultNoiseOsc = null;
 let ultNoiseGain = null;
 let charging = false;
@@ -242,18 +246,70 @@ window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
 if (key === "1") activeWeapon = 1;
 if (key === "2") activeWeapon = 2;
+if (activeWeapon === 2) {
+  // Fishing rod QWER animations
+  // Helper to cast lure
+  function doCastLure(power = 1) {
+    // Spawn lure at the same position as regular attack (front of player)
+    const sx = player.x + 38;
+    const sy = player.y + 26;
+    const angle = Math.atan2(facing.y, facing.x);
+    // DEBUG: Log and draw marker at spawn
+    console.log('[doCastLure] player.x:', player.x, 'player.y:', player.y);
+    console.log('[doCastLure] lure spawn sx:', sx, 'sy:', sy, 'facing:', facing);
+    if (window.ctx) {
+      window.ctx.save();
+      window.ctx.beginPath();
+      window.ctx.arc(sx - camera.x + canvas.width/2, sy - camera.y + canvas.height/2, 7, 0, Math.PI*2);
+      window.ctx.fillStyle = 'red';
+      window.ctx.globalAlpha = 0.7;
+      window.ctx.fill();
+      window.ctx.globalAlpha = 1.0;
+      window.ctx.restore();
+    }
+    castLure(sx, sy, Math.cos(angle), Math.sin(angle), { speed: 16 + 8 * power });
+  }
+  if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
+    qKeyHeld = true;
+    energy -= energyCosts.q;
+    fishingAnim = 1;
+    fishingAnimType = 'q';
+    doCastLure(1);
+  }
+  if (key === "w" && !wKeyHeld && cooldowns.w <= 0 && energy >= energyCosts.w) {
+    wKeyHeld = true;
+    energy -= energyCosts.w;
+    fishingAnim = 1;
+    fishingAnimType = 'w';
+    doCastLure(1.2);
+  }
+  if (key === "e" && !eKeyHeld && cooldowns.e <= 0 && energy >= energyCosts.e) {
+    eKeyHeld = true;
+    energy -= energyCosts.e;
+    fishingAnim = 1;
+    fishingAnimType = 'e';
+    doCastLure(1.5);
+  }
+  if (key === "r" && !ulting && cooldowns.r <= 0 && energy >= energyCosts.r) {
+    energy -= energyCosts.r;
+    fishingAnim = 1;
+    fishingAnimType = 'r';
+    doCastLure(2);
+  }
+  // Water rectangle for lure collision (approximate river area)
+  const waterRect = { x: 0, y: 320, width: canvas.width, height: 200 };
+  drawLures(ctx);
+} else {
   if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
     qKeyHeld = true;
     energy -= energyCosts.q;
     fireNormal();
   }
-
   if (key === "w" && !wKeyHeld && cooldowns.w <= 0 && energy >= energyCosts.w) {
     wKeyHeld = true;
     energy -= energyCosts.w;
     fireShotgun();
   }
-
   if (key === "e" && !charging && cooldowns.e <= 0 && energy >= energyCosts.e && !eKeyHeld) {
     eKeyHeld = true;
     energy -= energyCosts.e;
@@ -262,8 +318,6 @@ if (key === "2") activeWeapon = 2;
     chargeAutoReleased = false;
     chargeSoundTimer = 0;
   }
-
-
   if (key === "r" && !ulting && cooldowns.r <= 0 && energy >= energyCosts.r) {
     energy -= energyCosts.r;
     ulting = true;
@@ -287,6 +341,7 @@ if (key === "2") activeWeapon = 2;
     ultNoiseGain.connect(ctxAudio.destination);
     ultNoiseOsc.start();
   }
+}
 });
 
 
@@ -310,24 +365,39 @@ function drawFishingPole(ctx, x, y, scale, facing) {
 
   ctx.save();
 
-  // ------------------------
   // FLOAT / BOB OFFSET
-  // ------------------------
   let floatOffset = 0;
-
   if (walking) {
     floatOffset = Math.sin(performance.now() * 0.015) * 2;
   } else {
     floatOffset = Math.sin(idleTime * 0.004) * 1.5;
   }
 
-  // ------------------------
+  // Animation for QWER
+  let animOffsetX = 0, animOffsetY = 0, animAngle = 0;
+  if (typeof fishingAnim !== 'undefined' && fishingAnim > 0) {
+    if (fishingAnimType === 'q') {
+      animAngle = -Math.PI/6 * fishingAnim; // quick flick
+      animOffsetY = -10 * fishingAnim;
+    } else if (fishingAnimType === 'w') {
+      animAngle = Math.PI/8 * fishingAnim;
+      animOffsetX = 8 * fishingAnim;
+    } else if (fishingAnimType === 'e') {
+      animAngle = Math.PI/2 * fishingAnim;
+      animOffsetY = -18 * fishingAnim;
+    } else if (fishingAnimType === 'r') {
+      animAngle = Math.PI * fishingAnim;
+      animOffsetX = 16 * fishingAnim;
+      animOffsetY = -16 * fishingAnim;
+    }
+  }
+
   // POSITION OFFSET
-  // ------------------------
-  const offsetX = 14;
-  const offsetY = 18 + floatOffset;
+  const offsetX = 14 + animOffsetX;
+  const offsetY = 18 + floatOffset + animOffsetY;
 
   ctx.translate(x + offsetX, y + offsetY);
+  ctx.rotate(animAngle);
 
   const weaponScale = scale * 0.6;
   ctx.scale(weaponScale, weaponScale);
@@ -528,6 +598,9 @@ function releaseCharge(){
 }
 
 function update(dt){
+  // Water rectangle for lure collision (approximate river area)
+  const waterRect = { x: 0, y: 320, width: canvas.width, height: 200 };
+  updateLures(dt, waterRect);
 
 waterTime += dt * 0.002;
 
@@ -626,6 +699,8 @@ function outputPlayerPositionJSON() {
   }
 
   attackAnim = Math.max(0, attackAnim - dt*0.006);
+  fishingAnim = Math.max(0, fishingAnim - dt*0.008);
+  if (fishingAnim === 0) fishingAnimType = null;
 
   // =========================
   // CHARGING
