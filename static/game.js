@@ -1,3 +1,5 @@
+// NetworkClient is attached to window by network_socketio.js
+const networkClient = new window.NetworkClient({});
 
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
@@ -6,7 +8,6 @@ import { drawScepter } from "./weapon.js?v=2";
 
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-
 
 function resizeCanvas() {
   const dpr = window.devicePixelRatio || 1;
@@ -467,10 +468,26 @@ waterTime += dt * 0.002;
   // MOVEMENT (disabled during ult)
   // =========================
 
-  if (!ulting) {
-    tryMove(dt);
-  }
+    if (!ulting) {
+      tryMove(dt);
+      outputPlayerPositionJSON(); // Output position after movement
+    }
 
+// =========================
+// OUTPUT PLAYER POSITION AS JSON
+// =========================
+function outputPlayerPositionJSON() {
+  const playerData = {
+    x: player.x,
+    y: player.y,
+    facing: { ...facing },
+    health,
+    energy,
+    activeWeapon
+  };
+  // Send position to server for multiplayer sync
+  networkClient.sendPlayerUpdate(playerData);
+}
   // =========================
   // COOLDOWNS
   // =========================
