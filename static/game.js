@@ -922,36 +922,95 @@ function drawCourtyard() {
   const houseY = hedgeEndY + 120;
   const houseX = screenX - pathWidth/2 - 260;
 
-  const houseW = 180;
-  const houseH = 140;
-
-  ctx.fillStyle = "#8b5a2b";
+  // Nicer house design
+  const houseW = 200;
+  const houseH = 150;
+  const roofH = 60;
+  const doorW = 36;
+  const doorH = 62;
+  const windowW = 32;
+  const windowH = 32;
+  const chimneyW = 18;
+  const chimneyH = 38;
+  // House base
+  ctx.fillStyle = "#e6cfa3";
   ctx.fillRect(
     houseX - houseW/2,
     houseY - houseH,
     houseW,
     houseH
   );
-
-  ctx.fillStyle = "#5a2b1a";
+  // Roof
+  ctx.save();
+  ctx.shadowColor = "#a87c4a";
+  ctx.shadowBlur = 16;
+  ctx.fillStyle = "#a87c4a";
   ctx.beginPath();
-  ctx.moveTo(houseX - houseW/2 - 20, houseY - houseH);
-  ctx.lineTo(houseX + houseW/2 + 20, houseY - houseH);
-  ctx.lineTo(houseX, houseY - houseH - 80);
+  ctx.moveTo(houseX - houseW/2 - 16, houseY - houseH);
+  ctx.lineTo(houseX + houseW/2 + 16, houseY - houseH);
+  ctx.lineTo(houseX, houseY - houseH - roofH);
   ctx.closePath();
   ctx.fill();
-
-  ctx.fillStyle = "#3a1d0f";
+  ctx.shadowBlur = 0;
+  ctx.restore();
+  // Chimney
+  ctx.fillStyle = "#7a5c3a";
   ctx.fillRect(
-    houseX - 20,
-    houseY - 60,
-    40,
-    60
+    houseX + houseW/2 - 30,
+    houseY - houseH - chimneyH,
+    chimneyW,
+    chimneyH
   );
-
+  // Door
+  ctx.fillStyle = "#6b3a1a";
+  ctx.fillRect(
+    houseX - doorW/2,
+    houseY - doorH,
+    doorW,
+    doorH
+  );
+  // Door knob
+  ctx.fillStyle = "#d9b15b";
+  ctx.beginPath();
+  ctx.arc(houseX + doorW/2 - 8, houseY - doorH + doorH/2, 4, 0, Math.PI*2);
+  ctx.fill();
+  // Windows
   ctx.fillStyle = "#aee2ff";
-  ctx.fillRect(houseX - 50, houseY - 100, 30, 30);
-  ctx.fillRect(houseX + 20, houseY - 100, 30, 30);
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
+  ctx.strokeRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
+  ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
+  ctx.strokeRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
+  // Window crossbars
+  ctx.beginPath();
+  ctx.moveTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24);
+  ctx.lineTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24 + windowH);
+  ctx.moveTo(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH/2);
+  ctx.lineTo(houseX - houseW/2 + 18 + windowW, houseY - houseH + 24 + windowH/2);
+  ctx.moveTo(houseX + houseW/2 - windowW - 18 + windowW/2, houseY - houseH + 24);
+  ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW/2, houseY - houseH + 24 + windowH);
+  ctx.moveTo(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH/2);
+  ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW, houseY - houseH + 24 + windowH/2);
+  ctx.stroke();
+  // Flower box under left window
+  ctx.fillStyle = "#b5651d";
+  ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
+  ctx.fillStyle = "#ff6f61";
+  ctx.beginPath();
+  ctx.arc(houseX - houseW/2 + 28, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+  ctx.arc(houseX - houseW/2 + 38, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+  ctx.arc(houseX - houseW/2 + 48, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+  ctx.fill();
+  // Flower box under right window
+  ctx.fillStyle = "#b5651d";
+  ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
+  ctx.fillStyle = "#ff6f61";
+  ctx.beginPath();
+  ctx.arc(houseX + houseW/2 - windowW - 8, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+  ctx.arc(houseX + houseW/2 - windowW + 2, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+  ctx.arc(houseX + houseW/2 - windowW + 12, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+  ctx.fill();
 
   // =========================
   // HEDGES
