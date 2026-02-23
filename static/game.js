@@ -1839,7 +1839,8 @@ if (window.remotePlayers) {
     ctx.shadowColor = 'black';
     ctx.shadowBlur = 4;
     ctx.fillStyle = '#fff';
-    ctx.fillText(playerName, logicalW/2, logicalH/2 + raiseOffset - 18);
+    const nameOffsetX = 40; // move right by 40px
+    ctx.fillText(playerName, logicalW/2 + nameOffsetX, logicalH/2 + raiseOffset - 18);
     ctx.shadowBlur = 0;
     ctx.restore();
   }
@@ -1861,7 +1862,8 @@ if (window.remotePlayers) {
         ctx.shadowColor = 'black';
         ctx.shadowBlur = 4;
         ctx.fillStyle = '#fff';
-        ctx.fillText(name, screenX, screenY - 18);
+          const nameOffsetX = 40; // match local player orientation
+          ctx.fillText(name, screenX + nameOffsetX, screenY - 18);
         ctx.shadowBlur = 0;
         ctx.restore();
       }
