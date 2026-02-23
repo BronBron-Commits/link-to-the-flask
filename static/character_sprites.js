@@ -32,9 +32,9 @@ export const characterSprites = {
       front: [
         "0000RRRRRRR0000",
         "000RRRRRRRRR000",
-        "00RRRRKKKKRRRR00",
-        "0RRKKWWWWWKKRR0",
-        "0RKKKWWWWKKKKR0",
+        "00RRRREEEERRRR00",
+        "0RRKKEEEEEKRRR0",
+        "0RKKKEEEEKKKKR0",
         "0RKKKSKSKKKKKR0",
         "0RKKKSSSSKKKKR0",
         "0RKKKKKKKKKKKR0",
@@ -50,6 +50,7 @@ export const characterSprites = {
       ]
     },
     robeColor: ["#b0b0b0", "#a0a0a0", "#888", "#d0d0d0"], // animated gray shades
+    eyeColor: ["#00ff00", "#66ff66", "#33ff99", "#99ffcc"], // animated green shimmer
   },
   rogue: {
     robeColor: "#2fa05b",

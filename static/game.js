@@ -1028,20 +1028,52 @@ function drawRiver() {
   const logicalH = canvas.height / dpr;
 
   // Draw local player reflection
-  drawWizard(
-    ctx,
-    logicalW/2,
-    logicalH/2,
-    4,
-    walkFrame,
-    idleTime,
-    facing
-  );
+  if (characterSprites[characterType] && characterType !== "wizard") {
+    // Custom sprite reflection
+    const sprite = characterSprites[characterType].sprites.front;
+    const scale = 4;
+    const x = logicalW/2;
+    const y = logicalH/2;
+    for (let j = 0; j < sprite.length; j++) {
+      const row = sprite[j];
+      for (let i = 0; i < row.length; i++) {
+        const ch = row[i];
+        if (ch === "0") continue;
+        if (characterType === "knight" && ch === "A") {
+          const palette = characterSprites[characterType].robeColor;
+          const t = performance.now();
+          const idx = Math.floor(((Math.sin(i*0.8 + j*0.6 + t*0.004)+1)*1.5)) % palette.length;
+          ctx.fillStyle = palette[idx];
+        } else if (characterType === "knight" && ch === "E") {
+          const palette = characterSprites[characterType].eyeColor;
+          const t = performance.now();
+          const idx = Math.floor(((Math.sin(i*1.5 + j*2.2 + t*0.01)+1)*1.5)) % palette.length;
+          ctx.fillStyle = palette[idx];
+        } else {
+          ctx.fillStyle = ch === "K" ? "#000" : ch === "W" ? "#fff" : ch === "N" ? "#e0ac69" : ch === "S" ? "#f1c27d" : ch === "G" ? "#f5c542" : ch === "3" ? characterSprites[characterType].robeColor : "#888";
+        }
+        ctx.fillRect(Math.floor(x + i*scale), Math.floor(y + j*scale), scale, scale);
+      }
+    }
+  } else {
+    drawWizard(
+      ctx,
+      logicalW/2,
+      logicalH/2,
+      4,
+      walkFrame,
+      idleTime,
+      facing
+    );
+  }
+  // Weapon reflection
+  const weaponX = logicalW/2 + 38;
+  const weaponY = logicalH/2 + 26;
   if (activeWeapon === 1) {
     drawScepter(
       ctx,
-      logicalW/2 + 38,
-      logicalH/2 + 26,
+      weaponX,
+      weaponY,
       3,
       walkFrame,
       idleTime,
@@ -1051,8 +1083,8 @@ function drawRiver() {
   } else if (activeWeapon === 2) {
     drawFishingPole(
       ctx,
-      logicalW/2 + 38,
-      logicalH/2 + 26,
+      weaponX,
+      weaponY,
       3,
       facing
     );
@@ -1065,16 +1097,43 @@ function drawRiver() {
       if (!rp) continue;
       const screenX = rp.x - camera.x + logicalW/2;
       const screenY = rp.y - camera.y + logicalH/2;
-      drawWizard(
-        ctx,
-        screenX,
-        screenY,
-        4,
-        0,
-        0,
-        rp.facing || { x: 1, y: 0 },
-        rp.robeColor || '#5b2fa0'
-      );
+      let remoteType = rp.characterType || "wizard";
+      if (characterSprites[remoteType] && remoteType !== "wizard") {
+        const sprite = characterSprites[remoteType].sprites.front;
+        const scale = 4;
+        for (let j = 0; j < sprite.length; j++) {
+          const row = sprite[j];
+          for (let i = 0; i < row.length; i++) {
+            const ch = row[i];
+            if (ch === "0") continue;
+            if (remoteType === "knight" && ch === "A") {
+              const palette = characterSprites[remoteType].robeColor;
+              const t = performance.now();
+              const idx = Math.floor(((Math.sin(i*0.8 + j*0.6 + t*0.004)+1)*1.5)) % palette.length;
+              ctx.fillStyle = palette[idx];
+            } else if (remoteType === "knight" && ch === "E") {
+              const palette = characterSprites[remoteType].eyeColor;
+              const t = performance.now();
+              const idx = Math.floor(((Math.sin(i*1.5 + j*2.2 + t*0.01)+1)*1.5)) % palette.length;
+              ctx.fillStyle = palette[idx];
+            } else {
+              ctx.fillStyle = ch === "K" ? "#000" : ch === "W" ? "#fff" : ch === "N" ? "#e0ac69" : ch === "S" ? "#f1c27d" : ch === "G" ? "#f5c542" : ch === "3" ? characterSprites[remoteType].robeColor : "#888";
+            }
+            ctx.fillRect(Math.floor(screenX + i*scale), Math.floor(screenY + j*scale), scale, scale);
+          }
+        }
+      } else {
+        drawWizard(
+          ctx,
+          screenX,
+          screenY,
+          4,
+          0,
+          0,
+          rp.facing || { x: 1, y: 0 },
+          rp.robeColor || '#5b2fa0'
+        );
+      }
       // Draw weapon for remote player
       const weaponX = screenX + 38;
       const weaponY = screenY + 26;
@@ -1449,6 +1508,11 @@ if (window.remotePlayers) {
             const t = performance.now();
             const idx = Math.floor(((Math.sin(i*0.8 + j*0.6 + t*0.004)+1)*1.5)) % palette.length;
             ctx.fillStyle = palette[idx];
+          } else if (remoteType === "knight" && ch === "E") {
+            const palette = characterSprites[remoteType].eyeColor;
+            const t = performance.now();
+            const idx = Math.floor(((Math.sin(i*1.5 + j*2.2 + t*0.01)+1)*1.5)) % palette.length;
+            ctx.fillStyle = palette[idx];
           } else {
             ctx.fillStyle = ch === "K" ? "#000" : ch === "W" ? "#fff" : ch === "N" ? "#e0ac69" : ch === "S" ? "#f1c27d" : ch === "G" ? "#f5c542" : ch === "3" ? characterSprites[remoteType].robeColor : "#888";
           }
@@ -1556,6 +1620,11 @@ if (window.remotePlayers) {
           const palette = characterSprites[characterType].robeColor;
           const t = performance.now();
           const idx = Math.floor(((Math.sin(i*0.8 + j*0.6 + t*0.004)+1)*1.5)) % palette.length;
+          ctx.fillStyle = palette[idx];
+        } else if (characterType === "knight" && ch === "E") {
+          const palette = characterSprites[characterType].eyeColor;
+          const t = performance.now();
+          const idx = Math.floor(((Math.sin(i*1.5 + j*2.2 + t*0.01)+1)*1.5)) % palette.length;
           ctx.fillStyle = palette[idx];
         } else {
           ctx.fillStyle = ch === "K" ? "#000" : ch === "W" ? "#fff" : ch === "N" ? "#e0ac69" : ch === "S" ? "#f1c27d" : ch === "G" ? "#f5c542" : ch === "3" ? characterSprites[characterType].robeColor : "#888";
