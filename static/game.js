@@ -1279,12 +1279,15 @@ function drawCastle() {
 
   ctx.save();
 
-  // Base stone color
-  ctx.fillStyle = "#5a5a63";
+  // Facelift: Castle base with gradient stone
+  const grad = ctx.createLinearGradient(screenX, screenY - h/2, screenX, screenY + h/2);
+  grad.addColorStop(0, "#bfc6d1");
+  grad.addColorStop(1, "#7a7d8c");
+  ctx.fillStyle = grad;
   ctx.fillRect(screenX - w/2, screenY - h/2, w, h);
 
-  // Inner courtyard
-  ctx.fillStyle = "#2e2e33";
+  // Inner courtyard with lighter stone
+  ctx.fillStyle = "#e3e6ed";
   ctx.fillRect(
     screenX - w/2 + t,
     screenY - h/2 + t,
@@ -1292,32 +1295,104 @@ function drawCastle() {
     h - t*2
   );
 
-  // Towers (4 corners)
+  // Towers (4 corners) with brick pattern and highlights
   const towerRadius = 90;
-
-  ctx.fillStyle = "#6a6a75";
-
+  const towerColors = ["#d1bfa3", "#bfa98c", "#a38c7a"];
   const corners = [
     [-w/2, -h/2],
     [ w/2, -h/2],
     [-w/2,  h/2],
     [ w/2,  h/2]
   ];
-
-  corners.forEach(([ox, oy]) => {
+  corners.forEach(([ox, oy], idx) => {
+    ctx.save();
     ctx.beginPath();
     ctx.arc(screenX + ox, screenY + oy, towerRadius, 0, Math.PI*2);
+    ctx.clip();
+    // Brick pattern
+    for (let y = -towerRadius; y < towerRadius; y += 16) {
+      for (let x = -towerRadius; x < towerRadius; x += 32) {
+        ctx.fillStyle = towerColors[(x+y+idx*2)%towerColors.length];
+        ctx.fillRect(screenX + ox + x, screenY + oy + y, 28, 12);
+      }
+    }
+    // Highlight
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(screenX + ox, screenY + oy - 30, towerRadius * 0.7, 0, Math.PI*2);
     ctx.fill();
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+    // Tower top
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(screenX + ox, screenY + oy, towerRadius, 0, Math.PI*2);
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = "#6a6a75";
+    ctx.stroke();
+    ctx.restore();
+    // Flag
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(screenX + ox, screenY + oy - towerRadius);
+    ctx.lineTo(screenX + ox, screenY + oy - towerRadius - 36);
+    ctx.strokeStyle = "#222";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.fillStyle = idx % 2 === 0 ? "#e22" : "#2af";
+    ctx.beginPath();
+    ctx.moveTo(screenX + ox, screenY + oy - towerRadius - 36);
+    ctx.lineTo(screenX + ox + 22, screenY + oy - towerRadius - 24);
+    ctx.lineTo(screenX + ox, screenY + oy - towerRadius - 12);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
   });
 
-  // Gate (south side)
-  ctx.fillStyle = "#2a1f15";
+  // Gate (south side) with arch and details
+  ctx.save();
+  ctx.fillStyle = "#7a5c3a";
   ctx.fillRect(
     screenX - 80,
     screenY + h/2 - 20,
     160,
     120
   );
+  // Arch
+  ctx.beginPath();
+  ctx.arc(screenX, screenY + h/2 + 40, 80, Math.PI, 0);
+  ctx.fillStyle = "#e3e6ed";
+  ctx.globalAlpha = 0.7;
+  ctx.fill();
+  ctx.globalAlpha = 1.0;
+  // Door
+  ctx.fillStyle = "#4a2b1a";
+  ctx.fillRect(screenX - 36, screenY + h/2 + 40, 72, 60);
+  // Door knob
+  ctx.fillStyle = "#d9b15b";
+  ctx.beginPath();
+  ctx.arc(screenX + 24, screenY + h/2 + 70, 6, 0, Math.PI*2);
+  ctx.fill();
+  ctx.restore();
+
+  // Windows on castle front
+  ctx.save();
+  ctx.fillStyle = "#aee2ff";
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  for (let i = -1; i <= 1; i++) {
+    ctx.fillRect(screenX + i*120 - 18, screenY - h/2 + 36, 36, 36);
+    ctx.strokeRect(screenX + i*120 - 18, screenY - h/2 + 36, 36, 36);
+    // Crossbars
+    ctx.beginPath();
+    ctx.moveTo(screenX + i*120, screenY - h/2 + 36);
+    ctx.lineTo(screenX + i*120, screenY - h/2 + 72);
+    ctx.moveTo(screenX + i*120 - 18, screenY - h/2 + 54);
+    ctx.lineTo(screenX + i*120 + 18, screenY - h/2 + 54);
+    ctx.stroke();
+  }
+  ctx.restore();
 
   ctx.restore();
 }
