@@ -59,7 +59,6 @@ export class NetworkClient {
             trailCount:7
           });
         }
-        // Add ultimate if needed
       }
     } else if (data.type === "player_update") {
       // Use a unique id for each player (e.g., data.id)
@@ -73,6 +72,14 @@ export class NetworkClient {
         energy: data.energy,
         activeWeapon: data.activeWeapon
       };
+    } else if (data.type === "ultimate") {
+      const { id } = data.payload || {};
+      if (id !== window.playerId && window.remotePlayers && window.remotePlayers[id]) {
+        const rp = window.remotePlayers[id];
+        const worldX = rp.x + 38;
+        const worldY = rp.y + 26;
+        window.triggerUltimateBurst(worldX, worldY);
+      }
     } else {
       console.log("Received message:", data);
     }

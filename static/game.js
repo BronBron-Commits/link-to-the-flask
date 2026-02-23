@@ -159,6 +159,11 @@ const ultTotal = ultWindup + ultActive;
 let ultBurstTriggered = false;
 let screenShake = 0;
 
+// Multiplayer ultimate sync state
+let remoteUlting = {};
+let remoteUltTimer = {};
+let remoteUltBurstTriggered = {};
+
 /* =========================
    RIGHT CLICK MOVE
 ========================= */
@@ -203,26 +208,26 @@ if (key === "2") activeWeapon = 2;
 
   if (key === "r" && !ulting && cooldowns.r <= 0 && energy >= energyCosts.r) {
     energy -= energyCosts.r;
-
     ulting = true;
     ultTimer = 0;
-
+    // Send ultimate event to other clients
+    networkClient.send({
+      type: "ultimate",
+      payload: {
+        id: window.playerId,
+        x: camera.x,
+        y: camera.y
+      }
+    });
     const ctxAudio = new (window.AudioContext || window.webkitAudioContext)();
     ultNoiseOsc = ctxAudio.createOscillator();
     ultNoiseGain = ctxAudio.createGain();
-
     ultNoiseOsc.type = "sawtooth";
     ultNoiseOsc.frequency.value = 90;
     ultNoiseGain.gain.value = 0.05;
-
     ultNoiseOsc.connect(ultNoiseGain);
     ultNoiseGain.connect(ctxAudio.destination);
     ultNoiseOsc.start();
-
-    ultNoiseOsc.frequency.linearRampToValueAtTime(
-      400,
-      ctxAudio.currentTime + ultWindup / 1000
-    );
   }
 });
 
@@ -471,26 +476,36 @@ waterTime += dt * 0.002;
   // =========================
   // ULTIMATE
   // =========================
-
   if (ulting) {
-
     ultTimer += dt;
-
     if (!ultBurstTriggered && ultTimer >= ultWindup) {
       ultBurstTriggered = true;
       triggerUltimateBurst();
       cooldowns.r = cooldownDurations.r;
-
       if (ultNoiseOsc) {
         ultNoiseOsc.stop();
         ultNoiseOsc = null;
       }
     }
-
     if (ultTimer >= ultTotal) {
       ulting = false;
       ultTimer = 0;
       ultBurstTriggered = false;
+    }
+  }
+  // Remote ultimates
+  for (const id in remoteUlting) {
+    if (remoteUlting[id]) {
+      remoteUltTimer[id] += dt;
+      if (!remoteUltBurstTriggered[id] && remoteUltTimer[id] >= ultWindup) {
+        remoteUltBurstTriggered[id] = true;
+        triggerUltimateBurst(remoteUlting[id].x, remoteUlting[id].y);
+      }
+      if (remoteUltTimer[id] >= ultTotal) {
+        remoteUlting[id] = null;
+        remoteUltTimer[id] = 0;
+        remoteUltBurstTriggered[id] = false;
+      }
     }
   }
 
@@ -1118,28 +1133,15 @@ function drawFloor(){
   }
 }
 
-function triggerUltimateBurst() {
-  hudPulse.r = 300;
-  const dpr = window.devicePixelRatio || 1;
-  const logicalW = canvas.width / dpr;
-  const logicalH = canvas.height / dpr;
-
-  const centerX = logicalW / 2;
-  const centerY = logicalH / 2;
-
+function triggerUltimateBurst(centerX = camera.x, centerY = camera.y) {
   const radius = 140;
   const shots = 48; // huge burst
-
   for (let i = 0; i < shots; i++) {
-
     const angle = (Math.PI * 2 / shots) * i;
-
     const dx = Math.cos(angle);
     const dy = Math.sin(angle);
-
     const spawnX = centerX + dx * radius;
     const spawnY = centerY + dy * radius;
-
     castAttack(spawnX, spawnY, dx, dy, {
       speed: 28,
       life: 1.4,
@@ -1148,25 +1150,27 @@ function triggerUltimateBurst() {
       trailCount: 6
     });
   }
-
   sfxUltimateBoom();
   screenShake = 25;   // strength of shake
 }
-function drawUltimateHalo() {
+window.triggerUltimateBurst = triggerUltimateBurst;
+
+function drawUltimateHalo(centerX = null, centerY = null, timer = null) {
   const dpr = window.devicePixelRatio || 1;
   const logicalW = canvas.width / dpr;
   const logicalH = canvas.height / dpr;
 
-  // EXACT same position wizard is drawn at
-  const centerX = logicalW / 2;
-  const centerY = logicalH / 2;
+  // Use provided position or default to local
+  if (!centerX) centerX = logicalW / 2;
+  if (!centerY) centerY = logicalH / 2;
 
   const radius = 140;
 
   // only draw ring after windup delay
-  if (ultTimer < ultWindup) return;
+  let useTimer = timer !== null ? timer : ultTimer;
+  if (useTimer < ultWindup) return;
 
-  const activeTime = ultTimer - ultWindup;
+  const activeTime = useTimer - ultWindup;
   const rotation = activeTime * 0.004;
 
   ctx.save();
@@ -1287,7 +1291,33 @@ if (window.remotePlayers) {
     ctx.fillStyle = `rgba(0,0,0,${0.7 * fadeIn})`;
     ctx.fillRect(0,0,logicalW,logicalH);
   }
-
+  // Draw remote ult effects
+  for (const id in remoteUlting) {
+    if (remoteUlting[id]) {
+      const fadeIn = Math.min(1, remoteUltTimer[id] / ultWindup);
+      ctx.fillStyle = `rgba(0,0,0,${0.7 * fadeIn})`;
+      ctx.fillRect(0,0,logicalW,logicalH);
+      // Draw halo at remote player's screen position
+      const rp = window.remotePlayers[id];
+      if (rp) {
+        const screenX = rp.x - camera.x + logicalW/2;
+        const screenY = rp.y - camera.y + logicalH/2;
+        drawUltimateHalo(screenX, screenY, remoteUltTimer[id]);
+      }
+    }
+  }
+  // Draw remote ultimate burst projectiles
+  for (const id in remoteUlting) {
+    if (remoteUlting[id] && remoteUltBurstTriggered[id]) {
+      // Only trigger burst if not already triggered this frame
+      if (!remoteUlting[id].burstDrawn) {
+        triggerUltimateBurst(remoteUlting[id].x, remoteUlting[id].y);
+        remoteUlting[id].burstDrawn = true;
+      }
+    } else if (remoteUlting[id]) {
+      remoteUlting[id].burstDrawn = false;
+    }
+  }
   // =========================
   // Wizard
   // =========================
