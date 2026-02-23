@@ -1012,6 +1012,7 @@ function drawRiver() {
   const logicalW = canvas.width / dpr;
   const logicalH = canvas.height / dpr;
 
+  // Draw local player reflection
   drawWizard(
     ctx,
     logicalW/2,
@@ -1021,9 +1022,7 @@ function drawRiver() {
     idleTime,
     facing
   );
-
   if (activeWeapon === 1) {
-
     drawScepter(
       ctx,
       logicalW/2 + 38,
@@ -1034,9 +1033,7 @@ function drawRiver() {
       attackAnim,
       charging
     );
-
   } else if (activeWeapon === 2) {
-
     drawFishingPole(
       ctx,
       logicalW/2 + 38,
@@ -1044,7 +1041,51 @@ function drawRiver() {
       3,
       facing
     );
+  }
 
+  // Draw remote player reflections
+  if (window.remotePlayers) {
+    for (const id in window.remotePlayers) {
+      const rp = window.remotePlayers[id];
+      if (!rp) continue;
+      const screenX = rp.x - camera.x + logicalW/2;
+      const screenY = rp.y - camera.y + logicalH/2;
+      drawWizard(
+        ctx,
+        screenX,
+        screenY,
+        4,
+        0,
+        0,
+        rp.facing || { x: 1, y: 0 },
+        rp.robeColor || '#5b2fa0'
+      );
+      // Draw weapon for remote player
+      const weaponX = screenX + 38;
+      const weaponY = screenY + 26;
+      if (rp.activeWeapon === 1) {
+        drawScepter(
+          ctx,
+          weaponX,
+          weaponY,
+          3,
+          0,
+          0,
+          0,
+          false
+        );
+      } else if (rp.activeWeapon === 2) {
+        if (typeof drawFishingPole === 'function') {
+          drawFishingPole(
+            ctx,
+            weaponX,
+            weaponY,
+            3,
+            rp.facing || { x: 1, y: 0 }
+          );
+        }
+      }
+    }
   }
 
   ctx.restore(); // reflection
