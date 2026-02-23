@@ -36,10 +36,10 @@ function promptForPlayerName() {
   modal.style.zIndex = '9999';
   modal.innerHTML = `
     <div style="background:#222;padding:32px 48px;border-radius:12px;box-shadow:0 0 24px #000;text-align:center;">
-      <h2 style='color:#0f0;margin-bottom:16px;'>Enter Your Name</h2>
-      <input id="playerNameInput" type="text" maxlength="16" style="font-size:1.2em;padding:8px 12px;border-radius:6px;border:1px solid #0f0;background:#111;color:#0f0;outline:none;" autofocus />
+      <h2 style='color:#fff;margin-bottom:16px;'>Enter Your Name</h2>
+      <input id="playerNameInput" type="text" maxlength="16" style="font-size:1.2em;padding:8px 12px;border-radius:6px;border:1px solid rgb(255, 255, 255);background:#111;color:#fff;outline:none;" autofocus />
       <br><br>
-      <button id="playerNameBtn" style="font-size:1.1em;padding:8px 24px;border-radius:6px;background:#0f0;color:#111;border:none;cursor:pointer;">Start</button>
+      <button id="playerNameBtn" style="font-size:1.1em;padding:8px 24px;border-radius:6px;background:#fff;color:#111;border:none;cursor:pointer;">Start</button>
     </div>
   `;
   document.body.appendChild(modal);
