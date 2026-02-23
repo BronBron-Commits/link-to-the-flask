@@ -1,4 +1,13 @@
-export function drawWizard(ctx, x, y, scale=4, frame=0, idle=0, facing={x:1,y:0}){
+// robeColor can be a string (base color) or an array (palette)
+export function drawWizard(ctx, x, y, scale=4, frame=0, idle=0, facing={x:1,y:0}, robeColor="#5b2fa0"){
+
+  // If robeColor is a string, generate a palette of 4 shades from it
+  let robePalette;
+  if (Array.isArray(robeColor)) {
+    robePalette = robeColor;
+  } else {
+    robePalette = generateRobePalette(robeColor);
+  }
 
 /* =========================================================
    DIRECTION SELECTION
@@ -129,10 +138,30 @@ function goldColor(i,j){
   return "#fff1a8";
 }
 
-const robePalette = ["#5b2fa0","#6a3dad","#7c52c7","#a884ff"];
-function robeColor(i,j,time){
+function robeColorAnimated(i,j,time){
   const wave = Math.sin((i*0.8 + j*0.6) + time*0.004);
   return robePalette[Math.floor((wave+1)*1.5)];
+}
+
+// Generate 4 shades from a base color (hex string)
+function generateRobePalette(baseColor) {
+  // Simple shade generator: darken/lighten base color
+  function shade(hex, percent) {
+    let num = parseInt(hex.replace('#',''),16);
+    let r = (num >> 16) + percent;
+    let g = ((num >> 8) & 0x00FF) + percent;
+    let b = (num & 0x0000FF) + percent;
+    r = Math.max(0, Math.min(255, r));
+    g = Math.max(0, Math.min(255, g));
+    b = Math.max(0, Math.min(255, b));
+    return `#${(r<<16|g<<8|b).toString(16).padStart(6,'0')}`;
+  }
+  return [
+    shade(baseColor, -40),
+    shade(baseColor, -20),
+    shade(baseColor, 0),
+    shade(baseColor, 30)
+  ];
 }
 
 const t = performance.now();
@@ -172,7 +201,7 @@ for(let j=0;j<h;j++){
     if(ch==="0")continue;
 
     if(ch==="H") ctx.fillStyle=hairColor(i,j);
-    else if(ch==="3") ctx.fillStyle=robeColor(i,j,t);
+    else if(ch==="3") ctx.fillStyle=robeColorAnimated(i,j,t);
     else if(ch==="G") ctx.fillStyle=goldColor(i,j);
     else ctx.fillStyle=colors[ch];
 

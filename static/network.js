@@ -70,8 +70,19 @@ export class NetworkClient {
         facing: data.facing,
         health: data.health,
         energy: data.energy,
-        activeWeapon: data.activeWeapon
+        activeWeapon: data.activeWeapon,
+        robeColor: getGlobalRobeColorForId(data.id)
       };
+
+// Deterministic robe color for each player id (robe)
+function getGlobalRobeColorForId(id) {
+  const palette = ["#5b2fa0", "#6a3dad", "#7c52c7", "#a884ff", "#2fa05b", "#ad3d6a", "#c7c752", "#ff84a8"];
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = id.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return palette[Math.abs(hash) % palette.length];
+}
     } else if (data.type === "ultimate") {
       const { id } = data.payload || {};
       if (id !== window.playerId && window.remotePlayers && window.remotePlayers[id]) {

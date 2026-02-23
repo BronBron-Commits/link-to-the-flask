@@ -1253,7 +1253,8 @@ if (window.remotePlayers) {
       4,
       0,
       0,
-      rp.facing || { x: 1, y: 0 }
+      rp.facing || { x: 1, y: 0 },
+      rp.robeColor || '#5b2fa0'
     );
 
     // Draw weapon for remote player
@@ -1334,7 +1335,8 @@ if (window.remotePlayers) {
     4,
     walkFrame,
     idleTime,
-    facing
+    facing,
+    '#5b2fa0'
   );
 
   const sx = logicalW/2 + 38;
