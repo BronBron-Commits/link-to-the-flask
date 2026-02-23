@@ -922,9 +922,6 @@ function drawCourtyard() {
   // HOUSE (computed AFTER pathWidth exists)
   const hedgeEndY = screenY + (h/2 - 30);
   const houseY = hedgeEndY + 120;
-  const houseX = screenX - pathWidth/2 - 260;
-  // ...existing code...
-  // Draw house (same as before)
   const houseW = 200;
   const houseH = 150;
   const roofH = 60;
@@ -934,61 +931,69 @@ function drawCourtyard() {
   const windowH = 32;
   const chimneyW = 18;
   const chimneyH = 38;
-  ctx.fillStyle = "#e6cfa3";
-  ctx.fillRect(houseX - houseW/2, houseY - houseH, houseW, houseH);
-  ctx.save();
-  ctx.shadowColor = "#a87c4a";
-  ctx.shadowBlur = 16;
-  ctx.fillStyle = "#a87c4a";
-  ctx.beginPath();
-  ctx.moveTo(houseX - houseW/2 - 16, houseY - houseH);
-  ctx.lineTo(houseX + houseW/2 + 16, houseY - houseH);
-  ctx.lineTo(houseX, houseY - houseH - roofH);
-  ctx.closePath();
-  ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.restore();
-  ctx.fillStyle = "#7a5c3a";
-  ctx.fillRect(houseX + houseW/2 - 30, houseY - houseH - chimneyH, chimneyW, chimneyH);
-  ctx.fillStyle = "#6b3a1a";
-  ctx.fillRect(houseX - doorW/2, houseY - doorH, doorW, doorH);
-  ctx.fillStyle = "#d9b15b";
-  ctx.beginPath();
-  ctx.arc(houseX + doorW/2 - 8, houseY - doorH + doorH/2, 4, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = "#aee2ff";
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 2;
-  ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
-  ctx.strokeRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
-  ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
-  ctx.strokeRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
-  ctx.beginPath();
-  ctx.moveTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24);
-  ctx.lineTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24 + windowH);
-  ctx.moveTo(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH/2);
-  ctx.lineTo(houseX - houseW/2 + 18 + windowW, houseY - houseH + 24 + windowH/2);
-  ctx.moveTo(houseX + houseW/2 - windowW - 18 + windowW/2, houseY - houseH + 24);
-  ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW/2, houseY - houseH + 24 + windowH);
-  ctx.moveTo(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH/2);
-  ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW, houseY - houseH + 24 + windowH/2);
-  ctx.stroke();
-  ctx.fillStyle = "#b5651d";
-  ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
-  ctx.fillStyle = "#ff6f61";
-  ctx.beginPath();
-  ctx.arc(houseX - houseW/2 + 28, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
-  ctx.arc(houseX - houseW/2 + 38, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
-  ctx.arc(houseX - houseW/2 + 48, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
-  ctx.fill();
-  ctx.fillStyle = "#b5651d";
-  ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
-  ctx.fillStyle = "#ff6f61";
-  ctx.beginPath();
-  ctx.arc(houseX + houseW/2 - windowW - 8, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
-  ctx.arc(houseX + houseW/2 - windowW + 2, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
-  ctx.arc(houseX + houseW/2 - windowW + 12, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
-  ctx.fill();
+  // Draw multiple houses
+  const housePositions = [
+    screenX - pathWidth/2 - 260,
+    screenX - pathWidth/2 - 500,
+    screenX - pathWidth/2 - 740
+  ];
+  housePositions.forEach((houseX) => {
+    ctx.fillStyle = "#e6cfa3";
+    ctx.fillRect(houseX - houseW/2, houseY - houseH, houseW, houseH);
+    ctx.save();
+    ctx.shadowColor = "#a87c4a";
+    ctx.shadowBlur = 16;
+    ctx.fillStyle = "#a87c4a";
+    ctx.beginPath();
+    ctx.moveTo(houseX - houseW/2 - 16, houseY - houseH);
+    ctx.lineTo(houseX + houseW/2 + 16, houseY - houseH);
+    ctx.lineTo(houseX, houseY - houseH - roofH);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.restore();
+    ctx.fillStyle = "#7a5c3a";
+    ctx.fillRect(houseX + houseW/2 - 30, houseY - houseH - chimneyH, chimneyW, chimneyH);
+    ctx.fillStyle = "#6b3a1a";
+    ctx.fillRect(houseX - doorW/2, houseY - doorH, doorW, doorH);
+    ctx.fillStyle = "#d9b15b";
+    ctx.beginPath();
+    ctx.arc(houseX + doorW/2 - 8, houseY - doorH + doorH/2, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#aee2ff";
+    ctx.strokeStyle = "#fff";
+    ctx.lineWidth = 2;
+    ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
+    ctx.strokeRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
+    ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
+    ctx.strokeRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
+    ctx.beginPath();
+    ctx.moveTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24);
+    ctx.lineTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24 + windowH);
+    ctx.moveTo(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH/2);
+    ctx.lineTo(houseX - houseW/2 + 18 + windowW, houseY - houseH + 24 + windowH/2);
+    ctx.moveTo(houseX + houseW/2 - windowW - 18 + windowW/2, houseY - houseH + 24);
+    ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW/2, houseY - houseH + 24 + windowH);
+    ctx.moveTo(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH/2);
+    ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW, houseY - houseH + 24 + windowH/2);
+    ctx.stroke();
+    ctx.fillStyle = "#b5651d";
+    ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
+    ctx.fillStyle = "#ff6f61";
+    ctx.beginPath();
+    ctx.arc(houseX - houseW/2 + 28, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+    ctx.arc(houseX - houseW/2 + 38, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+    ctx.arc(houseX - houseW/2 + 48, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = "#b5651d";
+    ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
+    ctx.fillStyle = "#ff6f61";
+    ctx.beginPath();
+    ctx.arc(houseX + houseW/2 - windowW - 8, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+    ctx.arc(houseX + houseW/2 - windowW + 2, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+    ctx.arc(houseX + houseW/2 - windowW + 12, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
+    ctx.fill();
+  });
 
   // GUARD TOWER (opposite side of path)
   const towerX = screenX + pathWidth/2 + 260;
