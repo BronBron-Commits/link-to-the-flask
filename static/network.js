@@ -71,6 +71,7 @@ export class NetworkClient {
         health: data.health,
         energy: data.energy,
         activeWeapon: data.activeWeapon,
+        characterType: data.characterType || "wizard",
         robeColor: getGlobalRobeColorForId(data.id),
         name: typeof data.name === 'string' ? data.name : ''
       };

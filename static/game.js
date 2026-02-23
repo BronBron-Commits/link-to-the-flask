@@ -254,6 +254,8 @@ window.addEventListener("keydown", (e) => {
     characterTypeIndex = (characterTypeIndex + 1) % characterTypes.length;
     characterType = characterTypes[characterTypeIndex];
     e.preventDefault();
+    // Immediately broadcast outfit change
+    outputPlayerPositionJSON();
   }
 if (key === "1") activeWeapon = 1;
 if (key === "2") activeWeapon = 2;
@@ -664,6 +666,7 @@ waterTime += dt * 0.002;
 // OUTPUT PLAYER POSITION AS JSON
 // =========================
 function outputPlayerPositionJSON() {
+  window.outputPlayerPositionJSON = outputPlayerPositionJSON;
   const playerData = {
     id: window.playerId,
     x: player.x,
@@ -672,6 +675,7 @@ function outputPlayerPositionJSON() {
     health,
     energy,
     activeWeapon,
+    characterType,
     name: playerName
   };
   // Send position to server for multiplayer sync
@@ -1428,21 +1432,41 @@ function draw(){
 if (window.remotePlayers) {
   for (const id in window.remotePlayers) {
     const rp = window.remotePlayers[id];
-
     const screenX = rp.x - camera.x + logicalW/2;
     const screenY = rp.y - camera.y + logicalH/2;
-
-    drawWizard(
-      ctx,
-      screenX,
-      screenY,
-      4,
-      0,
-      0,
-      rp.facing || { x: 1, y: 0 },
-      rp.robeColor || '#5b2fa0'
-    );
-
+    // Use correct characterType for remote player
+    let remoteType = rp.characterType || "wizard";
+    if (characterSprites[remoteType] && remoteType !== "wizard") {
+      const sprite = characterSprites[remoteType].sprites.front;
+      const scale = 4;
+      for (let j = 0; j < sprite.length; j++) {
+        const row = sprite[j];
+        for (let i = 0; i < row.length; i++) {
+          const ch = row[i];
+          if (ch === "0") continue;
+          if (remoteType === "knight" && ch === "A") {
+            const palette = characterSprites[remoteType].robeColor;
+            const t = performance.now();
+            const idx = Math.floor(((Math.sin(i*0.8 + j*0.6 + t*0.004)+1)*1.5)) % palette.length;
+            ctx.fillStyle = palette[idx];
+          } else {
+            ctx.fillStyle = ch === "K" ? "#000" : ch === "W" ? "#fff" : ch === "N" ? "#e0ac69" : ch === "S" ? "#f1c27d" : ch === "G" ? "#f5c542" : ch === "3" ? characterSprites[remoteType].robeColor : "#888";
+          }
+          ctx.fillRect(Math.floor(screenX + i*scale), Math.floor(screenY + j*scale), scale, scale);
+        }
+      }
+    } else {
+      drawWizard(
+        ctx,
+        screenX,
+        screenY,
+        4,
+        0,
+        0,
+        rp.facing || { x: 1, y: 0 },
+        rp.robeColor || '#5b2fa0'
+      );
+    }
     // Draw weapon for remote player
     const weaponX = screenX + 38;
     const weaponY = screenY + 26;
