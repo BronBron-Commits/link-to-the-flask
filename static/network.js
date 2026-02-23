@@ -1,6 +1,6 @@
 export class NetworkClient {
   constructor() {
-    this.socket = new WebSocket("ws://localhost:8765");
+    this.socket = new WebSocket("ws://78.138.31.143:8765");
     this.socket.onopen = () => console.log("Connected");
     this.socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
