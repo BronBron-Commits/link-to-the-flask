@@ -1,11 +1,12 @@
-// NetworkClient is attached to window by network_socketio.js
-const networkClient = new window.NetworkClient({});
+import { NetworkClient } from "./network.js";
+const networkClient = new NetworkClient();
 
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=2";
-
+const remotePlayers = {};
+window.remotePlayers = remotePlayers;
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
@@ -1202,7 +1203,27 @@ function draw(){
   drawRiver();         // river LAST (because it clips)
 
   drawAttacks(ctx);
+// =========================
+// DRAW REMOTE PLAYERS
+// =========================
+if (window.remotePlayers) {
+  for (const id in window.remotePlayers) {
+    const rp = window.remotePlayers[id];
 
+    const screenX = rp.x - camera.x + logicalW/2;
+    const screenY = rp.y - camera.y + logicalH/2;
+
+    drawWizard(
+      ctx,
+      screenX,
+      screenY,
+      4,
+      0,
+      0,
+      rp.facing || { x: 1, y: 0 }
+    );
+  }
+}
   // =========================
   // Darken screen during ult
   // =========================
