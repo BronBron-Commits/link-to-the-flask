@@ -11,6 +11,7 @@ import { castLure, updateLures, drawLures } from "./lure.js";
 window.castAttack = castAttack;
 window.castShotgun = castShotgun;
 import { drawWizard } from "./character.js?v=2";
+import { characterSprites } from "./character_sprites.js";
 import { drawScepter } from "./weapon.js?v=2";
 import { sendAttack, sendShotgun } from "./network.js";
 const remotePlayers = {};
@@ -181,6 +182,10 @@ let hudPulse = {
 
 
 let player = { x: 0, y: 0 };
+// Character sprite selection
+const characterTypes = ["wizard", "knight", "rogue", "archer", "mage", "paladin"];
+let characterTypeIndex = 0;
+let characterType = characterTypes[characterTypeIndex];
 let facing = { x: 1, y: 0 };
 
 let camera = { x: 0, y: 0, targetX: 0, targetY: 0 };
@@ -244,6 +249,12 @@ canvas.addEventListener("mousedown", (e) => {
 
 window.addEventListener("keydown", (e) => {
   const key = e.key.toLowerCase();
+  // Switch character sprite with Tab (cycle)
+  if (e.code === "Tab") {
+    characterTypeIndex = (characterTypeIndex + 1) % characterTypes.length;
+    characterType = characterTypes[characterTypeIndex];
+    e.preventDefault();
+  }
 if (key === "1") activeWeapon = 1;
 if (key === "2") activeWeapon = 2;
 if (activeWeapon === 2) {
@@ -1504,16 +1515,42 @@ if (window.remotePlayers) {
   }
 
 
-  drawWizard(
-    ctx,
-    logicalW/2,
-    logicalH/2 + raiseOffset,
-    4,
-    walkFrame,
-    idleTime,
-    facing,
-    '#5b2fa0'
-  );
+  // Use alternate sprite system if selected
+  if (characterSprites[characterType] && characterType !== "wizard") {
+    // Custom sprite drawing (front only for demo)
+    const sprite = characterSprites[characterType].sprites.front;
+    const scale = 4;
+    const x = logicalW/2;
+    const y = logicalH/2 + raiseOffset;
+    for (let j = 0; j < sprite.length; j++) {
+      const row = sprite[j];
+      for (let i = 0; i < row.length; i++) {
+        const ch = row[i];
+        if (ch === "0") continue;
+        // Animate knight robe color
+        if (characterType === "knight" && ch === "A") {
+          const palette = characterSprites[characterType].robeColor;
+          const t = performance.now();
+          const idx = Math.floor(((Math.sin(i*0.8 + j*0.6 + t*0.004)+1)*1.5)) % palette.length;
+          ctx.fillStyle = palette[idx];
+        } else {
+          ctx.fillStyle = ch === "K" ? "#000" : ch === "W" ? "#fff" : ch === "N" ? "#e0ac69" : ch === "S" ? "#f1c27d" : ch === "G" ? "#f5c542" : ch === "3" ? characterSprites[characterType].robeColor : "#888";
+        }
+        ctx.fillRect(Math.floor(x + i*scale), Math.floor(y + j*scale), scale, scale);
+      }
+    }
+  } else {
+    drawWizard(
+      ctx,
+      logicalW/2,
+      logicalH/2 + raiseOffset,
+      4,
+      walkFrame,
+      idleTime,
+      facing,
+      '#5b2fa0'
+    );
+  }
 
   // Draw player name tag (smaller, centered, white)
   if (playerName) {
