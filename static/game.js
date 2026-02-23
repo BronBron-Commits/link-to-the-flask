@@ -918,11 +918,13 @@ function drawCourtyard() {
   // HOUSE (computed AFTER pathWidth exists)
   // =========================
 
+
+  // HOUSE (computed AFTER pathWidth exists)
   const hedgeEndY = screenY + (h/2 - 30);
   const houseY = hedgeEndY + 120;
   const houseX = screenX - pathWidth/2 - 260;
-
-  // Nicer house design
+  // ...existing code...
+  // Draw house (same as before)
   const houseW = 200;
   const houseH = 150;
   const roofH = 60;
@@ -932,15 +934,8 @@ function drawCourtyard() {
   const windowH = 32;
   const chimneyW = 18;
   const chimneyH = 38;
-  // House base
   ctx.fillStyle = "#e6cfa3";
-  ctx.fillRect(
-    houseX - houseW/2,
-    houseY - houseH,
-    houseW,
-    houseH
-  );
-  // Roof
+  ctx.fillRect(houseX - houseW/2, houseY - houseH, houseW, houseH);
   ctx.save();
   ctx.shadowColor = "#a87c4a";
   ctx.shadowBlur = 16;
@@ -953,28 +948,14 @@ function drawCourtyard() {
   ctx.fill();
   ctx.shadowBlur = 0;
   ctx.restore();
-  // Chimney
   ctx.fillStyle = "#7a5c3a";
-  ctx.fillRect(
-    houseX + houseW/2 - 30,
-    houseY - houseH - chimneyH,
-    chimneyW,
-    chimneyH
-  );
-  // Door
+  ctx.fillRect(houseX + houseW/2 - 30, houseY - houseH - chimneyH, chimneyW, chimneyH);
   ctx.fillStyle = "#6b3a1a";
-  ctx.fillRect(
-    houseX - doorW/2,
-    houseY - doorH,
-    doorW,
-    doorH
-  );
-  // Door knob
+  ctx.fillRect(houseX - doorW/2, houseY - doorH, doorW, doorH);
   ctx.fillStyle = "#d9b15b";
   ctx.beginPath();
   ctx.arc(houseX + doorW/2 - 8, houseY - doorH + doorH/2, 4, 0, Math.PI*2);
   ctx.fill();
-  // Windows
   ctx.fillStyle = "#aee2ff";
   ctx.strokeStyle = "#fff";
   ctx.lineWidth = 2;
@@ -982,7 +963,6 @@ function drawCourtyard() {
   ctx.strokeRect(houseX - houseW/2 + 18, houseY - houseH + 24, windowW, windowH);
   ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
   ctx.strokeRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24, windowW, windowH);
-  // Window crossbars
   ctx.beginPath();
   ctx.moveTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24);
   ctx.lineTo(houseX - houseW/2 + 18 + windowW/2, houseY - houseH + 24 + windowH);
@@ -993,7 +973,6 @@ function drawCourtyard() {
   ctx.moveTo(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH/2);
   ctx.lineTo(houseX + houseW/2 - windowW - 18 + windowW, houseY - houseH + 24 + windowH/2);
   ctx.stroke();
-  // Flower box under left window
   ctx.fillStyle = "#b5651d";
   ctx.fillRect(houseX - houseW/2 + 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
   ctx.fillStyle = "#ff6f61";
@@ -1002,7 +981,6 @@ function drawCourtyard() {
   ctx.arc(houseX - houseW/2 + 38, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
   ctx.arc(houseX - houseW/2 + 48, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
   ctx.fill();
-  // Flower box under right window
   ctx.fillStyle = "#b5651d";
   ctx.fillRect(houseX + houseW/2 - windowW - 18, houseY - houseH + 24 + windowH + 6, windowW, 8);
   ctx.fillStyle = "#ff6f61";
@@ -1012,24 +990,96 @@ function drawCourtyard() {
   ctx.arc(houseX + houseW/2 - windowW + 12, houseY - houseH + 24 + windowH + 10, 4, 0, Math.PI*2);
   ctx.fill();
 
-  // =========================
-  // HEDGES
-  // =========================
+  // GUARD TOWER (opposite side of path)
+  const towerX = screenX + pathWidth/2 + 260;
+  const towerY = houseY;
+  const towerW = 70;
+  const towerH = 180;
+  const roofH_tower = 48;
+  // Stone base
+  ctx.save();
+  ctx.fillStyle = "#bfc6d1";
+  ctx.fillRect(towerX - towerW/2, towerY - towerH, towerW, towerH);
+  // Brick lines
+  ctx.strokeStyle = "#7a7d8c";
+  ctx.lineWidth = 2;
+  for (let y = towerY - towerH + 12; y < towerY; y += 16) {
+    ctx.beginPath();
+    ctx.moveTo(towerX - towerW/2, y);
+    ctx.lineTo(towerX + towerW/2, y);
+    ctx.stroke();
+  }
+  // Roof
+  ctx.fillStyle = "#a87c4a";
+  ctx.beginPath();
+  ctx.moveTo(towerX - towerW/2 - 10, towerY - towerH);
+  ctx.lineTo(towerX + towerW/2 + 10, towerY - towerH);
+  ctx.lineTo(towerX, towerY - towerH - roofH_tower);
+  ctx.closePath();
+  ctx.fill();
+  // Windows
+  ctx.fillStyle = "#aee2ff";
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  for (let i = -1; i <= 1; i++) {
+    ctx.fillRect(towerX + i*22 - 12, towerY - towerH + 36, 24, 24);
+    ctx.strokeRect(towerX + i*22 - 12, towerY - towerH + 36, 24, 24);
+    ctx.beginPath();
+    ctx.moveTo(towerX + i*22, towerY - towerH + 36);
+    ctx.lineTo(towerX + i*22, towerY - towerH + 60);
+    ctx.moveTo(towerX + i*22 - 12, towerY - towerH + 48);
+    ctx.lineTo(towerX + i*22 + 12, towerY - towerH + 48);
+    ctx.stroke();
+  }
+  // Flag
+  ctx.beginPath();
+  ctx.moveTo(towerX, towerY - towerH - roofH_tower);
+  ctx.lineTo(towerX, towerY - towerH - roofH_tower - 36);
+  ctx.strokeStyle = "#222";
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.fillStyle = "#2af";
+  ctx.beginPath();
+  ctx.moveTo(towerX, towerY - towerH - roofH_tower - 36);
+  ctx.lineTo(towerX + 22, towerY - towerH - roofH_tower - 24);
+  ctx.lineTo(towerX, towerY - towerH - roofH_tower - 12);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 
-  const bushRadius = 22;
+  // Overhauled hedges: layered bushes, color variation, flowers
+  const bushRadius = 24;
   const hedgeOffset = pathWidth/2 + 80;
-
-  ctx.fillStyle = "#1f4f1f";
-
+  const bushColors = ["#2e7d32", "#388e3c", "#43a047", "#66bb6a"];
+  const flowerColors = ["#ff6f61", "#ffd700", "#aee2ff", "#e22", "#fff"];
   for (let y = -h/2 + 30; y <= h/2 - 30; y += 55) {
-
-    ctx.beginPath();
-    ctx.arc(screenX - hedgeOffset, screenY + y, bushRadius, 0, Math.PI*2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.arc(screenX + hedgeOffset, screenY + y, bushRadius, 0, Math.PI*2);
-    ctx.fill();
+    // Layered bushes (3 per hedge row)
+    for (let i = -1; i <= 1; i++) {
+      const offset = i * (bushRadius + 8);
+      ctx.save();
+      ctx.globalAlpha = 0.85 - Math.abs(i)*0.15;
+      ctx.fillStyle = bushColors[(y+i)%bushColors.length];
+      ctx.beginPath();
+      ctx.arc(screenX - hedgeOffset + offset, screenY + y, bushRadius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(screenX + hedgeOffset + offset, screenY + y, bushRadius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.restore();
+      // Flowers (randomly placed)
+      if (i === 0 && y % 110 === 0) {
+        for (let f = 0; f < 3; f++) {
+          ctx.fillStyle = flowerColors[(y+f)%flowerColors.length];
+          ctx.beginPath();
+          ctx.arc(screenX - hedgeOffset + offset + Math.random()*12 - 6, screenY + y + Math.random()*12 - 6, 4, 0, Math.PI*2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(screenX + hedgeOffset + offset + Math.random()*12 - 6, screenY + y + Math.random()*12 - 6, 4, 0, Math.PI*2);
+          ctx.fill();
+        }
+      }
+    }
   }
 
   ctx.restore();
