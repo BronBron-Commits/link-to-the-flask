@@ -1,13 +1,21 @@
 import { NetworkClient } from "./network.js";
 const networkClient = new NetworkClient();
 
+// Assign a unique player ID for this session (not shared across tabs)
+const playerId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
+window.playerId = playerId;
+
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
+window.castAttack = castAttack;
+window.castShotgun = castShotgun;
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=2";
+import { sendAttack, sendShotgun } from "./network.js";
 const remotePlayers = {};
 window.remotePlayers = remotePlayers;
 const canvas = document.getElementById("game");
+window.canvas = canvas;
 const ctx = canvas.getContext("2d");
 
 function resizeCanvas() {
@@ -375,23 +383,31 @@ function sfxUltimateBoom() {
 
 function fireNormal(){
   hudPulse.q = 200;
-  const sx = canvas.width/2 + 38;
-  const sy = canvas.height/2 + 26;
+  // Use player world position with offset for attack origin
+  const sx = player.x + 38;
+  const sy = player.y + 26;
 
   const {dx,dy} = aimDir();
 
   castAttack(sx,sy,dx,dy,{
     speed:22, life:1, rangeTiles:6, scaleBoost:1, trailCount:5
   });
+  networkClient.sendAttack({
+    attackType: "normal",
+    dx,
+    dy
+  });
 
   sfxShoot();
   attackAnim = 1;
-cooldowns.q = cooldownDurations.q;
+  cooldowns.q = cooldownDurations.q;
 }
 
 function fireCharged(power01){
-  const sx = canvas.width/2 + 38;
-  const sy = canvas.height/2 + 26;
+
+  // Use player world position with offset for attack origin
+  const sx = player.x + 38;
+  const sy = player.y + 26;
 
   const {dx,dy} = aimDir();
 
@@ -403,6 +419,12 @@ function fireCharged(power01){
   castAttack(sx,sy,dx,dy,{
     speed, life, rangeTiles, scaleBoost, trailCount:7
   });
+  networkClient.sendAttack({
+    attackType: "charged",
+    dx,
+    dy,
+    power: power01
+  });
 
   sfxCharged(power01);
   attackAnim = 1;
@@ -410,15 +432,22 @@ function fireCharged(power01){
 
 function fireShotgun(){
   hudPulse.w = 200;
-  const sx = canvas.width/2 + 38;
-  const sy = canvas.height/2 + 26;
+
+  // Use player world position with offset for attack origin
+  const sx = player.x + 38;
+  const sy = player.y + 26;
 
   const {dx,dy} = aimDir();
 
   castShotgun(sx,sy,dx,dy);
+  networkClient.sendAttack({
+    attackType: "shotgun",
+    dx,
+    dy
+  });
   sfxShotgun();
   attackAnim = 1;
-cooldowns.w = cooldownDurations.w;
+  cooldowns.w = cooldownDurations.w;
 }
 
 function releaseCharge(){
@@ -479,6 +508,7 @@ waterTime += dt * 0.002;
 // =========================
 function outputPlayerPositionJSON() {
   const playerData = {
+    id: window.playerId,
     x: player.x,
     y: player.y,
     facing: { ...facing },
@@ -1201,8 +1231,7 @@ function draw(){
   drawCastle();        // castle BEFORE courtyard
   drawCourtyard();     // courtyard (house + hedges)
   drawRiver();         // river LAST (because it clips)
-
-  drawAttacks(ctx);
+  drawAttacks(ctx, camera, logicalW, logicalH);
 // =========================
 // DRAW REMOTE PLAYERS
 // =========================
@@ -1222,6 +1251,32 @@ if (window.remotePlayers) {
       0,
       rp.facing || { x: 1, y: 0 }
     );
+
+    // Draw weapon for remote player
+    const weaponX = screenX + 38;
+    const weaponY = screenY + 26;
+    if (rp.activeWeapon === 1) {
+      drawScepter(
+        ctx,
+        weaponX,
+        weaponY,
+        3,
+        0,
+        0,
+        0,
+        false
+      );
+    } else if (rp.activeWeapon === 2) {
+      if (typeof drawFishingPole === 'function') {
+        drawFishingPole(
+          ctx,
+          weaponX,
+          weaponY,
+          3,
+          rp.facing || { x: 1, y: 0 }
+        );
+      }
+    }
   }
 }
   // =========================
