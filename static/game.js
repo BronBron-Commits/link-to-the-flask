@@ -14,6 +14,64 @@ import { drawScepter } from "./weapon.js?v=2";
 import { sendAttack, sendShotgun } from "./network.js";
 const remotePlayers = {};
 window.remotePlayers = remotePlayers;
+
+// Player name logic
+let playerName = '';
+
+function promptForPlayerName() {
+  if (document.getElementById('nameModal')) return;
+  const modal = document.createElement('div');
+  modal.id = 'nameModal';
+  modal.style.position = 'fixed';
+  modal.style.top = '0';
+  modal.style.left = '0';
+  modal.style.width = '100vw';
+  modal.style.height = '100vh';
+  modal.style.background = 'rgba(0,0,0,0.85)';
+  modal.style.display = 'flex';
+  modal.style.flexDirection = 'column';
+  modal.style.justifyContent = 'center';
+  modal.style.alignItems = 'center';
+  modal.style.zIndex = '9999';
+  modal.innerHTML = `
+    <div style="background:#222;padding:32px 48px;border-radius:12px;box-shadow:0 0 24px #000;text-align:center;">
+      <h2 style='color:#0f0;margin-bottom:16px;'>Enter Your Name</h2>
+      <input id="playerNameInput" type="text" maxlength="16" style="font-size:1.2em;padding:8px 12px;border-radius:6px;border:1px solid #0f0;background:#111;color:#0f0;outline:none;" autofocus />
+      <br><br>
+      <button id="playerNameBtn" style="font-size:1.1em;padding:8px 24px;border-radius:6px;background:#0f0;color:#111;border:none;cursor:pointer;">Start</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+  document.getElementById('playerNameBtn').onclick = () => {
+    const val = document.getElementById('playerNameInput').value.trim();
+    if (val.length > 0) {
+      playerName = val;
+      localStorage.setItem('playerName', playerName);
+      modal.remove();
+    }
+  };
+  document.getElementById('playerNameInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('playerNameBtn').click();
+  });
+}
+
+if (!playerName) {
+  promptForPlayerName();
+}
+
+// Always check for missing name on focus (e.g. after clearing storage)
+window.addEventListener('focus', () => {
+  if (!playerName) promptForPlayerName();
+});
+// Disconnect logic: notify server and remove player artifact on unload
+window.addEventListener('beforeunload', () => {
+  try {
+    if (networkClient && typeof networkClient.send === 'function') {
+      networkClient.send({ type: 'disconnect', payload: { id: window.playerId } });
+    }
+  } catch (e) {}
+});
+
 const canvas = document.getElementById("game");
 window.canvas = canvas;
 const ctx = canvas.getContext("2d");
@@ -529,7 +587,8 @@ function outputPlayerPositionJSON() {
     facing: { ...facing },
     health,
     energy,
-    activeWeapon
+    activeWeapon,
+    name: playerName
   };
   // Send position to server for multiplayer sync
   networkClient.sendPlayerUpdate(playerData);
@@ -1328,6 +1387,7 @@ if (window.remotePlayers) {
     raiseOffset = -20 * progress;
   }
 
+
   drawWizard(
     ctx,
     logicalW/2,
@@ -1338,6 +1398,45 @@ if (window.remotePlayers) {
     facing,
     '#5b2fa0'
   );
+
+  // Draw player name tag (smaller, centered, white)
+  if (playerName) {
+    ctx.save();
+    ctx.font = 'bold 14px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    // Shadow for readability
+    ctx.shadowColor = 'black';
+    ctx.shadowBlur = 4;
+    ctx.fillStyle = '#fff';
+    ctx.fillText(playerName, logicalW/2, logicalH/2 + raiseOffset - 18);
+    ctx.shadowBlur = 0;
+    ctx.restore();
+  }
+
+  // Draw remote player name tags
+  if (window.remotePlayers) {
+    for (const id in window.remotePlayers) {
+      const rp = window.remotePlayers[id];
+      if (!rp) continue;
+      // Only show name if valid string (not fallback to id or hashes)
+      const name = (typeof rp.name === 'string' && rp.name.trim().length > 0) ? rp.name : '';
+      if (name) {
+        const screenX = rp.x - camera.x + logicalW/2;
+        const screenY = rp.y - camera.y + logicalH/2;
+        ctx.save();
+        ctx.font = 'bold 14px monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(name, screenX, screenY - 18);
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    }
+  }
 
   const sx = logicalW/2 + 38;
   const sy = logicalH/2 + 26;

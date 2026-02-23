@@ -71,7 +71,8 @@ export class NetworkClient {
         health: data.health,
         energy: data.energy,
         activeWeapon: data.activeWeapon,
-        robeColor: getGlobalRobeColorForId(data.id)
+        robeColor: getGlobalRobeColorForId(data.id),
+        name: typeof data.name === 'string' ? data.name : ''
       };
 
 // Deterministic robe color for each player id (robe)
