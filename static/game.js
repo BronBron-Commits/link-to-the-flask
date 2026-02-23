@@ -987,7 +987,7 @@ function drawRiver() {
   const h = courtyard.height;
 
   const riverTop = screenY + h/2 + 400;
-  const riverHeight = 200;
+  const riverHeight = 1050; // Tripled height for a much taller river
 
   ctx.save();
 
