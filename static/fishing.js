@@ -27,10 +27,10 @@ export function createFishingComponent() {
 }
 
 export function startCast(player, fishingComp, castDistance = 80) {
-    // Calculate direction
+    // Only wizard character is supported
     const dx = player.facing.x;
     const dy = player.facing.y;
-    // Rod tip offset
+    // Rod tip offset for wizard (if needed, adjust here)
     const rodTipX = player.x + 14 + dx * 24;
     const rodTipY = player.y + 18 + dy * 12;
     const targetX = rodTipX + dx * castDistance;
