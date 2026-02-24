@@ -238,6 +238,7 @@ let remoteUltBurstTriggered = {};
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
 canvas.addEventListener("mousedown", (e) => {
+  if (document.getElementById('nameModal')) return;
   if (e.button !== 2) return; // right click
 
   const rect = canvas.getBoundingClientRect();
@@ -248,6 +249,7 @@ canvas.addEventListener("mousedown", (e) => {
 });
 
 window.addEventListener("keydown", (e) => {
+  if (document.getElementById('nameModal')) return;
   const key = e.key.toLowerCase();
   // Switch character sprite with Tab (cycle)
   if (e.code === "Tab") {
@@ -359,6 +361,7 @@ if (activeWeapon === 2) {
 
 
 window.addEventListener("keyup", (e) => {
+  if (document.getElementById('nameModal')) return;
   const key = e.key.toLowerCase();
 
   if (key === "q") qKeyHeld = false;
@@ -811,8 +814,9 @@ function drawCourtyard() {
   lightDir.x /= len;
   lightDir.y /= len;
 
+  const grassExtraX = 1600;
   for (let y = -h/2; y < h/2; y += tileSize) {
-    for (let x = -w/2; x < w/2; x += tileSize) {
+    for (let x = -w/2 - grassExtraX; x < w/2 + grassExtraX; x += tileSize) {
 
       const worldX = castle.x + x;
       const worldY = castle.y + courtyard.offsetY + y;
