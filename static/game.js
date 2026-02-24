@@ -502,7 +502,7 @@ function createJoystick() {
   container.id = 'joystick-container';
   container.style.position = 'fixed';
   container.style.left = '24px';
-  container.style.bottom = '24px';
+  container.style.bottom = '160px'; // Raised above HUD
   container.style.width = '120px';
   container.style.height = '120px';
   container.style.zIndex = '10001';
