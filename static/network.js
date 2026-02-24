@@ -71,6 +71,7 @@ export class NetworkClient {
       // Use a unique id for each player (e.g., data.id)
       if (!data.id) return; // Ignore if no id
       if (!window.remotePlayers) window.remotePlayers = {};
+      const prev = window.remotePlayers[data.id] || {};
       window.remotePlayers[data.id] = {
         x: data.x,
         y: data.y,
@@ -78,10 +79,15 @@ export class NetworkClient {
         health: data.health,
         energy: data.energy,
         activeWeapon: data.activeWeapon,
+        accordionHeld: typeof data.accordionHeld === 'boolean' ? data.accordionHeld : false,
         characterType: data.characterType || "wizard",
         robeColor: getGlobalRobeColorForId(data.id),
         name: typeof data.name === 'string' ? data.name : ''
       };
+      // Force redraw if accordionHeld changed
+      if (prev.accordionHeld !== window.remotePlayers[data.id].accordionHeld && typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(()=>{});
+      }
 
 // Deterministic robe color for each player id (robe)
 function getGlobalRobeColorForId(id) {

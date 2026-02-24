@@ -1164,7 +1164,8 @@ function outputPlayerPositionJSON() {
     energy,
     activeWeapon,
     characterType,
-    name: playerName
+    name: playerName,
+    accordionHeld
   };
   // Send position to server for multiplayer sync
   networkClient.sendPlayerUpdate(playerData);
@@ -2778,7 +2779,28 @@ if (window.remotePlayers) {
     // Draw weapon for remote player
     const weaponX = screenX + 38;
     const weaponY = screenY + 26;
-    if (rp.activeWeapon === 1) {
+    if (rp.accordionHeld) {
+      // Draw accordion for remote player regardless of activeWeapon
+      ctx.save();
+      if (rp.facing && rp.facing.y > 0) {
+        ctx.translate(weaponX, weaponY + 18);
+        ctx.rotate(Math.PI / 2);
+      } else if (rp.facing && rp.facing.x > 0) {
+        ctx.translate(weaponX + 32, weaponY);
+        ctx.rotate(Math.PI / 2);
+      } else if (rp.facing && rp.facing.x < 0) {
+        ctx.translate(weaponX - 32, weaponY);
+        ctx.rotate(-Math.PI / 2);
+      } else if (rp.facing && rp.facing.y < 0) {
+        ctx.translate(weaponX, weaponY - 18);
+        ctx.rotate(-Math.PI / 2);
+      } else {
+        ctx.translate(weaponX, weaponY);
+      }
+      drawAccordion(ctx, 0, 0, 1.5, rp.facing || {x:1,y:0});
+      ctx.restore();
+      // Optionally: draw floating notes for remote players here if you sync them
+    } else if (rp.activeWeapon === 1) {
       drawScepter(
         ctx,
         weaponX,
