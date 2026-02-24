@@ -283,6 +283,14 @@ let musicNotes = [];
 // Homemade synth for accordion tune
 let accordionSynth = null;
 let accordionSynthTimeouts = [];
+// Bass line: root notes of each chord (I-vi-IV-V)
+const bassNotes = [
+  130.81, // C3
+  110.00, // A2
+  174.62, // F3
+  196.00  // G3
+];
+const bassDur = 180; // ms, short staccato
 // I-vi-IV-V (C, Am, F, G) as arpeggio
 const accordionMelody = [
   {note:130.81, dur:440}, // C3
@@ -343,6 +351,41 @@ function playAccordionMelody() {
       });
       t += dur/1000;
     });
+
+    // Staccato bass line: root of each chord, one per measure
+    let bassT = ctx.currentTime;
+    const chordLen = 3; // 3 melody notes per chord
+    for (let i = 0; i < bassNotes.length; ++i) {
+      const freq = bassNotes[i];
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0, bassT);
+      gain.gain.linearRampToValueAtTime(0.18, bassT + 0.03);
+      gain.gain.linearRampToValueAtTime(0, bassT + bassDur/1000);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(bassT);
+      osc.stop(bassT + bassDur/1000);
+      const timeout = setTimeout(()=>{
+        osc.disconnect();
+        gain.disconnect();
+      }, (bassT-ctx.currentTime)*1000 + bassDur + 100);
+      accordionSynthTimeouts.push(timeout);
+      // Advance bassT by the duration of 3 melody notes (one chord)
+      let chordTotal = 0;
+      for (let j = 0; j < chordLen; ++j) {
+        let idx = i * chordLen + j;
+        let dur = accordionMelody[idx]?.dur || baseDur;
+        if (idx < accordionMelody.length - 1) {
+          if (idx % 2 === 0) dur = baseDur * swingRatio;
+          else dur = baseDur * (1 - swingRatio);
+        }
+        chordTotal += dur;
+      }
+      bassT += chordTotal / 1000;
+    }
     // Schedule next loop
     const totalDur = t - ctx.currentTime;
     const loopTimeout = setTimeout(() => {
@@ -382,11 +425,12 @@ let eKeyHeld = false;
 // Accordion state
 
 // Helper for drawing the accordion
-function drawAccordion(ctx, x, y, scale = 1, facing = {x:1, y:0}) {
+// Removed duplicate function declaration
+function drawAccordion(ctx, x, y, scale = 1, facing = {x:1, y:0}, isReflection = false) {
   ctx.save();
   ctx.translate(x, y);
   ctx.scale(scale, scale);
-  ctx.rotate(Math.atan2(facing.y, facing.x));
+  ctx.rotate(Math.atan2(facing.y, facing.x) + (isReflection ? Math.PI/2 : 0));
 
   // Animate bellows open/close
   let bellowsOpen = accordionAnim || 0;
@@ -1849,12 +1893,14 @@ function drawRiver() {
       facing
     );
   } else if (activeWeapon === 3) {
+    // Draw accordion reflection with extra 90 degree rotation
     drawAccordion(
       ctx,
       weaponX,
       weaponY,
-      3,
-      facing
+      1.5, // match main draw size
+      facing,
+      true // isReflection
     );
   }
 
