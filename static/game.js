@@ -1848,6 +1848,106 @@ function draw(){
   drawCastle();        // castle BEFORE courtyard
   drawCourtyard();     // courtyard (house + hedges)
   drawRiver();         // river LAST (because it clips)
+  drawSouthForest();
+  // Draw a forest south of the bridge (below the river)
+  function drawSouthForest() {
+    // Use world coordinates for correct placement
+    // Anchor forest in world space so it doesn't move with the player
+    const worldCenterX = castle.x;
+    const worldCenterY = castle.y + courtyard.offsetY + 20;
+    const h = courtyard.height;
+    const riverTopWorld = worldCenterY + h/2 + 400;
+    const riverHeight = 1050;
+    const forestYWorld = riverTopWorld + riverHeight + 40;
+    const forestHeight = 420 * 9;
+    const forestLeftWorld = worldCenterX - 1600;
+    const forestRightWorld = worldCenterX + 1600;
+    const treeCount = 48;
+    // Path parameters
+    const pathWidth = 120 * 3;
+    const pathLeft = worldCenterX - pathWidth / 2;
+    const pathRight = worldCenterX + pathWidth / 2;
+    // Draw grass under the forest area
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#4fa84f';
+    ctx.fillRect(forestLeftWorld - camera.x + canvas.width / 2, forestYWorld - camera.y + canvas.height / 2, forestRightWorld - forestLeftWorld, forestHeight);
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+    // Deterministic pseudo-random for consistent tree placement
+    function seededRand(seed) {
+      let x = Math.sin(seed) * 10000;
+      return x - Math.floor(x);
+    }
+    for (let i = 0; i < treeCount * 9; i++) {
+      // Distribute trees in clusters with some deterministic randomness
+      const cluster = Math.floor(i / 16);
+      const rx = seededRand(i + 1) * 0.7;
+      const ry = seededRand(i + 100) * 0.7;
+      const cx = seededRand(i + 200) * 18 - seededRand(i + 300) * 32;
+      const cy = seededRand(i + 400) * 12;
+      const xWorld = forestLeftWorld + (forestRightWorld - forestLeftWorld) * (i + rx) / (treeCount * 9) + cluster * 18 + cx;
+      const yWorld = forestYWorld + (ry * forestHeight) + cy;
+      // Skip trees that would overlap the path
+      if (xWorld > pathLeft - 18 && xWorld < pathRight + 18) continue;
+      // Convert world to screen coordinates
+      const x = xWorld - camera.x + canvas.width / 2;
+      const y = yWorld - camera.y + canvas.height / 2;
+      // Randomly select some trees to be cherry blossoms with birch trunks
+      const cherryChance = 0.18;
+      const isCherry = seededRand(i + 500) < cherryChance;
+      ctx.save();
+      if (isCherry) {
+        // White birch trunk
+        ctx.fillStyle = '#f7f7f2';
+        ctx.fillRect(x - 6, y + 36, 12, 44);
+        // Birch trunk stripes
+        ctx.strokeStyle = '#bdbdbd';
+        ctx.lineWidth = 2;
+        for (let s = 0; s < 4; s++) {
+          ctx.beginPath();
+          ctx.moveTo(x - 4, y + 44 + s * 10);
+          ctx.lineTo(x + 4, y + 44 + s * 10);
+          ctx.stroke();
+        }
+        // Cherry blossom foliage
+        ctx.beginPath();
+        ctx.arc(x, y + 24, 36, 0, Math.PI * 2);
+        ctx.arc(x - 20, y + 36, 26, 0, Math.PI * 2);
+        ctx.arc(x + 20, y + 36, 26, 0, Math.PI * 2);
+        ctx.fillStyle = seededRand(i + 800) > 0.5 ? '#ffd6f6' : '#ffb7e5';
+        ctx.globalAlpha = 0.93;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      } else {
+        // Regular tree
+        ctx.fillStyle = '#7a5c3a';
+        ctx.fillRect(x - 6, y + 36, 12, 44); // trunk bigger
+        // Draw larger foliage (layered circles)
+        ctx.beginPath();
+        ctx.arc(x, y + 24, 36, 0, Math.PI * 2);
+        ctx.arc(x - 20, y + 36, 26, 0, Math.PI * 2);
+        ctx.arc(x + 20, y + 36, 26, 0, Math.PI * 2);
+        ctx.fillStyle = i % 3 === 0 ? '#3e7d3a' : (i % 3 === 1 ? '#4fa84f' : '#2e5d2a');
+        ctx.globalAlpha = 0.93;
+        ctx.fill();
+        ctx.globalAlpha = 1.0;
+      }
+      ctx.restore();
+    }
+    // Draw the path itself (dirt path)
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#bfa77a';
+    ctx.beginPath();
+    ctx.moveTo(pathLeft - camera.x + canvas.width / 2, forestYWorld - camera.y + canvas.height / 2);
+    ctx.lineTo(pathRight - camera.x + canvas.width / 2, forestYWorld - camera.y + canvas.height / 2);
+    ctx.lineTo(pathRight - camera.x + canvas.width / 2, forestYWorld + forestHeight + 80 * 9 - camera.y + canvas.height / 2);
+    ctx.lineTo(pathLeft - camera.x + canvas.width / 2, forestYWorld + forestHeight + 80 * 9 - camera.y + canvas.height / 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
   drawAttacks(ctx, camera, logicalW, logicalH);
 // =========================
 // DRAW REMOTE PLAYERS
