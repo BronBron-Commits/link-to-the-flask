@@ -2190,11 +2190,20 @@ function drawHUD(logicalW, logicalH) {
       btn.style.top = (y - baseSize/2) + 'px';
       btn.style.width = baseSize + 'px';
       btn.style.height = baseSize + 'px';
-      btn.style.opacity = '0';
+      btn.style.opacity = '1';
       btn.style.pointerEvents = 'auto';
-      btn.style.border = 'none';
-      btn.style.background = 'transparent';
+      btn.style.border = '2px solid #2af';
+      btn.style.background = 'rgba(34,42,68,0.92)';
+      btn.style.borderRadius = '14px';
+      btn.style.color = '#fff';
+      btn.style.fontWeight = 'bold';
+      btn.style.fontSize = '1.2em';
+      btn.style.boxShadow = '0 2px 10px #0008';
       btn.style.zIndex = '10001';
+      btn.style.transition = 'background 0.2s, border 0.2s';
+      btn.onpointerdown = () => btn.style.background = '#2af8';
+      btn.onpointerup = () => btn.style.background = 'rgba(34,42,68,0.92)';
+      btn.onpointerleave = () => btn.style.background = 'rgba(34,42,68,0.92)';
       if (key === 'accordion') {
         btn.addEventListener('touchstart', function(e) {
           e.preventDefault();
