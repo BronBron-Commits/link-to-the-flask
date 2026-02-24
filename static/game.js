@@ -279,10 +279,96 @@ let attackAnim = 0;
 let accordionHeld = false;
 let accordionAnim = 0; // 0 = idle, 1 = fully open
 let musicNotes = [];
+
+// Homemade synth for accordion tune
+let accordionSynth = null;
+let accordionSynthTimeouts = [];
+// I-vi-IV-V (C, Am, F, G) as arpeggio
+const accordionMelody = [
+  {note:130.81, dur:440}, // C3
+  {note:164.82, dur:440}, // E3
+  {note:196.00, dur:440}, // G3
+  {note:110.00, dur:440}, // A2
+  {note:130.81, dur:440}, // C3
+  {note:164.82, dur:440}, // E3
+  {note:174.62, dur:440}, // F3
+  {note:220.00, dur:440}, // A3
+  {note:261.63, dur:440}, // C4
+  {note:196.00, dur:440}, // G3
+  {note:246.94, dur:440}, // B3
+  {note:293.67, dur:640}, // D4
+];
+
+function playAccordionMelody() {
+  if (accordionSynth || accordionMelodyLooping) return; // Already playing
+  accordionMelodyLooping = true;
+  function playLoop() {
+    if (!accordionMelodyLooping) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    accordionSynth = ctx;
+    let t = ctx.currentTime;
+    const swingRatio = 0.62; // 62% for long, 38% for short
+    let baseDur = 440;
+    accordionMelody.forEach((n, i) => {
+      // Swing: odd notes are longer, even notes are shorter
+      let dur = n.dur;
+      if (i < accordionMelody.length - 1) {
+        if (i % 2 === 0) dur = baseDur * swingRatio;
+        else dur = baseDur * (1 - swingRatio);
+      }
+      // Two detuned oscillators per note (triangle and sawtooth)
+      [0, -8].forEach(detune => {
+        ['triangle', 'sawtooth'].forEach(type => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = type;
+          osc.frequency.value = n.note;
+          osc.detune.value = detune;
+          // Envelope: gentle attack/release
+          gain.gain.setValueAtTime(0, t);
+          gain.gain.linearRampToValueAtTime(0.13, t + 0.06);
+          gain.gain.linearRampToValueAtTime(0.11, t + (dur/1000) - 0.08);
+          gain.gain.linearRampToValueAtTime(0, t + dur/1000);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(t);
+          osc.stop(t + dur/1000);
+          // Clean up
+          const timeout = setTimeout(()=>{
+            osc.disconnect();
+            gain.disconnect();
+          }, (t-ctx.currentTime)*1000 + dur + 100);
+          accordionSynthTimeouts.push(timeout);
+        });
+      });
+      t += dur/1000;
+    });
+    // Schedule next loop
+    const totalDur = t - ctx.currentTime;
+    const loopTimeout = setTimeout(() => {
+      try { ctx.close(); } catch(e){}
+      accordionSynth = null;
+      playLoop();
+    }, totalDur * 1000);
+    accordionSynthTimeouts.push(loopTimeout);
+  }
+  playLoop();
+}
+
+function stopAccordionMelody() {
+  accordionMelodyLooping = false;
+  if (accordionSynth) {
+    try { accordionSynth.close(); } catch(e){}
+    accordionSynth = null;
+  }
+  accordionSynthTimeouts.forEach(clearTimeout);
+  accordionSynthTimeouts = [];
+}
 let fishingAnim = 0;
 let fishingAnimType = null; // 'q', 'w', 'e', 'r'
 let ultNoiseOsc = null;
 let ultNoiseGain = null;
+      let accordionMelodyLooping = false;
 let charging = false;
 let chargeMs = 0;
 const chargeMaxMs = 900;
@@ -308,6 +394,7 @@ function drawAccordion(ctx, x, y, scale = 1, facing = {x:1, y:0}) {
 
   // Draw left side (red wood with buttons)
   ctx.fillStyle = '#b33';
+
   ctx.strokeStyle = '#800';
   ctx.lineWidth = 2;
   ctx.beginPath();
@@ -452,6 +539,7 @@ window.addEventListener("keydown", (e) => {
         t: 0,
         color: `hsl(${Math.floor(Math.random()*360)},80%,70%)`
       });
+      playAccordionMelody();
     }
   }
   // Prevent regular attacks if accordion is held
@@ -578,6 +666,7 @@ window.addEventListener("keyup", (e) => {
   if (key === " ") {
     accordionHeld = false;
     accordionAnim = 0;
+    stopAccordionMelody();
   }
 });
 
