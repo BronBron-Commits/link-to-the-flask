@@ -2158,9 +2158,8 @@ function drawCastle() {
 
 function drawHUD(logicalW, logicalH) {
   // Overlay HTML buttons for QWER on mobile/touch devices
-  if (typeof window !== 'undefined' && window.isMobileHUDOverlay !== true && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
-    window.isMobileHUDOverlay = true;
-    // Remove any existing overlay
+  if (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+    // Always remove any existing overlay before creating a new one
     const old = document.getElementById('hud-touch-overlay');
     if (old) old.remove();
     const overlay = document.createElement('div');
