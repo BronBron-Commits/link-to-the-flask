@@ -995,6 +995,42 @@ function drawCourtyard() {
     ctx.fill();
   });
 
+  // GATE (centered on path)
+  const gateBaseY = screenY + (h / 2 - 10); // slightly below hedges
+  const gateCenterX = screenX;
+  const gateWidth = 180;
+  const gateHeight = 120;
+  const postWidth = 22;
+  const postHeight = 140;
+  ctx.save();
+  // Draw left post
+  ctx.fillStyle = '#bfa77a';
+  ctx.fillRect(gateCenterX - gateWidth / 2 - postWidth, gateBaseY - postHeight, postWidth, postHeight);
+  // Draw right post
+  ctx.fillRect(gateCenterX + gateWidth / 2, gateBaseY - postHeight, postWidth, postHeight);
+  // Draw gate body (vertical bars)
+  ctx.fillStyle = '#7a5c3a';
+  for (let i = 0; i <= 6; i++) {
+    const x = gateCenterX - gateWidth / 2 + i * (gateWidth / 6);
+    ctx.fillRect(x - 4, gateBaseY - gateHeight, 8, gateHeight);
+  }
+  // Draw gate top (arched)
+  ctx.beginPath();
+  ctx.moveTo(gateCenterX - gateWidth / 2, gateBaseY - gateHeight);
+  ctx.quadraticCurveTo(gateCenterX, gateBaseY - gateHeight - 40, gateCenterX + gateWidth / 2, gateBaseY - gateHeight);
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#7a5c3a';
+  ctx.stroke();
+  // Draw horizontal bars
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(gateCenterX - gateWidth / 2, gateBaseY - gateHeight + 32);
+  ctx.lineTo(gateCenterX + gateWidth / 2, gateBaseY - gateHeight + 32);
+  ctx.moveTo(gateCenterX - gateWidth / 2, gateBaseY - gateHeight + 64);
+  ctx.lineTo(gateCenterX + gateWidth / 2, gateBaseY - gateHeight + 64);
+  ctx.stroke();
+  ctx.restore();
+
   // GUARD TOWER (opposite side of path)
   const towerX = screenX + pathWidth/2 + 260;
   const towerY = houseY;
