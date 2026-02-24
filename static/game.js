@@ -911,13 +911,6 @@ function drawCourtyard() {
 
   drawBrickField(verticalPathX, verticalPathY, pathWidth, h);
 
-  drawBrickField(
-    screenX - pathWidth/2,
-    screenY + h/2,
-    pathWidth,
-    400
-  );
-
   // =========================
   // HOUSE (computed AFTER pathWidth exists)
   // =========================
