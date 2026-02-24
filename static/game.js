@@ -483,6 +483,30 @@ function tryMove(dt){
     mobileTryMove(dt);
     return;
   }
+  // Desktop movement logic (restore)
+  if(!moveTarget) return;
+  const dx = moveTarget.x - player.x;
+  const dy = moveTarget.y - player.y;
+  const dist = Math.hypot(dx, dy);
+  if(dist < 4){
+    moveTarget = null;
+    walking = false;
+    return;
+  }
+  const nx = dx / dist;
+  const ny = dy / dist;
+  player.x += nx * moveSpeed;
+  player.y += ny * moveSpeed;
+  // SNAP FACING TO CARDINAL ONLY
+  if (Math.abs(nx) > Math.abs(ny)) {
+    facing.x = nx > 0 ? 1 : -1;
+    facing.y = 0;
+  } else {
+    facing.y = ny > 0 ? 1 : -1;
+    facing.x = 0;
+  }
+  walking = true;
+  idleTime = 0;
 }
 
 // Mobile movement logic using virtual joystick
