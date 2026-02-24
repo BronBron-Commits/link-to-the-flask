@@ -1864,22 +1864,64 @@ function drawHUD(logicalW, logicalH) {
   const centerX = logicalW / 2;
   const bottomY = logicalH - 30;
 
-  ctx.fillStyle = "rgba(0,0,0,0.6)";
-  ctx.fillRect(0, logicalH - hudHeight, logicalW, hudHeight);
+  // Modern HUD background: blurred, rounded, gradient
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = ctx.createLinearGradient(0, logicalH - hudHeight, 0, logicalH);
+  ctx.fillStyle.addColorStop(0, '#222a');
+  ctx.fillStyle.addColorStop(1, '#444a');
+  ctx.beginPath();
+  ctx.moveTo(20, logicalH - hudHeight + 20);
+  ctx.lineTo(logicalW - 20, logicalH - hudHeight + 20);
+  ctx.quadraticCurveTo(logicalW, logicalH - hudHeight + 40, logicalW, logicalH - 20);
+  ctx.lineTo(logicalW, logicalH - 20);
+  ctx.quadraticCurveTo(logicalW - 20, logicalH, 20, logicalH);
+  ctx.lineTo(20, logicalH);
+  ctx.quadraticCurveTo(0, logicalH - 20, 0, logicalH - hudHeight + 40);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
 
   // HEALTH
   const healthPercent = health / maxHealth;
-  ctx.fillStyle = "#400";
-  ctx.fillRect(centerX - barWidth/2, bottomY - 50, barWidth, barHeight);
-  ctx.fillStyle = "#e22";
-  ctx.fillRect(centerX - barWidth/2, bottomY - 50, barWidth * healthPercent, barHeight);
+  // Rounded health bar with gradient
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#a33';
+  ctx.fillStyle = ctx.createLinearGradient(centerX - barWidth/2, 0, centerX + barWidth/2, 0);
+  ctx.fillStyle.addColorStop(0, '#e22');
+  ctx.fillStyle.addColorStop(1, '#f66');
+  ctx.beginPath();
+  ctx.roundRect(centerX - barWidth/2, bottomY - 50, barWidth, barHeight, 9);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = ctx.createLinearGradient(centerX - barWidth/2, 0, centerX - barWidth/2 + barWidth * healthPercent, 0);
+  ctx.fillStyle.addColorStop(0, '#e22');
+  ctx.fillStyle.addColorStop(1, '#fff');
+  ctx.beginPath();
+  ctx.roundRect(centerX - barWidth/2, bottomY - 50, barWidth * healthPercent, barHeight, 9);
+  ctx.fill();
+  ctx.restore();
 
   // ENERGY
   const energyPercent = energy / maxEnergy;
-  ctx.fillStyle = "#002";
-  ctx.fillRect(centerX - barWidth/2, bottomY - 25, barWidth, barHeight);
-  ctx.fillStyle = "#2af";
-  ctx.fillRect(centerX - barWidth/2, bottomY - 25, barWidth * energyPercent, barHeight);
+  ctx.save();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#2af';
+  ctx.fillStyle = ctx.createLinearGradient(centerX - barWidth/2, 0, centerX + barWidth/2, 0);
+  ctx.fillStyle.addColorStop(0, '#2af');
+  ctx.fillStyle.addColorStop(1, '#6ff');
+  ctx.beginPath();
+  ctx.roundRect(centerX - barWidth/2, bottomY - 25, barWidth, barHeight, 9);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = ctx.createLinearGradient(centerX - barWidth/2, 0, centerX - barWidth/2 + barWidth * energyPercent, 0);
+  ctx.fillStyle.addColorStop(0, '#2af');
+  ctx.fillStyle.addColorStop(1, '#fff');
+  ctx.beginPath();
+  ctx.roundRect(centerX - barWidth/2, bottomY - 25, barWidth * energyPercent, barHeight, 9);
+  ctx.fill();
+  ctx.restore();
 
   // ABILITIES
   const abilities = ["q","w","e","r"];
@@ -1887,7 +1929,7 @@ function drawHUD(logicalW, logicalH) {
   const spacing = 70;
   const startX = centerX - (spacing * 1.5);
 
-  ctx.font = "20px sans-serif";
+  ctx.font = "bold 22px sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
 
@@ -1904,33 +1946,45 @@ function drawHUD(logicalW, logicalH) {
     ctx.translate(x, y);
     ctx.scale(scale, scale);
 
-let canAfford = energy >= energyCosts[key];
-ctx.fillStyle = canAfford ? "#222" : "#111";
-    ctx.fillRect(-baseSize/2, -baseSize/2, baseSize, baseSize);
+    let canAfford = energy >= energyCosts[key];
+    // Ability button: rounded, shadow, icon
+    ctx.shadowColor = canAfford ? '#2af' : '#a33';
+    ctx.shadowBlur = canAfford ? 12 : 6;
+    ctx.fillStyle = canAfford ? '#222' : '#111';
+    ctx.strokeStyle = canAfford ? '#2af' : '#a33';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(-baseSize/2, -baseSize/2, baseSize, baseSize, 12);
+    ctx.fill();
+    ctx.stroke();
+    ctx.shadowBlur = 0;
 
     if (cooldowns[key] > 0) {
-
       const percent = cooldowns[key] / cooldownDurations[key];
-
       ctx.fillStyle = "rgba(0,0,0,0.7)";
-      ctx.fillRect(
-        -baseSize/2,
-        -baseSize/2,
-        baseSize,
-        baseSize * percent
-      );
-
+      ctx.beginPath();
+      ctx.roundRect(-baseSize/2, -baseSize/2, baseSize, baseSize * percent, 12);
+      ctx.fill();
       ctx.fillStyle = "#fff";
+      ctx.font = "bold 18px sans-serif";
       ctx.fillText((cooldowns[key] / 1000).toFixed(1), 0, 0);
-
     } else {
-
       ctx.fillStyle = canAfford ? "#fff" : "#555";
+      ctx.font = "bold 22px sans-serif";
       ctx.fillText(key.toUpperCase(), 0, 0);
     }
 
     ctx.restore();
   });
+  // Add icons or text for health/energy
+  ctx.save();
+  ctx.font = "bold 18px sans-serif";
+  ctx.fillStyle = "#fff";
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText("❤", centerX - barWidth/2 - 30, bottomY - 41);
+  ctx.fillText("⚡", centerX - barWidth/2 - 30, bottomY - 16);
+  ctx.restore();
 }
 
 function drawFloor(){
