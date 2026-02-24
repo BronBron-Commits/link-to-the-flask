@@ -485,28 +485,119 @@ function tryMove(dt){
   }
 }
 
-// Mobile movement logic (stub)
+// Mobile movement logic using virtual joystick
+let joystick = {
+  active: false,
+  startX: 0,
+  startY: 0,
+  currentX: 0,
+  currentY: 0,
+  dx: 0,
+  dy: 0
+};
+
+function createJoystick() {
+  if (document.getElementById('joystick-container')) return;
+  const container = document.createElement('div');
+  container.id = 'joystick-container';
+  container.style.position = 'fixed';
+  container.style.left = '24px';
+  container.style.bottom = '24px';
+  container.style.width = '120px';
+  container.style.height = '120px';
+  container.style.zIndex = '10001';
+  container.style.touchAction = 'none';
+  document.body.appendChild(container);
+
+  const base = document.createElement('div');
+  base.style.position = 'absolute';
+  base.style.left = '0';
+  base.style.top = '0';
+  base.style.width = '120px';
+  base.style.height = '120px';
+  base.style.background = 'rgba(80,80,80,0.18)';
+  base.style.borderRadius = '60px';
+  container.appendChild(base);
+
+  const stick = document.createElement('div');
+  stick.id = 'joystick-stick';
+  stick.style.position = 'absolute';
+  stick.style.left = '40px';
+  stick.style.top = '40px';
+  stick.style.width = '40px';
+  stick.style.height = '40px';
+  stick.style.background = 'rgba(180,180,180,0.7)';
+  stick.style.borderRadius = '20px';
+  stick.style.boxShadow = '0 2px 8px #0002';
+  container.appendChild(stick);
+
+  // Touch events
+  container.addEventListener('touchstart', function(e) {
+    const touch = e.touches[0];
+    joystick.active = true;
+    const rect = container.getBoundingClientRect();
+    joystick.startX = touch.clientX - rect.left;
+    joystick.startY = touch.clientY - rect.top;
+    joystick.currentX = joystick.startX;
+    joystick.currentY = joystick.startY;
+    joystick.dx = 0;
+    joystick.dy = 0;
+    stick.style.left = (joystick.startX - 20) + 'px';
+    stick.style.top = (joystick.startY - 20) + 'px';
+  });
+  container.addEventListener('touchmove', function(e) {
+    if (!joystick.active) return;
+    const touch = e.touches[0];
+    const rect = container.getBoundingClientRect();
+    let x = touch.clientX - rect.left;
+    let y = touch.clientY - rect.top;
+    // Clamp to circle radius 48px
+    const dx = x - joystick.startX;
+    const dy = y - joystick.startY;
+    const dist = Math.hypot(dx, dy);
+    const maxDist = 48;
+    let clampedDx = dx, clampedDy = dy;
+    if (dist > maxDist) {
+      clampedDx = dx * maxDist / dist;
+      clampedDy = dy * maxDist / dist;
+      x = joystick.startX + clampedDx;
+      y = joystick.startY + clampedDy;
+    }
+    stick.style.left = (x - 20) + 'px';
+    stick.style.top = (y - 20) + 'px';
+    joystick.currentX = x;
+    joystick.currentY = y;
+    joystick.dx = clampedDx / maxDist;
+    joystick.dy = clampedDy / maxDist;
+  });
+  container.addEventListener('touchend', function(e) {
+    joystick.active = false;
+    joystick.dx = 0;
+    joystick.dy = 0;
+    stick.style.left = '40px';
+    stick.style.top = '40px';
+  });
+}
+
+if (isMobileDevice()) {
+  window.addEventListener('DOMContentLoaded', createJoystick);
+}
+
 function mobileTryMove(dt) {
-  // For now, just use the same logic as desktop
-  if(!moveTarget) return;
-  const dx = moveTarget.x - player.x;
-  const dy = moveTarget.y - player.y;
-  const dist = Math.hypot(dx, dy);
-  if(dist < 4){
-    moveTarget = null;
+  // Use joystick input for movement
+  if (!joystick.active || (Math.abs(joystick.dx) < 0.1 && Math.abs(joystick.dy) < 0.1)) {
     walking = false;
     return;
   }
-  const nx = dx / dist;
-  const ny = dy / dist;
-  player.x += nx * moveSpeed;
-  player.y += ny * moveSpeed;
-  // SNAP FACING TO CARDINAL ONLY
-  if (Math.abs(nx) > Math.abs(ny)) {
-    facing.x = nx > 0 ? 1 : -1;
+  const speed = moveSpeed;
+  player.x += joystick.dx * speed;
+  player.y += joystick.dy * speed;
+  // Snap facing
+  if (Math.abs(joystick.dx) > Math.abs(joystick.dy)) {
+    facing.x = joystick.dx > 0 ? 1 : -1;
     facing.y = 0;
   } else {
-    facing.y = ny > 0 ? 1 : -1;
+    facing.y = joystick.dy > 0 ? 1 : -1;
     facing.x = 0;
   }
   walking = true;
