@@ -9,8 +9,10 @@ export class NetworkClient {
       });
     }
   constructor() {
-    // Use localhost for local testing
-    this.socket = new WebSocket("ws://localhost:8765");
+    // Use your VPS IP/domain for production
+    const WS_HOST = window.WS_HOST || window.location.hostname;
+    const WS_PORT = window.WS_PORT || 8765;
+    this.socket = new WebSocket(`ws://${WS_HOST}:${WS_PORT}`);
     this.socket.onopen = () => console.log("Connected");
     this.socket.onmessage = (event) => {
       const data = JSON.parse(event.data);
@@ -19,7 +21,12 @@ export class NetworkClient {
   }
 
   send(data) {
-    this.socket.send(JSON.stringify(data));
+    if (this.socket.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(data));
+    } else {
+      // Optionally, queue or drop the message
+      console.warn("WebSocket not open. Dropping message:", data);
+    }
   }
 
   sendPlayerUpdate(playerData) {

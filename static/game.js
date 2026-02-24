@@ -1222,6 +1222,36 @@ function drawRiver() {
     ctx.fillStyle = '#fff';
     ctx.fillRect(pierScreenX, pierScreenY - 18, pierWidth, 4);
     ctx.globalAlpha = 1.0;
+
+    // --- Crates on the pier ---
+    // Draw 3 crates at different spots on the pier deck
+    function drawCrate(x, y, size = 38) {
+      ctx.save();
+      ctx.fillStyle = '#b08d57';
+      ctx.strokeStyle = '#7a5c3a';
+      ctx.lineWidth = 3;
+      ctx.fillRect(x, y, size, size);
+      ctx.strokeRect(x, y, size, size);
+      // Wood slats
+      ctx.strokeStyle = '#a88c5a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(x + 6, y + 8);
+      ctx.lineTo(x + size - 6, y + size - 8);
+      ctx.moveTo(x + size - 6, y + 8);
+      ctx.lineTo(x + 6, y + size - 8);
+      ctx.moveTo(x + size/2, y + 4);
+      ctx.lineTo(x + size/2, y + size - 4);
+      ctx.moveTo(x + 4, y + size/2);
+      ctx.lineTo(x + size - 4, y + size/2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // Place crates spaced along the pier
+    drawCrate(pierScreenX + pierWidth * 0.18, pierScreenY - 18 - 38, 38);
+    drawCrate(pierScreenX + pierWidth * 0.52, pierScreenY - 18 - 38, 44);
+    drawCrate(pierScreenX + pierWidth * 0.75, pierScreenY - 18 - 28, 32);
+
     ctx.restore();
     // Roof and walls for the pier (covered dock)
     (function drawPierRoofAndWalls() {
@@ -1969,6 +1999,123 @@ function draw(){
     ctx.lineTo(pathLeft - camera.x + canvas.width / 2, forestYWorld + forestHeight + 80 * 9 - camera.y + canvas.height / 2);
     ctx.closePath();
     ctx.fill();
+    ctx.restore();
+
+    // === Lava Fountain with Black Stone Pavers (slightly smaller, more effects) ===
+    // Position: end of the path
+    const scale = 3.2;
+    const fountainCenterX = worldCenterX;
+    const fountainCenterY = forestYWorld + forestHeight + 80 * 9 + 60 * scale;
+    const screenFountainX = fountainCenterX - camera.x + canvas.width / 2;
+    const screenFountainY = fountainCenterY - camera.y + canvas.height / 2;
+
+    // Draw black stone pavers (circle around fountain)
+    const paverCount = 24;
+    const paverRadius = 64 * scale;
+    for (let i = 0; i < paverCount; i++) {
+      const angle = (Math.PI * 2 / paverCount) * i;
+      const px = screenFountainX + Math.cos(angle) * paverRadius;
+      const py = screenFountainY + Math.sin(angle) * paverRadius;
+      ctx.save();
+      ctx.globalAlpha = 0.82;
+      ctx.fillStyle = '#222';
+      ctx.beginPath();
+      ctx.ellipse(px, py, 22 * scale, 16 * scale, angle, 0, Math.PI * 2);
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 8 * scale;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // Draw lava fountain base
+    ctx.save();
+    ctx.globalAlpha = 0.93;
+    ctx.fillStyle = '#3a2a1a';
+    ctx.beginPath();
+    ctx.arc(screenFountainX, screenFountainY, 38 * scale, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // Draw animated lava (center)
+    const lavaT = performance.now() * 0.002;
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    for (let r = 0; r < 3; r++) {
+      ctx.beginPath();
+      const radius = (22 - r * 5 + Math.sin(lavaT + r) * 2) * scale;
+      ctx.arc(screenFountainX, screenFountainY, radius, 0, Math.PI * 2);
+      ctx.fillStyle = r === 0 ? '#ff6a00' : (r === 1 ? '#ffb300' : '#fff2a8');
+      ctx.shadowColor = r === 0 ? '#ff6a00' : '#ffb300';
+      ctx.shadowBlur = (18 - r * 6) * scale;
+      ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+    ctx.restore();
+
+    // Draw smoke particles (smaller)
+    const smokeCount = 22;
+    for (let i = 0; i < smokeCount; i++) {
+      const t2 = lavaT + i * 0.18;
+      const angle = Math.PI * 2 * (i / smokeCount) + Math.sin(lavaT + i) * 0.2;
+      const dist = 18 * scale + Math.sin(lavaT * 0.7 + i) * 8 * scale;
+      const sx = screenFountainX + Math.cos(angle) * dist + Math.sin(lavaT + i) * 6;
+      const sy = screenFountainY - 30 * scale - Math.abs(Math.sin(lavaT + i) * 12 * scale) - i * 2.5;
+      ctx.save();
+      ctx.globalAlpha = 0.18 + 0.13 * Math.sin(lavaT * 1.2 + i);
+      ctx.fillStyle = '#444';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, 6 * scale * (0.7 + 0.3 * Math.sin(t2)), 3.5 * scale * (0.7 + 0.3 * Math.cos(t2)), angle, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // Draw flying lava spurts/particles (smaller)
+    const spurtCount = 18;
+    for (let i = 0; i < spurtCount; i++) {
+      const t3 = lavaT + i * 0.7;
+      const spurtAngle = Math.PI * 2 * (i / spurtCount) + Math.sin(lavaT * 0.7 + i) * 0.2;
+      const baseRadius = 18 * scale;
+      const spurtLen = 90 * scale + Math.sin(lavaT * 2.1 + i) * 18 * scale;
+      const px = screenFountainX + Math.cos(spurtAngle) * baseRadius;
+      const py = screenFountainY - Math.abs(Math.sin(lavaT + i) * 12 * scale);
+      const vx = Math.cos(spurtAngle) * spurtLen * Math.abs(Math.sin(t3));
+      const vy = -spurtLen * Math.abs(Math.cos(t3));
+      // Animate flying particle
+      const fx = px + vx * Math.abs(Math.sin(lavaT * 0.7 + i * 0.3));
+      const fy = py + vy * Math.abs(Math.sin(lavaT * 0.7 + i * 0.3));
+      ctx.save();
+      ctx.globalAlpha = 0.7 + 0.3 * Math.abs(Math.sin(lavaT + i));
+      ctx.fillStyle = i % 2 === 0 ? '#ffb300' : '#ff6a00';
+      ctx.beginPath();
+      ctx.ellipse(fx, fy, 2.8 * scale, 1.5 * scale, spurtAngle, 0, Math.PI * 2);
+      ctx.shadowColor = '#ff6a00';
+      ctx.shadowBlur = 3 * scale;
+      ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.restore();
+    }
+
+    // Draw lava spout (fountain jet)
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.beginPath();
+    const spoutHeight = (54 + Math.sin(lavaT * 2) * 8) * scale;
+    ctx.moveTo(screenFountainX, screenFountainY);
+    ctx.bezierCurveTo(
+      screenFountainX - 10 * scale, screenFountainY - spoutHeight * 0.4,
+      screenFountainX + 10 * scale, screenFountainY - spoutHeight * 0.7,
+      screenFountainX, screenFountainY - spoutHeight
+    );
+    ctx.lineWidth = 18 * scale;
+    ctx.strokeStyle = '#ff6a00';
+    ctx.shadowColor = '#ff6a00';
+    ctx.shadowBlur = 16 * scale;
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.lineWidth = 7 * scale;
+    ctx.strokeStyle = '#fff2a8';
+    ctx.stroke();
     ctx.restore();
   }
   drawAttacks(ctx, camera, logicalW, logicalH);
