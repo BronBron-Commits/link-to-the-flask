@@ -570,8 +570,13 @@ window.addEventListener("keydown", (e) => {
     outputPlayerPositionJSON();
   }
   // Accordion play (hold spacebar)
-  if (activeWeapon === 3 && key === " ") {
+  // On mobile, only equip accordion when actually playing
+  if (key === " " && (activeWeapon === 3 || (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)))) {
     if (!accordionHeld) {
+      // On mobile, switch to accordion only while playing
+      if (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+        activeWeapon = 3;
+      }
       accordionHeld = true;
       accordionAnim = 1;
       // Spawn a music note every time play starts
@@ -711,6 +716,10 @@ window.addEventListener("keyup", (e) => {
     accordionHeld = false;
     accordionAnim = 0;
     stopAccordionMelody();
+    // On mobile, unequip accordion when not playing
+    if (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+      if (activeWeapon === 3) activeWeapon = 1;
+    }
   }
 });
 
