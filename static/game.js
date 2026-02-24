@@ -1,3 +1,337 @@
+// === MINIMAP ===
+function drawMinimap(ctx, logicalW, logicalH) {
+  // Minimap config (move to top so all helpers can use)
+  const mapW = 180, mapH = 180;
+  const margin = 18;
+  const worldW = 3000, worldH = 3000; // Estimate world size
+  const minimapX = logicalW - mapW - margin;
+  const minimapY = margin;
+
+
+  // --- Render world features ---
+  // Helper: world to minimap
+  function worldToMini(wx, wy) {
+    const px = minimapX + mapW/2 + ((wx - player.x) / worldW) * mapW;
+    const py = minimapY + mapH/2 + ((wy - player.y) / worldH) * mapH;
+    return [px, py];
+  }
+
+  // Draw floor/grass background
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = '#4fa84f';
+  ctx.fillRect(minimapX, minimapY, mapW, mapH);
+  ctx.restore();
+
+  // Draw south forest (as green area with tree dots and cherry blossoms)
+  const forestLeftWorld = castle.x - 1600;
+  const forestRightWorld = castle.x + 1600;
+  const forestYWorld = castle.y + courtyard.offsetY + 20 + courtyard.height/2 + 400 + 1050 + 40;
+  const forestHeight = 420 * 9;
+  // Define pathLeft and pathRight for use in both trees and path
+  const pathWidth = 120 * 3;
+  const pathLeft = castle.x - pathWidth / 2;
+  const pathRight = castle.x + pathWidth / 2;
+  let [forestLeft, forestTop] = worldToMini(forestLeftWorld, forestYWorld);
+  let [forestRight, forestBottom] = worldToMini(forestRightWorld, forestYWorld + forestHeight);
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.fillStyle = '#357a35';
+  ctx.fillRect(forestLeft, forestTop, forestRight - forestLeft, forestBottom - forestTop);
+  ctx.restore();
+  // Draw trees (dots)
+  const treeCount = 48;
+  function seededRand(seed) {
+    let x = Math.sin(seed) * 10000;
+    return x - Math.floor(x);
+  }
+  for (let i = 0; i < treeCount * 9; i++) {
+    const cluster = Math.floor(i / 16);
+    const rx = seededRand(i + 1) * 0.7;
+    const ry = seededRand(i + 100) * 0.7;
+    const cx = seededRand(i + 200) * 18 - seededRand(i + 300) * 32;
+    const cy = seededRand(i + 400) * 12;
+    const xWorld = forestLeftWorld + (forestRightWorld - forestLeftWorld) * (i + rx) / (treeCount * 9) + cluster * 18 + cx;
+    const yWorld = forestYWorld + (ry * forestHeight) + cy;
+    // Skip trees that would overlap the path
+    if (xWorld > pathLeft - 18 && xWorld < pathRight + 18) continue;
+    let [tx, ty] = worldToMini(xWorld, yWorld);
+    // Cherry blossom or regular tree
+    const cherryChance = 0.18;
+    const isCherry = seededRand(i + 500) < cherryChance;
+    ctx.save();
+    ctx.globalAlpha = 0.93;
+    ctx.fillStyle = isCherry ? '#ffd6f6' : '#2e5d2a';
+    ctx.beginPath();
+    ctx.arc(tx, ty, isCherry ? 5 : 4, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.restore();
+  }
+  // Draw forest dirt path
+  let [pathL, pathT] = worldToMini(pathLeft, forestYWorld);
+  let [pathR, pathB] = worldToMini(pathRight, forestYWorld + forestHeight + 80 * 9);
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  ctx.fillStyle = '#bfa77a';
+  ctx.fillRect(pathL, pathT, pathR - pathL, pathB - pathT);
+  ctx.restore();
+  // Draw lava fountain (dot at end of path)
+  const scale = 3.2;
+  const fountainCenterX = castle.x;
+  const fountainCenterY = forestYWorld + forestHeight + 80 * 9 + 60 * scale;
+  let [fx, fy] = worldToMini(fountainCenterX, fountainCenterY);
+  ctx.save();
+  ctx.globalAlpha = 0.95;
+  ctx.beginPath();
+  ctx.arc(fx, fy, 8, 0, 2 * Math.PI);
+  ctx.fillStyle = '#ff6a00';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#fff2a8';
+  ctx.stroke();
+  ctx.restore();
+
+  // Draw moat (outer ring)
+  ctx.save();
+  ctx.strokeStyle = '#4af7';
+  ctx.lineWidth = 10;
+  let moatRadius = (castle.width/2 + moat.padding + moat.width/2) / worldW * mapW;
+  ctx.beginPath();
+  ctx.arc(minimapX + mapW/2, minimapY + mapH/2, moatRadius, 0, 2*Math.PI);
+  ctx.stroke();
+  ctx.restore();
+
+  // Draw courtyard (rectangle)
+  ctx.save();
+  ctx.strokeStyle = '#6c6';
+  ctx.lineWidth = 4;
+  let [cx, cy] = worldToMini(castle.x, castle.y + courtyard.offsetY + 20);
+  ctx.strokeRect(
+    cx - (courtyard.width/2)/worldW*mapW,
+    cy - (courtyard.height/2)/worldH*mapH,
+    courtyard.width/worldW*mapW,
+    courtyard.height/worldH*mapH
+  );
+  ctx.restore();
+
+  // Draw houses in courtyard
+  const houseY = cy + (courtyard.height/2)/worldH*mapH - 30/worldH*mapH + 120/worldH*mapH;
+  const houseW = 200/worldW*mapW;
+  const houseH = 150/worldH*mapH;
+  const housePositions = [
+    cx - (courtyard.width/2)/worldW*mapW - 260/worldW*mapW,
+    cx - (courtyard.width/2)/worldW*mapW - 500/worldW*mapW,
+    cx - (courtyard.width/2)/worldW*mapW - 740/worldW*mapW
+  ];
+  ctx.save();
+  ctx.fillStyle = '#e6cfa3';
+  housePositions.forEach((houseX) => {
+    ctx.fillRect(houseX - houseW/2, houseY - houseH, houseW, houseH);
+    ctx.strokeStyle = '#a87c4a';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(houseX - houseW/2, houseY - houseH, houseW, houseH);
+  });
+  ctx.restore();
+
+  // Draw hedges (bushes) in courtyard
+  const bushRadius = 24/worldW*mapW;
+  const hedgeOffset = (courtyard.width/2)/worldW*mapW + 80/worldW*mapW;
+  const bushColors = ['#2e7d32', '#388e3c', '#43a047', '#66bb6a'];
+  for (let y = -courtyard.height/2 + 30; y <= courtyard.height/2 - 30; y += 55) {
+    for (let i = -1; i <= 1; i++) {
+      const offset = i * (bushRadius + 8/worldW*mapW);
+      ctx.save();
+      ctx.globalAlpha = 0.85 - Math.abs(i)*0.15;
+      ctx.fillStyle = bushColors[(y+i)%bushColors.length];
+      let [bx, by] = worldToMini(castle.x - hedgeOffset + offset, castle.y + courtyard.offsetY + 20 + y);
+      ctx.beginPath();
+      ctx.arc(bx, by, bushRadius, 0, Math.PI*2);
+      ctx.fill();
+      [bx, by] = worldToMini(castle.x + hedgeOffset + offset, castle.y + courtyard.offsetY + 20 + y);
+      ctx.beginPath();
+      ctx.arc(bx, by, bushRadius, 0, Math.PI*2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.restore();
+    }
+  }
+
+  // Draw gate (rectangle at bottom of courtyard)
+  const gateBaseY = cy + (courtyard.height/2)/worldH*mapH - 10/worldH*mapH;
+  const gateCenterX = cx;
+  const gateWidth = 180/worldW*mapW;
+  const gateHeight = 120/worldH*mapH;
+  ctx.save();
+  ctx.fillStyle = '#bfa77a';
+  ctx.fillRect(gateCenterX - gateWidth/2 - 22/worldW*mapW, gateBaseY - 140/worldH*mapH, 22/worldW*mapW, 140/worldH*mapH);
+  ctx.fillRect(gateCenterX + gateWidth/2, gateBaseY - 140/worldH*mapH, 22/worldW*mapW, 140/worldH*mapH);
+  ctx.fillStyle = '#7a5c3a';
+  ctx.fillRect(gateCenterX - gateWidth/2, gateBaseY - gateHeight, gateWidth, gateHeight);
+  ctx.restore();
+
+  // Draw guard tower (rectangle with roof and flag)
+  const towerX = cx + (courtyard.width/2)/worldW*mapW + 260/worldW*mapW;
+  const towerY = houseY;
+  const towerW = 70/worldW*mapW;
+  const towerH = 180/worldH*mapH;
+  ctx.save();
+  ctx.fillStyle = '#bfc6d1';
+  ctx.fillRect(towerX - towerW/2, towerY - towerH, towerW, towerH);
+  ctx.fillStyle = '#a87c4a';
+  ctx.beginPath();
+  ctx.moveTo(towerX - towerW/2 - 10/worldW*mapW, towerY - towerH);
+  ctx.lineTo(towerX + towerW/2 + 10/worldW*mapW, towerY - towerH);
+  ctx.lineTo(towerX, towerY - towerH - 48/worldH*mapH);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+
+  // Draw moat (outer ring) again for clarity
+  ctx.save();
+  ctx.strokeStyle = '#4af7';
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.arc(minimapX + mapW/2, minimapY + mapH/2, moatRadius, 0, 2*Math.PI);
+  ctx.stroke();
+  ctx.restore();
+
+  // Draw castle (rectangle)
+  ctx.save();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 5;
+  let [castleX, castleY] = worldToMini(castle.x, castle.y);
+  ctx.strokeRect(
+    castleX - (castle.width/2)/worldW*mapW,
+    castleY - (castle.height/2)/worldH*mapH,
+    castle.width/worldW*mapW,
+    castle.height/worldH*mapH
+  );
+  ctx.restore();
+
+  // Draw river (blue band below courtyard)
+  ctx.save();
+  ctx.strokeStyle = '#39f8';
+  ctx.lineWidth = 12;
+  let riverY = castle.y + courtyard.offsetY + 20 + courtyard.height/2 + 400 + 525;
+  let [riverX, riverCY] = worldToMini(castle.x, riverY);
+  ctx.beginPath();
+  ctx.arc(riverX, riverCY, 60/worldW*mapW, 0, 2*Math.PI);
+  ctx.stroke();
+  ctx.restore();
+
+  // Draw pier (rectangle across river)
+  const pierWidth = 180 * 4 / worldW * mapW;
+  const pierLength = 1050 / worldH * mapH;
+  let [pierX, pierY] = worldToMini(castle.x, castle.y + courtyard.offsetY + 20 + courtyard.height/2 + 400);
+  ctx.save();
+  ctx.fillStyle = '#bfa77a';
+  ctx.fillRect(pierX - pierWidth/2, pierY, pierWidth, pierLength);
+  ctx.restore();
+
+  // Background
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = '#222a';
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(minimapX, minimapY, mapW, mapH, 18);
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+
+  // Center player in minimap, world scrolls
+  const playerMiniX = minimapX + mapW/2;
+  const playerMiniY = minimapY + mapH/2;
+  ctx.fillStyle = '#2af';
+  ctx.beginPath();
+  ctx.arc(playerMiniX, playerMiniY, 7, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Draw remote players relative to player
+  if (window.remotePlayers) {
+    for (const id in window.remotePlayers) {
+      const rp = window.remotePlayers[id];
+      if (!rp) continue;
+      // Offset from player, scaled to minimap
+      let [rx, ry] = worldToMini(rp.x, rp.y);
+      // Only draw if within minimap bounds
+      if (
+        rx >= minimapX && rx <= minimapX + mapW &&
+        ry >= minimapY && ry <= minimapY + mapH
+      ) {
+        ctx.save();
+        ctx.fillStyle = '#e22';
+        ctx.beginPath();
+        ctx.arc(rx, ry, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+  }
+
+  // Background
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = '#222a';
+  ctx.strokeStyle = '#888';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.roundRect(minimapX, minimapY, mapW, mapH, 18);
+  ctx.fill();
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+
+
+  // Center player in minimap, world scrolls
+  const px = minimapX + mapW/2;
+  const py = minimapY + mapH/2;
+  ctx.fillStyle = '#2af';
+  ctx.beginPath();
+  ctx.arc(px, py, 7, 0, 2 * Math.PI);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Draw remote players relative to player
+  if (window.remotePlayers) {
+    for (const id in window.remotePlayers) {
+      const rp = window.remotePlayers[id];
+      if (!rp) continue;
+      // Offset from player, scaled to minimap
+      const dx = (rp.x - player.x) / worldW * mapW;
+      const dy = (rp.y - player.y) / worldH * mapH;
+      const rx = px + dx;
+      const ry = py + dy;
+      // Only draw if within minimap bounds
+      if (rx >= minimapX && rx <= minimapX + mapW && ry >= minimapY && ry <= minimapY + mapH) {
+        ctx.fillStyle = '#e22';
+        ctx.beginPath();
+        ctx.arc(rx, ry, 6, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Border
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.roundRect(minimapX, minimapY, mapW, mapH, 18);
+  ctx.stroke();
+  ctx.restore();
+}
 import { NetworkClient } from "./network.js";
 const networkClient = new NetworkClient();
 
@@ -2606,6 +2940,7 @@ if (activeWeapon === 1) {
     ctx.restore();
   }
 
+  drawMinimap(ctx, logicalW, logicalH);
   drawHUD(logicalW, logicalH);
 }
 /* =========================
