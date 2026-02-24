@@ -1863,6 +1863,29 @@ function draw(){
     const forestLeftWorld = worldCenterX - 1600;
     const forestRightWorld = worldCenterX + 1600;
     const treeCount = 48;
+    // Cherry blossom petal particles blowing in the wind
+    const petalCount = 60;
+    const windSpeed = 0.18;
+    const t = performance.now() * 0.00025;
+    for (let p = 0; p < petalCount; p++) {
+      // Use seededRand for deterministic spread
+      const pxBase = forestLeftWorld + (forestRightWorld - forestLeftWorld) * seededRand(1000 + p);
+      const pyBase = forestYWorld + forestHeight * seededRand(2000 + p);
+      // Animate petals drifting right and slightly up/down
+      const px = pxBase + (t * 320 + 120 * seededRand(3000 + p)) % (forestRightWorld - forestLeftWorld);
+      const py = pyBase + Math.sin(t * 2 + p) * 32 + Math.cos(t + p) * 12;
+      // Only draw petals within the visible screen
+      const sx = px - camera.x + canvas.width / 2;
+      const sy = py - camera.y + canvas.height / 2;
+      if (sx < -40 || sx > canvas.width + 40 || sy < -40 || sy > canvas.height + 40) continue;
+      ctx.save();
+      ctx.globalAlpha = 0.7 + 0.2 * seededRand(4000 + p);
+      ctx.fillStyle = seededRand(5000 + p) > 0.5 ? '#ffd6f6' : '#ffb7e5';
+      ctx.beginPath();
+      ctx.ellipse(sx, sy, 8 + 4 * seededRand(6000 + p), 4 + 2 * seededRand(7000 + p), Math.PI * 2 * seededRand(8000 + p), 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
     // Path parameters
     const pathWidth = 120 * 3;
     const pathLeft = worldCenterX - pathWidth / 2;
