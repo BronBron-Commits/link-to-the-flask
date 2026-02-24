@@ -1164,10 +1164,10 @@ function drawRiver() {
     // Anchor pier in world space, centered horizontally, just below the coastline
     const gateWidth = 180;
     const pierWidth = gateWidth * 4; // 4x wider than the gate
-    const pierLength = 900; // much longer
+    const pierLength = riverHeight; // cross the full river
     // Use the same world-space X as the gate
     const pierWorldX = castle.x;
-    const pierWorldY = castle.y + courtyard.offsetY + 20 + courtyard.height / 2 + 400 + 10; // riverTop + 10
+    const pierWorldY = castle.y + courtyard.offsetY + 20 + courtyard.height / 2 + 400; // riverTop
     // Convert to screen space
     const pierScreenX = pierWorldX - camera.x + canvas.width / 2 - pierWidth / 2;
     const pierScreenY = pierWorldY - camera.y + canvas.height / 2;
