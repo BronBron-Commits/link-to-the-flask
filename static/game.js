@@ -1145,22 +1145,55 @@ function drawRiver() {
 
   const tileSize = 20;
 
+
   // WATER
   for (let y = 0; y < riverHeight; y += tileSize) {
     for (let x = 0; x < canvas.width; x += tileSize) {
-
       const wave = Math.sin((x * 0.02) + waterTime * 3) * 8;
-
       const brightness =
         80 +
         Math.sin((x + waterTime * 300) * 0.01) * 15 +
         Math.cos((y - waterTime * 250) * 0.01) * 10;
-
       ctx.fillStyle = `rgb(${brightness*0.35}, ${brightness*0.6}, ${brightness})`;
-
       ctx.fillRect(x, riverTop + y + wave, tileSize, tileSize);
     }
   }
+
+  // PIER (anchored, wide, long, styled like the gate)
+  (function drawPier() {
+    // Anchor pier in world space, centered horizontally, just below the coastline
+    const gateWidth = 180;
+    const pierWidth = gateWidth * 4; // 4x wider than the gate
+    const pierLength = 900; // much longer
+    // Use the same world-space X as the gate
+    const pierWorldX = castle.x;
+    const pierWorldY = castle.y + courtyard.offsetY + 20 + courtyard.height / 2 + 400 + 10; // riverTop + 10
+    // Convert to screen space
+    const pierScreenX = pierWorldX - camera.x + canvas.width / 2 - pierWidth / 2;
+    const pierScreenY = pierWorldY - camera.y + canvas.height / 2;
+
+    // Draw pier body (vertical planks, like gate bars)
+    ctx.save();
+    ctx.fillStyle = '#bfa77a';
+    ctx.strokeStyle = '#7a5c3a';
+    ctx.lineWidth = 4;
+    for (let i = 0; i <= 16; i++) {
+      const x = pierScreenX + i * (pierWidth / 16);
+      ctx.fillRect(x - 8, pierScreenY, 16, pierLength);
+      ctx.strokeRect(x - 8, pierScreenY, 16, pierLength);
+    }
+    // Draw pier deck (top plank)
+    ctx.fillStyle = '#b08d57';
+    ctx.fillRect(pierScreenX, pierScreenY - 18, pierWidth, 18);
+    ctx.strokeRect(pierScreenX, pierScreenY - 18, pierWidth, 18);
+    // Draw pier posts (at each corner)
+    ctx.fillStyle = '#7a5c3a';
+    ctx.fillRect(pierScreenX - 16, pierScreenY - 24, 32, 48);
+    ctx.fillRect(pierScreenX + pierWidth - 16, pierScreenY - 24, 32, 48);
+    ctx.fillRect(pierScreenX - 16, pierScreenY + pierLength - 24, 32, 48);
+    ctx.fillRect(pierScreenX + pierWidth - 16, pierScreenY + pierLength - 24, 32, 48);
+    ctx.restore();
+  })();
 
   // REFLECTION
   ctx.save();
