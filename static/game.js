@@ -2173,18 +2173,18 @@ function drawHUD(logicalW, logicalH) {
     overlay.style.pointerEvents = 'none';
     overlay.style.zIndex = '10000';
     document.body.appendChild(overlay);
-    const abilities = ['q','w','e','r'];
+    const abilities = ['q','w','e','r','accordion'];
     const baseSize = 50;
     const spacing = 70;
     const logicalW = window.innerWidth;
     const logicalH = window.innerHeight;
     const centerX = logicalW / 2;
-    const startX = centerX - (spacing * 1.5);
+    const startX = centerX - (spacing * 2);
     abilities.forEach((key, i) => {
       const x = startX + i * spacing;
       const y = logicalH - 80;
       const btn = document.createElement('button');
-      btn.innerText = key.toUpperCase();
+      btn.innerText = key === 'accordion' ? 'ACD' : key.toUpperCase();
       btn.style.position = 'absolute';
       btn.style.left = (x - baseSize/2) + 'px';
       btn.style.top = (y - baseSize/2) + 'px';
@@ -2195,26 +2195,55 @@ function drawHUD(logicalW, logicalH) {
       btn.style.border = 'none';
       btn.style.background = 'transparent';
       btn.style.zIndex = '10001';
-      btn.addEventListener('touchstart', function(e) {
-        e.preventDefault();
-        const down = new KeyboardEvent('keydown', { key });
-        window.dispatchEvent(down);
-      });
-      btn.addEventListener('touchend', function(e) {
-        e.preventDefault();
-        const up = new KeyboardEvent('keyup', { key });
-        window.dispatchEvent(up);
-      });
-      btn.addEventListener('mousedown', function(e) {
-        e.preventDefault();
-        const down = new KeyboardEvent('keydown', { key });
-        window.dispatchEvent(down);
-      });
-      btn.addEventListener('mouseup', function(e) {
-        e.preventDefault();
-        const up = new KeyboardEvent('keyup', { key });
-        window.dispatchEvent(up);
-      });
+      if (key === 'accordion') {
+        btn.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          // Switch to accordion and hold space
+          const one = new KeyboardEvent('keydown', { key: '3' });
+          window.dispatchEvent(one);
+          const down = new KeyboardEvent('keydown', { key: ' ' });
+          window.dispatchEvent(down);
+        });
+        btn.addEventListener('touchend', function(e) {
+          e.preventDefault();
+          // Release space
+          const up = new KeyboardEvent('keyup', { key: ' ' });
+          window.dispatchEvent(up);
+        });
+        btn.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          const one = new KeyboardEvent('keydown', { key: '3' });
+          window.dispatchEvent(one);
+          const down = new KeyboardEvent('keydown', { key: ' ' });
+          window.dispatchEvent(down);
+        });
+        btn.addEventListener('mouseup', function(e) {
+          e.preventDefault();
+          const up = new KeyboardEvent('keyup', { key: ' ' });
+          window.dispatchEvent(up);
+        });
+      } else {
+        btn.addEventListener('touchstart', function(e) {
+          e.preventDefault();
+          const down = new KeyboardEvent('keydown', { key });
+          window.dispatchEvent(down);
+        });
+        btn.addEventListener('touchend', function(e) {
+          e.preventDefault();
+          const up = new KeyboardEvent('keyup', { key });
+          window.dispatchEvent(up);
+        });
+        btn.addEventListener('mousedown', function(e) {
+          e.preventDefault();
+          const down = new KeyboardEvent('keydown', { key });
+          window.dispatchEvent(down);
+        });
+        btn.addEventListener('mouseup', function(e) {
+          e.preventDefault();
+          const up = new KeyboardEvent('keyup', { key });
+          window.dispatchEvent(up);
+        });
+      }
       overlay.appendChild(btn);
     });
   }
