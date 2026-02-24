@@ -2157,7 +2157,7 @@ function drawCastle() {
 
 
 function drawHUD(logicalW, logicalH) {
-  // Overlay HTML buttons for QWER on mobile/touch devices
+  // On mobile/touch, only show the overlay HUD and skip drawing the canvas HUD
   if (typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
     // Always remove any existing overlay before creating a new one
     const old = document.getElementById('hud-touch-overlay');
@@ -2254,6 +2254,7 @@ function drawHUD(logicalW, logicalH) {
       }
       overlay.appendChild(btn);
     });
+    return; // Do not draw the canvas HUD on mobile
   }
 
   const hudHeight = 120;
