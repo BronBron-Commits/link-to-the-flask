@@ -1,112 +1,6 @@
 import { NetworkClient } from "./network.js";
 const networkClient = new NetworkClient();
 
-// ========== MOBILE DETECTION & TOUCH CONTROLS ==========
-function isMobileDevice() {
-  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-}
-
-let mobileControlsInjected = false;
-let mobileMoveDir = null;
-
-function injectMobileControls() {
-  if (mobileControlsInjected) return;
-  mobileControlsInjected = true;
-  // Movement D-pad
-  const dpad = document.createElement('div');
-  dpad.id = 'mobile-dpad';
-  dpad.style.position = 'fixed';
-  dpad.style.left = '24px';
-  dpad.style.bottom = '24px';
-  dpad.style.zIndex = '9999';
-  dpad.innerHTML = `
-    <div style="display:grid;grid-template-columns:40px 40px 40px;grid-template-rows:40px 40px 40px;gap:4px;">
-      <button data-dir="up" style="grid-column:2;grid-row:1;width:40px;height:40px;opacity:0.7;">▲</button>
-      <button data-dir="left" style="grid-column:1;grid-row:2;width:40px;height:40px;opacity:0.7;">◀</button>
-      <button data-dir="down" style="grid-column:2;grid-row:3;width:40px;height:40px;opacity:0.7;">▼</button>
-      <button data-dir="right" style="grid-column:3;grid-row:2;width:40px;height:40px;opacity:0.7;">▶</button>
-    </div>
-  `;
-  document.body.appendChild(dpad);
-  // Action buttons (QWER)
-  const abtns = document.createElement('div');
-  abtns.id = 'mobile-abtns';
-  abtns.style.position = 'fixed';
-  abtns.style.right = '24px';
-  abtns.style.bottom = '32px';
-  abtns.style.zIndex = '9999';
-  abtns.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:12px;align-items:flex-end;">
-      <button data-act="q" style="width:56px;height:56px;font-size:1.3em;opacity:0.7;">Q</button>
-      <button data-act="w" style="width:56px;height:56px;font-size:1.3em;opacity:0.7;">W</button>
-      <button data-act="e" style="width:56px;height:56px;font-size:1.3em;opacity:0.7;">E</button>
-      <button data-act="r" style="width:56px;height:56px;font-size:1.3em;opacity:0.7;">R</button>
-    </div>
-  `;
-  document.body.appendChild(abtns);
-
-  // D-pad touch events
-  dpad.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('touchstart', e => {
-      e.preventDefault();
-      mobileMoveDir = btn.getAttribute('data-dir');
-    });
-    btn.addEventListener('touchend', e => {
-      e.preventDefault();
-      mobileMoveDir = null;
-    });
-  });
-  // Action button touch events
-  abtns.querySelectorAll('button').forEach(btn => {
-    btn.addEventListener('touchstart', e => {
-      e.preventDefault();
-      const act = btn.getAttribute('data-act');
-      triggerMobileAction(act);
-    });
-  });
-}
-
-function triggerMobileAction(act) {
-  // Simulate keydown for Q/W/E/R
-  const event = new KeyboardEvent('keydown', { key: act });
-  window.dispatchEvent(event);
-  // Simulate keyup after short delay
-  setTimeout(() => {
-    const upEvent = new KeyboardEvent('keyup', { key: act });
-    window.dispatchEvent(upEvent);
-  }, 120);
-}
-
-// Patch movement for mobile
-function mobileTryMove(dt) {
-  if (!mobileMoveDir) return;
-  let dx = 0, dy = 0;
-  if (mobileMoveDir === 'up') dy = -1;
-  if (mobileMoveDir === 'down') dy = 1;
-  if (mobileMoveDir === 'left') dx = -1;
-  if (mobileMoveDir === 'right') dx = 1;
-  if (dx === 0 && dy === 0) return;
-  const dist = Math.hypot(dx, dy);
-  const nx = dx / dist;
-  const ny = dy / dist;
-  player.x += nx * moveSpeed;
-  player.y += ny * moveSpeed;
-  // SNAP FACING TO CARDINAL ONLY
-  if (Math.abs(nx) > Math.abs(ny)) {
-    facing.x = nx > 0 ? 1 : -1;
-    facing.y = 0;
-  } else {
-    facing.y = ny > 0 ? 1 : -1;
-    facing.x = 0;
-  }
-  walking = true;
-  idleTime = 0;
-}
-
-// Inject controls if mobile
-if (isMobileDevice()) {
-  window.addEventListener('DOMContentLoaded', injectMobileControls);
-}
 
 // Assign a unique player ID for this session (not shared across tabs)
 const playerId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
@@ -344,16 +238,32 @@ let remoteUltBurstTriggered = {};
 
 canvas.addEventListener("contextmenu", e => e.preventDefault());
 
+
 canvas.addEventListener("mousedown", (e) => {
   if (document.getElementById('nameModal')) return;
   if (e.button !== 2) return; // right click
-
   const rect = canvas.getBoundingClientRect();
   const worldX = camera.x - canvas.width/2 + (e.clientX - rect.left);
   const worldY = camera.y - canvas.height/2 + (e.clientY - rect.top);
-
   moveTarget = { x: worldX, y: worldY };
 });
+
+// Touch-to-move for mobile: tap anywhere on canvas to move there
+function isMobileDevice() {
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+}
+if (isMobileDevice()) {
+  canvas.addEventListener('touchstart', function(e) {
+    if (document.getElementById('nameModal')) return;
+    if (e.touches.length > 0) {
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      const worldX = camera.x - canvas.width/2 + (touch.clientX - rect.left);
+      const worldY = camera.y - canvas.height/2 + (touch.clientY - rect.top);
+      moveTarget = { x: worldX, y: worldY };
+    }
+  });
+}
 
 window.addEventListener("keydown", (e) => {
   if (document.getElementById('nameModal')) return;
@@ -1766,6 +1676,67 @@ function drawCastle() {
 
 
 function drawHUD(logicalW, logicalH) {
+  // Overlay HTML buttons for QWER on mobile/touch devices
+  if (typeof window !== 'undefined' && window.isMobileHUDOverlay !== true && ('ontouchstart' in window || navigator.maxTouchPoints > 0)) {
+    window.isMobileHUDOverlay = true;
+    // Remove any existing overlay
+    const old = document.getElementById('hud-touch-overlay');
+    if (old) old.remove();
+    const overlay = document.createElement('div');
+    overlay.id = 'hud-touch-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.left = '0';
+    overlay.style.top = '0';
+    overlay.style.width = '100vw';
+    overlay.style.height = '100vh';
+    overlay.style.pointerEvents = 'none';
+    overlay.style.zIndex = '10000';
+    document.body.appendChild(overlay);
+    const abilities = ['q','w','e','r'];
+    const baseSize = 50;
+    const spacing = 70;
+    const logicalW = window.innerWidth;
+    const logicalH = window.innerHeight;
+    const centerX = logicalW / 2;
+    const startX = centerX - (spacing * 1.5);
+    abilities.forEach((key, i) => {
+      const x = startX + i * spacing;
+      const y = logicalH - 80;
+      const btn = document.createElement('button');
+      btn.innerText = key.toUpperCase();
+      btn.style.position = 'absolute';
+      btn.style.left = (x - baseSize/2) + 'px';
+      btn.style.top = (y - baseSize/2) + 'px';
+      btn.style.width = baseSize + 'px';
+      btn.style.height = baseSize + 'px';
+      btn.style.opacity = '0';
+      btn.style.pointerEvents = 'auto';
+      btn.style.border = 'none';
+      btn.style.background = 'transparent';
+      btn.style.zIndex = '10001';
+      btn.addEventListener('touchstart', function(e) {
+        e.preventDefault();
+        const down = new KeyboardEvent('keydown', { key });
+        window.dispatchEvent(down);
+      });
+      btn.addEventListener('touchend', function(e) {
+        e.preventDefault();
+        const up = new KeyboardEvent('keyup', { key });
+        window.dispatchEvent(up);
+      });
+      btn.addEventListener('mousedown', function(e) {
+        e.preventDefault();
+        const down = new KeyboardEvent('keydown', { key });
+        window.dispatchEvent(down);
+      });
+      btn.addEventListener('mouseup', function(e) {
+        e.preventDefault();
+        const up = new KeyboardEvent('keyup', { key });
+        window.dispatchEvent(up);
+      });
+      overlay.appendChild(btn);
+    });
+  }
 
   const hudHeight = 120;
   const barWidth = 300;
