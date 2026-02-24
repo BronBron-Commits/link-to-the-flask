@@ -1174,8 +1174,9 @@ function drawRiver() {
 
     // Stylized pier body (vertical planks with wood grain, bolts, and color variation)
     ctx.save();
-    for (let i = 0; i <= 16; i++) {
-      const x = pierScreenX + i * (pierWidth / 16);
+    const plankCount = 32;
+    for (let i = 0; i <= plankCount; i++) {
+      const x = pierScreenX + i * (pierWidth / plankCount);
       // Subtle color variation for planks
       ctx.fillStyle = i % 2 === 0 ? '#bfa77a' : '#c8b07a';
       ctx.strokeStyle = '#7a5c3a';
@@ -1228,7 +1229,7 @@ function drawRiver() {
       const roofHeight = 90;
       const roofOverhang = 32;
       const roofY = pierScreenY - 18 - roofHeight;
-      // Roof gable (triangle)
+      // Solid, semi-transparent roof (no gable or shingle lines)
       ctx.save();
       ctx.beginPath();
       ctx.moveTo(pierScreenX - roofOverhang, roofY + roofHeight); // left bottom
@@ -1236,32 +1237,9 @@ function drawRiver() {
       ctx.lineTo(pierScreenX + pierWidth + roofOverhang, roofY + roofHeight); // right bottom
       ctx.closePath();
       ctx.fillStyle = '#a97c50';
-      ctx.globalAlpha = 0.93;
+      ctx.globalAlpha = 0.65;
       ctx.fill();
       ctx.globalAlpha = 1.0;
-      ctx.lineWidth = 5;
-      ctx.strokeStyle = '#7a5c3a';
-      ctx.stroke();
-      // Roof shingles (horizontal lines)
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#c8b07a';
-      for (let s = 1; s < 6; s++) {
-        const y = roofY + roofHeight * (s / 6);
-        ctx.beginPath();
-        ctx.moveTo(pierScreenX - roofOverhang + 10, y);
-        ctx.lineTo(pierScreenX + pierWidth + roofOverhang - 10, y);
-        ctx.stroke();
-      }
-      // Roof beams (vertical supports)
-      ctx.lineWidth = 6;
-      ctx.strokeStyle = '#7a5c3a';
-      for (let b = 0; b <= 4; b++) {
-        const bx = pierScreenX + b * (pierWidth / 4);
-        ctx.beginPath();
-        ctx.moveTo(bx, roofY + roofHeight);
-        ctx.lineTo(bx, pierScreenY - 18);
-        ctx.stroke();
-      }
       ctx.restore();
 
       // Side walls (railings)
