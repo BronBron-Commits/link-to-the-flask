@@ -274,6 +274,11 @@ let walkFrame = 0;
 let walkTimer = 0;
 let idleTime = 0;
 let attackAnim = 0;
+
+// Accordion play state
+let accordionHeld = false;
+let accordionAnim = 0; // 0 = idle, 1 = fully open
+let musicNotes = [];
 let fishingAnim = 0;
 let fishingAnimType = null; // 'q', 'w', 'e', 'r'
 let ultNoiseOsc = null;
@@ -296,6 +301,10 @@ function drawAccordion(ctx, x, y, scale = 1, facing = {x:1, y:0}) {
   ctx.translate(x, y);
   ctx.scale(scale, scale);
   ctx.rotate(Math.atan2(facing.y, facing.x));
+
+  // Animate bellows open/close
+  let bellowsOpen = accordionAnim || 0;
+  let bellowsWidth = 12 + 8 * bellowsOpen;
 
   // Draw left side (red wood with buttons)
   ctx.fillStyle = '#b33';
@@ -340,20 +349,20 @@ function drawAccordion(ctx, x, y, scale = 1, facing = {x:1, y:0}) {
     }
   }
 
-  // Draw bellows (pleated)
+  // Draw bellows (pleated, animated width)
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(-6, -8);
-  ctx.lineTo(6, -8);
-  ctx.lineTo(6, 8);
+  ctx.lineTo(-6 + bellowsWidth, -8);
+  ctx.lineTo(-6 + bellowsWidth, 8);
   ctx.lineTo(-6, 8);
   ctx.closePath();
   ctx.clip();
   for (let i = 0; i < 8; i++) {
     ctx.strokeStyle = i % 2 === 0 ? '#eee' : '#bbb';
     ctx.beginPath();
-    ctx.moveTo(-6 + i * 1.5, -8);
-    ctx.lineTo(-6 + i * 1.5, 8);
+    ctx.moveTo(-6 + i * (bellowsWidth/7), -8);
+    ctx.lineTo(-6 + i * (bellowsWidth/7), 8);
     ctx.stroke();
   }
   ctx.restore();
@@ -361,7 +370,7 @@ function drawAccordion(ctx, x, y, scale = 1, facing = {x:1, y:0}) {
   // Bellows outline
   ctx.strokeStyle = '#888';
   ctx.lineWidth = 1;
-  ctx.strokeRect(-6, -8, 12, 16);
+  ctx.strokeRect(-6, -8, bellowsWidth, 16);
 
   ctx.restore();
 }
@@ -428,6 +437,26 @@ window.addEventListener("keydown", (e) => {
     e.preventDefault();
     // Immediately broadcast outfit change
     outputPlayerPositionJSON();
+  }
+  // Accordion play (hold spacebar)
+  if (activeWeapon === 3 && key === " ") {
+    if (!accordionHeld) {
+      accordionHeld = true;
+      accordionAnim = 1;
+      // Spawn a music note every time play starts
+      musicNotes.push({
+        x: player.x + 38,
+        y: player.y + 10,
+        vx: Math.random()*1-0.5,
+        vy: -1.5-Math.random(),
+        t: 0,
+        color: `hsl(${Math.floor(Math.random()*360)},80%,70%)`
+      });
+    }
+  }
+  // Prevent regular attacks if accordion is held
+  if (activeWeapon === 3 && accordionHeld) {
+    return;
   }
 if (key === "1") activeWeapon = 1;
 if (key === "2") activeWeapon = 2;
@@ -544,6 +573,11 @@ window.addEventListener("keyup", (e) => {
     if (charging) {
       releaseCharge();
     }
+  }
+  // Release accordion
+  if (key === " ") {
+    accordionHeld = false;
+    accordionAnim = 0;
   }
 });
 
@@ -907,7 +941,36 @@ function update(dt){
   const waterRect = { x: 0, y: 320, width: canvas.width, height: 200 };
   updateLures(dt, waterRect);
 
-waterTime += dt * 0.002;
+  // Accordion animation
+  if (activeWeapon === 3) {
+    if (accordionHeld) {
+      accordionAnim = Math.min(1, accordionAnim + dt*0.004);
+      // Occasionally spawn music notes while held
+      if (Math.random() < dt*0.0015) {
+        musicNotes.push({
+          x: player.x + 38,
+          y: player.y + 10,
+          vx: Math.random()*1-0.5,
+          vy: -1.5-Math.random(),
+          t: 0,
+          color: `hsl(${Math.floor(Math.random()*360)},80%,70%)`
+        });
+      }
+    } else {
+      accordionAnim = Math.max(0, accordionAnim - dt*0.004);
+    }
+  }
+
+  // Update music notes
+  for (let note of musicNotes) {
+    note.x += note.vx;
+    note.y += note.vy;
+    note.t += dt;
+  }
+  // Remove old notes
+  musicNotes = musicNotes.filter(n => n.t < 2000);
+
+  waterTime += dt * 0.002;
 
   // =========================
   // ULTIMATE
@@ -2797,6 +2860,20 @@ if (activeWeapon === 1) {
   }
 
   drawMiniMap(ctx, logicalW, logicalH);
+  // Draw floating music notes (above player)
+  function drawMusicNotes(ctx, camera) {
+    for (let note of musicNotes) {
+      ctx.save();
+      ctx.globalAlpha = 1 - note.t/2000;
+      ctx.fillStyle = note.color;
+      ctx.font = 'bold 22px Arial';
+      ctx.translate(note.x - camera.x + ctx.canvas.width/2, note.y - camera.y + ctx.canvas.height/2);
+      ctx.rotate(Math.sin(note.t*0.005 + note.x)*0.3);
+      ctx.fillText('♪', 0, 0);
+      ctx.restore();
+    }
+  }
+  drawMusicNotes(ctx, camera);
   drawHUD(logicalW, logicalH);
 }
 /* =========================
