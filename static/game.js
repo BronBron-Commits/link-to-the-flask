@@ -1172,26 +1172,157 @@ function drawRiver() {
     const pierScreenX = pierWorldX - camera.x + canvas.width / 2 - pierWidth / 2;
     const pierScreenY = pierWorldY - camera.y + canvas.height / 2;
 
-    // Draw pier body (vertical planks, like gate bars)
+    // Stylized pier body (vertical planks with wood grain, bolts, and color variation)
     ctx.save();
-    ctx.fillStyle = '#bfa77a';
-    ctx.strokeStyle = '#7a5c3a';
-    ctx.lineWidth = 4;
     for (let i = 0; i <= 16; i++) {
       const x = pierScreenX + i * (pierWidth / 16);
+      // Subtle color variation for planks
+      ctx.fillStyle = i % 2 === 0 ? '#bfa77a' : '#c8b07a';
+      ctx.strokeStyle = '#7a5c3a';
+      ctx.lineWidth = 4;
       ctx.fillRect(x - 8, pierScreenY, 16, pierLength);
       ctx.strokeRect(x - 8, pierScreenY, 16, pierLength);
+      // Wood grain lines
+      ctx.save();
+      ctx.strokeStyle = 'rgba(120,90,40,0.25)';
+      ctx.lineWidth = 1.2;
+      for (let g = 0; g < 4; g++) {
+        ctx.beginPath();
+        ctx.moveTo(x - 6, pierScreenY + 30 + g * 60 + Math.random()*10);
+        ctx.bezierCurveTo(x, pierScreenY + 50 + g * 60 + Math.random()*10, x + 2, pierScreenY + 70 + g * 60 + Math.random()*10, x + 6, pierScreenY + 90 + g * 60 + Math.random()*10);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // Bolts
+      ctx.save();
+      ctx.fillStyle = '#888';
+      for (let b = 0; b < 6; b++) {
+        ctx.beginPath();
+        ctx.arc(x, pierScreenY + 30 + b * (pierLength / 6), 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
     }
-    // Draw pier deck (top plank)
+    // Deck (top plank with shadow and highlight)
+    ctx.save();
+    // Shadow under deck
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#000';
+    ctx.fillRect(pierScreenX, pierScreenY - 10, pierWidth, 18);
+    ctx.globalAlpha = 1.0;
+    // Deck plank
     ctx.fillStyle = '#b08d57';
+    ctx.strokeStyle = '#7a5c3a';
+    ctx.lineWidth = 4;
     ctx.fillRect(pierScreenX, pierScreenY - 18, pierWidth, 18);
     ctx.strokeRect(pierScreenX, pierScreenY - 18, pierWidth, 18);
-    // Draw pier posts (at each corner)
-    ctx.fillStyle = '#7a5c3a';
-    ctx.fillRect(pierScreenX - 16, pierScreenY - 24, 32, 48);
-    ctx.fillRect(pierScreenX + pierWidth - 16, pierScreenY - 24, 32, 48);
-    ctx.fillRect(pierScreenX - 16, pierScreenY + pierLength - 24, 32, 48);
-    ctx.fillRect(pierScreenX + pierWidth - 16, pierScreenY + pierLength - 24, 32, 48);
+    // Deck highlight
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(pierScreenX, pierScreenY - 18, pierWidth, 4);
+    ctx.globalAlpha = 1.0;
+    ctx.restore();
+    // Roof and walls for the pier (covered dock)
+    (function drawPierRoofAndWalls() {
+      // Roof parameters
+      const roofHeight = 90;
+      const roofOverhang = 32;
+      const roofY = pierScreenY - 18 - roofHeight;
+      // Roof gable (triangle)
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(pierScreenX - roofOverhang, roofY + roofHeight); // left bottom
+      ctx.lineTo(pierScreenX + pierWidth / 2, roofY); // top
+      ctx.lineTo(pierScreenX + pierWidth + roofOverhang, roofY + roofHeight); // right bottom
+      ctx.closePath();
+      ctx.fillStyle = '#a97c50';
+      ctx.globalAlpha = 0.93;
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#7a5c3a';
+      ctx.stroke();
+      // Roof shingles (horizontal lines)
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#c8b07a';
+      for (let s = 1; s < 6; s++) {
+        const y = roofY + roofHeight * (s / 6);
+        ctx.beginPath();
+        ctx.moveTo(pierScreenX - roofOverhang + 10, y);
+        ctx.lineTo(pierScreenX + pierWidth + roofOverhang - 10, y);
+        ctx.stroke();
+      }
+      // Roof beams (vertical supports)
+      ctx.lineWidth = 6;
+      ctx.strokeStyle = '#7a5c3a';
+      for (let b = 0; b <= 4; b++) {
+        const bx = pierScreenX + b * (pierWidth / 4);
+        ctx.beginPath();
+        ctx.moveTo(bx, roofY + roofHeight);
+        ctx.lineTo(bx, pierScreenY - 18);
+        ctx.stroke();
+      }
+      ctx.restore();
+
+      // Side walls (railings)
+      ctx.save();
+      ctx.strokeStyle = '#a97c50';
+      ctx.lineWidth = 7;
+      ctx.globalAlpha = 0.85;
+      // Left railing
+      ctx.beginPath();
+      ctx.moveTo(pierScreenX + 12, pierScreenY - 8);
+      ctx.lineTo(pierScreenX + 12, pierScreenY + pierLength - 40);
+      ctx.stroke();
+      // Right railing
+      ctx.beginPath();
+      ctx.moveTo(pierScreenX + pierWidth - 12, pierScreenY - 8);
+      ctx.lineTo(pierScreenX + pierWidth - 12, pierScreenY + pierLength - 40);
+      ctx.stroke();
+      // Top rails
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(pierScreenX + 12, pierScreenY - 8);
+      ctx.lineTo(pierScreenX + pierWidth - 12, pierScreenY - 8);
+      ctx.stroke();
+      // Bottom rails (partial, not at water)
+      ctx.beginPath();
+      ctx.moveTo(pierScreenX + 12, pierScreenY + pierLength / 2);
+      ctx.lineTo(pierScreenX + pierWidth - 12, pierScreenY + pierLength / 2);
+      ctx.stroke();
+      ctx.restore();
+    })();
+    // Posts (with wood rings and shadow)
+    function drawPost(px, py) {
+      ctx.save();
+      // Post shadow
+      ctx.globalAlpha = 0.18;
+      ctx.fillStyle = '#000';
+      ctx.beginPath();
+      ctx.ellipse(px + 16, py + 48, 16, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1.0;
+      // Post body
+      ctx.fillStyle = '#7a5c3a';
+      ctx.fillRect(px, py, 32, 48);
+      ctx.strokeStyle = '#5a3c1a';
+      ctx.lineWidth = 3;
+      ctx.strokeRect(px, py, 32, 48);
+      // Wood rings
+      ctx.strokeStyle = '#a88c5a';
+      ctx.lineWidth = 2;
+      for (let r = 1; r <= 2; r++) {
+        ctx.beginPath();
+        ctx.moveTo(px + 4, py + r * 12);
+        ctx.lineTo(px + 28, py + r * 12);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+    drawPost(pierScreenX - 16, pierScreenY - 24);
+    drawPost(pierScreenX + pierWidth - 16, pierScreenY - 24);
+    drawPost(pierScreenX - 16, pierScreenY + pierLength - 24);
+    drawPost(pierScreenX + pierWidth - 16, pierScreenY + pierLength - 24);
     ctx.restore();
   })();
 
