@@ -57,20 +57,49 @@ function drawMiniMap(ctx, player, remotePlayersArr, world) {
   ctx.strokeStyle = '#444';
   ctx.lineWidth = 2;
   ctx.stroke();
-
-  // World bounds for scaling
+  // Draw a scaled-down reimage of the world inside the mini map
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(mapX + borderRadius, mapY);
+  ctx.lineTo(mapX + mapWidth - borderRadius, mapY);
+  ctx.quadraticCurveTo(mapX + mapWidth, mapY, mapX + mapWidth, mapY + borderRadius);
+  ctx.lineTo(mapX + mapWidth, mapY + mapHeight - borderRadius);
+  ctx.quadraticCurveTo(mapX + mapWidth, mapY + mapHeight, mapX + mapWidth - borderRadius, mapY + mapHeight);
+  ctx.lineTo(mapX + borderRadius, mapY + mapHeight);
+  ctx.quadraticCurveTo(mapX, mapY + mapHeight, mapX, mapY + mapHeight - borderRadius);
+  ctx.lineTo(mapX, mapY + borderRadius);
+  ctx.quadraticCurveTo(mapX, mapY, mapX + borderRadius, mapY);
+  ctx.closePath();
+  ctx.clip();
+  // Calculate scale to fit the world
   const worldW = world?.width || 4000;
   const worldH = world?.height || 4000;
-  const scaleX = (mapWidth - 32) / worldW;
-  const scaleY = (mapHeight - 32) / worldH;
+  const scale = Math.min((mapWidth - 32) / worldW, (mapHeight - 32) / worldH);
+  ctx.translate(mapX + 16, mapY + 16);
+  ctx.scale(scale, scale);
+  // Draw world features (floor, castle, river, etc.)
+  if (typeof drawFloor === 'function') drawFloor();
+  if (typeof drawCastle === 'function') drawCastle();
+  if (typeof drawRiver === 'function') drawRiver();
+  if (typeof drawCourtyard === 'function') drawCourtyard();
+  // Optionally draw other features
+  ctx.restore();
+
+  // Show the same area as the main screen (camera view)
+  // Use camera coordinates and screen size for scaling
+  const cameraW = ctx.canvas.width;
+  const cameraH = ctx.canvas.height;
+  const scaleX = (mapWidth - 32) / cameraW;
+  const scaleY = (mapHeight - 32) / cameraH;
   const offsetX = mapX + 16;
   const offsetY = mapY + 16;
 
   // Draw player
-  if (player) {
+  if (player && typeof camera !== 'undefined') {
     ctx.fillStyle = '#4af';
-    const px = offsetX + (player.x + worldW / 2) * scaleX;
-    const py = offsetY + (player.y + worldH / 2) * scaleY;
+    // Calculate player's position relative to camera
+    const px = offsetX + (player.x - camera.x + cameraW / 2) * scaleX;
+    const py = offsetY + (player.y - camera.y + cameraH / 2) * scaleY;
     ctx.beginPath();
     ctx.arc(px, py, 7, 0, 2 * Math.PI);
     ctx.fill();
@@ -80,11 +109,11 @@ function drawMiniMap(ctx, player, remotePlayersArr, world) {
   }
 
   // Draw remote players
-  if (Array.isArray(remotePlayersArr)) {
+  if (Array.isArray(remotePlayersArr) && typeof camera !== 'undefined') {
     ctx.fillStyle = '#fa4';
     for (const rp of remotePlayersArr) {
-      const rx = offsetX + (rp.x + worldW / 2) * scaleX;
-      const ry = offsetY + (rp.y + worldH / 2) * scaleY;
+      const rx = offsetX + (rp.x - camera.x + cameraW / 2) * scaleX;
+      const ry = offsetY + (rp.y - camera.y + cameraH / 2) * scaleY;
       ctx.beginPath();
       ctx.arc(rx, ry, 5, 0, 2 * Math.PI);
       ctx.fill();
