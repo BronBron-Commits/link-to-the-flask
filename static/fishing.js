@@ -117,12 +117,15 @@ export function updateFishing(dt, fishingComp) {
 export function drawFishing(ctx, fishingComp, camera) {
     const bobber = fishingComp.bobber;
     if (!bobber) {
-        if (typeof window !== 'undefined') window._currentBobberScreenPos = null;
+        if (typeof window !== 'undefined' && window._bobberScreenPos) {
+            delete window._bobberScreenPos[fishingComp.playerId];
+        }
         return;
     }
-    // Set global for rod string
+    // Set per-player global for rod string
     if (typeof window !== 'undefined') {
-        window._currentBobberScreenPos = {
+        if (!window._bobberScreenPos) window._bobberScreenPos = {};
+        window._bobberScreenPos[fishingComp.playerId] = {
             x: bobber.x - camera.x + ctx.canvas.width/2,
             y: bobber.y - camera.y + ctx.canvas.height/2
         };

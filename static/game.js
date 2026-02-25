@@ -1,3 +1,26 @@
+// Draw remote fishing poles and bobbers
+if (window.remotePlayers) {
+  for (const id in window.remotePlayers) {
+    const rp = window.remotePlayers[id];
+    if (!rp) continue;
+    if (rp.activeWeapon === 2) {
+      // Draw fishing pole
+      const remoteSX = rp.x - camera.x + logicalW/2 + 38;
+      const remoteSY = rp.y - camera.y + logicalH/2 + 26;
+      drawFishingPole(
+        ctx,
+        remoteSX,
+        remoteSY,
+        3,
+        rp.facing || { x: 1, y: 0 }
+      );
+      // Draw remote fishing bobber and effects
+      if (rp.fishingComp) {
+        drawFishing(ctx, rp.fishingComp, camera);
+      }
+    }
+  }
+}
 import { NetworkClient } from "./network.js";
 const networkClient = new NetworkClient();
 
@@ -810,8 +833,8 @@ function drawFishingPole(ctx, x, y, scale, facing) {
   ctx.fill();
 
   // Line
-  // If a global variable for the current bobber position exists, draw the string to it
-  if (typeof window !== 'undefined' && window._currentBobberScreenPos) {
+  // Draw rod string for this player only
+  if (typeof window !== 'undefined' && window._bobberScreenPos && window._bobberScreenPos[playerId]) {
     ctx.save();
     ctx.strokeStyle = "rgba(230,230,230,0.85)";
     ctx.lineWidth = 1.5;
@@ -822,7 +845,7 @@ function drawFishingPole(ctx, x, y, scale, facing) {
     // End point is in screen coordinates
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.moveTo(m.e + 12 * m.a - 28 * m.b, m.f + 12 * m.c - 28 * m.d); // rod tip in screen
-    ctx.lineTo(window._currentBobberScreenPos.x, window._currentBobberScreenPos.y);
+    ctx.lineTo(window._bobberScreenPos[playerId].x, window._bobberScreenPos[playerId].y);
     ctx.stroke();
     ctx.restore();
   } else {
