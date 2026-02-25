@@ -834,21 +834,25 @@ function drawFishingPole(ctx, x, y, scale, facing) {
   ctx.fill();
 
   // Line
-  // Draw rod string for this player only
-  if (typeof window !== 'undefined' && window._bobberScreenPos && window._bobberScreenPos[playerId]) {
-    ctx.save();
-    ctx.strokeStyle = "rgba(230,230,230,0.85)";
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(12, -28); // rod tip
-    // Transform rod tip to screen coordinates
-    const m = ctx.getTransform();
-    // End point is in screen coordinates
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.moveTo(m.e + 12 * m.a - 28 * m.b, m.f + 12 * m.c - 28 * m.d); // rod tip in screen
-    ctx.lineTo(window._bobberScreenPos[playerId].x, window._bobberScreenPos[playerId].y);
-    ctx.stroke();
-    ctx.restore();
+  // Draw rod string for local and remote players
+  if (typeof window !== 'undefined' && window._bobberScreenPos) {
+    const allIds = Object.keys(window._bobberScreenPos);
+    for (const id of allIds) {
+      if (!window._bobberScreenPos[id]) continue;
+      ctx.save();
+      ctx.strokeStyle = "rgba(230,230,230,0.85)";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(12, -28); // rod tip
+      // Transform rod tip to screen coordinates
+      const m = ctx.getTransform();
+      // End point is in screen coordinates
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.moveTo(m.e + 12 * m.a - 28 * m.b, m.f + 12 * m.c - 28 * m.d); // rod tip in screen
+      ctx.lineTo(window._bobberScreenPos[id].x, window._bobberScreenPos[id].y);
+      ctx.stroke();
+      ctx.restore();
+    }
   } else {
     ctx.strokeStyle = "rgba(230,230,230,0.7)";
     ctx.lineWidth = 1;
