@@ -1,6 +1,7 @@
 // Draw remote fishing poles and bobbers
 if (window.remotePlayers) {
   for (const id in window.remotePlayers) {
+    if (id === window.playerId) continue; // skip local player
     const rp = window.remotePlayers[id];
     if (!rp) continue;
     if (rp.activeWeapon === 2) {
