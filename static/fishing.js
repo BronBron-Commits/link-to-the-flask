@@ -26,7 +26,7 @@ export function createFishingComponent() {
     };
 }
 
-export function startCast(player, fishingComp, castDistance = 80) {
+export function startCast(player, fishingComp, castDistance = 160) {
     // Only wizard character is supported
     const dx = player.facing.x;
     const dy = player.facing.y;
@@ -109,7 +109,17 @@ export function updateFishing(dt, fishingComp) {
 
 export function drawFishing(ctx, fishingComp, camera) {
     const bobber = fishingComp.bobber;
-    if (!bobber) return;
+    if (!bobber) {
+        if (typeof window !== 'undefined') window._currentBobberScreenPos = null;
+        return;
+    }
+    // Set global for rod string
+    if (typeof window !== 'undefined') {
+        window._currentBobberScreenPos = {
+            x: bobber.x - camera.x + ctx.canvas.width/2,
+            y: bobber.y - camera.y + ctx.canvas.height/2
+        };
+    }
     // Draw ripple
     if (bobber.ripple > 0) {
         ctx.save();

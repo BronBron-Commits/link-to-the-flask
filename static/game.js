@@ -420,6 +420,8 @@ let chargeAutoReleased = false;
 let chargeSoundTimer = 0;
 
 let fishingComp = createFishingComponent();
+let fishingCharging = false;
+let fishingChargeStart = 0;
 
 let eCooldownTimer = 0;
 let qKeyHeld = false;
@@ -602,13 +604,12 @@ if (key === "1") activeWeapon = 1;
 if (key === "2") activeWeapon = 2;
 if (key === "3") activeWeapon = 3;
 if (activeWeapon === 2) {
-  // Fishing rod QWER animations now start fishing logic
-  if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
+  // Q: Hold to charge, release to cast farther
+  if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q && !fishingCharging) {
     qKeyHeld = true;
-    energy -= energyCosts.q;
-    fishingAnim = 1;
-    fishingAnimType = 'q';
-    startCast({ ...player, facing }, fishingComp);
+    fishingCharging = true;
+    fishingChargeStart = performance.now();
+    // Don't startCast or animate yet; wait for keyup
   }
   if (key === "w" && !wKeyHeld && cooldowns.w <= 0 && energy >= energyCosts.w) {
     wKeyHeld = true;
@@ -683,7 +684,20 @@ window.addEventListener("keyup", (e) => {
   if (document.getElementById('nameModal')) return;
   const key = e.key.toLowerCase();
 
-  if (key === "q") qKeyHeld = false;
+  if (key === "q") {
+    qKeyHeld = false;
+    if (activeWeapon === 2 && fishingCharging && cooldowns.q <= 0 && energy >= energyCosts.q) {
+      fishingCharging = false;
+      const chargeDuration = Math.min(performance.now() - fishingChargeStart, 1200); // ms
+      // Map chargeDuration (min 80, max 220)
+      const minDist = 80, maxDist = 220;
+      const dist = minDist + ((maxDist - minDist) * (chargeDuration / 1200));
+      energy -= energyCosts.q;
+      fishingAnim = 1;
+      fishingAnimType = 'q';
+      startCast({ ...player, facing }, fishingComp, dist);
+    }
+  }
   if (key === "w") wKeyHeld = false;
 
   if (key === "e") {
@@ -767,18 +781,31 @@ function drawFishingPole(ctx, x, y, scale, facing) {
   ctx.fill();
 
   // Line
-  ctx.strokeStyle = "rgba(230,230,230,0.7)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(12, -28);
-  ctx.lineTo(12, -6);
-  ctx.stroke();
+  // If a global variable for the current bobber position exists, draw the string to it
+  if (typeof window !== 'undefined' && window._currentBobberScreenPos) {
+    ctx.save();
+    ctx.strokeStyle = "rgba(230,230,230,0.85)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(12, -28); // rod tip
+    // Transform rod tip to screen coordinates
+    const m = ctx.getTransform();
+    // End point is in screen coordinates
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.moveTo(m.e + 12 * m.a - 28 * m.b, m.f + 12 * m.c - 28 * m.d); // rod tip in screen
+    ctx.lineTo(window._currentBobberScreenPos.x, window._currentBobberScreenPos.y);
+    ctx.stroke();
+    ctx.restore();
+  } else {
+    ctx.strokeStyle = "rgba(230,230,230,0.7)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(12, -28);
+    ctx.lineTo(12, -6);
+    ctx.stroke();
+  }
 
-  // Hook
-  ctx.fillStyle = "#ccc";
-  ctx.beginPath();
-  ctx.arc(12, -5, 1.5, 0, Math.PI * 2);
-  ctx.fill();
+  // (Removed static bobber/hook here; now only the dynamic bobber is drawn in drawFishing)
 
   ctx.restore();
 }
@@ -2257,6 +2284,57 @@ function drawHUD(logicalW, logicalH) {
   const bottomY = logicalH - 30;
 
   // Modern HUD background: blurred, rounded, gradient
+    // Draw fish icon and Q charge bar if holding fishing rod
+    if (typeof activeWeapon !== 'undefined' && activeWeapon === 2) {
+      // Position: left of HUD
+      const iconX = 70;
+      const iconY = logicalH - hudHeight / 2 - 10;
+      const iconSize = 44;
+      // Draw fish icon (simple stylized fish)
+      ctx.save();
+      ctx.translate(iconX, iconY);
+      ctx.scale(iconSize / 48, iconSize / 48);
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#2af';
+      ctx.fillStyle = '#bff';
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 18, 10, 0, 0, Math.PI * 2);
+      ctx.moveTo(-18, 0);
+      ctx.lineTo(-28, -10);
+      ctx.lineTo(-28, 10);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Eye
+      ctx.beginPath();
+      ctx.arc(10, -3, 2, 0, Math.PI * 2);
+      ctx.fillStyle = '#222';
+      ctx.fill();
+      ctx.restore();
+      // Draw charge bar (always visible, longer)
+      const barW = 110;
+      const barH = 12;
+      const barX = iconX - barW / 2 + 10;
+      const barY = iconY + iconSize / 2 + 10;
+      let qCharge = 0;
+      if (fishingCharging && typeof fishingChargeStart !== 'undefined') {
+        qCharge = Math.min(1, (performance.now() - fishingChargeStart) / chargeMaxMs);
+      }
+      ctx.save();
+      ctx.strokeStyle = '#2af';
+      ctx.lineWidth = 2.5;
+      ctx.fillStyle = '#bff';
+      ctx.beginPath();
+      ctx.roundRect(barX, barY, barW, barH, 5);
+      ctx.stroke();
+      if (qCharge > 0) {
+        ctx.fillStyle = '#2af';
+        ctx.beginPath();
+        ctx.roundRect(barX, barY, barW * qCharge, barH, 5);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
   ctx.save();
   ctx.globalAlpha = 0.85;
   ctx.fillStyle = ctx.createLinearGradient(0, logicalH - hudHeight, 0, logicalH);
