@@ -1,6 +1,7 @@
 import { NetworkClient } from "./network.js";
 const networkClient = new NetworkClient();
 
+import { createFishingComponent, startCast, updateFishing, drawFishing, handleFishingInput, FishingState } from "./fishing.js";
 
 // Assign a unique player ID for this session (not shared across tabs)
 const playerId = (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
@@ -8,7 +9,7 @@ window.playerId = playerId;
 
 import { sfxShoot, sfxCharged, sfxShotgun } from "./sfx.js";
 import { castAttack, castShotgun, updateAttacks, drawAttacks } from "./attack.js?v=300";
-import { castLure, updateLures, drawLures } from "./lure.js";
+
 window.castAttack = castAttack;
 window.castShotgun = castShotgun;
 import { drawWizard } from "./character.js?v=2";
@@ -418,6 +419,8 @@ const chargeMaxMs = 900;
 let chargeAutoReleased = false;
 let chargeSoundTimer = 0;
 
+let fishingComp = createFishingComponent();
+
 let eCooldownTimer = 0;
 let qKeyHeld = false;
 let wKeyHeld = false;
@@ -599,58 +602,37 @@ if (key === "1") activeWeapon = 1;
 if (key === "2") activeWeapon = 2;
 if (key === "3") activeWeapon = 3;
 if (activeWeapon === 2) {
-  // Fishing rod QWER animations
-  // Helper to cast lure
-  function doCastLure(power = 1) {
-    // Spawn lure at the same position as regular attack (front of player)
-    const sx = player.x + 38;
-    const sy = player.y + 26;
-    const angle = Math.atan2(facing.y, facing.x);
-    // DEBUG: Log and draw marker at spawn
-    console.log('[doCastLure] player.x:', player.x, 'player.y:', player.y);
-    console.log('[doCastLure] lure spawn sx:', sx, 'sy:', sy, 'facing:', facing);
-    if (window.ctx) {
-      window.ctx.save();
-      window.ctx.beginPath();
-      window.ctx.arc(sx - camera.x + canvas.width/2, sy - camera.y + canvas.height/2, 7, 0, Math.PI*2);
-      window.ctx.fillStyle = 'red';
-      window.ctx.globalAlpha = 0.7;
-      window.ctx.fill();
-      window.ctx.globalAlpha = 1.0;
-      window.ctx.restore();
-    }
-    castLure(sx, sy, Math.cos(angle), Math.sin(angle), { speed: 16 + 8 * power });
-  }
+  // Fishing rod QWER animations now start fishing logic
   if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
     qKeyHeld = true;
     energy -= energyCosts.q;
     fishingAnim = 1;
     fishingAnimType = 'q';
-    doCastLure(1);
+    startCast({ ...player, facing }, fishingComp);
   }
   if (key === "w" && !wKeyHeld && cooldowns.w <= 0 && energy >= energyCosts.w) {
     wKeyHeld = true;
     energy -= energyCosts.w;
     fishingAnim = 1;
     fishingAnimType = 'w';
-    doCastLure(1.2);
+    startCast({ ...player, facing }, fishingComp, 100);
   }
   if (key === "e" && !eKeyHeld && cooldowns.e <= 0 && energy >= energyCosts.e) {
     eKeyHeld = true;
     energy -= energyCosts.e;
     fishingAnim = 1;
     fishingAnimType = 'e';
-    doCastLure(1.5);
+    startCast({ ...player, facing }, fishingComp, 120);
   }
   if (key === "r" && !ulting && cooldowns.r <= 0 && energy >= energyCosts.r) {
     energy -= energyCosts.r;
     fishingAnim = 1;
     fishingAnimType = 'r';
-    doCastLure(2);
+    startCast({ ...player, facing }, fishingComp, 140);
   }
-  // Water rectangle for lure collision (approximate river area)
-  const waterRect = { x: 0, y: 320, width: canvas.width, height: 200 };
-  drawLures(ctx);
+ 
+  // Handle fishing input (e.g. hook with Q)
+  handleFishingInput(key, fishingComp);
 } else {
   if (key === "q" && !qKeyHeld && cooldowns.q <= 0 && energy >= energyCosts.q) {
     qKeyHeld = true;
@@ -1079,9 +1061,11 @@ function releaseCharge(){
 }
 
 function update(dt){
-  // Water rectangle for lure collision (approximate river area)
-  const waterRect = { x: 0, y: 320, width: canvas.width, height: 200 };
-  updateLures(dt, waterRect);
+
+  // Update fishing logic if fishing pole is active
+  if (activeWeapon === 2) {
+    updateFishing(dt, fishingComp);
+  }
 
   // Accordion animation
   if (activeWeapon === 3) {
@@ -2830,17 +2814,17 @@ if (window.remotePlayers) {
       // Draw accordion for remote player regardless of activeWeapon
       ctx.save();
       if (rp.facing && rp.facing.y > 0) {
-        ctx.translate(weaponX, weaponY + 18);
-        ctx.rotate(Math.PI / 2);
+        ctx.translate(weaponX, weaponY + 18); // Pull down
+        ctx.rotate(Math.PI / 2); // 90 degrees
       } else if (rp.facing && rp.facing.x > 0) {
-        ctx.translate(weaponX + 32, weaponY);
-        ctx.rotate(Math.PI / 2);
+        ctx.translate(weaponX + 32, weaponY); // More extreme push right
+        ctx.rotate(Math.PI / 2); // 90 degrees
       } else if (rp.facing && rp.facing.x < 0) {
-        ctx.translate(weaponX - 32, weaponY);
-        ctx.rotate(-Math.PI / 2);
+        ctx.translate(weaponX - 32, weaponY); // More extreme push left
+        ctx.rotate(-Math.PI / 2); // -90 degrees
       } else if (rp.facing && rp.facing.y < 0) {
         ctx.translate(weaponX, weaponY - 18);
-        ctx.rotate(-Math.PI / 2);
+        ctx.rotate(-Math.PI / 2); // -90 degrees
       } else {
         ctx.translate(weaponX, weaponY);
       }
@@ -3024,6 +3008,9 @@ if (activeWeapon === 1) {
     3,
     facing
   );
+
+  // Draw fishing bobber and effects
+  drawFishing(ctx, fishingComp, camera);
 
 } else if (activeWeapon === 3) {
 
