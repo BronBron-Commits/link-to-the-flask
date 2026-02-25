@@ -11,7 +11,8 @@ export const FishingState = {
     HOOK_WINDOW: 'HOOK_WINDOW',
     REELING: 'REELING',
     FAIL: 'FAIL',
-    SUCCESS: 'SUCCESS'
+    SUCCESS: 'SUCCESS',
+    WAIT_FOR_RECAST: 'WAIT_FOR_RECAST'
 };
 
 export function createFishingComponent() {
@@ -100,10 +101,16 @@ export function updateFishing(dt, fishingComp) {
             // Multiplayer: send FAIL event
         }
     } else if (fishingComp.state === FishingState.SUCCESS || fishingComp.state === FishingState.FAIL) {
-        // Cleanup
-        fishingComp.bobber = null;
-        fishingComp.state = FishingState.IDLE;
-        // Multiplayer: send SUCCESS event
+        // Cleanup, add short delay before allowing recast
+        if (!fishingComp.finishTime) {
+            fishingComp.finishTime = performance.now() + 800; // 800ms pause
+        }
+        if (performance.now() >= fishingComp.finishTime) {
+            fishingComp.bobber = null;
+            fishingComp.state = FishingState.WAIT_FOR_RECAST;
+            fishingComp.finishTime = null;
+            // Multiplayer: send SUCCESS event
+        }
     }
 }
 
@@ -144,6 +151,37 @@ export function drawFishing(ctx, fishingComp, camera) {
     ctx.stroke();
     ctx.globalAlpha = 1;
     ctx.restore();
+    // Draw fish if caught
+    if (bobber.fish) {
+        ctx.save();
+        ctx.globalAlpha = 0.95;
+        // Simple fish drawing, replace with sprite if available
+        ctx.beginPath();
+        ctx.ellipse(
+            bobber.x - camera.x + ctx.canvas.width/2 + 10,
+            bobber.y - camera.y + ctx.canvas.height/2 + 18,
+            12, 6, 0, 0, Math.PI * 2
+        );
+        ctx.fillStyle = '#3af';
+        ctx.fill();
+        ctx.strokeStyle = '#222';
+        ctx.stroke();
+        ctx.restore();
+    }
+        // Show 'Reel it in!' text if bobber is yellow (HOOK_WINDOW)
+        if (fishingComp.state === FishingState.HOOK_WINDOW && bobber.bite) {
+            ctx.save();
+            ctx.font = 'bold 18px Arial';
+            ctx.fillStyle = '#ff0';
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 2;
+            const text = 'Reel it in!';
+            const textX = bobber.x - camera.x + ctx.canvas.width/2 + 20;
+            const textY = bobber.y - camera.y + ctx.canvas.height/2 + 10;
+            ctx.strokeText(text, textX, textY);
+            ctx.fillText(text, textX, textY);
+            ctx.restore();
+        }
     // Hook animation
     if (bobber.hookAnim > 0) {
         ctx.save();
@@ -161,9 +199,23 @@ export function drawFishing(ctx, fishingComp, camera) {
 
 export function handleFishingInput(key, fishingComp) {
     const now = performance.now();
-    if (fishingComp.state === FishingState.HOOK_WINDOW && key === 'q') {
+    if (fishingComp.state === FishingState.HOOK_WINDOW && (key === ' ' || key === 'Spacebar' || key === 'Space')) {
+        // 50% chance to catch fish
+        const caughtFish = Math.random() < 0.5;
         fishingComp.state = FishingState.SUCCESS;
         // Multiplayer: send SUCCESS event
+        if (caughtFish && fishingComp.bobber) {
+            fishingComp.bobber.fish = {
+                // Example fish properties
+                type: 'fish',
+                sprite: 'fish', // Replace with actual sprite logic if needed
+                offsetY: 0
+            };
+        } else if (fishingComp.bobber) {
+            fishingComp.bobber.fish = null;
+        }
+    } else if (fishingComp.state === FishingState.WAIT_FOR_RECAST && (key === ' ' || key === 'Spacebar' || key === 'Space')) {
+        fishingComp.state = FishingState.IDLE;
     }
 }
 
