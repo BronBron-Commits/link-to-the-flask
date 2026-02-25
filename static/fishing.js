@@ -199,9 +199,11 @@ export function drawFishing(ctx, fishingComp, camera) {
 
 export function handleFishingInput(key, fishingComp) {
     const now = performance.now();
-    if (fishingComp.state === FishingState.HOOK_WINDOW && (key === ' ' || key === 'Spacebar' || key === 'Space')) {
-        // 50% chance to catch fish
-        const caughtFish = Math.random() < 0.5;
+    if ((fishingComp.state === FishingState.HOOK_WINDOW || fishingComp.state === FishingState.WAITING_FOR_BITE) && (key === ' ' || key === 'Spacebar' || key === 'Space')) {
+        let caughtFish = false;
+        if (fishingComp.state === FishingState.HOOK_WINDOW) {
+            caughtFish = Math.random() < 0.5;
+        }
         fishingComp.state = FishingState.SUCCESS;
         // Multiplayer: send SUCCESS event
         if (caughtFish && fishingComp.bobber) {
