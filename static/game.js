@@ -442,28 +442,83 @@ function draw() {
             const candleY = pos.y - 24; // push farther north
             ctx.fillStyle = '#fffbe6'; // candle body
             ctx.fillRect(candleX, candleY, 8, 16); // double size
-            // Animate stylized flame
+            // Animate more stylized magical flame
             const flameY = candleY - 8;
             const flameX = candleX + 4;
             const t = performance.now() * 0.001;
             const flicker = Math.sin(t*1.2) * 0.7 + Math.sin(t*0.5) * 0.3;
-            const flameRadius = 4 + flicker;
+            const flameHeight = 16 + flicker*2;
+            const flameWidth = 8 + flicker;
             ctx.save();
+            // Outer glow
             ctx.beginPath();
-            ctx.ellipse(flameX, flameY, flameRadius, flameRadius*0.7, 0, 0, Math.PI*2);
-            ctx.fillStyle = '#ffd700'; // gold outer
-            ctx.globalAlpha = 0.7;
+            ctx.moveTo(flameX, flameY + flameHeight*0.2);
+            ctx.bezierCurveTo(
+                flameX - flameWidth*0.5, flameY + flameHeight*0.5,
+                flameX - flameWidth*0.3, flameY - flameHeight*0.2,
+                flameX, flameY - flameHeight
+            );
+            ctx.bezierCurveTo(
+                flameX + flameWidth*0.3, flameY - flameHeight*0.2,
+                flameX + flameWidth*0.5, flameY + flameHeight*0.5,
+                flameX, flameY + flameHeight*0.2
+            );
+            ctx.closePath();
+            ctx.globalAlpha = 0.45;
+            ctx.fillStyle = '#ffd700';
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 12;
             ctx.fill();
+            ctx.shadowBlur = 0;
+            // Middle flame
             ctx.beginPath();
-            ctx.ellipse(flameX, flameY+2, flameRadius*0.6, flameRadius*0.4, 0, 0, Math.PI*2);
-            ctx.fillStyle = '#ff9800'; // orange inner
-            ctx.globalAlpha = 0.9;
+            ctx.moveTo(flameX, flameY + flameHeight*0.1);
+            ctx.bezierCurveTo(
+                flameX - flameWidth*0.3, flameY + flameHeight*0.3,
+                flameX - flameWidth*0.15, flameY - flameHeight*0.3,
+                flameX, flameY - flameHeight*0.7
+            );
+            ctx.bezierCurveTo(
+                flameX + flameWidth*0.15, flameY - flameHeight*0.3,
+                flameX + flameWidth*0.3, flameY + flameHeight*0.3,
+                flameX, flameY + flameHeight*0.1
+            );
+            ctx.closePath();
+            ctx.globalAlpha = 0.85;
+            ctx.fillStyle = '#ff9800';
             ctx.fill();
+            // Inner core
             ctx.beginPath();
-            ctx.ellipse(flameX, flameY+4, flameRadius*0.3, flameRadius*0.18, 0, 0, Math.PI*2);
-            ctx.fillStyle = '#fffbe6'; // white core
+            ctx.moveTo(flameX, flameY);
+            ctx.bezierCurveTo(
+                flameX - flameWidth*0.08, flameY - flameHeight*0.1,
+                flameX, flameY - flameHeight*0.25,
+                flameX, flameY - flameHeight*0.45
+            );
+            ctx.bezierCurveTo(
+                flameX, flameY - flameHeight*0.25,
+                flameX + flameWidth*0.08, flameY - flameHeight*0.1,
+                flameX, flameY
+            );
+            ctx.closePath();
             ctx.globalAlpha = 1.0;
+            ctx.fillStyle = '#fffbe6';
             ctx.fill();
+            // Sparkles
+            for(let s=0;s<3;s++){
+                ctx.save();
+                ctx.globalAlpha = 0.7;
+                ctx.fillStyle = '#ffd700';
+                ctx.beginPath();
+                ctx.arc(
+                    flameX + Math.sin(t*2+s)*flameWidth*0.4,
+                    flameY - flameHeight*0.7 + Math.cos(t*3+s)*3,
+                    1.2 + Math.sin(t*4+s)*0.7,
+                    0, Math.PI*2
+                );
+                ctx.fill();
+                ctx.restore();
+            }
             ctx.restore();
             ctx.restore();
         } else if (i === 1) {
