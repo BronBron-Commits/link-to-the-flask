@@ -157,11 +157,196 @@ function draw() {
     const tableCY = charY + 32;
     const tableRX = 44; // horizontal radius
     const tableRY = 28; // vertical radius
-    // Draw larger black carpet with frills under table
+    // Draw two bookshelves north of carpet, with fireplace between them
     const carpetW = tableRX * 4.2 * 1.5;
     const carpetH = tableRY * 3.2 * 1.5;
     const carpetX = tableCX - carpetW/2;
     const carpetY = tableCY + tableRY - carpetH/2 - 24; // push up a bit more
+    // Bookshelf dimensions
+    const shelfW = carpetW * 0.28;
+    const shelfH = 136; // doubled height
+    const shelfY = carpetY - shelfH - 24;
+    // Left bookshelf
+    const leftShelfX = carpetX + 16;
+    // Right bookshelf
+    const rightShelfX = carpetX + carpetW - shelfW - 16;
+    // Fireplace dimensions and position
+    const fireplaceW = carpetW * 0.22;
+    const fireplaceH = 54;
+    const fireplaceX = carpetX + (carpetW - fireplaceW)/2;
+    const fireplaceY = shelfY + shelfH - fireplaceH;
+    // Draw left bookshelf
+    ctx.save();
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(leftShelfX, shelfY, shelfW, shelfH);
+    ctx.fillStyle = '#a0522d';
+    for(let s=0;s<3;s++){
+        ctx.fillRect(leftShelfX, shelfY + 8 + s*20, shelfW, 4);
+    }
+    // Draw cabinets underneath books
+    const cabinetH = 32;
+    ctx.fillStyle = '#6d4c2b';
+    ctx.fillRect(leftShelfX, shelfY + shelfH - cabinetH, shelfW, cabinetH);
+    // Cabinet doors
+    ctx.fillStyle = '#a0522d';
+    ctx.fillRect(leftShelfX + 6, shelfY + shelfH - cabinetH + 6, shelfW/2 - 12, cabinetH - 12);
+    ctx.fillRect(leftShelfX + shelfW/2 + 6, shelfY + shelfH - cabinetH + 6, shelfW/2 - 12, cabinetH - 12);
+    // Handles
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(leftShelfX + shelfW/2 - 10, shelfY + shelfH - cabinetH + cabinetH/2, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(leftShelfX + shelfW/2 + 10, shelfY + shelfH - cabinetH + cabinetH/2, 4, 0, Math.PI*2);
+    ctx.fill();
+    // Draw books on left bookshelf
+    const bookColors = ['#c62828', '#388e3c', '#1565c0'];
+    const gold = '#ffd700';
+    const booksPerLayer = Math.floor((shelfW - 16) / 12);
+    if (!window.bookshelfColorOrderLeft) {
+        window.bookshelfColorOrderLeft = [];
+        for(let layer=0;layer<3;layer++){
+            let colorOrder = [];
+            for(let i=0;i<booksPerLayer;i++){
+                colorOrder.push(bookColors[Math.floor(Math.random()*bookColors.length)]);
+            }
+            window.bookshelfColorOrderLeft.push(colorOrder);
+        }
+    }
+    for(let layer=0;layer<3;layer++){
+        let colorOrder = window.bookshelfColorOrderLeft[layer];
+        for(let i=0;i<booksPerLayer;i++){
+            const bookX = leftShelfX + 8 + i*12;
+            const bookY = shelfY + 12 + layer*20;
+            let baseColor = colorOrder[i];
+            let h,s,l;
+            if (!window.bookshelfHSL) window.bookshelfHSL = {};
+            if (!window.bookshelfHSL[baseColor]) {
+                let r = parseInt(baseColor.slice(1,3),16)/255;
+                let g = parseInt(baseColor.slice(3,5),16)/255;
+                let b = parseInt(baseColor.slice(5,7),16)/255;
+                let max = Math.max(r,g,b), min = Math.min(r,g,b);
+                l = (max+min)/2;
+                if(max==min){h=s=0;}else{
+                    let d = max-min;
+                    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+                    switch(max){
+                        case r: h=(g-b)/d+(g<b?6:0);break;
+                        case g: h=(b-r)/d+2;break;
+                        case b: h=(r-g)/d+4;break;
+                    }
+                    h/=6;
+                }
+                window.bookshelfHSL[baseColor] = {h,s,l};
+            }
+            let hsl = window.bookshelfHSL[baseColor];
+            let offset = ((layer+1)*17 + i*31) % 100 / 500;
+            let l2 = Math.min(1, Math.max(0, hsl.l + offset - 0.05));
+            let s2 = Math.min(1, Math.max(0, hsl.s + offset/2 - 0.02));
+            ctx.fillStyle = `hsl(${Math.round(hsl.h*360)},${Math.round(s2*100)}%,${Math.round(l2*100)}%)`;
+            ctx.fillRect(bookX, bookY, 10, 16);
+            ctx.fillStyle = gold;
+            ctx.fillRect(bookX + 2, bookY + 2, 2, 12);
+        }
+    }
+    ctx.restore();
+    // Draw right bookshelf
+    ctx.save();
+    ctx.fillStyle = '#8b5a2b';
+    ctx.fillRect(rightShelfX, shelfY, shelfW, shelfH);
+    ctx.fillStyle = '#a0522d';
+    for(let s=0;s<3;s++){
+        ctx.fillRect(rightShelfX, shelfY + 8 + s*20, shelfW, 4);
+    }
+    // Draw cabinets underneath books
+    ctx.fillStyle = '#6d4c2b';
+    ctx.fillRect(rightShelfX, shelfY + shelfH - cabinetH, shelfW, cabinetH);
+    // Cabinet doors
+    ctx.fillStyle = '#a0522d';
+    ctx.fillRect(rightShelfX + 6, shelfY + shelfH - cabinetH + 6, shelfW/2 - 12, cabinetH - 12);
+    ctx.fillRect(rightShelfX + shelfW/2 + 6, shelfY + shelfH - cabinetH + 6, shelfW/2 - 12, cabinetH - 12);
+    // Handles
+    ctx.fillStyle = '#ffd700';
+    ctx.beginPath();
+    ctx.arc(rightShelfX + shelfW/2 - 10, shelfY + shelfH - cabinetH + cabinetH/2, 4, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(rightShelfX + shelfW/2 + 10, shelfY + shelfH - cabinetH + cabinetH/2, 4, 0, Math.PI*2);
+    ctx.fill();
+    // Draw books on right bookshelf
+    if (!window.bookshelfColorOrderRight) {
+        window.bookshelfColorOrderRight = [];
+        for(let layer=0;layer<3;layer++){
+            let colorOrder = [];
+            for(let i=0;i<booksPerLayer;i++){
+                colorOrder.push(bookColors[Math.floor(Math.random()*bookColors.length)]);
+            }
+            window.bookshelfColorOrderRight.push(colorOrder);
+        }
+    }
+    for(let layer=0;layer<3;layer++){
+        let colorOrder = window.bookshelfColorOrderRight[layer];
+        for(let i=0;i<booksPerLayer;i++){
+            const bookX = rightShelfX + 8 + i*12;
+            const bookY = shelfY + 12 + layer*20;
+            let baseColor = colorOrder[i];
+            let h,s,l;
+            if (!window.bookshelfHSL) window.bookshelfHSL = {};
+            if (!window.bookshelfHSL[baseColor]) {
+                let r = parseInt(baseColor.slice(1,3),16)/255;
+                let g = parseInt(baseColor.slice(3,5),16)/255;
+                let b = parseInt(baseColor.slice(5,7),16)/255;
+                let max = Math.max(r,g,b), min = Math.min(r,g,b);
+                l = (max+min)/2;
+                if(max==min){h=s=0;}else{
+                    let d = max-min;
+                    s = l>0.5 ? d/(2-max-min) : d/(max+min);
+                    switch(max){
+                        case r: h=(g-b)/d+(g<b?6:0);break;
+                        case g: h=(b-r)/d+2;break;
+                        case b: h=(r-g)/d+4;break;
+                    }
+                    h/=6;
+                }
+                window.bookshelfHSL[baseColor] = {h,s,l};
+            }
+            let hsl = window.bookshelfHSL[baseColor];
+            let offset = ((layer+1)*17 + i*31) % 100 / 500;
+            let l2 = Math.min(1, Math.max(0, hsl.l + offset - 0.05));
+            let s2 = Math.min(1, Math.max(0, hsl.s + offset/2 - 0.02));
+            ctx.fillStyle = `hsl(${Math.round(hsl.h*360)},${Math.round(s2*100)}%,${Math.round(l2*100)}%)`;
+            ctx.fillRect(bookX, bookY, 10, 16);
+            ctx.fillStyle = gold;
+            ctx.fillRect(bookX + 2, bookY + 2, 2, 12);
+        }
+    }
+    ctx.restore();
+    // Draw fireplace between bookshelves
+    ctx.save();
+    ctx.fillStyle = '#bdbdbd'; // stone
+    ctx.fillRect(fireplaceX, fireplaceY, fireplaceW, fireplaceH);
+    ctx.fillStyle = '#888'; // inner shadow
+    ctx.fillRect(fireplaceX+6, fireplaceY+6, fireplaceW-12, fireplaceH-18);
+    // Draw fire
+    const fireX = fireplaceX + fireplaceW/2;
+    const fireY = fireplaceY + fireplaceH - 22;
+    ctx.beginPath();
+    ctx.ellipse(fireX, fireY, fireplaceW*0.18, 14, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#ffd700';
+    ctx.globalAlpha = 0.8;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(fireX, fireY-8, fireplaceW*0.12, 8, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#ff9800';
+    ctx.globalAlpha = 0.9;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(fireX, fireY-14, fireplaceW*0.07, 5, 0, 0, Math.PI*2);
+    ctx.fillStyle = '#c62828';
+    ctx.globalAlpha = 1.0;
+    ctx.fill();
+    ctx.restore();
+    // Draw larger black carpet with frills under table
     ctx.save();
     ctx.fillStyle = '#181018'; // black base
     ctx.fillRect(carpetX, carpetY, carpetW, carpetH);
@@ -257,10 +442,29 @@ function draw() {
             const candleY = pos.y - 24; // push farther north
             ctx.fillStyle = '#fffbe6'; // candle body
             ctx.fillRect(candleX, candleY, 8, 16); // double size
+            // Animate stylized flame
+            const flameY = candleY - 8;
+            const flameX = candleX + 4;
+            const t = performance.now() * 0.001;
+            const flicker = Math.sin(t*1.2) * 0.7 + Math.sin(t*0.5) * 0.3;
+            const flameRadius = 4 + flicker;
+            ctx.save();
             ctx.beginPath();
-            ctx.arc(candleX+4, candleY, 4, Math.PI, 0);
-            ctx.fillStyle = '#ffd700'; // flame
+            ctx.ellipse(flameX, flameY, flameRadius, flameRadius*0.7, 0, 0, Math.PI*2);
+            ctx.fillStyle = '#ffd700'; // gold outer
+            ctx.globalAlpha = 0.7;
             ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(flameX, flameY+2, flameRadius*0.6, flameRadius*0.4, 0, 0, Math.PI*2);
+            ctx.fillStyle = '#ff9800'; // orange inner
+            ctx.globalAlpha = 0.9;
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(flameX, flameY+4, flameRadius*0.3, flameRadius*0.18, 0, 0, Math.PI*2);
+            ctx.fillStyle = '#fffbe6'; // white core
+            ctx.globalAlpha = 1.0;
+            ctx.fill();
+            ctx.restore();
             ctx.restore();
         } else if (i === 1) {
             // 2 pips
