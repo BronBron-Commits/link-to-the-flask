@@ -327,24 +327,83 @@ function draw() {
     ctx.fillRect(fireplaceX, fireplaceY, fireplaceW, fireplaceH);
     ctx.fillStyle = '#888'; // inner shadow
     ctx.fillRect(fireplaceX+6, fireplaceY+6, fireplaceW-12, fireplaceH-18);
-    // Draw fire
+    // Draw stylized magical fire in fireplace
     const fireX = fireplaceX + fireplaceW/2;
     const fireY = fireplaceY + fireplaceH - 22;
+    const t = performance.now() * 0.001;
+    const flicker = Math.sin(t*1.7) * 2.2 + Math.sin(t*0.7) * 1.1;
+    const flameHeight = 24 + flicker;
+    const flameWidth = fireplaceW * 0.18 + flicker*0.5;
+    ctx.save();
+    // Outer glow
     ctx.beginPath();
-    ctx.ellipse(fireX, fireY, fireplaceW*0.18, 14, 0, 0, Math.PI*2);
+    ctx.moveTo(fireX, fireY + flameHeight*0.2);
+    ctx.bezierCurveTo(
+        fireX - flameWidth*0.7, fireY + flameHeight*0.5,
+        fireX - flameWidth*0.4, fireY - flameHeight*0.2,
+        fireX, fireY - flameHeight
+    );
+    ctx.bezierCurveTo(
+        fireX + flameWidth*0.4, fireY - flameHeight*0.2,
+        fireX + flameWidth*0.7, fireY + flameHeight*0.5,
+        fireX, fireY + flameHeight*0.2
+    );
+    ctx.closePath();
+    ctx.globalAlpha = 0.35;
     ctx.fillStyle = '#ffd700';
-    ctx.globalAlpha = 0.8;
+    ctx.shadowColor = '#ffd700';
+    ctx.shadowBlur = 18;
     ctx.fill();
+    ctx.shadowBlur = 0;
+    // Middle flame
     ctx.beginPath();
-    ctx.ellipse(fireX, fireY-8, fireplaceW*0.12, 8, 0, 0, Math.PI*2);
+    ctx.moveTo(fireX, fireY + flameHeight*0.1);
+    ctx.bezierCurveTo(
+        fireX - flameWidth*0.4, fireY + flameHeight*0.3,
+        fireX - flameWidth*0.2, fireY - flameHeight*0.3,
+        fireX, fireY - flameHeight*0.7
+    );
+    ctx.bezierCurveTo(
+        fireX + flameWidth*0.2, fireY - flameHeight*0.3,
+        fireX + flameWidth*0.4, fireY + flameHeight*0.3,
+        fireX, fireY + flameHeight*0.1
+    );
+    ctx.closePath();
+    ctx.globalAlpha = 0.85;
     ctx.fillStyle = '#ff9800';
-    ctx.globalAlpha = 0.9;
     ctx.fill();
+    // Inner core
     ctx.beginPath();
-    ctx.ellipse(fireX, fireY-14, fireplaceW*0.07, 5, 0, 0, Math.PI*2);
-    ctx.fillStyle = '#c62828';
+    ctx.moveTo(fireX, fireY);
+    ctx.bezierCurveTo(
+        fireX - flameWidth*0.12, fireY - flameHeight*0.1,
+        fireX, fireY - flameHeight*0.25,
+        fireX, fireY - flameHeight*0.45
+    );
+    ctx.bezierCurveTo(
+        fireX, fireY - flameHeight*0.25,
+        fireX + flameWidth*0.12, fireY - flameHeight*0.1,
+        fireX, fireY
+    );
+    ctx.closePath();
     ctx.globalAlpha = 1.0;
+    ctx.fillStyle = '#fffbe6';
     ctx.fill();
+    // Sparkles
+    for(let s=0;s<6;s++){
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        ctx.fillStyle = '#ffd700';
+        ctx.beginPath();
+        ctx.arc(
+            fireX + Math.sin(t*2+s)*flameWidth*0.6,
+            fireY - flameHeight*0.7 + Math.cos(t*3+s)*6,
+            2 + Math.sin(t*4+s)*1.2,
+            0, Math.PI*2
+        );
+        ctx.fill();
+        ctx.restore();
+    }
     ctx.restore();
     // Draw larger black carpet with frills under table
     ctx.save();
@@ -544,6 +603,35 @@ function draw() {
         ctx.restore();
     }
     ctx.restore();
+        // Add click handler for purple dice
+        if (!window.diceClickHandlerAdded) {
+            window.diceClickHandlerAdded = true;
+            canvas.addEventListener('click', function(e) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = (e.clientX - rect.left - canvas.width/2) / zoom + canvas.width/2;
+                const mouseY = (e.clientY - rect.top - canvas.height/2) / zoom + canvas.height/2;
+                for (let i = 0; i < dicePositions.length; i++) {
+                    const pos = dicePositions[i];
+                    if (
+                        mouseX >= pos.x && mouseX <= pos.x + diceSize &&
+                        mouseY >= pos.y && mouseY <= pos.y + diceSize
+                    ) {
+                        // Only trigger for first dice (purple dice with candle)
+                        if (i === 0) {
+                            // Hide canvas and load 3D scene
+                            canvas.style.display = 'none';
+                            // Dynamically load dice3d.js
+                            // Dynamically load dice3d.js
+                            const script = document.createElement('script');
+                            script.type = 'module';
+                            script.src = '/static/dice3d.js';
+                            document.body.appendChild(script);
+                        }
+                        break;
+                    }
+                }
+            });
+        }
 
     // Draw chair to the left of circular table
     const tableR = tableRX; // define tableR for compatibility
