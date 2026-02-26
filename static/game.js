@@ -158,10 +158,10 @@ function draw() {
     const tableRX = 44; // horizontal radius
     const tableRY = 28; // vertical radius
     // Draw larger black carpet with frills under table
-    const carpetW = tableRX * 4.2;
-    const carpetH = tableRY * 3.2;
+    const carpetW = tableRX * 4.2 * 1.5;
+    const carpetH = tableRY * 3.2 * 1.5;
     const carpetX = tableCX - carpetW/2;
-    const carpetY = tableCY + tableRY - carpetH/2;
+    const carpetY = tableCY + tableRY - carpetH/2 - 24; // push up a bit more
     ctx.save();
     ctx.fillStyle = '#181018'; // black base
     ctx.fillRect(carpetX, carpetY, carpetW, carpetH);
@@ -251,6 +251,17 @@ function draw() {
             ctx.beginPath();
             ctx.arc(pos.x + diceSize/2, pos.y + diceSize/2, 3.5, 0, Math.PI*2);
             ctx.fill();
+            // Draw larger candle farther north on top left of this dice
+            ctx.save();
+            const candleX = pos.x + 2;
+            const candleY = pos.y - 24; // push farther north
+            ctx.fillStyle = '#fffbe6'; // candle body
+            ctx.fillRect(candleX, candleY, 8, 16); // double size
+            ctx.beginPath();
+            ctx.arc(candleX+4, candleY, 4, Math.PI, 0);
+            ctx.fillStyle = '#ffd700'; // flame
+            ctx.fill();
+            ctx.restore();
         } else if (i === 1) {
             // 2 pips
             ctx.beginPath();
@@ -306,13 +317,14 @@ function draw() {
 }
 
 let last=performance.now();
+
 setInterval(()=>{
-const now=performance.now();
-const dt=now-last; last=now;
-idleTime+=dt;
-update();
+    const now=performance.now();
+    const dt=now-last; last=now;
+    idleTime+=dt;
+    update();
     updateAttacks(dt);
-draw();
+    draw();
 },33);
 
 // Joystick and button code fully removed
