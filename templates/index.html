@@ -4,58 +4,26 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Engine View</title>
 <style>
+/* Removed invalid CSS properties */
 body{background:#111;color:white;text-align:center;font-family:sans-serif;margin:0}
-canvas{background:#222;margin-top:10px}
-
-#controls{
-position:fixed;
-bottom:20px;
-left:0; right:0;
-display:flex;
-justify-content:space-between;
-padding:0 20px;
-}
-
-#stick{
-width:140px;height:140px;
-background:#333;border-radius:50%;
-position:relative;
-touch-action:none;
-}
-
-#knob{
-width:60px;height:60px;
-background:#888;border-radius:50%;
-position:absolute;
-left:40px;top:40px;
-}
-
-.buttons{
-display:flex;
-flex-direction:column;
-gap:14px;
-}
-
-button{
-font-size:18px;
-padding:18px 24px;
-border:none;
-border-radius:10px;
-background:#555;color:white;
-}
+canvas{background:#222;display:block;position:fixed;top:0;left:0;margin:0;padding:0;z-index:0;}
+/* Joystick and button styles removed */
 </style>
 </head>
 <body>
 
 <canvas id="game" width="400" height="400"></canvas>
+<script>
+function resizeCanvas() {
+	const canvas = document.getElementById('game');
+	canvas.width = window.innerWidth;
+	canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('DOMContentLoaded', resizeCanvas);
+</script>
 
-<div id="controls">
-  <div id="stick"><div id="knob"></div></div>
-  <div class="buttons">
-    <button onclick="action('A')">A</button>
-    <button onclick="action('B')">B</button>
-  </div>
-</div>
+<!-- Joystick and button UI removed -->
 
 <!-- THIS loads your actual game code -->
 <script type="module" src="/static/game.js?v=99"></script>
