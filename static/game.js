@@ -1,4 +1,3 @@
-
 import { castAttack, updateAttacks, drawAttacks } from "./attack.js?v=1";
 import { drawWizard } from "./character.js?v=2";
 import { drawScepter } from "./weapon.js?v=1";
@@ -8,21 +7,20 @@ const ctx = canvas.getContext("2d");
 
 // Zoom state
 let zoom = 1.0;
-const minZoom = 0.9;
-const maxZoom = 1.2;
+const maxZoom = 2.0;
+function getMinZoom() {
+    // Minimum zoom so the entire canvas fits within the window
+    const w = canvas.width;
+    const h = canvas.height;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+    const scaleW = w / winW;
+    const scaleH = h / winH;
+    return Math.max(scaleW, scaleH, 0.1); // never allow less than 0.1
+}
 
 // Mouse wheel zoom handler
-canvas.addEventListener('wheel', function(e) {
-    // Only preventDefault if zooming, not for passive scrolling
-    if (e.ctrlKey || e.altKey || e.metaKey) e.preventDefault();
-    const delta = Math.sign(e.deltaY);
-    // Further reduce zoom velocity for more gradual zooming
-    zoom -= delta * 0.01;
-    // Clamp zoom strictly and round to avoid floating point drift
-    if (zoom < minZoom) zoom = minZoom;
-    if (zoom > maxZoom) zoom = maxZoom;
-    zoom = Math.round(zoom * 1000) / 1000;
-}, { passive: true });
+// Zooming removed: no mouse wheel zoom handler
 
 let joy = { x: 0, y: 0 };
 const tileSize = 40;
@@ -152,8 +150,6 @@ function draw() {
     ctx.scale(zoom, zoom);
     ctx.translate(-canvas.width/2, -canvas.height/2);
     drawWoodFloor(ctx, canvas.width, canvas.height);
-    drawAttacks(ctx);
-
     // Draw improved circular 3D table to the left of character
     const charX = canvas.width/2;
     const charY = canvas.height/2;
@@ -161,7 +157,33 @@ function draw() {
     const tableCY = charY + 32;
     const tableRX = 44; // horizontal radius
     const tableRY = 28; // vertical radius
+    // Draw larger black carpet with frills under table
+    const carpetW = tableRX * 4.2;
+    const carpetH = tableRY * 3.2;
+    const carpetX = tableCX - carpetW/2;
+    const carpetY = tableCY + tableRY - carpetH/2;
     ctx.save();
+    ctx.fillStyle = '#181018'; // black base
+    ctx.fillRect(carpetX, carpetY, carpetW, carpetH);
+    // Draw frills on left and right ends
+    const frillCount = 18;
+    const frillLen = 16;
+    const frillSpacing = carpetH / (frillCount+1);
+    ctx.strokeStyle = '#bdbdbd';
+    ctx.lineWidth = 2;
+    for(let i=1;i<=frillCount;i++){
+        // Left frills
+        ctx.beginPath();
+        ctx.moveTo(carpetX, carpetY + i*frillSpacing);
+        ctx.lineTo(carpetX - frillLen, carpetY + i*frillSpacing + Math.sin(i)*4);
+        ctx.stroke();
+        // Right frills
+        ctx.beginPath();
+        ctx.moveTo(carpetX + carpetW, carpetY + i*frillSpacing);
+        ctx.lineTo(carpetX + carpetW + frillLen, carpetY + i*frillSpacing + Math.sin(i)*4);
+        ctx.stroke();
+    }
+    ctx.restore();
     // Table top (ellipse for perspective)
     ctx.beginPath();
     ctx.ellipse(tableCX, tableCY, tableRX, tableRY, 0, 0, Math.PI*2);
