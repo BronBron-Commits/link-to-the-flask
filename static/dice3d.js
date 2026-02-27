@@ -625,6 +625,30 @@ leaveBtn.addEventListener('click', () => {
 });
 document.body.appendChild(leaveBtn);
 
+// Controls legend
+const legendDiv = document.createElement('div');
+legendDiv.style.position = 'fixed';
+legendDiv.style.top = '60px';
+legendDiv.style.left = '16px';
+legendDiv.style.zIndex = '1001';
+legendDiv.style.background = 'rgba(34,34,34,0.92)';
+legendDiv.style.color = '#ffe066';
+legendDiv.style.padding = '12px 18px 12px 18px';
+legendDiv.style.borderRadius = '8px';
+legendDiv.style.fontSize = '1.05em';
+legendDiv.style.fontFamily = 'sans-serif';
+legendDiv.style.lineHeight = '1.6';
+legendDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+legendDiv.innerHTML = `
+<b>Controls</b><br>
+<span style="color:#fff">W/S</span> &mdash; Raise/Lower Camera<br>
+<span style="color:#fff">A/D</span> &mdash; Orbit Camera<br>
+<span style="color:#fff">Mouse Drag</span> &mdash; Look Around<br>
+<span style="color:#fff">Mouse Wheel</span> &mdash; Zoom<br>
+<span style="color:#fff">Click Die</span> &mdash; Roll Die<br>
+`;
+document.body.appendChild(legendDiv);
+
 // Display winning numbers at the top of the screen
 const resultDiv = document.createElement('div');
 resultDiv.style.position = 'fixed';
