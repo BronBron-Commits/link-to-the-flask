@@ -227,6 +227,13 @@ scene.add(ambient);
 const radius = 0.6;
 const d20Geometry = new THREE.IcosahedronGeometry(radius, 0);
 
+// Edge highlight (glow) setup
+const EDGE_GLOW_COLOR = 0x8fd6ff; // light blue
+let d20EdgeGlow = null;
+let d20bEdgeGlow = null;
+let d20Hovered = false;
+let d20bHovered = false;
+
 // Create procedural royal blue + gold veins texture
 const d20Canvas = document.createElement('canvas');
 d20Canvas.width = 512;
@@ -327,6 +334,50 @@ renderer.domElement.addEventListener('click', (e) => {
             // Spawn particle blast at second die position
             spawnParticleBlast(d20b.position.clone(), true);
         }
+    }
+});
+
+// Die hover detection and edge glow
+renderer.domElement.addEventListener('mousemove', (e) => {
+    const mouse = new THREE.Vector2(
+        (e.clientX / renderer.domElement.clientWidth) * 2 - 1,
+        -(e.clientY / renderer.domElement.clientHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects([d20, d20b], true);
+    let foundD20 = false, foundD20b = false;
+    for (let i = 0; i < intersects.length; i++) {
+        if (intersects[i].object === d20 || d20.children.includes(intersects[i].object)) foundD20 = true;
+        if (intersects[i].object === d20b || d20b.children.includes(intersects[i].object)) foundD20b = true;
+    }
+    // d20 hover
+    if (foundD20 && !d20Hovered) {
+        d20Hovered = true;
+        if (!d20EdgeGlow) {
+            const edges = new THREE.EdgesGeometry(d20.geometry);
+            d20EdgeGlow = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: EDGE_GLOW_COLOR, linewidth: 2 }));
+            d20EdgeGlow.renderOrder = 10;
+            d20.add(d20EdgeGlow);
+        }
+        d20EdgeGlow.visible = true;
+    } else if (!foundD20 && d20Hovered) {
+        d20Hovered = false;
+        if (d20EdgeGlow) d20EdgeGlow.visible = false;
+    }
+    // d20b hover
+    if (foundD20b && !d20bHovered) {
+        d20bHovered = true;
+        if (!d20bEdgeGlow) {
+            const edges = new THREE.EdgesGeometry(d20b.geometry);
+            d20bEdgeGlow = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: EDGE_GLOW_COLOR, linewidth: 2 }));
+            d20bEdgeGlow.renderOrder = 10;
+            d20b.add(d20bEdgeGlow);
+        }
+        d20bEdgeGlow.visible = true;
+    } else if (!foundD20b && d20bHovered) {
+        d20bHovered = false;
+        if (d20bEdgeGlow) d20bEdgeGlow.visible = false;
     }
 });
 
