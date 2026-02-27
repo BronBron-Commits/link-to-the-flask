@@ -263,8 +263,11 @@ renderer.domElement.addEventListener('click', (e) => {
 const positionAttr = d20Geometry.attributes.position;
 let outwardOffset = 0.05; // Distance to move numbers outside faces
 
-// Store face centers and normals for both dice
-const d20Faces = [];
+// Store face centers and normals for each die separately
+const d20FacesA = [];
+const d20FacesB = [];
+const d20NumbersA = [];
+const d20NumbersB = [];
 for (let i = 0; i < positionAttr.count; i += 3) {
     // Each triangle = 3 vertices
     const vA = new THREE.Vector3().fromBufferAttribute(positionAttr, i);
@@ -287,7 +290,8 @@ for (let i = 0; i < positionAttr.count; i += 3) {
     if (normal.dot(center) < 0) {
         normal.negate();
     }
-    d20Faces.push({ center, normal });
+    d20FacesA.push({ center: center.clone(), normal: normal.clone() });
+    d20FacesB.push({ center: center.clone(), normal: normal.clone() });
     // Create number texture
     const canvas = document.createElement('canvas');
     canvas.width = 256;
@@ -302,28 +306,44 @@ for (let i = 0; i < positionAttr.count; i += 3) {
     ctx.strokeText((i / 3 + 1).toString(), 128, 128);
     ctx.fillText((i / 3 + 1).toString(), 128, 128);
     const texture = new THREE.CanvasTexture(canvas);
-    const plane = new THREE.Mesh(
+    const planeAMaterial = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        side: THREE.DoubleSide
+    });
+    const planeA = new THREE.Mesh(
         new THREE.PlaneGeometry(0.5, 0.5),
-        new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            side: THREE.DoubleSide
-        })
+        planeAMaterial
     );
     // Position slightly outside face
-    plane.position.copy(
+    planeA.position.copy(
         center.clone().add(
             normal.clone().multiplyScalar(outwardOffset)
         )
     );
     // Face outward
-    plane.lookAt(
-        plane.position.clone().add(normal)
+    planeA.lookAt(
+        planeA.position.clone().add(normal)
     );
-    d20.add(plane);
-    // Add numbers to second die
-    const planeB = plane.clone();
+    d20.add(planeA);
+    d20NumbersA.push(planeA);
+
+    // Add numbers to second die (separate mesh, unique material)
+    const planeBMaterial = planeAMaterial.clone();
+    const planeB = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.5, 0.5),
+        planeBMaterial
+    );
+    planeB.position.copy(
+        center.clone().add(
+            normal.clone().multiplyScalar(outwardOffset)
+        )
+    );
+    planeB.lookAt(
+        planeB.position.clone().add(normal)
+    );
     d20b.add(planeB);
+    d20NumbersB.push(planeB);
 }
 
 // Highlight top face for both dice
@@ -341,9 +361,33 @@ function highlightTopFace(die, faces) {
         }
     }
     // Remove highlighting: all numbers same color and opacity
-    for (let i = 0; i < die.children.length; i++) {
-        die.children[i].material.color.set('#ffffff');
-        die.children[i].material.opacity = 0.85;
+    let numberMeshes;
+    let highlightColor;
+    if (die === d20) {
+        numberMeshes = d20NumbersA;
+        highlightColor = '#ffe066'; // bright yellow for die 1
+    } else if (die === d20b) {
+        numberMeshes = d20NumbersB;
+        highlightColor = '#66e0ff'; // bright blue for die 2
+    } else {
+        numberMeshes = die.children;
+        highlightColor = '#ffffff';
+    }
+    for (let i = 0; i < numberMeshes.length; i++) {
+        numberMeshes[i].material.color.set('#ffffff');
+        numberMeshes[i].material.opacity = 0.85;
+        numberMeshes[i].material.emissive = undefined;
+        numberMeshes[i].material.emissiveIntensity = undefined;
+    }
+    // Glow the top face
+    if (topIdx >= 0 && numberMeshes[topIdx]) {
+        numberMeshes[topIdx].material.color.set(highlightColor);
+        numberMeshes[topIdx].material.opacity = 1.0;
+        // Add emissive glow if MeshStandardMaterial
+        if (numberMeshes[topIdx].material.emissive !== undefined) {
+            numberMeshes[topIdx].material.emissive.set(highlightColor);
+            numberMeshes[topIdx].material.emissiveIntensity = 0.8;
+        }
     }
     return topIdx + 1; // Face number
 }
@@ -436,8 +480,8 @@ scene.add(bevel);
 // Bookshelves removed
 
 // Add a lit candle to the table
-const candleHeight = 0.35;
-const candleRadius = 0.08;
+const candleHeight = 0.7; // Increased height
+const candleRadius = 0.16; // Increased radius
 const candleGeometry = new THREE.CylinderGeometry(candleRadius, candleRadius, candleHeight, 32);
 const candleMaterial = new THREE.MeshStandardMaterial({ color: 0xf5e6c2, roughness: 0.6 });
 const candle = new THREE.Mesh(candleGeometry, candleMaterial);
@@ -446,10 +490,40 @@ candle.position.set(candleX, -1.5 + tableHeight / 2 + candleHeight / 2, 0.7);
 scene.add(candle);
 
 // Candle flame (small sphere)
-const flameGeometry = new THREE.SphereGeometry(0.04, 16, 16);
-const flameMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700, emissive: 0xffa500 });
+const flameGeometry = new THREE.SphereGeometry(0.06, 24, 24); // Slightly larger, smoother
+// Create a custom shader material for a stylized gradient flame
+const flameMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        color1: { value: new THREE.Color(0xffd700) }, // gold
+        color2: { value: new THREE.Color(0xff6600) }, // orange
+        color3: { value: new THREE.Color(0xffffff) }, // white core
+        time: { value: 0 }
+    },
+    vertexShader: `
+        varying vec3 vPosition;
+        void main() {
+            vPosition = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 color1;
+        uniform vec3 color2;
+        uniform vec3 color3;
+        uniform float time;
+        varying vec3 vPosition;
+        void main() {
+            float intensity = 1.0 - length(vPosition) * 1.2;
+            float flicker = 0.98 + sin(time * 0.8) * 0.04 + fract(sin(dot(vPosition.xy, vec2(12.9898,78.233))) * 43758.5453) * 0.08;
+            vec3 color = mix(color2, color1, intensity);
+            color = mix(color, color3, pow(intensity, 8.0));
+            gl_FragColor = vec4(color * flicker, intensity);
+        }
+    `,
+    transparent: true
+});
 const flame = new THREE.Mesh(flameGeometry, flameMaterial);
-flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.04, 0.7);
+flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.06, 0.7);
 scene.add(flame);
 
 // Candle light
@@ -538,9 +612,9 @@ function animate() {
             dieAngularVelocityB.set(0, 0);
         }
     }
-    // Highlight top face for both dice and get numbers
-    const numA = highlightTopFace(d20, d20Faces);
-    const numB = highlightTopFace(d20b, d20Faces);
+    // Highlight top face for both dice independently
+    const numA = highlightTopFace(d20, d20FacesA);
+    const numB = highlightTopFace(d20b, d20FacesB);
     // Display result at top of screen
     resultDiv.textContent = `Die 1: ${numA}   Die 2: ${numB}`;
     // No idle spin
@@ -551,7 +625,11 @@ function animate() {
     // Flicker candle flame and light
     const flicker = 0.98 + Math.sin(Date.now() * 0.008) * 0.04 + Math.random() * 0.02;
     candleLight.intensity = 1.2 * flicker;
-    flame.scale.set(flicker, flicker * 1.15, flicker);
+    flame.scale.set(flicker, flicker * 1.25, flicker);
+    // Animate flame shader
+    if (flame.material.uniforms && flame.material.uniforms.time) {
+        flame.material.uniforms.time.value = performance.now() * 0.001;
+    }
 
     // Mouse look only (disabled for orbit)
     // camera.rotation.order = 'YXZ';

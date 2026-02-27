@@ -96,11 +96,10 @@ function createWoodPattern() {
     const wctx = woodPatternCanvas.getContext('2d');
     for (let y = 0; y < patternH; y += plankHeight) {
         for (let x = 0; x < patternW; x += plankWidth) {
-            // Deep dark brown, less gray, more warmth
-            // Reddish dark brown for warmer wood
-            const r = 60 + Math.floor(Math.random()*12); // more red
-            const g = 28 + Math.floor(Math.random()*6);  // keep green low
-            const b = 18 + Math.floor(Math.random()*4);  // keep blue low
+            // Even darker wood for dim lighting
+            const r = 28 + Math.floor(Math.random()*6);
+            const g = 14 + Math.floor(Math.random()*4);
+            const b = 8 + Math.floor(Math.random()*2);
             wctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
             wctx.fillRect(x, y, plankWidth, plankHeight);
             wctx.save();
@@ -143,6 +142,7 @@ function drawWoodFloor(ctx, width, height) {
 }
 
 function draw() {
+        // ...existing code...
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.save();
     // Center and scale canvas for zoom
@@ -160,6 +160,22 @@ function draw() {
     // Draw two bookshelves north of carpet, with fireplace between them
     const carpetW = tableRX * 4.2 * 1.5;
     const carpetH = tableRY * 3.2 * 1.5;
+        // Spotlight effect over furniture area (after carpetW/H are defined)
+        ctx.save();
+        const spotlightCX = canvas.width/2 - 100; // table center x
+        const spotlightCY = canvas.height/2 + 32; // table center y
+            let spotlightRadius = Math.max(carpetW, carpetH) * 0.92;
+        const spotlightGradient = ctx.createRadialGradient(
+            spotlightCX, spotlightCY, spotlightRadius * 0.32,
+            spotlightCX, spotlightCY, spotlightRadius
+        );
+        spotlightGradient.addColorStop(0, 'rgba(255,255,220,0.28)');
+        spotlightGradient.addColorStop(0.7, 'rgba(255,255,220,0.09)');
+        spotlightGradient.addColorStop(1, 'rgba(255,255,220,0)');
+        ctx.globalAlpha = 0.65;
+        ctx.fillStyle = spotlightGradient;
+        ctx.fillRect(spotlightCX - spotlightRadius, spotlightCY - spotlightRadius, spotlightRadius*2, spotlightRadius*2);
+        ctx.restore();
     const carpetX = tableCX - carpetW/2;
     const carpetY = tableCY + tableRY - carpetH/2 - 24; // push up a bit more
     // Bookshelf dimensions
@@ -177,22 +193,22 @@ function draw() {
     const fireplaceY = shelfY + shelfH - fireplaceH;
     // Draw left bookshelf
     ctx.save();
-    ctx.fillStyle = '#8b5a2b';
+    ctx.fillStyle = '#2a1a0e';
     ctx.fillRect(leftShelfX, shelfY, shelfW, shelfH);
-    ctx.fillStyle = '#a0522d';
+    ctx.fillStyle = '#3a2320';
     for(let s=0;s<3;s++){
         ctx.fillRect(leftShelfX, shelfY + 8 + s*20, shelfW, 4);
     }
     // Draw cabinets underneath books
     const cabinetH = 32;
-    ctx.fillStyle = '#6d4c2b';
+    ctx.fillStyle = '#1a0e07';
     ctx.fillRect(leftShelfX, shelfY + shelfH - cabinetH, shelfW, cabinetH);
     // Cabinet doors
     ctx.fillStyle = '#a0522d';
     ctx.fillRect(leftShelfX + 6, shelfY + shelfH - cabinetH + 6, shelfW/2 - 12, cabinetH - 12);
     ctx.fillRect(leftShelfX + shelfW/2 + 6, shelfY + shelfH - cabinetH + 6, shelfW/2 - 12, cabinetH - 12);
     // Handles
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = '#3a2320';
     ctx.beginPath();
     ctx.arc(leftShelfX + shelfW/2 - 10, shelfY + shelfH - cabinetH + cabinetH/2, 4, 0, Math.PI*2);
     ctx.fill();
@@ -250,11 +266,25 @@ function draw() {
         }
     }
     ctx.restore();
+
+    // Stronger vignette effect overlay
+    ctx.save();
+    ctx.globalAlpha = 0.65;
+    const vignetteGradient = ctx.createRadialGradient(
+        canvas.width/2, canvas.height/2, Math.min(canvas.width, canvas.height)*0.22,
+        canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)*0.58
+    );
+    vignetteGradient.addColorStop(0, 'rgba(0,0,0,0)');
+    vignetteGradient.addColorStop(0.7, 'rgba(0,0,0,0.35)');
+    vignetteGradient.addColorStop(1, 'rgba(0,0,0,1)');
+    ctx.fillStyle = vignetteGradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
     // Draw right bookshelf
     ctx.save();
     ctx.fillStyle = '#8b5a2b';
     ctx.fillRect(rightShelfX, shelfY, shelfW, shelfH);
-    ctx.fillStyle = '#a0522d';
+    ctx.fillStyle = '#2a1a0e';
     for(let s=0;s<3;s++){
         ctx.fillRect(rightShelfX, shelfY + 8 + s*20, shelfW, 4);
     }
@@ -323,9 +353,9 @@ function draw() {
     ctx.restore();
     // Draw fireplace between bookshelves
     ctx.save();
-    ctx.fillStyle = '#bdbdbd'; // stone
+    ctx.fillStyle = '#2a2320'; // dim stone
     ctx.fillRect(fireplaceX, fireplaceY, fireplaceW, fireplaceH);
-    ctx.fillStyle = '#888'; // inner shadow
+    ctx.fillStyle = '#181018'; // dim inner shadow
     ctx.fillRect(fireplaceX+6, fireplaceY+6, fireplaceW-12, fireplaceH-18);
     // Draw stylized magical fire in fireplace
     const fireX = fireplaceX + fireplaceW/2;
@@ -350,7 +380,7 @@ function draw() {
     );
     ctx.closePath();
     ctx.globalAlpha = 0.35;
-    ctx.fillStyle = '#ffd700';
+    ctx.fillStyle = '#2a1a0e';
     ctx.shadowColor = '#ffd700';
     ctx.shadowBlur = 18;
     ctx.fill();
@@ -370,7 +400,7 @@ function draw() {
     );
     ctx.closePath();
     ctx.globalAlpha = 0.85;
-    ctx.fillStyle = '#ff9800';
+    ctx.fillStyle = '#3a2320';
     ctx.fill();
     // Inner core
     ctx.beginPath();
@@ -387,7 +417,7 @@ function draw() {
     );
     ctx.closePath();
     ctx.globalAlpha = 1.0;
-    ctx.fillStyle = '#fffbe6';
+    ctx.fillStyle = '#181018';
     ctx.fill();
     // Sparkles
     for(let s=0;s<6;s++){
@@ -407,8 +437,44 @@ function draw() {
     ctx.restore();
     // Draw larger black carpet with frills under table
     ctx.save();
-    ctx.fillStyle = '#181018'; // black base
+    ctx.fillStyle = '#0a0608'; // even darker base
     ctx.fillRect(carpetX, carpetY, carpetW, carpetH);
+    // Gold symmetrical design
+    ctx.save();
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 3;
+    ctx.globalAlpha = 0.85;
+    // Centered pattern: mirrored arcs and lines
+    const centerX = carpetX + carpetW/2;
+    const centerY = carpetY + carpetH/2;
+    const designW = carpetW * 0.41;
+    const designH = carpetH * 0.41;
+    // Four mirrored arcs
+    for(let i=0;i<4;i++){
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(i * Math.PI/2);
+        ctx.beginPath();
+        ctx.arc(0, -designH/2 + 24, designW/3, Math.PI*0.85, Math.PI*2.15);
+        ctx.stroke();
+        ctx.restore();
+    }
+    // Four mirrored lines
+    for(let i=0;i<4;i++){
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(i * Math.PI/2);
+        ctx.beginPath();
+        ctx.moveTo(0, -designH/2 + 24);
+        ctx.lineTo(0, -designH/2 + 24 + designH*0.22);
+        ctx.stroke();
+        ctx.restore();
+    }
+    // Center medallion
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, designW*0.13, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
     // Draw frills on left and right ends
     const frillCount = 18;
     const frillLen = 16;
@@ -472,20 +538,20 @@ function draw() {
     ctx.beginPath();
     ctx.ellipse(tableCX, tableCY, tableRX, tableRY, 0, 0, Math.PI*2);
     ctx.closePath();
-    ctx.fillStyle = '#a0522d';
+    ctx.fillStyle = '#2a1a0e';
     ctx.fill();
     // Table rim (darker ellipse)
     ctx.beginPath();
     ctx.ellipse(tableCX, tableCY, tableRX, tableRY, 0, 0, Math.PI*2);
     ctx.lineWidth = 4;
-    ctx.strokeStyle = '#8b5a2b';
+    ctx.strokeStyle = '#181018';
     ctx.stroke();
     // Table top highlight
     ctx.save();
     ctx.globalAlpha = 0.18;
     ctx.beginPath();
     ctx.ellipse(tableCX, tableCY-tableRY/2, tableRX-10, tableRY/2.2, 0, 0, Math.PI);
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = '#181018';
     ctx.fill();
     ctx.restore();
     // Table legs (placed for perspective)
@@ -680,10 +746,10 @@ function draw() {
     ctx.save();
     ctx.fillStyle = '#deb887'; // chair seat
     ctx.fillRect(chairX, chairY, 32, 12);
-    ctx.fillStyle = '#8b5a2b'; // chair legs
+    ctx.fillStyle = '#181018'; // chair legs
     ctx.fillRect(chairX+2, chairY+12, 6, 18);
     ctx.fillRect(chairX+24, chairY+12, 6, 18);
-    ctx.fillStyle = '#a0522d'; // chair back
+    ctx.fillStyle = '#2a1a0e'; // chair back
     ctx.fillRect(chairX, chairY-16, 32, 14);
     ctx.restore();
 
