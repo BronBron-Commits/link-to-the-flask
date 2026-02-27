@@ -300,7 +300,8 @@ const bevelMaterial = new THREE.MeshStandardMaterial({
     metalness: 0.18
 });
 const bevel = new THREE.Mesh(bevelGeometry, bevelMaterial);
-bevel.position.y = -1.35 + tableHeight / 2;
+// Lower the bevel to sit flush with table surface
+bevel.position.y = -1.5 + tableHeight / 2 + 0.01; // matches table.position.y, slight offset for flush
 bevel.rotation.x = Math.PI / 2;
 scene.add(bevel);
 
