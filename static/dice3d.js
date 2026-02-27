@@ -358,7 +358,7 @@ tableCanvas.height = 512;
 const tableCtx = tableCanvas.getContext('2d');
 
 // Fill base wood color (more orange)
-tableCtx.fillStyle = '#3b2312'; // dark oak base
+tableCtx.fillStyle = '#1a0e07'; // very dark brown
 tableCtx.fillRect(0, 0, tableCanvas.width, tableCanvas.height);
 
 // Draw wood grain lines (warmer orange-brown)
@@ -372,8 +372,8 @@ for (let i = 0; i < 180; i++) {
         tableCtx.lineTo(x, y + offset);
     }
     tableCtx.lineWidth = 2.2 + Math.random() * 1.2;
-    tableCtx.strokeStyle = 'rgba(90, 60, 30, 0.55)'; // dark oak grain
-    tableCtx.shadowColor = 'rgba(40, 20, 10, 0.18)';
+    tableCtx.strokeStyle = 'rgba(40, 25, 10, 0.55)'; // deeper brown grain
+    tableCtx.shadowColor = 'rgba(20, 10, 5, 0.18)';
     tableCtx.shadowBlur = 6;
     tableCtx.stroke();
 }
