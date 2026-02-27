@@ -671,7 +671,10 @@ function animate() {
     // Camera vertical movement with W/S
     if (moveUp) orbitHeight += 0.12;
     if (moveDown) orbitHeight -= 0.12;
-    orbitHeight = Math.max(2.5, Math.min(8, orbitHeight));
+    // Unclamp W/S range by 15%
+    const minHeight = 2.5 - (8 - 2.5) * 0.15; // 15% lower
+    const maxHeight = 8 + (8 - 2.5) * 0.15;   // 15% higher
+    orbitHeight = Math.max(minHeight, Math.min(maxHeight, orbitHeight));
 
     // Camera orbit with A/D
     if (orbitLeft) orbitAngle -= 0.04;
