@@ -17,6 +17,46 @@ import * as THREE from './three.module.js';
 
 const scene = new THREE.Scene();
 
+// Particle blast system
+const particleBlasts = [];
+const PARTICLE_COUNT = 32;
+const PARTICLE_LIFETIME = 0.7; // seconds
+const PARTICLE_SIZE = 0.065; // half as small
+const GOLD_COLOR = 0xffe066; // gold (matches die veins)
+const ROYAL_BLUE_COLOR = 0x1a237e; // royal blue (matches die base)
+function spawnParticleBlast(position, isDie2 = false) {
+    const group = new THREE.Group();
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const geo = new THREE.SphereGeometry(PARTICLE_SIZE, 8, 8);
+        // Alternate colors: first half gold, second half royal blue
+        // If isDie2, swap order for visual distinction
+        let color;
+        if (isDie2) {
+            color = i < PARTICLE_COUNT / 2 ? ROYAL_BLUE_COLOR : GOLD_COLOR;
+        } else {
+            color = i < PARTICLE_COUNT / 2 ? GOLD_COLOR : ROYAL_BLUE_COLOR;
+        }
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const mesh = new THREE.Mesh(geo, mat);
+        // Random direction
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const speed = 2.2 + Math.random() * 1.2;
+        mesh.userData = {
+            velocity: new THREE.Vector3(
+                Math.sin(phi) * Math.cos(theta) * speed,
+                Math.cos(phi) * speed,
+                Math.sin(phi) * Math.sin(theta) * speed
+            ),
+            age: 0
+        };
+        group.add(mesh);
+    }
+    group.position.copy(position);
+    particleBlasts.push({ group, start: performance.now() });
+    scene.add(group);
+}
+
 
 // Procedural nighttime skybox (darker, animated stars)
 const skyCanvas = document.createElement('canvas');
@@ -104,6 +144,11 @@ let yaw = 0, pitch = 0;
 let mouseDown = false;
 let prevMouseX = 0, prevMouseY = 0;
 
+// Table hover highlight state
+let tableHovered = false;
+const highlightBevelColor = 0xffe066; // gold highlight
+const normalBevelColor = 0xffffff;
+
 renderer.domElement.addEventListener('mousedown', (e) => {
     mouseDown = true;
     prevMouseX = e.clientX;
@@ -112,6 +157,28 @@ renderer.domElement.addEventListener('mousedown', (e) => {
 renderer.domElement.addEventListener('mouseup', () => { mouseDown = false; });
 renderer.domElement.addEventListener('mouseleave', () => { mouseDown = false; });
 renderer.domElement.addEventListener('mousemove', (e) => {
+    // Table hover detection
+    const mouse = new THREE.Vector2(
+        (e.clientX / renderer.domElement.clientWidth) * 2 - 1,
+        -(e.clientY / renderer.domElement.clientHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+    // Check intersection with table and bevel
+    const intersects = raycaster.intersectObjects([table, bevel], true);
+    if (intersects.length > 0) {
+        if (!tableHovered) {
+            tableHovered = true;
+            bevel.material.color.set(highlightBevelColor);
+        }
+    } else {
+        if (tableHovered) {
+            tableHovered = false;
+            bevel.material.color.set(normalBevelColor);
+        }
+    }
+
+    // Only process camera look if mouseDown
     if (!mouseDown) return;
     const dx = e.clientX - prevMouseX;
     const dy = e.clientY - prevMouseY;
@@ -247,6 +314,8 @@ renderer.domElement.addEventListener('click', (e) => {
             dieVelocity.z = (Math.random() - 0.5) * 0.08;
             dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
             dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+            // Spawn particle blast at die position
+            spawnParticleBlast(d20.position.clone(), false);
         } else if ((obj === d20b || d20b.children.includes(obj)) && !fallingB && !rollingB) {
             fallingB = true;
             d20b.position.y = dieInitialY;
@@ -255,6 +324,8 @@ renderer.domElement.addEventListener('click', (e) => {
             dieVelocityB.z = (Math.random() - 0.5) * 0.08;
             dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
             dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
+            // Spawn particle blast at second die position
+            spawnParticleBlast(d20b.position.clone(), true);
         }
     }
 });
@@ -629,6 +700,25 @@ function animate() {
     // Animate flame shader
     if (flame.material.uniforms && flame.material.uniforms.time) {
         flame.material.uniforms.time.value = performance.now() * 0.001;
+    }
+
+    // Animate particle blasts
+    for (let i = particleBlasts.length - 1; i >= 0; i--) {
+        const { group, start } = particleBlasts[i];
+        const elapsed = (performance.now() - start) / 1000;
+        for (let j = 0; j < group.children.length; j++) {
+            const mesh = group.children[j];
+            mesh.userData.age += 0.016;
+            // Fade out
+            mesh.material.opacity = Math.max(0, 1 - mesh.userData.age / PARTICLE_LIFETIME);
+            mesh.material.transparent = true;
+            // Move
+            mesh.position.add(mesh.userData.velocity.clone().multiplyScalar(0.016));
+        }
+        if (elapsed > PARTICLE_LIFETIME) {
+            scene.remove(group);
+            particleBlasts.splice(i, 1);
+        }
     }
 
     // Mouse look only (disabled for orbit)
