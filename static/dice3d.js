@@ -209,8 +209,11 @@ for (let i = 0; i < 60; i++) {
 }
 
 const tableTexture = new THREE.CanvasTexture(tableCanvas);
+// Make table surface bigger and add beveled edge
+const tableRadius = 4.0;
+const tableHeight = 0.3;
 const table = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.5, 2.5, 0.3, 32),
+    new THREE.CylinderGeometry(tableRadius, tableRadius, tableHeight, 64),
     new THREE.MeshStandardMaterial({
         map: tableTexture,
         color: 0xffffff,
@@ -221,6 +224,19 @@ const table = new THREE.Mesh(
 );
 table.position.y = -1.5;
 scene.add(table);
+
+// Add beveled edge using torus
+const bevelGeometry = new THREE.TorusGeometry(tableRadius + 0.08, 0.12, 32, 128);
+const bevelMaterial = new THREE.MeshStandardMaterial({
+    map: tableTexture,
+    color: 0xffffff,
+    roughness: 0.85,
+    metalness: 0.18
+});
+const bevel = new THREE.Mesh(bevelGeometry, bevelMaterial);
+bevel.position.y = -1.35 + tableHeight / 2;
+bevel.rotation.x = Math.PI / 2;
+scene.add(bevel);
 
 // Animate
 function animate() {
