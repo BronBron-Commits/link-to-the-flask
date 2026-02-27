@@ -1,6 +1,72 @@
+
 import * as THREE from './three.module.js';
 
 const scene = new THREE.Scene();
+
+
+// Procedural nighttime skybox (darker, animated stars)
+const skyCanvas = document.createElement('canvas');
+skyCanvas.width = 2048;
+skyCanvas.height = 2048;
+const skyCtx = skyCanvas.getContext('2d');
+
+// Store star data for animation
+const starCount = 900;
+const stars = [];
+for (let i = 0; i < starCount; i++) {
+    stars.push({
+        x: Math.random() * skyCanvas.width,
+        y: Math.random() * skyCanvas.height,
+        r: 0.3 + Math.random() * 0.7,
+        twinkle: 0.5 + Math.random() * 0.5,
+        speed: 0.002 + Math.random() * 0.004,
+        phase: Math.random() * Math.PI * 2
+    });
+}
+
+function drawSky() {
+    // Fill pure black
+    skyCtx.fillStyle = '#000000';
+    skyCtx.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
+
+    // Draw animated stars
+    for (let i = 0; i < starCount; i++) {
+        const star = stars[i];
+        // Animate twinkle
+        star.phase += star.speed;
+        const twinkle = star.twinkle * (0.7 + 0.3 * Math.sin(star.phase));
+        skyCtx.beginPath();
+        skyCtx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        skyCtx.fillStyle = 'rgba(255,255,255,' + twinkle + ')';
+        skyCtx.shadowColor = '#fff';
+        skyCtx.shadowBlur = 6;
+        skyCtx.fill();
+        skyCtx.shadowBlur = 0;
+    }
+
+    // Moon
+    const moonX = 820;
+    const moonY = 220;
+    skyCtx.beginPath();
+    skyCtx.arc(moonX, moonY, 60, 0, Math.PI * 2);
+    skyCtx.fillStyle = 'rgba(240,240,255,0.85)';
+    skyCtx.shadowColor = '#fff';
+    skyCtx.shadowBlur = 30;
+    skyCtx.fill();
+    skyCtx.shadowBlur = 0;
+}
+
+const skyTexture = new THREE.CanvasTexture(skyCanvas);
+skyTexture.mapping = THREE.EquirectangularReflectionMapping;
+skyTexture.magFilter = THREE.LinearFilter;
+skyTexture.minFilter = THREE.LinearMipMapLinearFilter;
+
+const skyGeo = new THREE.SphereGeometry(50, 64, 64);
+const skyMat = new THREE.MeshBasicMaterial({ map: skyTexture, side: THREE.BackSide });
+const skySphere = new THREE.Mesh(skyGeo, skyMat);
+scene.add(skySphere);
+
+drawSky();
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -168,7 +234,7 @@ tableCanvas.height = 512;
 const tableCtx = tableCanvas.getContext('2d');
 
 // Fill base wood color (more orange)
-tableCtx.fillStyle = '#ff7f2a'; // vivid, warm orange wood
+tableCtx.fillStyle = '#3b2312'; // dark oak base
 tableCtx.fillRect(0, 0, tableCanvas.width, tableCanvas.height);
 
 // Draw wood grain lines (warmer orange-brown)
@@ -182,8 +248,8 @@ for (let i = 0; i < 180; i++) {
         tableCtx.lineTo(x, y + offset);
     }
     tableCtx.lineWidth = 2.2 + Math.random() * 1.2;
-    tableCtx.strokeStyle = 'rgba(255, 110, 20, 0.55)'; // more prominent orange grain
-    tableCtx.shadowColor = 'rgba(80, 40, 10, 0.18)';
+    tableCtx.strokeStyle = 'rgba(90, 60, 30, 0.55)'; // dark oak grain
+    tableCtx.shadowColor = 'rgba(40, 20, 10, 0.18)';
     tableCtx.shadowBlur = 6;
     tableCtx.stroke();
 }
@@ -243,6 +309,9 @@ function animate() {
     requestAnimationFrame(animate);
     d20.rotation.x += 0.02;
     d20.rotation.y += 0.02;
+    // Animate skybox stars
+    drawSky();
+    skyTexture.needsUpdate = true;
     renderer.render(scene, camera);
 }
 
