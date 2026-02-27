@@ -767,8 +767,9 @@ function animate() {
     // Highlight top face for both dice independently
     const numA = highlightTopFace(d20, d20FacesA);
     const numB = highlightTopFace(d20b, d20FacesB);
-    // Display result at top of screen
-    resultDiv.textContent = `Die 1: ${numA}   Die 2: ${numB}`;
+    // Display result at top of screen with D20(1) and D20(2) labels
+    // D20(2) value in light blue
+        resultDiv.innerHTML = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span>`;
     // No idle spin
     // ...existing code...
     // Animate skybox stars
