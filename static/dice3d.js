@@ -40,8 +40,46 @@ scene.add(ambient);
 // D20
 const radius = 1.2;
 const d20Geometry = new THREE.IcosahedronGeometry(radius, 0);
+
+// Create procedural royal blue + gold veins texture
+const d20Canvas = document.createElement('canvas');
+d20Canvas.width = 512;
+d20Canvas.height = 512;
+const d20Ctx = d20Canvas.getContext('2d');
+
+// Fill royal blue
+d20Ctx.fillStyle = '#1a237e'; // Royal blue
+d20Ctx.fillRect(0, 0, d20Canvas.width, d20Canvas.height);
+
+// Gold noise veins
+for (let i = 0; i < 1200; i++) {
+    const x = Math.random() * d20Canvas.width;
+    const y = Math.random() * d20Canvas.height;
+    const angle = Math.random() * Math.PI * 2;
+    const length = 40 + Math.random() * 60;
+    d20Ctx.save();
+    d20Ctx.translate(x, y);
+    d20Ctx.rotate(angle);
+    d20Ctx.beginPath();
+    d20Ctx.moveTo(0, 0);
+    d20Ctx.lineTo(length, 0);
+    d20Ctx.lineWidth = 2 + Math.random() * 2;
+    // Blend gold with blue for veins
+    const blueGold = 'rgba(60, 90, 200, 0.7)'; // deep blue
+    const gold = 'rgba(180, 160, 80, 0.35)'; // muted gold
+    d20Ctx.strokeStyle = Math.random() < 0.7 ? blueGold : gold;
+    d20Ctx.shadowColor = 'rgba(60, 90, 200, 0.3)';
+    d20Ctx.shadowBlur = 4;
+    d20Ctx.stroke();
+    d20Ctx.restore();
+}
+
+const d20Texture = new THREE.CanvasTexture(d20Canvas);
 const d20Material = new THREE.MeshStandardMaterial({
-    color: 0x7a3cff
+    map: d20Texture,
+    color: 0xffffff,
+    metalness: 0.5,
+    roughness: 0.3
 });
 
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
@@ -85,8 +123,8 @@ for (let i = 0; i < positionAttr.count; i += 3) {
     canvas.height = 256;
 
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = 'yellow';
-    ctx.strokeStyle = 'black';
+    ctx.fillStyle = '#ffe066'; // lighter gold
+    ctx.strokeStyle = '#fff9c4'; // pale gold outline
     ctx.lineWidth = 16;
     ctx.font = 'bold 180px Arial';
     ctx.textAlign = 'center';
