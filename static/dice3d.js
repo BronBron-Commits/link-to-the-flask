@@ -430,45 +430,10 @@ bevel.rotation.x = Math.PI / 2;
 scene.add(bevel);
 
 // Fireplace (simple box with glowing fire)
-const fireplaceWidth = 1.6;
-const fireplaceHeight = 1.1;
-const fireplaceDepth = 0.4;
-const fireplaceGeometry = new THREE.BoxGeometry(fireplaceWidth, fireplaceHeight, fireplaceDepth);
-const fireplaceMaterial = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.7 });
-const fireplace = new THREE.Mesh(fireplaceGeometry, fireplaceMaterial);
-fireplace.position.set(0, -0.2 + fireplaceHeight / 2, -tableRadius - 0.6);
-scene.add(fireplace);
-
-// Fireplace fire (glowing sphere)
-const fireGeometry = new THREE.SphereGeometry(0.35, 24, 24);
-const fireMaterial = new THREE.MeshBasicMaterial({ color: 0xffa726, emissive: 0xff6f00 });
-const fire = new THREE.Mesh(fireGeometry, fireMaterial);
-fire.position.set(0, -0.2 + 0.35, -tableRadius - 0.6);
-scene.add(fire);
-
-const fireLight = new THREE.PointLight(0xffa726, 2.5, 6);
-fireLight.position.copy(fire.position);
-scene.add(fireLight);
+// Fireplace removed
 
 // Bookshelves (tall boxes)
-const shelfWidth = 0.4;
-const shelfHeight = 2.2;
-const shelfDepth = 0.3;
-const shelfMaterial = new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 0.6 });
-
-const leftShelf = new THREE.Mesh(
-    new THREE.BoxGeometry(shelfWidth, shelfHeight, shelfDepth),
-    shelfMaterial
-);
-leftShelf.position.set(-fireplaceWidth / 2 - shelfWidth / 2 - 0.15, shelfHeight / 2 - 0.2, -tableRadius - 0.6);
-scene.add(leftShelf);
-
-const rightShelf = new THREE.Mesh(
-    new THREE.BoxGeometry(shelfWidth, shelfHeight, shelfDepth),
-    shelfMaterial
-);
-rightShelf.position.set(fireplaceWidth / 2 + shelfWidth / 2 + 0.15, shelfHeight / 2 - 0.2, -tableRadius - 0.6);
-scene.add(rightShelf);
+// Bookshelves removed
 
 // Add a lit candle to the table
 const candleHeight = 0.35;
