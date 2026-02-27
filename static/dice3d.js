@@ -1,4 +1,18 @@
-
+// Camera vertical movement controls
+let moveUp = false, moveDown = false;
+let orbitLeft = false, orbitRight = false;
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyW') moveUp = true;
+    if (e.code === 'KeyS') moveDown = true;
+    if (e.code === 'KeyA') orbitLeft = true;
+    if (e.code === 'KeyD') orbitRight = true;
+});
+document.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyW') moveUp = false;
+    if (e.code === 'KeyS') moveDown = false;
+    if (e.code === 'KeyA') orbitLeft = false;
+    if (e.code === 'KeyD') orbitRight = false;
+});
 import * as THREE from './three.module.js';
 
 const scene = new THREE.Scene();
@@ -74,32 +88,21 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     1000
 );
-camera.position.set(0, 0.5, 6);
+// Camera orbit state
+let orbitAngle = 0;
+const orbitRadius = 6;
+let orbitHeight = 4.5;
+camera.position.set(0, orbitHeight, orbitRadius);
+camera.lookAt(0, -1.5, 0); // Look at table center
 
 const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 // WASD and mouse look controls
-let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-let velocity = new THREE.Vector3();
-let direction = new THREE.Vector3();
 let yaw = 0, pitch = 0;
 let mouseDown = false;
 let prevMouseX = 0, prevMouseY = 0;
-
-document.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyW') moveForward = true;
-    if (e.code === 'KeyS') moveBackward = true;
-    if (e.code === 'KeyA') moveLeft = true;
-    if (e.code === 'KeyD') moveRight = true;
-});
-document.addEventListener('keyup', (e) => {
-    if (e.code === 'KeyW') moveForward = false;
-    if (e.code === 'KeyS') moveBackward = false;
-    if (e.code === 'KeyA') moveLeft = false;
-    if (e.code === 'KeyD') moveRight = false;
-});
 
 renderer.domElement.addEventListener('mousedown', (e) => {
     mouseDown = true;
@@ -117,6 +120,16 @@ renderer.domElement.addEventListener('mousemove', (e) => {
     yaw -= dx * 0.002;
     pitch -= dy * 0.002;
     pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+});
+
+// Mouse wheel zoom
+renderer.domElement.addEventListener('wheel', (e) => {
+    // Zoom in/out by changing camera FOV (frame zoom)
+    const fovSpeed = 2;
+    camera.fov += e.deltaY > 0 ? fovSpeed : -fovSpeed;
+    // Clamp FOV
+    camera.fov = Math.max(30, Math.min(90, camera.fov));
+    camera.updateProjectionMatrix();
 });
 
 // Fullscreen
@@ -144,7 +157,7 @@ const ambient = new THREE.AmbientLight(0xffffff, 0.4);
 scene.add(ambient);
 
 // D20
-const radius = 1.2;
+const radius = 0.6;
 const d20Geometry = new THREE.IcosahedronGeometry(radius, 0);
 
 // Create procedural royal blue + gold veins texture
@@ -191,50 +204,78 @@ const d20Material = new THREE.MeshStandardMaterial({
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
 scene.add(d20);
 
+// Add second die
+const d20b = new THREE.Mesh(d20Geometry.clone(), d20Material.clone());
+d20b.position.set(1.2, 0, 0); // Offset second die to the right
+scene.add(d20b);
+
 // Dice roll animation state
 let rolling = false;
+let falling = false;
 let rollStart = 0;
 let rollDuration = 1200; // ms
 let rollTarget = { x: 0, y: 0 };
+let gravity = -0.025;
+let dieVelocity = new THREE.Vector3(0, 0, 0);
+let dieAngularVelocity = new THREE.Vector2(0, 0);
+const dieInitialY = 1.5;
+
+// Second die animation state
+let rollingB = false;
+let fallingB = false;
+let dieVelocityB = new THREE.Vector3(0, 0, 0);
+let dieAngularVelocityB = new THREE.Vector2(0, 0);
 
 // Roll dice on click
 renderer.domElement.addEventListener('click', (e) => {
-    // Raycast to check if d20 was clicked
+    // Raycast to check if either die was clicked
     const mouse = new THREE.Vector2(
         (e.clientX / renderer.domElement.clientWidth) * 2 - 1,
         -(e.clientY / renderer.domElement.clientHeight) * 2 + 1
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObject(d20, true);
-    if (intersects.length > 0 && !rolling) {
-        rolling = true;
-        rollStart = Date.now();
-        // Pick random target rotation
-        rollTarget.x = d20.rotation.x + Math.PI * (2 + Math.random() * 2);
-        rollTarget.y = d20.rotation.y + Math.PI * (2 + Math.random() * 2);
+    const intersects = raycaster.intersectObjects([d20, d20b], true);
+    if (intersects.length > 0) {
+        // Which die?
+        const obj = intersects[0].object;
+        if ((obj === d20 || d20.children.includes(obj)) && !falling && !rolling) {
+            falling = true;
+            d20.position.y = dieInitialY;
+            dieVelocity.set(0, 0, 0);
+            dieVelocity.x = (Math.random() - 0.5) * 0.08;
+            dieVelocity.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+        } else if ((obj === d20b || d20b.children.includes(obj)) && !fallingB && !rollingB) {
+            fallingB = true;
+            d20b.position.y = dieInitialY;
+            dieVelocityB.set(0, 0, 0);
+            dieVelocityB.x = (Math.random() - 0.5) * 0.08;
+            dieVelocityB.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
+        }
     }
 });
 
 // ---- FIXED FACE EXTRACTION ----
 const positionAttr = d20Geometry.attributes.position;
-
 let outwardOffset = 0.05; // Distance to move numbers outside faces
 
+// Store face centers and normals for both dice
+const d20Faces = [];
 for (let i = 0; i < positionAttr.count; i += 3) {
-
     // Each triangle = 3 vertices
     const vA = new THREE.Vector3().fromBufferAttribute(positionAttr, i);
     const vB = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 1);
     const vC = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 2);
-
     // Face center
     const center = new THREE.Vector3()
         .add(vA)
         .add(vB)
         .add(vC)
         .divideScalar(3);
-
     // Correct outward normal
     const normal = new THREE.Vector3()
         .crossVectors(
@@ -242,29 +283,25 @@ for (let i = 0; i < positionAttr.count; i += 3) {
             vC.clone().sub(vA)
         )
         .normalize();
-
     // Ensure normal points outward
     if (normal.dot(center) < 0) {
         normal.negate();
     }
-
+    d20Faces.push({ center, normal });
     // Create number texture
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
-
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#ffe066'; // lighter gold
     ctx.strokeStyle = '#fff9c4'; // pale gold outline
-    ctx.lineWidth = 16;
-    ctx.font = 'bold 180px Arial';
+    ctx.lineWidth = 8; // half original line width
+    ctx.font = 'bold 90px Arial'; // half original font size
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeText((i / 3 + 1).toString(), 128, 128);
     ctx.fillText((i / 3 + 1).toString(), 128, 128);
-
     const texture = new THREE.CanvasTexture(canvas);
-
     const plane = new THREE.Mesh(
         new THREE.PlaneGeometry(0.5, 0.5),
         new THREE.MeshBasicMaterial({
@@ -273,20 +310,42 @@ for (let i = 0; i < positionAttr.count; i += 3) {
             side: THREE.DoubleSide
         })
     );
-
     // Position slightly outside face
     plane.position.copy(
         center.clone().add(
             normal.clone().multiplyScalar(outwardOffset)
         )
     );
-
     // Face outward
     plane.lookAt(
         plane.position.clone().add(normal)
     );
-
     d20.add(plane);
+    // Add numbers to second die
+    const planeB = plane.clone();
+    d20b.add(planeB);
+}
+
+// Highlight top face for both dice
+function highlightTopFace(die, faces) {
+    let maxDot = -Infinity;
+    let topIdx = -1;
+    for (let i = 0; i < faces.length; i++) {
+        // World normal
+        const worldNormal = faces[i].normal.clone().applyQuaternion(die.quaternion);
+        // Up vector
+        const dot = worldNormal.dot(new THREE.Vector3(0, 1, 0));
+        if (dot > maxDot) {
+            maxDot = dot;
+            topIdx = i;
+        }
+    }
+    // Remove highlighting: all numbers same color and opacity
+    for (let i = 0; i < die.children.length; i++) {
+        die.children[i].material.color.set('#ffffff');
+        die.children[i].material.opacity = 0.85;
+    }
+    return topIdx + 1; // Face number
 }
 
 camera.position.z = 5;
@@ -433,23 +492,94 @@ const candleLight = new THREE.PointLight(0xffd700, 1.2, 2.5);
 candleLight.position.copy(flame.position);
 scene.add(candleLight);
 
+// Add Leave Table button
+const leaveBtn = document.createElement('button');
+leaveBtn.textContent = 'Leave Table';
+leaveBtn.style.position = 'fixed';
+leaveBtn.style.top = '16px';
+leaveBtn.style.left = '16px';
+leaveBtn.style.zIndex = '1001';
+leaveBtn.style.padding = '10px 22px';
+leaveBtn.style.fontSize = '1.1em';
+leaveBtn.style.background = '#222';
+leaveBtn.style.color = '#fff';
+leaveBtn.style.border = '2px solid #fff';
+leaveBtn.style.borderRadius = '8px';
+leaveBtn.style.cursor = 'pointer';
+leaveBtn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+leaveBtn.style.opacity = '0.92';
+leaveBtn.addEventListener('mouseenter', () => leaveBtn.style.opacity = '1');
+leaveBtn.addEventListener('mouseleave', () => leaveBtn.style.opacity = '0.92');
+leaveBtn.addEventListener('click', () => {
+    window.location.href = '/'; // Redirect to main scene (index.html)
+});
+document.body.appendChild(leaveBtn);
+
+// Display winning numbers at the top of the screen
+const resultDiv = document.createElement('div');
+resultDiv.style.position = 'fixed';
+resultDiv.style.top = '16px';
+resultDiv.style.left = '50%';
+resultDiv.style.transform = 'translateX(-50%)';
+resultDiv.style.zIndex = '1002';
+resultDiv.style.fontSize = '2.2em';
+resultDiv.style.fontWeight = 'bold';
+resultDiv.style.color = '#ffe066';
+resultDiv.style.textShadow = '0 2px 8px #222, 0 0 8px #fff9c4';
+resultDiv.style.pointerEvents = 'none';
+document.body.appendChild(resultDiv);
+
 // Animate
 function animate() {
+    // Camera vertical movement with W/S
+    if (moveUp) orbitHeight += 0.12;
+    if (moveDown) orbitHeight -= 0.12;
+    orbitHeight = Math.max(2.5, Math.min(8, orbitHeight));
+
+    // Camera orbit with A/D
+    if (orbitLeft) orbitAngle -= 0.04;
+    if (orbitRight) orbitAngle += 0.04;
+
+    // Update camera position to orbit around table center
+    camera.position.x = Math.sin(orbitAngle) * orbitRadius;
+    camera.position.z = Math.cos(orbitAngle) * orbitRadius;
+    camera.position.y = orbitHeight;
+    camera.lookAt(0, -1.5, 0);
     requestAnimationFrame(animate);
-    d20.rotation.x += 0.02;
-    d20.rotation.y += 0.02;
-        // Dice roll animation
-        if (rolling) {
-            const now = Date.now();
-            const t = Math.min(1, (now - rollStart) / rollDuration);
-            // Ease out cubic
-            const ease = 1 - Math.pow(1 - t, 3);
-            d20.rotation.x = d20.rotation.x + (rollTarget.x - d20.rotation.x) * ease;
-            d20.rotation.y = d20.rotation.y + (rollTarget.y - d20.rotation.y) * ease;
-            if (t >= 1) {
-                rolling = false;
-            }
+    // Gravity/falling animation for both dice
+    if (falling) {
+        dieVelocity.y += gravity;
+        d20.position.add(dieVelocity);
+        d20.rotation.x += dieAngularVelocity.x;
+        d20.rotation.y += dieAngularVelocity.y;
+        const tableTopY = table.position.y + tableHeight / 2 + radius;
+        if (d20.position.y <= tableTopY) {
+            d20.position.y = tableTopY;
+            falling = false;
+            dieVelocity.set(0, 0, 0);
+            dieAngularVelocity.set(0, 0);
         }
+    }
+    if (fallingB) {
+        dieVelocityB.y += gravity;
+        d20b.position.add(dieVelocityB);
+        d20b.rotation.x += dieAngularVelocityB.x;
+        d20b.rotation.y += dieAngularVelocityB.y;
+        const tableTopY = table.position.y + tableHeight / 2 + radius;
+        if (d20b.position.y <= tableTopY) {
+            d20b.position.y = tableTopY;
+            fallingB = false;
+            dieVelocityB.set(0, 0, 0);
+            dieAngularVelocityB.set(0, 0);
+        }
+    }
+    // Highlight top face for both dice and get numbers
+    const numA = highlightTopFace(d20, d20Faces);
+    const numB = highlightTopFace(d20b, d20Faces);
+    // Display result at top of screen
+    resultDiv.textContent = `Die 1: ${numA}   Die 2: ${numB}`;
+    // No idle spin
+    // ...existing code...
     // Animate skybox stars
     drawSky();
     skyTexture.needsUpdate = true;
@@ -458,24 +588,12 @@ function animate() {
     candleLight.intensity = 1.2 * flicker;
     flame.scale.set(flicker, flicker * 1.15, flicker);
 
-    // Camera controls
-    direction.set(0, 0, 0);
-    if (moveForward) direction.z -= 1;
-    if (moveBackward) direction.z += 1;
-    if (moveLeft) direction.x -= 1;
-    if (moveRight) direction.x += 1;
-    direction.normalize();
-    // Move relative to yaw
-    const speed = 0.08;
-    const sinYaw = Math.sin(yaw), cosYaw = Math.cos(yaw);
-    camera.position.x += (direction.x * cosYaw - direction.z * sinYaw) * speed;
-    camera.position.z += (direction.x * sinYaw + direction.z * cosYaw) * speed;
-    // Clamp camera height
-    camera.position.y = 0.5;
-    // Mouse look
-    camera.rotation.order = 'YXZ';
-    camera.rotation.y = yaw;
-    camera.rotation.x = pitch;
+    // Mouse look only (disabled for orbit)
+    // camera.rotation.order = 'YXZ';
+    // camera.rotation.y = yaw;
+    // camera.rotation.x = pitch;
+    // Keep camera above and angled down
+    // camera.position.y = Math.max(camera.position.y, 2.5);
 
     renderer.render(scene, camera);
 }
