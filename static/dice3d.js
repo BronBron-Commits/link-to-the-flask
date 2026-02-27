@@ -191,6 +191,31 @@ const d20Material = new THREE.MeshStandardMaterial({
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
 scene.add(d20);
 
+// Dice roll animation state
+let rolling = false;
+let rollStart = 0;
+let rollDuration = 1200; // ms
+let rollTarget = { x: 0, y: 0 };
+
+// Roll dice on click
+renderer.domElement.addEventListener('click', (e) => {
+    // Raycast to check if d20 was clicked
+    const mouse = new THREE.Vector2(
+        (e.clientX / renderer.domElement.clientWidth) * 2 - 1,
+        -(e.clientY / renderer.domElement.clientHeight) * 2 + 1
+    );
+    const raycaster = new THREE.Raycaster();
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObject(d20, true);
+    if (intersects.length > 0 && !rolling) {
+        rolling = true;
+        rollStart = Date.now();
+        // Pick random target rotation
+        rollTarget.x = d20.rotation.x + Math.PI * (2 + Math.random() * 2);
+        rollTarget.y = d20.rotation.y + Math.PI * (2 + Math.random() * 2);
+    }
+});
+
 // ---- FIXED FACE EXTRACTION ----
 const positionAttr = d20Geometry.attributes.position;
 
@@ -413,6 +438,18 @@ function animate() {
     requestAnimationFrame(animate);
     d20.rotation.x += 0.02;
     d20.rotation.y += 0.02;
+        // Dice roll animation
+        if (rolling) {
+            const now = Date.now();
+            const t = Math.min(1, (now - rollStart) / rollDuration);
+            // Ease out cubic
+            const ease = 1 - Math.pow(1 - t, 3);
+            d20.rotation.x = d20.rotation.x + (rollTarget.x - d20.rotation.x) * ease;
+            d20.rotation.y = d20.rotation.y + (rollTarget.y - d20.rotation.y) * ease;
+            if (t >= 1) {
+                rolling = false;
+            }
+        }
     // Animate skybox stars
     drawSky();
     skyTexture.needsUpdate = true;
