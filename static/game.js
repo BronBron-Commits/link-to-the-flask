@@ -428,6 +428,46 @@ function draw() {
         ctx.stroke();
     }
     ctx.restore();
+
+    // Draw two couches, one on each side of the rug
+    // Draw couches rotated in place, facing inward toward the table
+    const couchW = carpetW * 0.38;
+    const couchH = carpetH * 0.32;
+    const couchY = carpetY + carpetH/2 - couchH/2;
+    // Left couch (left of carpet)
+    const leftCouchX = carpetX - couchW - 24;
+    ctx.save();
+    ctx.translate(leftCouchX + couchW/2, couchY + couchH/2);
+    ctx.rotate(-Math.PI/2); // rotate 90deg counterclockwise
+    ctx.fillStyle = '#3a2320';
+    ctx.fillRect(-couchW/2, -couchH/2, couchW, couchH);
+    ctx.fillStyle = '#5a3a2a';
+    for(let i=0;i<3;i++){
+        ctx.fillRect(-couchW/2 + 12 + i*(couchW/3), -couchH/2 + 8, couchW/3 - 24, couchH - 24);
+    }
+    ctx.fillStyle = '#181018';
+    ctx.fillRect(-couchW/2 + 8, couchH/2 - 16, 12, 8);
+    ctx.fillRect(couchW/2 - 20, couchH/2 - 16, 12, 8);
+    ctx.fillRect(-couchW/2 + 8, -couchH/2 + 8, 12, 8);
+    ctx.fillRect(couchW/2 - 20, -couchH/2 + 8, 12, 8);
+    ctx.restore();
+    // Right couch (right of carpet)
+    const rightCouchX = carpetX + carpetW + 24;
+    ctx.save();
+    ctx.translate(rightCouchX + couchW/2, couchY + couchH/2);
+    ctx.rotate(Math.PI/2); // rotate 90deg clockwise
+    ctx.fillStyle = '#3a2320';
+    ctx.fillRect(-couchW/2, -couchH/2, couchW, couchH);
+    ctx.fillStyle = '#5a3a2a';
+    for(let i=0;i<3;i++){
+        ctx.fillRect(-couchW/2 + 12 + i*(couchW/3), -couchH/2 + 8, couchW/3 - 24, couchH - 24);
+    }
+    ctx.fillStyle = '#181018';
+    ctx.fillRect(-couchW/2 + 8, couchH/2 - 16, 12, 8);
+    ctx.fillRect(couchW/2 - 20, couchH/2 - 16, 12, 8);
+    ctx.fillRect(-couchW/2 + 8, -couchH/2 + 8, 12, 8);
+    ctx.fillRect(couchW/2 - 20, -couchH/2 + 8, 12, 8);
+    ctx.restore();
     // Table top (ellipse for perspective)
     ctx.beginPath();
     ctx.ellipse(tableCX, tableCY, tableRX, tableRY, 0, 0, Math.PI*2);
