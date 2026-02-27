@@ -74,10 +74,50 @@ const camera = new THREE.PerspectiveCamera(
     0.1,
     1000
 );
+camera.position.set(0, 0.5, 6);
 
 const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+// WASD and mouse look controls
+let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+let velocity = new THREE.Vector3();
+let direction = new THREE.Vector3();
+let yaw = 0, pitch = 0;
+let mouseDown = false;
+let prevMouseX = 0, prevMouseY = 0;
+
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'KeyW') moveForward = true;
+    if (e.code === 'KeyS') moveBackward = true;
+    if (e.code === 'KeyA') moveLeft = true;
+    if (e.code === 'KeyD') moveRight = true;
+});
+document.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyW') moveForward = false;
+    if (e.code === 'KeyS') moveBackward = false;
+    if (e.code === 'KeyA') moveLeft = false;
+    if (e.code === 'KeyD') moveRight = false;
+});
+
+renderer.domElement.addEventListener('mousedown', (e) => {
+    mouseDown = true;
+    prevMouseX = e.clientX;
+    prevMouseY = e.clientY;
+});
+renderer.domElement.addEventListener('mouseup', () => { mouseDown = false; });
+renderer.domElement.addEventListener('mouseleave', () => { mouseDown = false; });
+renderer.domElement.addEventListener('mousemove', (e) => {
+    if (!mouseDown) return;
+    const dx = e.clientX - prevMouseX;
+    const dy = e.clientY - prevMouseY;
+    prevMouseX = e.clientX;
+    prevMouseY = e.clientY;
+    yaw -= dx * 0.002;
+    pitch -= dy * 0.002;
+    pitch = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
+});
 
 // Fullscreen
 renderer.domElement.style.position = 'fixed';
@@ -305,6 +345,69 @@ bevel.position.y = -1.5 + tableHeight / 2 + 0.01; // matches table.position.y, s
 bevel.rotation.x = Math.PI / 2;
 scene.add(bevel);
 
+// Fireplace (simple box with glowing fire)
+const fireplaceWidth = 1.6;
+const fireplaceHeight = 1.1;
+const fireplaceDepth = 0.4;
+const fireplaceGeometry = new THREE.BoxGeometry(fireplaceWidth, fireplaceHeight, fireplaceDepth);
+const fireplaceMaterial = new THREE.MeshStandardMaterial({ color: 0x6d4c41, roughness: 0.7 });
+const fireplace = new THREE.Mesh(fireplaceGeometry, fireplaceMaterial);
+fireplace.position.set(0, -0.2 + fireplaceHeight / 2, -tableRadius - 0.6);
+scene.add(fireplace);
+
+// Fireplace fire (glowing sphere)
+const fireGeometry = new THREE.SphereGeometry(0.35, 24, 24);
+const fireMaterial = new THREE.MeshBasicMaterial({ color: 0xffa726, emissive: 0xff6f00 });
+const fire = new THREE.Mesh(fireGeometry, fireMaterial);
+fire.position.set(0, -0.2 + 0.35, -tableRadius - 0.6);
+scene.add(fire);
+
+const fireLight = new THREE.PointLight(0xffa726, 2.5, 6);
+fireLight.position.copy(fire.position);
+scene.add(fireLight);
+
+// Bookshelves (tall boxes)
+const shelfWidth = 0.4;
+const shelfHeight = 2.2;
+const shelfDepth = 0.3;
+const shelfMaterial = new THREE.MeshStandardMaterial({ color: 0x4e342e, roughness: 0.6 });
+
+const leftShelf = new THREE.Mesh(
+    new THREE.BoxGeometry(shelfWidth, shelfHeight, shelfDepth),
+    shelfMaterial
+);
+leftShelf.position.set(-fireplaceWidth / 2 - shelfWidth / 2 - 0.15, shelfHeight / 2 - 0.2, -tableRadius - 0.6);
+scene.add(leftShelf);
+
+const rightShelf = new THREE.Mesh(
+    new THREE.BoxGeometry(shelfWidth, shelfHeight, shelfDepth),
+    shelfMaterial
+);
+rightShelf.position.set(fireplaceWidth / 2 + shelfWidth / 2 + 0.15, shelfHeight / 2 - 0.2, -tableRadius - 0.6);
+scene.add(rightShelf);
+
+// Add a lit candle to the table
+const candleHeight = 0.35;
+const candleRadius = 0.08;
+const candleGeometry = new THREE.CylinderGeometry(candleRadius, candleRadius, candleHeight, 32);
+const candleMaterial = new THREE.MeshStandardMaterial({ color: 0xf5e6c2, roughness: 0.6 });
+const candle = new THREE.Mesh(candleGeometry, candleMaterial);
+const candleX = -tableRadius * 0.65; // Move to left side
+candle.position.set(candleX, -1.5 + tableHeight / 2 + candleHeight / 2, 0.7);
+scene.add(candle);
+
+// Candle flame (small sphere)
+const flameGeometry = new THREE.SphereGeometry(0.04, 16, 16);
+const flameMaterial = new THREE.MeshBasicMaterial({ color: 0xffd700, emissive: 0xffa500 });
+const flame = new THREE.Mesh(flameGeometry, flameMaterial);
+flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.04, 0.7);
+scene.add(flame);
+
+// Candle light
+const candleLight = new THREE.PointLight(0xffd700, 1.2, 2.5);
+candleLight.position.copy(flame.position);
+scene.add(candleLight);
+
 // Animate
 function animate() {
     requestAnimationFrame(animate);
@@ -313,6 +416,30 @@ function animate() {
     // Animate skybox stars
     drawSky();
     skyTexture.needsUpdate = true;
+    // Flicker candle flame and light
+    const flicker = 0.98 + Math.sin(Date.now() * 0.008) * 0.04 + Math.random() * 0.02;
+    candleLight.intensity = 1.2 * flicker;
+    flame.scale.set(flicker, flicker * 1.15, flicker);
+
+    // Camera controls
+    direction.set(0, 0, 0);
+    if (moveForward) direction.z -= 1;
+    if (moveBackward) direction.z += 1;
+    if (moveLeft) direction.x -= 1;
+    if (moveRight) direction.x += 1;
+    direction.normalize();
+    // Move relative to yaw
+    const speed = 0.08;
+    const sinYaw = Math.sin(yaw), cosYaw = Math.cos(yaw);
+    camera.position.x += (direction.x * cosYaw - direction.z * sinYaw) * speed;
+    camera.position.z += (direction.x * sinYaw + direction.z * cosYaw) * speed;
+    // Clamp camera height
+    camera.position.y = 0.5;
+    // Mouse look
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
     renderer.render(scene, camera);
 }
 
