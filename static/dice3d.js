@@ -161,9 +161,63 @@ for (let i = 0; i < positionAttr.count; i += 3) {
 camera.position.z = 5;
 
 // Table
+// Procedural wood texture for table
+const tableCanvas = document.createElement('canvas');
+tableCanvas.width = 512;
+tableCanvas.height = 512;
+const tableCtx = tableCanvas.getContext('2d');
+
+// Fill base wood color (more orange)
+tableCtx.fillStyle = '#ff7f2a'; // vivid, warm orange wood
+tableCtx.fillRect(0, 0, tableCanvas.width, tableCanvas.height);
+
+// Draw wood grain lines (warmer orange-brown)
+for (let i = 0; i < 180; i++) {
+    const y = Math.random() * tableCanvas.height;
+    const amplitude = 14 + Math.random() * 24;
+    const frequency = 0.025 + Math.random() * 0.035;
+    tableCtx.beginPath();
+    for (let x = 0; x < tableCanvas.width; x++) {
+        const offset = Math.sin(x * frequency + y / 40) * amplitude;
+        tableCtx.lineTo(x, y + offset);
+    }
+    tableCtx.lineWidth = 2.2 + Math.random() * 1.2;
+    tableCtx.strokeStyle = 'rgba(255, 110, 20, 0.55)'; // more prominent orange grain
+    tableCtx.shadowColor = 'rgba(80, 40, 10, 0.18)';
+    tableCtx.shadowBlur = 6;
+    tableCtx.stroke();
+}
+
+// Add random scratches
+for (let i = 0; i < 60; i++) {
+    const x = Math.random() * tableCanvas.width;
+    const y = Math.random() * tableCanvas.height;
+    const angle = Math.random() * Math.PI * 2;
+    const length = 40 + Math.random() * 60;
+    tableCtx.save();
+    tableCtx.translate(x, y);
+    tableCtx.rotate(angle);
+    tableCtx.beginPath();
+    tableCtx.moveTo(0, 0);
+    tableCtx.lineTo(length, 0);
+    tableCtx.lineWidth = 1.2 + Math.random() * 0.8;
+    tableCtx.strokeStyle = 'rgba(255, 255, 255, 0.18)'; // subtle white scratch
+    tableCtx.shadowColor = 'rgba(255, 255, 255, 0.08)';
+    tableCtx.shadowBlur = 2;
+    tableCtx.stroke();
+    tableCtx.restore();
+}
+
+const tableTexture = new THREE.CanvasTexture(tableCanvas);
 const table = new THREE.Mesh(
     new THREE.CylinderGeometry(2.5, 2.5, 0.3, 32),
-    new THREE.MeshStandardMaterial({ color: 0x8b5a2b })
+    new THREE.MeshStandardMaterial({
+        map: tableTexture,
+        color: 0xffffff,
+        roughness: 0.85,
+        metalness: 0.18,
+        normalScale: new THREE.Vector2(1.2, 1.2)
+    })
 );
 table.position.y = -1.5;
 scene.add(table);
