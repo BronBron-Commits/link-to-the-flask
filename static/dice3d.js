@@ -195,7 +195,7 @@ renderer.domElement.addEventListener('wheel', (e) => {
     const fovSpeed = 2;
     camera.fov += e.deltaY > 0 ? fovSpeed : -fovSpeed;
     // Clamp FOV
-    camera.fov = Math.max(30, Math.min(90, camera.fov));
+    camera.fov = Math.max(15, Math.min(90, camera.fov));
     camera.updateProjectionMatrix();
 });
 
@@ -332,7 +332,7 @@ renderer.domElement.addEventListener('click', (e) => {
 
 // ---- FIXED FACE EXTRACTION ----
 const positionAttr = d20Geometry.attributes.position;
-let outwardOffset = 0.05; // Distance to move numbers outside faces
+let outwardOffset = 0.028; // Reduced distance to move numbers outside faces
 
 // Store face centers and normals for each die separately
 const d20FacesA = [];
@@ -478,7 +478,7 @@ const plankCount = 8 + Math.floor(Math.random() * 3); // 8-10 planks
 const plankHeight = tableCanvas.height / plankCount;
 for (let i = 0; i < plankCount; i++) {
     // Alternate plank colors for realism
-    const baseColor = i % 2 === 0 ? '#7d5526' : '#a97c50';
+    const baseColor = i % 2 === 0 ? '#3a2410' : '#5a3b1a'; // much darker browns
     tableCtx.fillStyle = baseColor;
     tableCtx.fillRect(0, i * plankHeight, tableCanvas.width, plankHeight);
     // Draw plank edge shadow
@@ -486,7 +486,7 @@ for (let i = 0; i < plankCount; i++) {
     tableCtx.moveTo(0, (i + 1) * plankHeight);
     tableCtx.lineTo(tableCanvas.width, (i + 1) * plankHeight);
     tableCtx.lineWidth = 3.2;
-    tableCtx.strokeStyle = 'rgba(60, 40, 20, 0.28)';
+    tableCtx.strokeStyle = 'rgba(30, 20, 10, 0.38)'; // darker plank edge
     tableCtx.stroke();
     // Add some wood grain lines to each plank
     for (let g = 0; g < 7; g++) {
@@ -498,7 +498,7 @@ for (let i = 0; i < plankCount; i++) {
             tableCtx.lineTo(x, prevY + offset);
         }
         tableCtx.lineWidth = 1.1;
-        tableCtx.strokeStyle = 'rgba(90, 60, 30, 0.22)';
+        tableCtx.strokeStyle = 'rgba(40, 28, 14, 0.28)'; // darker grain
         tableCtx.stroke();
     }
     // Add a few knots
@@ -507,8 +507,8 @@ for (let i = 0; i < plankCount; i++) {
         const knotY = (i * plankHeight) + Math.random() * plankHeight;
         const knotR = 6 + Math.random() * 7;
         const grad = tableCtx.createRadialGradient(knotX, knotY, 1, knotX, knotY, knotR);
-        grad.addColorStop(0, 'rgba(80,60,30,0.32)');
-        grad.addColorStop(1, 'rgba(80,60,30,0)');
+        grad.addColorStop(0, 'rgba(30,20,10,0.32)');
+        grad.addColorStop(1, 'rgba(30,20,10,0)');
         tableCtx.beginPath();
         tableCtx.arc(knotX, knotY, knotR, 0, Math.PI * 2);
         tableCtx.fillStyle = grad;
