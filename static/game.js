@@ -716,25 +716,19 @@ function draw() {
                 const rect = canvas.getBoundingClientRect();
                 const mouseX = (e.clientX - rect.left - canvas.width/2) / zoom + canvas.width/2;
                 const mouseY = (e.clientY - rect.top - canvas.height/2) / zoom + canvas.height/2;
-                for (let i = 0; i < dicePositions.length; i++) {
-                    const pos = dicePositions[i];
-                    if (
-                        mouseX >= pos.x && mouseX <= pos.x + diceSize &&
-                        mouseY >= pos.y && mouseY <= pos.y + diceSize
-                    ) {
-                        // Only trigger for first dice (purple dice with candle)
-                        if (i === 0) {
-                            // Hide canvas and load 3D scene
-                            canvas.style.display = 'none';
-                            // Dynamically load dice3d.js
-                            // Dynamically load dice3d.js
-                            const script = document.createElement('script');
-                            script.type = 'module';
-                            script.src = '/static/dice3d.js';
-                            document.body.appendChild(script);
-                        }
-                        break;
-                    }
+                // Check if mouse is inside table ellipse
+                const dx = mouseX - tableCX;
+                const dy = mouseY - tableCY;
+                // Ellipse equation: (dx/tableRX)^2 + (dy/tableRY)^2 <= 1
+                if ((dx*dx)/(tableRX*tableRX) + (dy*dy)/(tableRY*tableRY) <= 1) {
+                    // Only trigger for first dice (purple dice with candle)
+                    // Hide canvas and load 3D scene
+                    canvas.style.display = 'none';
+                    // Dynamically load dice3d.js
+                    const script = document.createElement('script');
+                    script.type = 'module';
+                    script.src = '/static/dice3d.js';
+                    document.body.appendChild(script);
                 }
             });
         }
