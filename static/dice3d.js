@@ -50,7 +50,7 @@ scene.add(d20);
 // ---- FIXED FACE EXTRACTION ----
 const positionAttr = d20Geometry.attributes.position;
 
-let outwardOffset = 0.35;
+let outwardOffset = 0.05; // Distance to move numbers outside faces
 
 for (let i = 0; i < positionAttr.count; i += 3) {
 
