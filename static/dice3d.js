@@ -223,9 +223,10 @@ scene.add(light);
 const ambient = new THREE.AmbientLight(0xffffff, 0.4);
 scene.add(ambient);
 
-// D20
+// D20 and D12
 const radius = 0.6;
 const d20Geometry = new THREE.IcosahedronGeometry(radius, 0);
+const d12Geometry = new THREE.DodecahedronGeometry(radius * 0.95, 0); // d12 slightly smaller
 
 // Edge highlight (glow) setup
 const EDGE_GLOW_COLOR = 0x8fd6ff; // light blue
@@ -233,43 +234,51 @@ let d20EdgeGlow = null;
 let d20bEdgeGlow = null;
 let d20Hovered = false;
 let d20bHovered = false;
+let d12EdgeGlow = null;
+let d12Hovered = false;
 
-// Create procedural royal blue + gold veins texture
-const d20Canvas = document.createElement('canvas');
-d20Canvas.width = 512;
-d20Canvas.height = 512;
-const d20Ctx = d20Canvas.getContext('2d');
-
-// Fill royal blue
-d20Ctx.fillStyle = '#1a237e'; // Royal blue
-d20Ctx.fillRect(0, 0, d20Canvas.width, d20Canvas.height);
-
-// Gold noise veins
-for (let i = 0; i < 1200; i++) {
-    const x = Math.random() * d20Canvas.width;
-    const y = Math.random() * d20Canvas.height;
-    const angle = Math.random() * Math.PI * 2;
-    const length = 40 + Math.random() * 60;
-    d20Ctx.save();
-    d20Ctx.translate(x, y);
-    d20Ctx.rotate(angle);
-    d20Ctx.beginPath();
-    d20Ctx.moveTo(0, 0);
-    d20Ctx.lineTo(length, 0);
-    d20Ctx.lineWidth = 2 + Math.random() * 2;
-    // Blend gold with blue for veins
-    const blueGold = 'rgba(60, 90, 200, 0.7)'; // deep blue
-    const gold = 'rgba(180, 160, 80, 0.35)'; // muted gold
-    d20Ctx.strokeStyle = Math.random() < 0.7 ? blueGold : gold;
-    d20Ctx.shadowColor = 'rgba(60, 90, 200, 0.3)';
-    d20Ctx.shadowBlur = 4;
-    d20Ctx.stroke();
-    d20Ctx.restore();
+// Create procedural royal blue + gold veins texture (shared for d20/d12)
+function createRoyalBlueGoldTexture(size = 512, veins = 1200) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#1a237e'; // Royal blue
+    ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < veins; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const angle = Math.random() * Math.PI * 2;
+        const length = 40 + Math.random() * 60;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(length, 0);
+        ctx.lineWidth = 2 + Math.random() * 2;
+        const blueGold = 'rgba(60, 90, 200, 0.7)';
+        const gold = 'rgba(180, 160, 80, 0.35)';
+        ctx.strokeStyle = Math.random() < 0.7 ? blueGold : gold;
+        ctx.shadowColor = 'rgba(60, 90, 200, 0.3)';
+        ctx.shadowBlur = 4;
+        ctx.stroke();
+        ctx.restore();
+    }
+    return canvas;
 }
 
-const d20Texture = new THREE.CanvasTexture(d20Canvas);
+const d20Texture = new THREE.CanvasTexture(createRoyalBlueGoldTexture());
 const d20Material = new THREE.MeshStandardMaterial({
     map: d20Texture,
+    color: 0xffffff,
+    metalness: 0.5,
+    roughness: 0.3
+});
+
+const d12Texture = new THREE.CanvasTexture(createRoyalBlueGoldTexture(512, 900));
+const d12Material = new THREE.MeshStandardMaterial({
+    map: d12Texture,
     color: 0xffffff,
     metalness: 0.5,
     roughness: 0.3
@@ -278,7 +287,12 @@ const d20Material = new THREE.MeshStandardMaterial({
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
 scene.add(d20);
 
-// Add second die
+// D12 die
+const d12 = new THREE.Mesh(d12Geometry, d12Material);
+d12.position.set(-1.2, 0, 0); // Offset d12 to the left
+scene.add(d12);
+
+// Add second die (d20b)
 const d20b = new THREE.Mesh(d20Geometry.clone(), d20Material.clone());
 d20b.position.set(1.2, 0, 0); // Offset second die to the right
 scene.add(d20b);
@@ -294,6 +308,12 @@ let dieVelocity = new THREE.Vector3(0, 0, 0);
 let dieAngularVelocity = new THREE.Vector2(0, 0);
 const dieInitialY = 1.5;
 
+// D12 animation state
+let rollingD12 = false;
+let fallingD12 = false;
+let dieVelocityD12 = new THREE.Vector3(0, 0, 0);
+let dieAngularVelocityD12 = new THREE.Vector2(0, 0);
+
 // Second die animation state
 let rollingB = false;
 let fallingB = false;
@@ -302,14 +322,14 @@ let dieAngularVelocityB = new THREE.Vector2(0, 0);
 
 // Roll dice on click
 renderer.domElement.addEventListener('click', (e) => {
-    // Raycast to check if either die was clicked
+    // Raycast to check if any die was clicked
     const mouse = new THREE.Vector2(
         (e.clientX / renderer.domElement.clientWidth) * 2 - 1,
         -(e.clientY / renderer.domElement.clientHeight) * 2 + 1
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects([d20, d20b], true);
+    const intersects = raycaster.intersectObjects([d20, d20b, d12], true);
     if (intersects.length > 0) {
         // Which die?
         const obj = intersects[0].object;
@@ -321,7 +341,6 @@ renderer.domElement.addEventListener('click', (e) => {
             dieVelocity.z = (Math.random() - 0.5) * 0.08;
             dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
             dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
-            // Spawn particle blast at die position
             spawnParticleBlast(d20.position.clone(), false);
         } else if ((obj === d20b || d20b.children.includes(obj)) && !fallingB && !rollingB) {
             fallingB = true;
@@ -331,8 +350,16 @@ renderer.domElement.addEventListener('click', (e) => {
             dieVelocityB.z = (Math.random() - 0.5) * 0.08;
             dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
             dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
-            // Spawn particle blast at second die position
             spawnParticleBlast(d20b.position.clone(), true);
+        } else if ((obj === d12 || d12.children.includes(obj)) && !fallingD12 && !rollingD12) {
+            fallingD12 = true;
+            d12.position.y = dieInitialY;
+            dieVelocityD12.set(0, 0, 0);
+            dieVelocityD12.x = (Math.random() - 0.5) * 0.08;
+            dieVelocityD12.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocityD12.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocityD12.y = 0.2 + Math.random() * 0.5;
+            spawnParticleBlast(d12.position.clone(), false);
         }
     }
 });
@@ -345,11 +372,12 @@ renderer.domElement.addEventListener('mousemove', (e) => {
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects([d20, d20b], true);
-    let foundD20 = false, foundD20b = false;
+    const intersects = raycaster.intersectObjects([d20, d20b, d12], true);
+    let foundD20 = false, foundD20b = false, foundD12 = false;
     for (let i = 0; i < intersects.length; i++) {
         if (intersects[i].object === d20 || d20.children.includes(intersects[i].object)) foundD20 = true;
         if (intersects[i].object === d20b || d20b.children.includes(intersects[i].object)) foundD20b = true;
+        if (intersects[i].object === d12 || d12.children.includes(intersects[i].object)) foundD12 = true;
     }
     // d20 hover
     if (foundD20 && !d20Hovered) {
@@ -379,50 +407,49 @@ renderer.domElement.addEventListener('mousemove', (e) => {
         d20bHovered = false;
         if (d20bEdgeGlow) d20bEdgeGlow.visible = false;
     }
+    // d12 hover
+    if (foundD12 && !d12Hovered) {
+        d12Hovered = true;
+        if (!d12EdgeGlow) {
+            const edges = new THREE.EdgesGeometry(d12.geometry);
+            d12EdgeGlow = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: EDGE_GLOW_COLOR, linewidth: 2 }));
+            d12EdgeGlow.renderOrder = 10;
+            d12.add(d12EdgeGlow);
+        }
+        d12EdgeGlow.visible = true;
+    } else if (!foundD12 && d12Hovered) {
+        d12Hovered = false;
+        if (d12EdgeGlow) d12EdgeGlow.visible = false;
+    }
 });
 
 // ---- FIXED FACE EXTRACTION ----
-const positionAttr = d20Geometry.attributes.position;
 let outwardOffset = 0.028; // Reduced distance to move numbers outside faces
 
-// Store face centers and normals for each die separately
-const d20FacesA = [];
-const d20FacesB = [];
-const d20NumbersA = [];
-const d20NumbersB = [];
-for (let i = 0; i < positionAttr.count; i += 3) {
-    // Each triangle = 3 vertices
-    const vA = new THREE.Vector3().fromBufferAttribute(positionAttr, i);
-    const vB = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 1);
-    const vC = new THREE.Vector3().fromBufferAttribute(positionAttr, i + 2);
-    // Face center
-    const center = new THREE.Vector3()
-        .add(vA)
-        .add(vB)
-        .add(vC)
-        .divideScalar(3);
-    // Correct outward normal
-    const normal = new THREE.Vector3()
-        .crossVectors(
-            vB.clone().sub(vA),
-            vC.clone().sub(vA)
-        )
-        .normalize();
-    // Ensure normal points outward
-    if (normal.dot(center) < 0) {
-        normal.negate();
-    }
+// D20 face numbers
+const d20FacesA = [], d20FacesB = [], d20NumbersA = [], d20NumbersB = [];
+const d20PositionAttr = d20Geometry.attributes.position;
+for (let i = 0; i < d20PositionAttr.count; i += 3) {
+    const vA = new THREE.Vector3().fromBufferAttribute(d20PositionAttr, i);
+    const vB = new THREE.Vector3().fromBufferAttribute(d20PositionAttr, i + 1);
+    const vC = new THREE.Vector3().fromBufferAttribute(d20PositionAttr, i + 2);
+    const center = new THREE.Vector3().add(vA).add(vB).add(vC).divideScalar(3);
+    const normal = new THREE.Vector3().crossVectors(
+        vB.clone().sub(vA),
+        vC.clone().sub(vA)
+    ).normalize();
+    if (normal.dot(center) < 0) normal.negate();
     d20FacesA.push({ center: center.clone(), normal: normal.clone() });
     d20FacesB.push({ center: center.clone(), normal: normal.clone() });
-    // Create number texture
+    // Number label
     const canvas = document.createElement('canvas');
     canvas.width = 256;
     canvas.height = 256;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffe066'; // lighter gold
-    ctx.strokeStyle = '#fff9c4'; // pale gold outline
-    ctx.lineWidth = 8; // half original line width
-    ctx.font = 'bold 90px Arial'; // half original font size
+    ctx.fillStyle = '#ffe066';
+    ctx.strokeStyle = '#fff9c4';
+    ctx.lineWidth = 8;
+    ctx.font = 'bold 90px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeText((i / 3 + 1).toString(), 128, 128);
@@ -433,67 +460,74 @@ for (let i = 0; i < positionAttr.count; i += 3) {
         transparent: true,
         side: THREE.DoubleSide
     });
-    const planeA = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.5, 0.5),
-        planeAMaterial
-    );
-    // Position slightly outside face
-    planeA.position.copy(
-        center.clone().add(
-            normal.clone().multiplyScalar(outwardOffset)
-        )
-    );
-    // Face outward
-    planeA.lookAt(
-        planeA.position.clone().add(normal)
-    );
+    const planeA = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), planeAMaterial);
+    planeA.position.copy(center.clone().add(normal.clone().multiplyScalar(outwardOffset)));
+    planeA.lookAt(planeA.position.clone().add(normal));
     d20.add(planeA);
     d20NumbersA.push(planeA);
-
-    // Add numbers to second die (separate mesh, unique material)
+    // d20b
     const planeBMaterial = planeAMaterial.clone();
-    const planeB = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.5, 0.5),
-        planeBMaterial
-    );
-    planeB.position.copy(
-        center.clone().add(
-            normal.clone().multiplyScalar(outwardOffset)
-        )
-    );
-    planeB.lookAt(
-        planeB.position.clone().add(normal)
-    );
+    const planeB = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), planeBMaterial);
+    planeB.position.copy(center.clone().add(normal.clone().multiplyScalar(outwardOffset)));
+    planeB.lookAt(planeB.position.clone().add(normal));
     d20b.add(planeB);
     d20NumbersB.push(planeB);
 }
 
-// Highlight top face for both dice
-function highlightTopFace(die, faces) {
+// D12 face numbers
+const d12Faces = [], d12Numbers = [];
+const d12PositionAttr = d12Geometry.attributes.position;
+for (let i = 0; i < d12PositionAttr.count; i += 3) {
+    const vA = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i);
+    const vB = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i + 1);
+    const vC = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i + 2);
+    const center = new THREE.Vector3().add(vA).add(vB).add(vC).divideScalar(3);
+    const normal = new THREE.Vector3().crossVectors(
+        vB.clone().sub(vA),
+        vC.clone().sub(vA)
+    ).normalize();
+    if (normal.dot(center) < 0) normal.negate();
+    // Only add one label per face (dodecahedron has 12 faces, 36 triangles)
+    if (i % 9 === 0) { // 3 triangles per face
+        const faceNum = Math.floor(i / 9) + 1;
+        d12Faces.push({ center: center.clone(), normal: normal.clone() });
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffe066';
+        ctx.strokeStyle = '#fff9c4';
+        ctx.lineWidth = 8;
+        ctx.font = 'bold 90px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeText(faceNum.toString(), 128, 128);
+        ctx.fillText(faceNum.toString(), 128, 128);
+        const texture = new THREE.CanvasTexture(canvas);
+        const planeMat = new THREE.MeshBasicMaterial({
+            map: texture,
+            transparent: true,
+            side: THREE.DoubleSide
+        });
+        const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), planeMat);
+        plane.position.copy(center.clone().add(normal.clone().multiplyScalar(outwardOffset)));
+        plane.lookAt(plane.position.clone().add(normal));
+        d12.add(plane);
+        d12Numbers.push(plane);
+    }
+}
+
+// Highlight top face for d20, d20b, d12
+function highlightTopFace(die, faces, numberMeshes, highlightColor) {
     let maxDot = -Infinity;
     let topIdx = -1;
     for (let i = 0; i < faces.length; i++) {
-        // World normal
         const worldNormal = faces[i].normal.clone().applyQuaternion(die.quaternion);
-        // Up vector
         const dot = worldNormal.dot(new THREE.Vector3(0, 1, 0));
         if (dot > maxDot) {
             maxDot = dot;
             topIdx = i;
         }
-    }
-    // Remove highlighting: all numbers same color and opacity
-    let numberMeshes;
-    let highlightColor;
-    if (die === d20) {
-        numberMeshes = d20NumbersA;
-        highlightColor = '#ffe066'; // bright yellow for die 1
-    } else if (die === d20b) {
-        numberMeshes = d20NumbersB;
-        highlightColor = '#66e0ff'; // bright blue for die 2
-    } else {
-        numberMeshes = die.children;
-        highlightColor = '#ffffff';
     }
     for (let i = 0; i < numberMeshes.length; i++) {
         numberMeshes[i].material.color.set('#ffffff');
@@ -501,17 +535,15 @@ function highlightTopFace(die, faces) {
         numberMeshes[i].material.emissive = undefined;
         numberMeshes[i].material.emissiveIntensity = undefined;
     }
-    // Glow the top face
     if (topIdx >= 0 && numberMeshes[topIdx]) {
         numberMeshes[topIdx].material.color.set(highlightColor);
         numberMeshes[topIdx].material.opacity = 1.0;
-        // Add emissive glow if MeshStandardMaterial
         if (numberMeshes[topIdx].material.emissive !== undefined) {
             numberMeshes[topIdx].material.emissive.set(highlightColor);
             numberMeshes[topIdx].material.emissiveIntensity = 0.8;
         }
     }
-    return topIdx + 1; // Face number
+    return topIdx + 1;
 }
 
 camera.position.z = 5;
@@ -764,12 +796,25 @@ function animate() {
             dieAngularVelocityB.set(0, 0);
         }
     }
-    // Highlight top face for both dice independently
-    const numA = highlightTopFace(d20, d20FacesA);
-    const numB = highlightTopFace(d20b, d20FacesB);
-    // Display result at top of screen with D20(1) and D20(2) labels
-    // D20(2) value in light blue
-        resultDiv.innerHTML = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span>`;
+    if (fallingD12) {
+        dieVelocityD12.y += gravity;
+        d12.position.add(dieVelocityD12);
+        d12.rotation.x += dieAngularVelocityD12.x;
+        d12.rotation.y += dieAngularVelocityD12.y;
+        const tableTopY = table.position.y + tableHeight / 2 + radius * 0.95;
+        if (d12.position.y <= tableTopY) {
+            d12.position.y = tableTopY;
+            fallingD12 = false;
+            dieVelocityD12.set(0, 0, 0);
+            dieAngularVelocityD12.set(0, 0);
+        }
+    }
+    // Highlight top face for all dice independently
+    const numA = highlightTopFace(d20, d20FacesA, d20NumbersA, '#ffe066');
+    const numB = highlightTopFace(d20b, d20FacesB, d20NumbersB, '#66e0ff');
+    const numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ffb366');
+    // Display result at top of screen with D20(1), D20(2), D12 labels
+    resultDiv.innerHTML = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span> &nbsp; <span style="color:#fff">D12:</span> <span style="color:#ffb366">${numD12}</span>`;
     // No idle spin
     // ...existing code...
     // Animate skybox stars
