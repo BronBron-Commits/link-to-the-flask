@@ -812,9 +812,9 @@ function animate() {
     // Highlight top face for all dice independently
     const numA = highlightTopFace(d20, d20FacesA, d20NumbersA, '#ffe066');
     const numB = highlightTopFace(d20b, d20FacesB, d20NumbersB, '#66e0ff');
-    const numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ffb366');
+    const numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ff2222');
     // Display result at top of screen with D20(1), D20(2), D12 labels
-    resultDiv.innerHTML = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span> &nbsp; <span style="color:#fff">D12:</span> <span style="color:#ffb366">${numD12}</span>`;
+    resultDiv.innerHTML = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span> &nbsp; <span style="color:#fff">D12:</span> <span style="color:#ff2222">${numD12}</span>`;
     // No idle spin
     // ...existing code...
     // Animate skybox stars
