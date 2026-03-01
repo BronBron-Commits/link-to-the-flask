@@ -630,6 +630,22 @@ bevel.position.y = -1.5 + tableHeight / 2 + 0.01; // matches table.position.y, s
 bevel.rotation.x = Math.PI / 2;
 scene.add(bevel);
 
+// --- Dice Tray ---
+// A shallow cylinder with a felt-like material, slightly smaller than the table
+const trayRadius = tableRadius * 0.7;
+const trayHeight = 0.12;
+const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.01;
+const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeight, 48);
+const trayMaterial = new THREE.MeshStandardMaterial({
+    color: 0x2e7d32, // dark green felt
+    roughness: 0.85,
+    metalness: 0.18
+});
+const tray = new THREE.Mesh(trayGeometry, trayMaterial);
+tray.position.set(0, trayY, 0);
+scene.add(tray);
+
+
 // Fireplace (simple box with glowing fire)
 // Fireplace removed
 
@@ -734,6 +750,87 @@ legendDiv.innerHTML = `
 <span style="color:#fff">Click Die</span> &mdash; Roll Die<br>
 `;
 document.body.appendChild(legendDiv);
+
+// --- Dice Action Menu ---
+const diceMenuDiv = document.createElement('div');
+diceMenuDiv.style.position = 'fixed';
+diceMenuDiv.style.top = '170px';
+diceMenuDiv.style.left = '16px';
+diceMenuDiv.style.zIndex = '1001';
+diceMenuDiv.style.background = 'rgba(34,34,34,0.92)';
+diceMenuDiv.style.color = '#ffe066';
+diceMenuDiv.style.padding = '12px 18px 12px 18px';
+diceMenuDiv.style.borderRadius = '8px';
+diceMenuDiv.style.fontSize = '1.05em';
+diceMenuDiv.style.fontFamily = 'sans-serif';
+diceMenuDiv.style.lineHeight = '1.6';
+diceMenuDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+diceMenuDiv.innerHTML = `
+<b>Dice Actions</b><br>
+<button id="roll-d20-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll Standard d20</button><br>
+<button id="roll-adv-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#66e0ff;border:1px solid #66e0ff;border-radius:6px;cursor:pointer;">Roll d20 (Advantage)</button><br>
+<button id="roll-dis-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ff2222;border:1px solid #ff2222;border-radius:6px;cursor:pointer;">Roll d20 (Disadvantage)</button>
+`;
+document.body.appendChild(diceMenuDiv);
+
+// Dice action handlers
+document.getElementById('roll-d20-btn').onclick = () => {
+    // Standard d20 roll: roll first d20 only
+    if (!falling && !rolling) {
+        falling = true;
+        d20.position.y = dieInitialY;
+        dieVelocity.set(0, 0, 0);
+        dieVelocity.x = (Math.random() - 0.5) * 0.08;
+        dieVelocity.z = (Math.random() - 0.5) * 0.08;
+        dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+        dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+        spawnParticleBlast(d20.position.clone(), false);
+    }
+};
+document.getElementById('roll-adv-btn').onclick = () => {
+    // Advantage: roll both d20 and d20b
+    if (!falling && !rolling && !fallingB && !rollingB) {
+        falling = true;
+        d20.position.y = dieInitialY;
+        dieVelocity.set(0, 0, 0);
+        dieVelocity.x = (Math.random() - 0.5) * 0.08;
+        dieVelocity.z = (Math.random() - 0.5) * 0.08;
+        dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+        dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+        spawnParticleBlast(d20.position.clone(), false);
+
+        fallingB = true;
+        d20b.position.y = dieInitialY;
+        dieVelocityB.set(0, 0, 0);
+        dieVelocityB.x = (Math.random() - 0.5) * 0.08;
+        dieVelocityB.z = (Math.random() - 0.5) * 0.08;
+        dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
+        dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
+        spawnParticleBlast(d20b.position.clone(), true);
+    }
+};
+document.getElementById('roll-dis-btn').onclick = () => {
+    // Disadvantage: roll both d20 and d20b
+    if (!falling && !rolling && !fallingB && !rollingB) {
+        falling = true;
+        d20.position.y = dieInitialY;
+        dieVelocity.set(0, 0, 0);
+        dieVelocity.x = (Math.random() - 0.5) * 0.08;
+        dieVelocity.z = (Math.random() - 0.5) * 0.08;
+        dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+        dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+        spawnParticleBlast(d20.position.clone(), false);
+
+        fallingB = true;
+        d20b.position.y = dieInitialY;
+        dieVelocityB.set(0, 0, 0);
+        dieVelocityB.x = (Math.random() - 0.5) * 0.08;
+        dieVelocityB.z = (Math.random() - 0.5) * 0.08;
+        dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
+        dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
+        spawnParticleBlast(d20b.position.clone(), true);
+    }
+};
 
 // Display winning numbers at the top of the screen
 const resultDiv = document.createElement('div');
