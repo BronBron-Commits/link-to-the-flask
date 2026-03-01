@@ -777,6 +777,10 @@ document.body.appendChild(diceMenuDiv);
 document.getElementById('roll-d20-btn').onclick = () => {
     // Standard d20 roll: roll first d20 only
     if (!falling && !rolling) {
+        // Only show d20
+        d20.visible = true;
+        if (typeof d20b !== 'undefined') d20b.visible = false;
+        if (typeof d12 !== 'undefined') d12.visible = false;
         falling = true;
         d20.position.y = dieInitialY;
         dieVelocity.set(0, 0, 0);
@@ -790,6 +794,10 @@ document.getElementById('roll-d20-btn').onclick = () => {
 document.getElementById('roll-adv-btn').onclick = () => {
     // Advantage: roll both d20 and d20b
     if (!falling && !rolling && !fallingB && !rollingB) {
+        // Show both d20 and d20b
+        d20.visible = true;
+        d20b.visible = true;
+        if (typeof d12 !== 'undefined') d12.visible = false;
         falling = true;
         d20.position.y = dieInitialY;
         dieVelocity.set(0, 0, 0);
@@ -812,6 +820,10 @@ document.getElementById('roll-adv-btn').onclick = () => {
 document.getElementById('roll-dis-btn').onclick = () => {
     // Disadvantage: roll both d20 and d20b
     if (!falling && !rolling && !fallingB && !rollingB) {
+        // Show both d20 and d20b
+        d20.visible = true;
+        d20b.visible = true;
+        if (typeof d12 !== 'undefined') d12.visible = false;
         falling = true;
         d20.position.y = dieInitialY;
         dieVelocity.set(0, 0, 0);
