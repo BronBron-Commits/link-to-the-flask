@@ -286,16 +286,19 @@ const d12Material = new THREE.MeshStandardMaterial({
 
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
 scene.add(d20);
+d20.visible = false;
 
 // D12 die
 const d12 = new THREE.Mesh(d12Geometry, d12Material);
 d12.position.set(-1.2, 0, 0); // Offset d12 to the left
 scene.add(d12);
+d12.visible = false;
 
 // Add second die (d20b)
 const d20b = new THREE.Mesh(d20Geometry.clone(), d20Material.clone());
 d20b.position.set(1.2, 0, 0); // Offset second die to the right
 scene.add(d20b);
+d20b.visible = false;
 
 // Dice roll animation state
 let rolling = false;
@@ -919,11 +922,41 @@ function animate() {
         }
     }
     // Highlight top face for all dice independently
-    const numA = highlightTopFace(d20, d20FacesA, d20NumbersA, '#ffe066');
-    const numB = highlightTopFace(d20b, d20FacesB, d20NumbersB, '#66e0ff');
-    const numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ff2222');
-    // Display result at top of screen with D20(1), D20(2), D12 labels
-    resultDiv.innerHTML = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span> &nbsp; <span style="color:#fff">D12:</span> <span style="color:#ff2222">${numD12}</span>`;
+    let numA = null, numB = null, numD12 = null;
+    if (d20 && d20.visible) numA = highlightTopFace(d20, d20FacesA, d20NumbersA, '#ffe066');
+    if (d20b && d20b.visible) numB = highlightTopFace(d20b, d20FacesB, d20NumbersB, '#66e0ff');
+    if (d12 && d12.visible) numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ff2222');
+
+    // Decide which value to show based on which dice are visible
+    let resultHtml = '';
+    if (d20 && d20.visible && (!d20b || !d20b.visible) && (!d12 || !d12.visible)) {
+        // Standard d20
+        resultHtml = `<span style="color:#fff">D20:</span> <span style="color:#ffe066">${numA}</span>`;
+    } else if (d20 && d20.visible && d20b && d20b.visible && (!d12 || !d12.visible)) {
+        // Advantage/disadvantage
+        if (!falling && !fallingB && !rolling && !rollingB) {
+            // Both dice have landed, decide which value to show
+            if (document.activeElement && document.activeElement.id === 'roll-adv-btn') {
+                // Advantage: show highest
+                const advValue = Math.max(numA, numB);
+                resultHtml = `<span style=\"color:#fff\">Advantage:</span> <span style=\"color:#66e0ff\">${advValue}</span>`;
+            } else if (document.activeElement && document.activeElement.id === 'roll-dis-btn') {
+                // Disadvantage: show lowest
+                const disValue = Math.min(numA, numB);
+                resultHtml = `<span style=\"color:#fff\">Disadvantage:</span> <span style=\"color:#ff2222\">${disValue}</span>`;
+            } else {
+                // Fallback: show both
+                resultHtml = `<span style=\"color:#fff\">D20(1):</span> <span style=\"color:#ffe066\">${numA}</span> &nbsp; <span style=\"color:#fff\">D20(2):</span> <span style=\"color:#8fd6ff\">${numB}</span>`;
+            }
+        } else {
+            // Still rolling, show both
+            resultHtml = `<span style=\"color:#fff\">D20(1):</span> <span style=\"color:#ffe066\">${numA}</span> &nbsp; <span style=\"color:#fff\">D20(2):</span> <span style=\"color:#8fd6ff\">${numB}</span>`;
+        }
+    } else if (d12 && d12.visible && (!d20 || !d20.visible) && (!d20b || !d20b.visible)) {
+        // Only d12
+        resultHtml = `<span style=\"color:#fff\">D12:</span> <span style=\"color:#ff2222\">${numD12}</span>`;
+    }
+    resultDiv.innerHTML = resultHtml;
     // No idle spin
     // ...existing code...
     // Animate skybox stars
