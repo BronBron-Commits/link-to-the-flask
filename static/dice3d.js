@@ -754,7 +754,7 @@ document.body.appendChild(legendDiv);
 // --- Dice Action Menu ---
 const diceMenuDiv = document.createElement('div');
 diceMenuDiv.style.position = 'fixed';
-diceMenuDiv.style.top = '170px';
+diceMenuDiv.style.top = '320px';
 diceMenuDiv.style.left = '16px';
 diceMenuDiv.style.zIndex = '1001';
 diceMenuDiv.style.background = 'rgba(34,34,34,0.92)';
