@@ -148,7 +148,7 @@ const camera = new THREE.PerspectiveCamera(
 );
 // Camera orbit state
 let orbitAngle = 0;
-const orbitRadius = 6;
+let orbitRadius = 6;
 let orbitHeight = 4.5;
 camera.position.set(0, orbitHeight, orbitRadius);
 camera.lookAt(0, -1.5, 0); // Look at table center
@@ -209,13 +209,14 @@ renderer.domElement.addEventListener('mousemove', (e) => {
 
 // Mouse wheel zoom
 renderer.domElement.addEventListener('wheel', (e) => {
-    // Zoom in/out by changing camera FOV (frame zoom)
-    const fovSpeed = 2;
-    camera.fov += e.deltaY > 0 ? fovSpeed : -fovSpeed;
-    // Clamp FOV
-    camera.fov = Math.max(15, Math.min(90, camera.fov));
-    camera.updateProjectionMatrix();
-});
+    // Zoom in/out by moving camera radius
+    const zoomSpeed = 0.5;
+    if (e.deltaY > 0) {
+        orbitRadius = Math.min(orbitRadius + zoomSpeed, 24); // max zoom out
+    } else {
+        orbitRadius = Math.max(orbitRadius - zoomSpeed, 2.5); // min zoom in
+    }
+}, { passive: true });
 
 // Fullscreen
 renderer.domElement.style.position = 'fixed';
