@@ -6,8 +6,8 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
 // Zoom state
-let zoom = 1.0;
-const maxZoom = 2.0;
+let zoom = 2.0; // doubled zoom
+const maxZoom = 4.0; // allow higher zoom
 function getMinZoom() {
     // Minimum zoom so the entire canvas fits within the window
     const w = canvas.width;
@@ -23,7 +23,7 @@ function getMinZoom() {
 // Zooming removed: no mouse wheel zoom handler
 
 let joy = { x: 0, y: 0 };
-const tileSize = 40;
+const tileSize = 80; // doubled tile size
 
 let player = { x: 0, y: 0 };
 let facing={x:1,y:0};
@@ -86,8 +86,8 @@ function update(){
 // Procedural PBR wood plank pattern
 let woodPatternCanvas = null;
 function createWoodPattern() {
-    const plankWidth = 80;
-    const plankHeight = 40;
+    const plankWidth = 160; // doubled
+    const plankHeight = 80; // doubled
     const patternW = plankWidth * 4;
     const patternH = plankHeight * 4;
     woodPatternCanvas = document.createElement('canvas');
@@ -145,6 +145,9 @@ function draw() {
         // ...existing code...
     ctx.clearRect(0,0,canvas.width,canvas.height);
     ctx.save();
+    ctx.scale(0.5, 0.5); // 0.5x (zoomed out to 50%)
+    // Center camera on player/world
+    ctx.translate(-camera.x + canvas.width/2, -camera.y + canvas.height/2);
     // Center and scale canvas for zoom
     ctx.translate(canvas.width/2, canvas.height/2);
     ctx.scale(zoom, zoom);
@@ -155,8 +158,8 @@ function draw() {
     const charY = canvas.height/2;
     const tableCX = charX - 100;
     const tableCY = charY + 32;
-    const tableRX = 44; // horizontal radius
-    const tableRY = 28; // vertical radius
+    const tableRX = 88; // horizontal radius doubled
+    const tableRY = 56; // vertical radius doubled
     // Draw two bookshelves north of carpet, with fireplace between them
     const carpetW = tableRX * 4.2 * 1.5;
     const carpetH = tableRY * 3.2 * 1.5;
@@ -180,7 +183,7 @@ function draw() {
     const carpetY = tableCY + tableRY - carpetH/2 - 24; // push up a bit more
     // Bookshelf dimensions
     const shelfW = carpetW * 0.28;
-    const shelfH = 136; // doubled height
+    const shelfH = 272; // doubled height
     const shelfY = carpetY - shelfH - 24;
     // Left bookshelf
     const leftShelfX = carpetX + 16;
@@ -188,7 +191,7 @@ function draw() {
     const rightShelfX = carpetX + carpetW - shelfW - 16;
     // Fireplace dimensions and position
     const fireplaceW = carpetW * 0.22;
-    const fireplaceH = 54;
+    const fireplaceH = 108; // doubled height
     const fireplaceX = carpetX + (carpetW - fireplaceW)/2;
     const fireplaceY = shelfY + shelfH - fireplaceH;
     // Draw left bookshelf
@@ -200,7 +203,7 @@ function draw() {
         ctx.fillRect(leftShelfX, shelfY + 8 + s*20, shelfW, 4);
     }
     // Draw cabinets underneath books
-    const cabinetH = 32;
+    const cabinetH = 64; // doubled height
     ctx.fillStyle = '#1a0e07';
     ctx.fillRect(leftShelfX, shelfY + shelfH - cabinetH, shelfW, cabinetH);
     // Cabinet doors
@@ -218,7 +221,7 @@ function draw() {
     // Draw books on left bookshelf
     const bookColors = ['#c62828', '#388e3c', '#1565c0'];
     const gold = '#ffd700';
-    const booksPerLayer = Math.floor((shelfW - 16) / 12);
+    const booksPerLayer = Math.floor((shelfW - 32) / 24); // doubled spacing
     if (!window.bookshelfColorOrderLeft) {
         window.bookshelfColorOrderLeft = [];
         for(let layer=0;layer<3;layer++){
@@ -232,8 +235,8 @@ function draw() {
     for(let layer=0;layer<3;layer++){
         let colorOrder = window.bookshelfColorOrderLeft[layer];
         for(let i=0;i<booksPerLayer;i++){
-            const bookX = leftShelfX + 8 + i*12;
-            const bookY = shelfY + 12 + layer*20;
+            const bookX = leftShelfX + 16 + i*24;
+            const bookY = shelfY + 24 + layer*40;
             let baseColor = colorOrder[i];
             let h,s,l;
             if (!window.bookshelfHSL) window.bookshelfHSL = {};
@@ -260,9 +263,9 @@ function draw() {
             let l2 = Math.min(1, Math.max(0, hsl.l + offset - 0.05));
             let s2 = Math.min(1, Math.max(0, hsl.s + offset/2 - 0.02));
             ctx.fillStyle = `hsl(${Math.round(hsl.h*360)},${Math.round(s2*100)}%,${Math.round(l2*100)}%)`;
-            ctx.fillRect(bookX, bookY, 10, 16);
+            ctx.fillRect(bookX, bookY, 20, 32);
             ctx.fillStyle = gold;
-            ctx.fillRect(bookX + 2, bookY + 2, 2, 12);
+            ctx.fillRect(bookX + 4, bookY + 4, 4, 24);
         }
     }
     ctx.restore();
@@ -351,8 +354,8 @@ function draw() {
     for(let layer=0;layer<3;layer++){
         let colorOrder = window.bookshelfColorOrderRight[layer];
         for(let i=0;i<booksPerLayer;i++){
-            const bookX = rightShelfX + 8 + i*12;
-            const bookY = shelfY + 12 + layer*20;
+            const bookX = rightShelfX + 16 + i*24;
+            const bookY = shelfY + 24 + layer*40;
             let baseColor = colorOrder[i];
             let h,s,l;
             if (!window.bookshelfHSL) window.bookshelfHSL = {};
@@ -379,9 +382,9 @@ function draw() {
             let l2 = Math.min(1, Math.max(0, hsl.l + offset - 0.05));
             let s2 = Math.min(1, Math.max(0, hsl.s + offset/2 - 0.02));
             ctx.fillStyle = `hsl(${Math.round(hsl.h*360)},${Math.round(s2*100)}%,${Math.round(l2*100)}%)`;
-            ctx.fillRect(bookX, bookY, 10, 16);
+            ctx.fillRect(bookX, bookY, 20, 32);
             ctx.fillStyle = gold;
-            ctx.fillRect(bookX + 2, bookY + 2, 2, 12);
+            ctx.fillRect(bookX + 4, bookY + 4, 4, 24);
         }
     }
     ctx.restore();
@@ -396,8 +399,8 @@ function draw() {
     const fireY = fireplaceY + fireplaceH - 22;
     const t = performance.now() * 0.001;
     const flicker = Math.sin(t*1.7) * 2.2 + Math.sin(t*0.7) * 1.1;
-    const flameHeight = 24 + flicker;
-    const flameWidth = fireplaceW * 0.18 + flicker*0.5;
+    const flameHeight = 48 + flicker*2; // doubled
+    const flameWidth = fireplaceW * 0.36 + flicker; // doubled
     ctx.save();
     // Outer glow
     ctx.beginPath();
@@ -511,7 +514,7 @@ function draw() {
     ctx.restore();
     // Draw frills on left and right ends
     const frillCount = 18;
-    const frillLen = 16;
+    const frillLen = 32; // doubled
     const frillSpacing = carpetH / (frillCount+1);
     ctx.strokeStyle = '#bdbdbd';
     ctx.lineWidth = 2;
@@ -697,7 +700,7 @@ function draw() {
     ctx.restore();
 
     // Draw 3 purple dice on the table
-    const diceSize = 14;
+    const diceSize = 28; // doubled
     const diceY = tableCY - tableRY/2 + 12;
     const dicePositions = [
         {x: tableCX - 10, y: diceY},
@@ -863,32 +866,33 @@ function draw() {
 
     // Draw chair to the left of circular table
     const tableR = tableRX; // define tableR for compatibility
-    const chairX = tableCX - tableR - 32;
-    const chairY = tableCY + tableR - 10;
+    const chairX = tableCX - tableR - 64; // doubled offset
+    const chairY = tableCY + tableR - 20; // doubled offset
     ctx.save();
     ctx.fillStyle = '#deb887'; // chair seat
-    ctx.fillRect(chairX, chairY, 32, 12);
+    ctx.fillRect(chairX, chairY, 64, 24);
     ctx.fillStyle = '#181018'; // chair legs
-    ctx.fillRect(chairX+2, chairY+12, 6, 18);
-    ctx.fillRect(chairX+24, chairY+12, 6, 18);
+    ctx.fillRect(chairX+4, chairY+24, 12, 36);
+    ctx.fillRect(chairX+48, chairY+24, 12, 36);
     ctx.fillStyle = '#2a1a0e'; // chair back
-    ctx.fillRect(chairX, chairY-16, 32, 14);
+    ctx.fillRect(chairX, chairY-32, 64, 28);
     ctx.restore();
 
     drawWizard(
         ctx,
         charX,
         charY,
-        4,
+        8, // double the scale for player
         walkFrame,
         idleTime
     );
 
     // scepter: position relative to centered player
     // tweak these offsets to move it into the hand
-    const sx = charX + 38;
-    const sy = charY + 26;
-    drawScepter(ctx, sx, sy, 3, walkFrame);
+    const sx = charX + 80; // moved a little more to the right
+    const sy = charY + 36; // moved a little further down
+    drawScepter(ctx, sx, sy, 6, walkFrame); // double the scale for scepter
+    ctx.restore(); // Restore after scaling
 }
 
 let last=performance.now();
