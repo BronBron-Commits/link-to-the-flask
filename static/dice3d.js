@@ -622,8 +622,8 @@ for (let i = 0; i < plankCount; i++) {
 
 const tableTexture = new THREE.CanvasTexture(tableCanvas);
 // Make table surface bigger and add beveled edge
-const tableRadius = 4.0;
-const tableHeight = 0.3;
+const tableRadius = 8.0;
+const tableHeight = 0.6;
 const table = new THREE.Mesh(
     new THREE.CylinderGeometry(tableRadius, tableRadius, tableHeight, 64),
     new THREE.MeshStandardMaterial({
@@ -654,8 +654,8 @@ scene.add(bevel);
 // --- Dice Tray ---
 // A shallow cylinder with a felt-like material, slightly smaller than the table
 const trayRadius = tableRadius * 0.7;
-const trayHeight = 0.12;
-const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.01;
+const trayHeight = 0.24;
+const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.02;
 const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeight, 48);
 // Create a more prominent PBR-style felt texture
 const trayFeltCanvas = document.createElement('canvas');
@@ -771,8 +771,8 @@ tray.position.set(0, trayY, 0);
 scene.add(tray);
 
 // --- Image Plane Above Felt (shows map.png) ---
-const imagePlaneSize = trayRadius * 1.15; // slightly smaller than tray
-const imagePlaneHeight = trayY + trayHeight / 2 + 0.012; // just above felt
+const imagePlaneSize = trayRadius * 1.15;
+const imagePlaneHeight = trayY + trayHeight / 2 + 0.024;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
 const loader = new THREE.TextureLoader();
 loader.setPath('static/');
@@ -822,6 +822,101 @@ loader.load('map.png', function(texture) {
         imagePlane.position.set(0, imagePlaneHeight, 0);
         imagePlane.rotation.x = -Math.PI / 2;
         scene.add(imagePlane);
+        // --- Editable Terrain Grid ---
+        const terrainGridSize = 20; // 20x20 grid
+        const terrainCellSize = imagePlaneSize / terrainGridSize;
+        const terrainHeights = [];
+        for (let y = 0; y <= terrainGridSize; y++) {
+            terrainHeights[y] = [];
+            for (let x = 0; x <= terrainGridSize; x++) {
+                terrainHeights[y][x] = 0; // initial flat
+            }
+        }
+
+        function createTerrainGeometry() {
+            const geometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize, terrainGridSize, terrainGridSize);
+            // Set heights
+            for (let i = 0; i < geometry.attributes.position.count; i++) {
+                const ix = i % (terrainGridSize + 1);
+                const iy = Math.floor(i / (terrainGridSize + 1));
+                geometry.attributes.position.setZ(i, terrainHeights[iy][ix]);
+            }
+            geometry.computeVertexNormals();
+            return geometry;
+        }
+
+        let terrainMesh = null;
+        function addTerrainMesh() {
+            if (terrainMesh) scene.remove(terrainMesh);
+            const geometry = createTerrainGeometry();
+            const material = new THREE.MeshStandardMaterial({
+                color: 0xcccccc,
+                wireframe: true,
+                transparent: true,
+                opacity: 0.7,
+                depthWrite: false
+            });
+            terrainMesh = new THREE.Mesh(geometry, material);
+            terrainMesh.position.set(0, imagePlaneHeight + 0.01, 0);
+            terrainMesh.rotation.x = -Math.PI / 2;
+            scene.add(terrainMesh);
+        }
+        addTerrainMesh();
+            // --- Face Selection for Terrain ---
+            let selectedFace = null;
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                // Only left click
+                if (e.button !== 0) return;
+                // Convert mouse to NDC
+                const rect = renderer.domElement.getBoundingClientRect();
+                const mouse = new THREE.Vector2(
+                    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+                    -((e.clientY - rect.top) / rect.height) * 2 + 1
+                );
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, camera);
+                if (!terrainMesh) return;
+                const intersects = raycaster.intersectObject(terrainMesh, false);
+                if (intersects.length > 0) {
+                    selectedFace = intersects[0];
+                    // Visual feedback: highlight selected face
+                    const idx = selectedFace.face.a;
+                    const geometry = terrainMesh.geometry;
+                    if (!geometry.attributes.color) {
+                        const colors = [];
+                        for (let i = 0; i < geometry.attributes.position.count; i++) {
+                            colors.push(0.8, 0.8, 0.8);
+                        }
+                        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                    }
+                    // Reset all colors
+                    for (let i = 0; i < geometry.attributes.color.count; i++) {
+                        geometry.attributes.color.setXYZ(i, 0.8, 0.8, 0.8);
+                    }
+                    // Highlight the three vertices of the selected face
+                    geometry.attributes.color.setXYZ(selectedFace.face.a, 1, 0.5, 0.2);
+                    geometry.attributes.color.setXYZ(selectedFace.face.b, 1, 0.5, 0.2);
+                    geometry.attributes.color.setXYZ(selectedFace.face.c, 1, 0.5, 0.2);
+                    geometry.attributes.color.needsUpdate = true;
+                    geometry.attributes.position.needsUpdate = true;
+
+                    // --- Raise/lower terrain on click ---
+                    // Find grid indices for the three vertices
+                    const indices = [selectedFace.face.a, selectedFace.face.b, selectedFace.face.c];
+                    const verts = indices.map(i => {
+                        return {
+                            ix: i % (terrainGridSize + 1),
+                            iy: Math.floor(i / (terrainGridSize + 1))
+                        };
+                    });
+                    // Raise with left click, lower with right click
+                    let delta = e.shiftKey ? -0.2 : 0.2;
+                    verts.forEach(v => {
+                        terrainHeights[v.iy][v.ix] += delta;
+                    });
+                    addTerrainMesh();
+                }
+            });
     };
     img.src = texture.image.currentSrc || texture.image.src;
 });
@@ -836,9 +931,9 @@ loader.load('map.png', function(texture) {
 // Add a lit candle to the table
 
 // Candle shape: more realistic (tapered, melted)
-const candleHeight = 0.72;
-const candleRadiusTop = 0.11; // Tapered top
-const candleRadiusBottom = 0.17;
+const candleHeight = 1.44;
+const candleRadiusTop = 0.22;
+const candleRadiusBottom = 0.34;
 const candleGeometry = new THREE.CylinderGeometry(candleRadiusTop, candleRadiusBottom, candleHeight, 32, 1, false);
 // Add some melted wax effect by modifying vertices
 const pos = candleGeometry.attributes.position;
@@ -863,7 +958,7 @@ const candleMaterial = new THREE.MeshStandardMaterial({ color: 0xf5e6c2, roughne
 const candle = new THREE.Mesh(candleGeometry, candleMaterial);
 // Move candle closer to edge of table (right side, not blocking dice)
 const candleAngle = Math.PI * 0.18; // ~10 degrees from x axis
-const candleEdgeDist = tableRadius - candleRadiusBottom - 0.11;
+const candleEdgeDist = tableRadius - candleRadiusBottom - 0.22;
 const candleX = Math.cos(candleAngle) * candleEdgeDist;
 const candleZ = Math.sin(candleAngle) * candleEdgeDist;
 candle.position.set(candleX, -1.5 + tableHeight / 2 + candleHeight / 2, candleZ);
@@ -904,7 +999,7 @@ const flameMaterial = new THREE.ShaderMaterial({
 });
 
 const flame = new THREE.Mesh(flameGeometry, flameMaterial);
-flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.06, candleZ);
+flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.12, candleZ);
 scene.add(flame);
 
 // Candle light
