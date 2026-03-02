@@ -364,6 +364,8 @@ let dieAngularVelocityB = new THREE.Vector2(0, 0);
 const player = { x: 0, y: tableHeight / 2 + 2.0 + 0.11 + 0.18, z: 0 }; // 0.18 offset for clear visibility
 // Create a simple sphere mesh for the player (half size)
 
+// (Player glow mesh code moved below, after imagePlaneSize and table are defined)
+
 // --- Humanoid polygon figure ---
 const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x22ff44, metalness: 0.3, roughness: 0.5 });
 const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), playerMaterial);
@@ -948,13 +950,55 @@ loader.load('map.png', function(texture) {
         gridTexture.wrapT = THREE.ClampToEdgeWrapping;
         gridTexture.minFilter = THREE.LinearFilter;
         // --- Editable Terrain Grid & Deformable Map ---
+        // --- Glowing overlay for player square (must be after imagePlaneSize and table are defined) ---
+        let playerGlowMesh = null;
+        function createPlayerGlowMesh() {
+            const cellSize = imagePlaneSize / terrainGridSize;
+            const glowGeo = new THREE.PlaneGeometry(cellSize * 0.98, cellSize * 0.98);
+            const glowMat = new THREE.MeshBasicMaterial({
+                color: 0xffff00,
+                transparent: true,
+                opacity: 0.45,
+                blending: THREE.AdditiveBlending,
+                depthWrite: false
+            });
+            const mesh = new THREE.Mesh(glowGeo, glowMat);
+            mesh.rotation.x = -Math.PI / 2;
+            mesh.renderOrder = 10;
+            return mesh;
+        }
+        playerGlowMesh = createPlayerGlowMesh();
+        scene.add(playerGlowMesh);
+
+        function updatePlayerGlow() {
+            // Convert player.x, player.z to grid cell
+            const gridX = Math.floor((player.x + imagePlaneSize / 2) / (imagePlaneSize / terrainGridSize));
+            const gridZ = Math.floor((player.z + imagePlaneSize / 2) / (imagePlaneSize / terrainGridSize));
+            const cellSize = imagePlaneSize / terrainGridSize;
+            // Clamp to grid
+            const clampedX = Math.max(0, Math.min(terrainGridSize - 1, gridX));
+            const clampedZ = Math.max(0, Math.min(terrainGridSize - 1, gridZ));
+            // Center of cell
+            const px = -imagePlaneSize / 2 + (clampedX + 0.5) * cellSize;
+            const pz = -imagePlaneSize / 2 + (clampedZ + 0.5) * cellSize;
+            // Place just above the map mesh
+            playerGlowMesh.position.set(px, player.y - 0.18, pz);
+        }
+        updatePlayerGlow();
+
+        // Update glow position when player moves (add to animation loop if needed)
+        function animatePlayerGlow() {
+            updatePlayerGlow();
+            requestAnimationFrame(animatePlayerGlow);
+        }
+        animatePlayerGlow();
         const terrainCellSize = imagePlaneSize / terrainGridSize;
 
         let terrainMesh = null;
         let mapMesh = null;
         function createTerrainGeometry() {
-            // Flat plane, no height modification
-            return new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize, 1, 1);
+            // Higher resolution plane for displacement
+            return new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize, 128, 128);
         }
 
         function addTerrainMesh() {
@@ -983,28 +1027,32 @@ loader.load('map.png', function(texture) {
             const mapUniforms = {
                 map: { value: gridTexture },
                 time: { value: 0 },
-                normalMap: { value: normalMap },
                 displacementMap: { value: displacementMap },
-                aoMap: { value: aoMap },
-                metalnessMap: { value: specularMap },
+                displacementScale: { value: 0.07 }, // very subtle
             };
             const mapMaterial = new THREE.ShaderMaterial({
                 uniforms: mapUniforms,
                 vertexShader: `
+                    uniform sampler2D displacementMap;
+                    uniform float displacementScale;
                     varying vec2 vUv;
                     void main() {
                         vUv = uv;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                        // Sample displacement map
+                        float disp = texture2D(displacementMap, uv).r;
+                        // Center around 0, scale very subtly
+                        float d = (disp - 0.5) * displacementScale;
+                        vec3 displaced = position + normal * d;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
                     }
                 `,
                 fragmentShader: `
                     uniform sampler2D map;
                     uniform float time;
                     varying vec2 vUv;
-                    // Subtle animated UV distortion
                     void main() {
                         float freq = 2.0;
-                        float amp = 0.012;
+                        float amp = 0.0015;
                         vec2 uv = vUv;
                         uv.x += sin(uv.y * 6.2831 * freq + time * 0.7) * amp;
                         uv.y += cos(uv.x * 6.2831 * freq + time * 0.5) * amp;

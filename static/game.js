@@ -267,18 +267,52 @@ function draw() {
     }
     ctx.restore();
 
-    // Stronger vignette effect overlay
+    // Animated fog overlay effect
     ctx.save();
-    ctx.globalAlpha = 0.65;
-    const vignetteGradient = ctx.createRadialGradient(
-        canvas.width/2, canvas.height/2, Math.min(canvas.width, canvas.height)*0.22,
-        canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)*0.58
+    // Animate fog center with time for drifting effect
+    const fogTime = performance.now() * 0.00018;
+    const fogDriftX = Math.sin(fogTime) * canvas.width * 0.13;
+    const fogDriftY = Math.cos(fogTime * 0.7) * canvas.height * 0.09;
+    const fogCenterX = canvas.width/2 + fogDriftX;
+    const fogCenterY = canvas.height/2 + fogDriftY;
+    const fogGradient = ctx.createRadialGradient(
+        fogCenterX, fogCenterY, Math.min(canvas.width, canvas.height)*0.18,
+        fogCenterX, fogCenterY, Math.max(canvas.width, canvas.height)*0.85
+    );
+    fogGradient.addColorStop(0, 'rgba(255,255,255,0.28)');
+    fogGradient.addColorStop(0.5, 'rgba(255,255,255,0.18)');
+    fogGradient.addColorStop(1, 'rgba(255,255,255,0.52)');
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = fogGradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
+
+    // Stronger vignette effect overlay (with more blur and opacity)
+    ctx.save();
+    ctx.globalAlpha = 0.92;
+    // Draw blurred vignette using an offscreen canvas
+    const vignetteCanvas = document.createElement('canvas');
+    vignetteCanvas.width = canvas.width;
+    vignetteCanvas.height = canvas.height;
+    const vctx = vignetteCanvas.getContext('2d');
+    // Draw radial gradient to offscreen
+    const vignetteGradient = vctx.createRadialGradient(
+        canvas.width/2, canvas.height/2, Math.min(canvas.width, canvas.height)*0.18,
+        canvas.width/2, canvas.height/2, Math.max(canvas.width, canvas.height)*0.68
     );
     vignetteGradient.addColorStop(0, 'rgba(0,0,0,0)');
-    vignetteGradient.addColorStop(0.7, 'rgba(0,0,0,0.35)');
+    vignetteGradient.addColorStop(0.55, 'rgba(0,0,0,0.45)');
+    vignetteGradient.addColorStop(0.85, 'rgba(0,0,0,0.85)');
     vignetteGradient.addColorStop(1, 'rgba(0,0,0,1)');
-    ctx.fillStyle = vignetteGradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    vctx.fillStyle = vignetteGradient;
+    vctx.fillRect(0, 0, canvas.width, canvas.height);
+    // Apply stronger blur filter
+    vctx.globalAlpha = 1.0;
+    vctx.filter = 'blur(38px)';
+    vctx.drawImage(vignetteCanvas, 0, 0);
+    vctx.filter = 'none';
+    // Draw blurred vignette to main canvas
+    ctx.drawImage(vignetteCanvas, 0, 0);
     ctx.restore();
     // Draw right bookshelf
     ctx.save();
@@ -500,39 +534,133 @@ function draw() {
     const couchW = carpetW * 0.38;
     const couchH = carpetH * 0.32;
     const couchY = carpetY + carpetH/2 - couchH/2;
-    // Left couch (left of carpet)
+    // Left couch (left of carpet) - enhanced look
     const leftCouchX = carpetX - couchW - 24;
     ctx.save();
     ctx.translate(leftCouchX + couchW/2, couchY + couchH/2);
     ctx.rotate(-Math.PI/2); // rotate 90deg counterclockwise
-    ctx.fillStyle = '#3a2320';
-    ctx.fillRect(-couchW/2, -couchH/2, couchW, couchH);
-    ctx.fillStyle = '#5a3a2a';
+    // Couch base with rounded corners
+    ctx.fillStyle = '#4b2e1a';
+    ctx.strokeStyle = '#2a1a0e';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-couchW/2 + 12, -couchH/2);
+    ctx.lineTo(couchW/2 - 12, -couchH/2);
+    ctx.quadraticCurveTo(couchW/2, -couchH/2, couchW/2, -couchH/2 + 12);
+    ctx.lineTo(couchW/2, couchH/2 - 12);
+    ctx.quadraticCurveTo(couchW/2, couchH/2, couchW/2 - 12, couchH/2);
+    ctx.lineTo(-couchW/2 + 12, couchH/2);
+    ctx.quadraticCurveTo(-couchW/2, couchH/2, -couchW/2, couchH/2 - 12);
+    ctx.lineTo(-couchW/2, -couchH/2 + 12);
+    ctx.quadraticCurveTo(-couchW/2, -couchH/2, -couchW/2 + 12, -couchH/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Couch seat cushions
+    ctx.fillStyle = '#6d4c2b';
     for(let i=0;i<3;i++){
-        ctx.fillRect(-couchW/2 + 12 + i*(couchW/3), -couchH/2 + 8, couchW/3 - 24, couchH - 24);
+        ctx.beginPath();
+        ctx.moveTo(-couchW/2 + 16 + i*(couchW/3), -couchH/2 + 10);
+        ctx.lineTo(-couchW/2 + 16 + (i+1)*(couchW/3) - 20, -couchH/2 + 10);
+        ctx.quadraticCurveTo(-couchW/2 + 16 + (i+1)*(couchW/3) - 10, -couchH/2 + 18, -couchW/2 + 16 + (i+1)*(couchW/3) - 20, couchH/2 - 18);
+        ctx.lineTo(-couchW/2 + 16 + i*(couchW/3), couchH/2 - 18);
+        ctx.quadraticCurveTo(-couchW/2 + 16 + i*(couchW/3) + 10, -couchH/2 + 18, -couchW/2 + 16 + i*(couchW/3), -couchH/2 + 10);
+        ctx.closePath();
+        ctx.fill();
     }
-    ctx.fillStyle = '#181018';
-    ctx.fillRect(-couchW/2 + 8, couchH/2 - 16, 12, 8);
-    ctx.fillRect(couchW/2 - 20, couchH/2 - 16, 12, 8);
-    ctx.fillRect(-couchW/2 + 8, -couchH/2 + 8, 12, 8);
-    ctx.fillRect(couchW/2 - 20, -couchH/2 + 8, 12, 8);
+    // Armrests
+    ctx.fillStyle = '#3a2320';
+    ctx.beginPath();
+    ctx.ellipse(-couchW/2 + 18, 0, 14, couchH/2 - 8, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(couchW/2 - 18, 0, 14, couchH/2 - 8, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Backrest with subtle highlight
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#5a3a2a';
+    ctx.beginPath();
+    ctx.moveTo(-couchW/2 + 12, -couchH/2 + 2);
+    ctx.lineTo(couchW/2 - 12, -couchH/2 + 2);
+    ctx.quadraticCurveTo(couchW/2, -couchH/2 + 2, couchW/2, -couchH/2 + 18);
+    ctx.lineTo(-couchW/2, -couchH/2 + 18);
+    ctx.quadraticCurveTo(-couchW/2, -couchH/2 + 2, -couchW/2 + 12, -couchH/2 + 2);
+    ctx.closePath();
+    ctx.fill();
     ctx.restore();
-    // Right couch (right of carpet)
+    // Subtle shadow under couch
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(0, couchH/2 - 6, couchW/2.2, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+    ctx.restore();
+    // Right couch (right of carpet) - enhanced look
     const rightCouchX = carpetX + carpetW + 24;
     ctx.save();
     ctx.translate(rightCouchX + couchW/2, couchY + couchH/2);
     ctx.rotate(Math.PI/2); // rotate 90deg clockwise
-    ctx.fillStyle = '#3a2320';
-    ctx.fillRect(-couchW/2, -couchH/2, couchW, couchH);
-    ctx.fillStyle = '#5a3a2a';
+    // Couch base with rounded corners
+    ctx.fillStyle = '#4b2e1a';
+    ctx.strokeStyle = '#2a1a0e';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(-couchW/2 + 12, -couchH/2);
+    ctx.lineTo(couchW/2 - 12, -couchH/2);
+    ctx.quadraticCurveTo(couchW/2, -couchH/2, couchW/2, -couchH/2 + 12);
+    ctx.lineTo(couchW/2, couchH/2 - 12);
+    ctx.quadraticCurveTo(couchW/2, couchH/2, couchW/2 - 12, couchH/2);
+    ctx.lineTo(-couchW/2 + 12, couchH/2);
+    ctx.quadraticCurveTo(-couchW/2, couchH/2, -couchW/2, couchH/2 - 12);
+    ctx.lineTo(-couchW/2, -couchH/2 + 12);
+    ctx.quadraticCurveTo(-couchW/2, -couchH/2, -couchW/2 + 12, -couchH/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    // Couch seat cushions
+    ctx.fillStyle = '#6d4c2b';
     for(let i=0;i<3;i++){
-        ctx.fillRect(-couchW/2 + 12 + i*(couchW/3), -couchH/2 + 8, couchW/3 - 24, couchH - 24);
+        ctx.beginPath();
+        ctx.moveTo(-couchW/2 + 16 + i*(couchW/3), -couchH/2 + 10);
+        ctx.lineTo(-couchW/2 + 16 + (i+1)*(couchW/3) - 20, -couchH/2 + 10);
+        ctx.quadraticCurveTo(-couchW/2 + 16 + (i+1)*(couchW/3) - 10, -couchH/2 + 18, -couchW/2 + 16 + (i+1)*(couchW/3) - 20, couchH/2 - 18);
+        ctx.lineTo(-couchW/2 + 16 + i*(couchW/3), couchH/2 - 18);
+        ctx.quadraticCurveTo(-couchW/2 + 16 + i*(couchW/3) + 10, -couchH/2 + 18, -couchW/2 + 16 + i*(couchW/3), -couchH/2 + 10);
+        ctx.closePath();
+        ctx.fill();
     }
-    ctx.fillStyle = '#181018';
-    ctx.fillRect(-couchW/2 + 8, couchH/2 - 16, 12, 8);
-    ctx.fillRect(couchW/2 - 20, couchH/2 - 16, 12, 8);
-    ctx.fillRect(-couchW/2 + 8, -couchH/2 + 8, 12, 8);
-    ctx.fillRect(couchW/2 - 20, -couchH/2 + 8, 12, 8);
+    // Armrests
+    ctx.fillStyle = '#3a2320';
+    ctx.beginPath();
+    ctx.ellipse(-couchW/2 + 18, 0, 14, couchH/2 - 8, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.ellipse(couchW/2 - 18, 0, 14, couchH/2 - 8, 0, 0, Math.PI*2);
+    ctx.fill();
+    // Backrest with subtle highlight
+    ctx.save();
+    ctx.globalAlpha = 0.7;
+    ctx.fillStyle = '#5a3a2a';
+    ctx.beginPath();
+    ctx.moveTo(-couchW/2 + 12, -couchH/2 + 2);
+    ctx.lineTo(couchW/2 - 12, -couchH/2 + 2);
+    ctx.quadraticCurveTo(couchW/2, -couchH/2 + 2, couchW/2, -couchH/2 + 18);
+    ctx.lineTo(-couchW/2, -couchH/2 + 18);
+    ctx.quadraticCurveTo(-couchW/2, -couchH/2 + 2, -couchW/2 + 12, -couchH/2 + 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+    // Subtle shadow under couch
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(0, couchH/2 - 6, couchW/2.2, 10, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
     ctx.restore();
     // Table top (ellipse for perspective)
     ctx.beginPath();
