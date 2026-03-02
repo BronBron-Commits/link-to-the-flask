@@ -216,11 +216,11 @@ window.addEventListener('resize', resize3D);
 resize3D();
 
 // Lighting
-const light = new THREE.DirectionalLight(0xffffff, 1);
+const light = new THREE.DirectionalLight(0xffffff, 1.7); // increased intensity
 light.position.set(5, 10, 5);
 scene.add(light);
 
-const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+const ambient = new THREE.AmbientLight(0xffffff, 0.7); // increased intensity
 scene.add(ambient);
 
 // D20 and D12
@@ -237,13 +237,14 @@ let d20bHovered = false;
 let d12EdgeGlow = null;
 let d12Hovered = false;
 
-// Create procedural royal blue + gold veins texture (shared for d20/d12)
-function createRoyalBlueGoldTexture(size = 512, veins = 1200) {
+
+// Create procedural bright purple + gold veins texture (shared for d20/d12)
+function createBrightPurpleGoldTexture(size = 512, veins = 1200) {
     const canvas = document.createElement('canvas');
     canvas.width = size;
     canvas.height = size;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#1a237e'; // Royal blue
+    ctx.fillStyle = '#a259ff'; // Bright purple
     ctx.fillRect(0, 0, size, size);
     for (let i = 0; i < veins; i++) {
         const x = Math.random() * size;
@@ -257,31 +258,41 @@ function createRoyalBlueGoldTexture(size = 512, veins = 1200) {
         ctx.moveTo(0, 0);
         ctx.lineTo(length, 0);
         ctx.lineWidth = 2 + Math.random() * 2;
-        const blueGold = 'rgba(60, 90, 200, 0.7)';
-        const gold = 'rgba(180, 160, 80, 0.35)';
-        ctx.strokeStyle = Math.random() < 0.7 ? blueGold : gold;
-        ctx.shadowColor = 'rgba(60, 90, 200, 0.3)';
-        ctx.shadowBlur = 4;
+        const purpleGold = 'rgba(162, 89, 255, 0.7)'; // bright purple
+        const gold = 'rgba(255, 215, 80, 0.5)'; // brighter gold
+        ctx.strokeStyle = Math.random() < 0.7 ? purpleGold : gold;
+        ctx.shadowColor = Math.random() < 0.7 ? 'rgba(162, 89, 255, 0.3)' : 'rgba(255, 215, 80, 0.18)';
+        ctx.shadowBlur = 6;
         ctx.stroke();
         ctx.restore();
     }
     return canvas;
 }
 
-const d20Texture = new THREE.CanvasTexture(createRoyalBlueGoldTexture());
-const d20Material = new THREE.MeshStandardMaterial({
+const d20Texture = new THREE.CanvasTexture(createBrightPurpleGoldTexture());
+const d20Material = new THREE.MeshPhysicalMaterial({
     map: d20Texture,
     color: 0xffffff,
-    metalness: 0.5,
-    roughness: 0.3
+    metalness: 0.92,
+    roughness: 0.13,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.08,
+    reflectivity: 0.82,
+    sheen: 0.25,
+    sheenColor: new THREE.Color(0xffffff)
 });
 
-const d12Texture = new THREE.CanvasTexture(createRoyalBlueGoldTexture(512, 900));
-const d12Material = new THREE.MeshStandardMaterial({
+const d12Texture = new THREE.CanvasTexture(createBrightPurpleGoldTexture(512, 900));
+const d12Material = new THREE.MeshPhysicalMaterial({
     map: d12Texture,
     color: 0xffffff,
-    metalness: 0.5,
-    roughness: 0.3
+    metalness: 0.92,
+    roughness: 0.13,
+    clearcoat: 0.7,
+    clearcoatRoughness: 0.08,
+    reflectivity: 0.82,
+    sheen: 0.25,
+    sheenColor: new THREE.Color(0xffffff)
 });
 
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
@@ -884,7 +895,7 @@ diceMenuDiv.innerHTML = `
 <button id="roll-d20-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll Standard d20</button><br>
 <button id="roll-adv-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#66e0ff;border:1px solid #66e0ff;border-radius:6px;cursor:pointer;">Roll d20 (Advantage)</button><br>
 <button id="roll-dis-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ff2222;border:1px solid #ff2222;border-radius:6px;cursor:pointer;">Roll d20 (Disadvantage)</button>
-<button id="roll-d12-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll D12</button>
+<button id="roll-d12-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll d12</button>
 `;
 document.body.appendChild(diceMenuDiv);
 
@@ -1056,7 +1067,7 @@ function animate() {
     let numA = null, numB = null, numD12 = null;
     if (d20 && d20.visible) numA = highlightTopFace(d20, d20FacesA, d20NumbersA, '#ffe066');
     if (d20b && d20b.visible) numB = highlightTopFace(d20b, d20FacesB, d20NumbersB, '#66e0ff');
-    if (d12 && d12.visible) numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ff2222');
+    if (d12 && d12.visible) numD12 = highlightTopFace(d12, d12Faces, d12Numbers, '#ffe066');
 
     // Decide which value to show based on which dice are visible
     let resultHtml = '';
@@ -1085,7 +1096,7 @@ function animate() {
         }
     } else if (d12 && d12.visible && (!d20 || !d20.visible) && (!d20b || !d20b.visible)) {
         // Only d12
-        resultHtml = `<span style=\"color:#fff\">D12:</span> <span style=\"color:#ff2222\">${numD12}</span>`;
+        resultHtml = `<span style=\"color:#fff\">D12:</span> <span style=\"color:#ffe066\">${numD12}</span>`;
     }
     resultDiv.innerHTML = resultHtml;
     // No idle spin
