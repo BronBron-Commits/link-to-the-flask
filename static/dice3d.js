@@ -774,6 +774,15 @@ scene.add(tray);
 const imagePlaneSize = trayRadius * 1.15;
 const imagePlaneHeight = trayY + trayHeight / 2 + 0.024;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
+// Terrain heights must be accessible to all relevant functions
+const terrainGridSize = 40; // 40x40 grid (doubled faces)
+let terrainHeights = [];
+for (let y = 0; y <= terrainGridSize; y++) {
+    terrainHeights[y] = [];
+    for (let x = 0; x <= terrainGridSize; x++) {
+        terrainHeights[y][x] = 0;
+    }
+}
 const loader = new THREE.TextureLoader();
 loader.setPath('static/');
 loader.load('map.png', function(texture) {
@@ -795,44 +804,62 @@ loader.load('map.png', function(texture) {
         ctx.drawImage(img, 0, 0, gridCanvas.width, gridCanvas.height);
         ctx.globalAlpha = 1.0;
 
-        // Draw grid
-        const gridCount = 20; // 20x20 grid
-        ctx.strokeStyle = 'rgba(255,255,255,0.38)';
-        ctx.lineWidth = 1.2;
-        for (let i = 0; i <= gridCount; i++) {
-            let x = (i / gridCount) * gridCanvas.width;
-            ctx.beginPath();
-            ctx.moveTo(x, 0);
-            ctx.lineTo(x, gridCanvas.height);
-            ctx.stroke();
-            let y = (i / gridCount) * gridCanvas.height;
-            ctx.beginPath();
-            ctx.moveTo(0, y);
-            ctx.lineTo(gridCanvas.width, y);
-            ctx.stroke();
+        const gridCount = terrainGridSize;
+
+        // --- Generate heat map from image brightness ---
+        // Sample the image at grid points and set terrainHeights
+        for (let y = 0; y <= gridCount; y++) {
+            for (let x = 0; x <= gridCount; x++) {
+                // Sample center of each cell
+                const px = Math.floor((x / gridCount) * gridCanvas.width);
+                const py = Math.floor((y / gridCount) * gridCanvas.height);
+                const pixel = ctx.getImageData(px, py, 1, 1).data;
+                // Use brightness (simple average)
+                const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
+                // Map brightness [0,255] to height [-1, 1]
+                const h = ((brightness / 255) - 0.5) * 2.0;
+                terrainHeights[y][x] = h;
+            }
         }
+
+            // --- Smooth the terrain heights to remove outliers ---
+            function smoothHeights(heights, passes = 2) {
+                const h = heights.length;
+                const w = heights[0].length;
+                for (let pass = 0; pass < passes; pass++) {
+                    const copy = heights.map(row => row.slice());
+                    for (let y = 0; y < h; y++) {
+                        for (let x = 0; x < w; x++) {
+                            let sum = 0, count = 0;
+                            for (let dy = -1; dy <= 1; dy++) {
+                                for (let dx = -1; dx <= 1; dx++) {
+                                    const ny = y + dy, nx = x + dx;
+                                    if (ny >= 0 && ny < h && nx >= 0 && nx < w) {
+                                        sum += copy[ny][nx];
+                                        count++;
+                                    }
+                                }
+                            }
+                            heights[y][x] = sum / count;
+                        }
+                    }
+                }
+            }
+            smoothHeights(terrainHeights, 3); // 3 passes for extra smoothness
+
+        // Draw grid
+        // Grid drawing removed: no visible grid on the map
 
         const gridTexture = new THREE.CanvasTexture(gridCanvas);
         gridTexture.anisotropy = 8;
         gridTexture.wrapS = THREE.ClampToEdgeWrapping;
         gridTexture.wrapT = THREE.ClampToEdgeWrapping;
         gridTexture.minFilter = THREE.LinearFilter;
-        const imagePlaneMaterial = new THREE.MeshStandardMaterial({ map: gridTexture, transparent: true, opacity: 0.85, roughness: 0.7, metalness: 0.05 });
-        const imagePlane = new THREE.Mesh(imagePlaneGeometry, imagePlaneMaterial);
-        imagePlane.position.set(0, imagePlaneHeight, 0);
-        imagePlane.rotation.x = -Math.PI / 2;
-        scene.add(imagePlane);
-        // --- Editable Terrain Grid ---
-        const terrainGridSize = 20; // 20x20 grid
+        // --- Editable Terrain Grid & Deformable Map ---
         const terrainCellSize = imagePlaneSize / terrainGridSize;
-        const terrainHeights = [];
-        for (let y = 0; y <= terrainGridSize; y++) {
-            terrainHeights[y] = [];
-            for (let x = 0; x <= terrainGridSize; x++) {
-                terrainHeights[y][x] = 0; // initial flat
-            }
-        }
 
+        let terrainMesh = null;
+        let mapMesh = null;
         function createTerrainGeometry() {
             const geometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize, terrainGridSize, terrainGridSize);
             // Set heights
@@ -845,78 +872,83 @@ loader.load('map.png', function(texture) {
             return geometry;
         }
 
-        let terrainMesh = null;
         function addTerrainMesh() {
             if (terrainMesh) scene.remove(terrainMesh);
+            if (mapMesh) scene.remove(mapMesh);
             const geometry = createTerrainGeometry();
-            const material = new THREE.MeshStandardMaterial({
-                color: 0xcccccc,
-                wireframe: true,
-                transparent: true,
-                opacity: 0.7,
-                depthWrite: false
+            // Map mesh (deforms the map image)
+            const mapMaterial = new THREE.MeshStandardMaterial({
+                map: gridTexture,
+                transparent: false,
+                opacity: 1.0,
+                roughness: 0.7,
+                metalness: 0.05,
+                side: THREE.DoubleSide
             });
-            terrainMesh = new THREE.Mesh(geometry, material);
-            terrainMesh.position.set(0, imagePlaneHeight + 0.01, 0);
-            terrainMesh.rotation.x = -Math.PI / 2;
-            scene.add(terrainMesh);
+            // Raise the mesh much higher above the table surface
+            const meshY = table.position.y + tableHeight / 2 + 2.0; // well above table
+            mapMesh = new THREE.Mesh(geometry.clone(), mapMaterial);
+            mapMesh.position.set(0, meshY, 0);
+            mapMesh.rotation.x = -Math.PI / 2;
+            scene.add(mapMesh);
+            // Terrain wireframe overlay removed: no grid or wireframe visible
         }
         addTerrainMesh();
-            // --- Face Selection for Terrain ---
-            let selectedFace = null;
-            renderer.domElement.addEventListener('mousedown', (e) => {
-                // Only left click
-                if (e.button !== 0) return;
-                // Convert mouse to NDC
-                const rect = renderer.domElement.getBoundingClientRect();
-                const mouse = new THREE.Vector2(
-                    ((e.clientX - rect.left) / rect.width) * 2 - 1,
-                    -((e.clientY - rect.top) / rect.height) * 2 + 1
-                );
-                const raycaster = new THREE.Raycaster();
-                raycaster.setFromCamera(mouse, camera);
-                if (!terrainMesh) return;
-                const intersects = raycaster.intersectObject(terrainMesh, false);
-                if (intersects.length > 0) {
-                    selectedFace = intersects[0];
-                    // Visual feedback: highlight selected face
-                    const idx = selectedFace.face.a;
-                    const geometry = terrainMesh.geometry;
-                    if (!geometry.attributes.color) {
-                        const colors = [];
-                        for (let i = 0; i < geometry.attributes.position.count; i++) {
-                            colors.push(0.8, 0.8, 0.8);
-                        }
-                        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        // --- Face Selection for Terrain ---
+        let selectedFace = null;
+        renderer.domElement.addEventListener('mousedown', (e) => {
+            // Only left click
+            if (e.button !== 0) return;
+            // Convert mouse to NDC
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(
+                ((e.clientX - rect.left) / rect.width) * 2 - 1,
+                -((e.clientY - rect.top) / rect.height) * 2 + 1
+            );
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            if (!terrainMesh) return;
+            const intersects = raycaster.intersectObject(terrainMesh, false);
+            if (intersects.length > 0) {
+                selectedFace = intersects[0];
+                // Visual feedback: highlight selected face
+                const idx = selectedFace.face.a;
+                const geometry = terrainMesh.geometry;
+                if (!geometry.attributes.color) {
+                    const colors = [];
+                    for (let i = 0; i < geometry.attributes.position.count; i++) {
+                        colors.push(0.8, 0.8, 0.8);
                     }
-                    // Reset all colors
-                    for (let i = 0; i < geometry.attributes.color.count; i++) {
-                        geometry.attributes.color.setXYZ(i, 0.8, 0.8, 0.8);
-                    }
-                    // Highlight the three vertices of the selected face
-                    geometry.attributes.color.setXYZ(selectedFace.face.a, 1, 0.5, 0.2);
-                    geometry.attributes.color.setXYZ(selectedFace.face.b, 1, 0.5, 0.2);
-                    geometry.attributes.color.setXYZ(selectedFace.face.c, 1, 0.5, 0.2);
-                    geometry.attributes.color.needsUpdate = true;
-                    geometry.attributes.position.needsUpdate = true;
-
-                    // --- Raise/lower terrain on click ---
-                    // Find grid indices for the three vertices
-                    const indices = [selectedFace.face.a, selectedFace.face.b, selectedFace.face.c];
-                    const verts = indices.map(i => {
-                        return {
-                            ix: i % (terrainGridSize + 1),
-                            iy: Math.floor(i / (terrainGridSize + 1))
-                        };
-                    });
-                    // Raise with left click, lower with right click
-                    let delta = e.shiftKey ? -0.2 : 0.2;
-                    verts.forEach(v => {
-                        terrainHeights[v.iy][v.ix] += delta;
-                    });
-                    addTerrainMesh();
+                    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
                 }
-            });
+                // Reset all colors
+                for (let i = 0; i < geometry.attributes.color.count; i++) {
+                    geometry.attributes.color.setXYZ(i, 0.8, 0.8, 0.8);
+                }
+                // Highlight the three vertices of the selected face
+                geometry.attributes.color.setXYZ(selectedFace.face.a, 1, 0.5, 0.2);
+                geometry.attributes.color.setXYZ(selectedFace.face.b, 1, 0.5, 0.2);
+                geometry.attributes.color.setXYZ(selectedFace.face.c, 1, 0.5, 0.2);
+                geometry.attributes.color.needsUpdate = true;
+                geometry.attributes.position.needsUpdate = true;
+
+                // --- Raise/lower terrain on click ---
+                // Find grid indices for the three vertices
+                const indices = [selectedFace.face.a, selectedFace.face.b, selectedFace.face.c];
+                const verts = indices.map(i => {
+                    return {
+                        ix: i % (terrainGridSize + 1),
+                        iy: Math.floor(i / (terrainGridSize + 1))
+                    };
+                });
+                // Raise with left click, lower with right click
+                let delta = e.shiftKey ? -0.2 : 0.2;
+                verts.forEach(v => {
+                    terrainHeights[v.iy][v.ix] += delta;
+                });
+                addTerrainMesh();
+            }
+        });
     };
     img.src = texture.image.currentSrc || texture.image.src;
 });
