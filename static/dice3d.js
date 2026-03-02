@@ -224,7 +224,7 @@ const ambient = new THREE.AmbientLight(0xffffff, 0.7); // increased intensity
 scene.add(ambient);
 
 // D20 and D12
-const radius = 0.6;
+const radius = 0.3;
 const d20Geometry = new THREE.IcosahedronGeometry(radius, 0);
 const d12Geometry = new THREE.DodecahedronGeometry(radius * 0.95, 0); // d12 slightly smaller
 
@@ -1393,6 +1393,39 @@ function animate() {
     resultDiv.innerHTML = resultHtml;
     // No idle spin
     // ...existing code...
+    // --- Dice Rolling Cage ---
+    // A small bowl on the table for rolling dice
+    const bowlRadius = trayRadius * 0.35;
+    const bowlHeight = tableHeight * 0.7;
+    const bowlGeometry = new THREE.CylinderGeometry(bowlRadius, bowlRadius * 0.8, bowlHeight, 32, 1, true);
+    const bowlMaterial = new THREE.MeshStandardMaterial({
+        color: 0xcccccc,
+        transparent: true,
+        opacity: 0.32,
+        metalness: 0.25,
+        roughness: 0.45,
+        side: THREE.DoubleSide
+    });
+    const diceBowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
+    // Place the bowl on the table, to the right
+    diceBowl.position.set(tableRadius * 0.7, table.position.y + tableHeight + bowlHeight / 2 + 0.05, 0);
+    scene.add(diceBowl);
+
+    // Add a solid base to the bowl
+    const baseThickness = bowlHeight * 0.12;
+    const baseGeometry = new THREE.CylinderGeometry(bowlRadius * 0.95, bowlRadius * 0.95, baseThickness, 32);
+    const baseMaterial = new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        metalness: 0.18,
+        roughness: 0.55
+    });
+    const bowlBase = new THREE.Mesh(baseGeometry, baseMaterial);
+    bowlBase.position.set(
+        diceBowl.position.x,
+        diceBowl.position.y - bowlHeight / 2 + baseThickness / 2,
+        diceBowl.position.z
+    );
+    scene.add(bowlBase);
     // Animate skybox stars
     drawSky();
     skyTexture.needsUpdate = true;
