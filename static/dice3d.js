@@ -24,6 +24,24 @@ const PARTICLE_LIFETIME = 0.7; // seconds
 const PARTICLE_SIZE = 0.065; // half as small
 const GOLD_COLOR = 0xffe066; // gold (matches die veins)
 const ROYAL_BLUE_COLOR = 0x1a237e; // royal blue (matches die base)
+
+// --- Dice Rolling Cage ---
+// A small bowl on the table for rolling dice
+const trayRadius = 8.0 * 0.7; // fallback if not yet defined
+const tableHeight = 0.6; // fallback if not yet defined
+const bowlRadius = trayRadius * 0.35;
+const bowlHeight = tableHeight * 0.7;
+const bowlGeometry = new THREE.CylinderGeometry(bowlRadius, bowlRadius * 0.8, bowlHeight, 32, 1, true);
+const bowlMaterial = new THREE.MeshStandardMaterial({
+    color: 0xcccccc,
+    transparent: true,
+    opacity: 0.32,
+    metalness: 0.25,
+    roughness: 0.45,
+    side: THREE.DoubleSide
+});
+const diceBowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
+
 function spawnParticleBlast(position, isDie2 = false) {
     const group = new THREE.Group();
     for (let i = 0; i < PARTICLE_COUNT; i++) {
@@ -629,7 +647,7 @@ for (let i = 0; i < plankCount; i++) {
 const tableTexture = new THREE.CanvasTexture(tableCanvas);
 // Make table surface bigger and add beveled edge
 const tableRadius = 8.0;
-const tableHeight = 0.6;
+// const tableHeight = 0.6; // removed duplicate
 const table = new THREE.Mesh(
     new THREE.CylinderGeometry(tableRadius, tableRadius, tableHeight, 64),
     new THREE.MeshStandardMaterial({
@@ -659,7 +677,7 @@ scene.add(bevel);
 
 // --- Dice Tray ---
 // A shallow cylinder with a felt-like material, slightly smaller than the table
-const trayRadius = tableRadius * 0.7;
+// const trayRadius = tableRadius * 0.7; // removed duplicate
 const trayHeight = 0.24;
 const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.02;
 const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeight, 48);
@@ -1322,40 +1340,93 @@ function animate() {
     camera.lookAt(0, -1.5, 0);
     requestAnimationFrame(animate);
     // Gravity/falling animation for both dice
+    // --- D20 ---
     if (falling) {
         dieVelocity.y += gravity;
         d20.position.add(dieVelocity);
         d20.rotation.x += dieAngularVelocity.x;
         d20.rotation.y += dieAngularVelocity.y;
-        const tableTopY = table.position.y + tableHeight / 2 + radius;
-        if (d20.position.y <= tableTopY) {
-            d20.position.y = tableTopY;
+        // Bowl collision
+        const bowlCenter = diceBowl.position;
+        const bowlRimY = diceBowl.position.y + bowlHeight / 2;
+        const bowlInnerRadius = bowlRadius * 0.98 - radius * 0.9; // leave a little gap
+        const dx = d20.position.x - bowlCenter.x;
+        const dz = d20.position.z - bowlCenter.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (d20.position.y < bowlRimY && dist > bowlInnerRadius) {
+            // Push back to bowl surface
+            const push = (dist - bowlInnerRadius);
+            d20.position.x -= (dx / dist) * push;
+            d20.position.z -= (dz / dist) * push;
+            // Stop velocity in that direction
+            const vProj = (dieVelocity.x * dx + dieVelocity.z * dz) / dist;
+            dieVelocity.x -= (dx / dist) * vProj;
+            dieVelocity.z -= (dz / dist) * vProj;
+        }
+        // Bowl floor
+        const bowlFloorY = diceBowl.position.y - bowlHeight / 2 + radius * 0.98;
+        if (d20.position.y <= bowlFloorY) {
+            d20.position.y = bowlFloorY;
             falling = false;
             dieVelocity.set(0, 0, 0);
             dieAngularVelocity.set(0, 0);
         }
     }
+    // --- D20b ---
     if (fallingB) {
         dieVelocityB.y += gravity;
         d20b.position.add(dieVelocityB);
         d20b.rotation.x += dieAngularVelocityB.x;
         d20b.rotation.y += dieAngularVelocityB.y;
-        const tableTopY = table.position.y + tableHeight / 2 + radius;
-        if (d20b.position.y <= tableTopY) {
-            d20b.position.y = tableTopY;
+        // Bowl collision
+        const bowlCenter = diceBowl.position;
+        const bowlRimY = diceBowl.position.y + bowlHeight / 2;
+        const bowlInnerRadius = bowlRadius * 0.98 - radius * 0.9;
+        const dx = d20b.position.x - bowlCenter.x;
+        const dz = d20b.position.z - bowlCenter.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (d20b.position.y < bowlRimY && dist > bowlInnerRadius) {
+            const push = (dist - bowlInnerRadius);
+            d20b.position.x -= (dx / dist) * push;
+            d20b.position.z -= (dz / dist) * push;
+            const vProj = (dieVelocityB.x * dx + dieVelocityB.z * dz) / dist;
+            dieVelocityB.x -= (dx / dist) * vProj;
+            dieVelocityB.z -= (dz / dist) * vProj;
+        }
+        // Bowl floor
+        const bowlFloorY = diceBowl.position.y - bowlHeight / 2 + radius * 0.98;
+        if (d20b.position.y <= bowlFloorY) {
+            d20b.position.y = bowlFloorY;
             fallingB = false;
             dieVelocityB.set(0, 0, 0);
             dieAngularVelocityB.set(0, 0);
         }
     }
+    // --- D12 ---
     if (fallingD12) {
         dieVelocityD12.y += gravity;
         d12.position.add(dieVelocityD12);
         d12.rotation.x += dieAngularVelocityD12.x;
         d12.rotation.y += dieAngularVelocityD12.y;
-        const tableTopY = table.position.y + tableHeight / 2 + radius * 0.95;
-        if (d12.position.y <= tableTopY) {
-            d12.position.y = tableTopY;
+        // Bowl collision
+        const bowlCenter = diceBowl.position;
+        const bowlRimY = diceBowl.position.y + bowlHeight / 2;
+        const bowlInnerRadius = bowlRadius * 0.98 - radius * 0.95;
+        const dx = d12.position.x - bowlCenter.x;
+        const dz = d12.position.z - bowlCenter.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        if (d12.position.y < bowlRimY && dist > bowlInnerRadius) {
+            const push = (dist - bowlInnerRadius);
+            d12.position.x -= (dx / dist) * push;
+            d12.position.z -= (dz / dist) * push;
+            const vProj = (dieVelocityD12.x * dx + dieVelocityD12.z * dz) / dist;
+            dieVelocityD12.x -= (dx / dist) * vProj;
+            dieVelocityD12.z -= (dz / dist) * vProj;
+        }
+        // Bowl floor
+        const bowlFloorY = diceBowl.position.y - bowlHeight / 2 + radius * 0.95;
+        if (d12.position.y <= bowlFloorY) {
+            d12.position.y = bowlFloorY;
             fallingD12 = false;
             dieVelocityD12.set(0, 0, 0);
             dieAngularVelocityD12.set(0, 0);
@@ -1399,23 +1470,9 @@ function animate() {
     resultDiv.innerHTML = resultHtml;
     // No idle spin
     // ...existing code...
-    // --- Dice Rolling Cage ---
-    // A small bowl on the table for rolling dice
-    const bowlRadius = trayRadius * 0.35;
-    const bowlHeight = tableHeight * 0.7;
-    const bowlGeometry = new THREE.CylinderGeometry(bowlRadius, bowlRadius * 0.8, bowlHeight, 32, 1, true);
-    const bowlMaterial = new THREE.MeshStandardMaterial({
-        color: 0xcccccc,
-        transparent: true,
-        opacity: 0.32,
-        metalness: 0.25,
-        roughness: 0.45,
-        side: THREE.DoubleSide
-    });
-    const diceBowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
-    // Place the bowl on the table, to the right
-    diceBowl.position.set(tableRadius * 0.7, table.position.y + tableHeight + bowlHeight / 2 + 0.05, 0);
-    scene.add(diceBowl);
+// Place the bowl on the table, to the right
+diceBowl.position.set(tableRadius * 0.7, table.position.y + tableHeight + bowlHeight / 2 + 0.05, 0);
+scene.add(diceBowl);
 
     // Add a solid base to the bowl
     const baseThickness = bowlHeight * 0.12;
