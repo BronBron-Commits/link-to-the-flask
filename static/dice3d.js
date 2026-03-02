@@ -646,10 +646,114 @@ const trayRadius = tableRadius * 0.7;
 const trayHeight = 0.12;
 const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.01;
 const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeight, 48);
+// Create a more prominent PBR-style felt texture
+const trayFeltCanvas = document.createElement('canvas');
+trayFeltCanvas.width = 512;
+trayFeltCanvas.height = 512;
+const trayFeltCtx = trayFeltCanvas.getContext('2d');
+// Fill with base purple
+trayFeltCtx.fillStyle = '#7c3aed';
+trayFeltCtx.fillRect(0, 0, trayFeltCanvas.width, trayFeltCanvas.height);
+// Add high-contrast noise and fibers
+for (let y = 0; y < trayFeltCanvas.height; y++) {
+    for (let x = 0; x < trayFeltCanvas.width; x++) {
+        const noise = Math.floor(Math.random() * 40) - 20; // -20 to +19
+        const base = 124 + noise; // base purple (124, 58, 237)
+        trayFeltCtx.fillStyle = `rgb(${Math.max(0,Math.min(255,base))},${58 + noise / 2},${237 + noise})`;
+        trayFeltCtx.fillRect(x, y, 1, 1);
+    }
+}
+// Add more prominent fibers
+for (let i = 0; i < 120; i++) {
+    trayFeltCtx.save();
+    trayFeltCtx.globalAlpha = 0.18 + Math.random() * 0.15;
+    trayFeltCtx.strokeStyle = Math.random() < 0.5 ? '#a78bfa' : '#4c1d95'; // light or dark purple fiber
+    trayFeltCtx.lineWidth = 1.2 + Math.random() * 2.2;
+    if (Math.random() < 0.5) {
+        // Horizontal fiber
+        const y = Math.random() * trayFeltCanvas.height;
+        trayFeltCtx.beginPath();
+        trayFeltCtx.moveTo(0, y);
+        trayFeltCtx.lineTo(trayFeltCanvas.width, y + Math.random() * 12 - 6);
+        trayFeltCtx.stroke();
+    } else {
+        // Vertical fiber
+        const x = Math.random() * trayFeltCanvas.width;
+        trayFeltCtx.beginPath();
+        trayFeltCtx.moveTo(x, 0);
+        trayFeltCtx.lineTo(x + Math.random() * 12 - 6, trayFeltCanvas.height);
+        trayFeltCtx.stroke();
+    }
+    trayFeltCtx.restore();
+}
+const trayFeltTexture = new THREE.CanvasTexture(trayFeltCanvas);
+trayFeltTexture.wrapS = THREE.RepeatWrapping;
+trayFeltTexture.wrapT = THREE.RepeatWrapping;
+trayFeltTexture.repeat.set(3, 3);
+
+// Create a bump/normal map for felt (simulate soft roughness)
+const trayFeltBumpCanvas = document.createElement('canvas');
+trayFeltBumpCanvas.width = 512;
+trayFeltBumpCanvas.height = 512;
+const trayFeltBumpCtx = trayFeltBumpCanvas.getContext('2d');
+for (let y = 0; y < trayFeltBumpCanvas.height; y++) {
+    for (let x = 0; x < trayFeltBumpCanvas.width; x++) {
+        const n = Math.floor(Math.random() * 80) + 80; // 80-159
+        trayFeltBumpCtx.fillStyle = `rgb(${n},${n},${n})`;
+        trayFeltBumpCtx.fillRect(x, y, 1, 1);
+    }
+}
+// Add some fiber streaks to bump
+for (let i = 0; i < 60; i++) {
+    trayFeltBumpCtx.save();
+    trayFeltBumpCtx.globalAlpha = 0.18 + Math.random() * 0.12;
+    trayFeltBumpCtx.strokeStyle = '#bbb';
+    trayFeltBumpCtx.lineWidth = 1 + Math.random() * 1.5;
+    if (Math.random() < 0.5) {
+        const y = Math.random() * trayFeltBumpCanvas.height;
+        trayFeltBumpCtx.beginPath();
+        trayFeltBumpCtx.moveTo(0, y);
+        trayFeltBumpCtx.lineTo(trayFeltBumpCanvas.width, y + Math.random() * 8 - 4);
+        trayFeltBumpCtx.stroke();
+    } else {
+        const x = Math.random() * trayFeltBumpCanvas.width;
+        trayFeltBumpCtx.beginPath();
+        trayFeltBumpCtx.moveTo(x, 0);
+        trayFeltBumpCtx.lineTo(x + Math.random() * 8 - 4, trayFeltBumpCanvas.height);
+        trayFeltBumpCtx.stroke();
+    }
+    trayFeltBumpCtx.restore();
+}
+const trayFeltBumpTexture = new THREE.CanvasTexture(trayFeltBumpCanvas);
+trayFeltBumpTexture.wrapS = THREE.RepeatWrapping;
+trayFeltBumpTexture.wrapT = THREE.RepeatWrapping;
+trayFeltBumpTexture.repeat.set(3, 3);
+
+// Create a roughness map (darker = rougher)
+const trayFeltRoughCanvas = document.createElement('canvas');
+trayFeltRoughCanvas.width = 512;
+trayFeltRoughCanvas.height = 512;
+const trayFeltRoughCtx = trayFeltRoughCanvas.getContext('2d');
+for (let y = 0; y < trayFeltRoughCanvas.height; y++) {
+    for (let x = 0; x < trayFeltRoughCanvas.width; x++) {
+        const n = Math.floor(Math.random() * 120) + 60; // 60-179
+        trayFeltRoughCtx.fillStyle = `rgb(${n},${n},${n})`;
+        trayFeltRoughCtx.fillRect(x, y, 1, 1);
+    }
+}
+const trayFeltRoughTexture = new THREE.CanvasTexture(trayFeltRoughCanvas);
+trayFeltRoughTexture.wrapS = THREE.RepeatWrapping;
+trayFeltRoughTexture.wrapT = THREE.RepeatWrapping;
+trayFeltRoughTexture.repeat.set(3, 3);
+
 const trayMaterial = new THREE.MeshStandardMaterial({
     color: 0x7c3aed, // purple felt
-    roughness: 0.85,
-    metalness: 0.18
+    roughness: 0.92,
+    metalness: 0.13,
+    map: trayFeltTexture,
+    bumpMap: trayFeltBumpTexture,
+    bumpScale: 0.13,
+    roughnessMap: trayFeltRoughTexture
 });
 const tray = new THREE.Mesh(trayGeometry, trayMaterial);
 tray.position.set(0, trayY, 0);
