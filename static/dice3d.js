@@ -480,44 +480,51 @@ for (let i = 0; i < d20PositionAttr.count; i += 3) {
 // D12 face numbers
 const d12Faces = [], d12Numbers = [];
 const d12PositionAttr = d12Geometry.attributes.position;
-for (let i = 0; i < d12PositionAttr.count; i += 3) {
-    const vA = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i);
-    const vB = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i + 1);
-    const vC = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i + 2);
-    const center = new THREE.Vector3().add(vA).add(vB).add(vC).divideScalar(3);
-    const normal = new THREE.Vector3().crossVectors(
-        vB.clone().sub(vA),
-        vC.clone().sub(vA)
-    ).normalize();
-    if (normal.dot(center) < 0) normal.negate();
-    // Only add one label per face (dodecahedron has 12 faces, 36 triangles)
-    if (i % 9 === 0) { // 3 triangles per face
-        const faceNum = Math.floor(i / 9) + 1;
-        d12Faces.push({ center: center.clone(), normal: normal.clone() });
-        const canvas = document.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffe066';
-        ctx.strokeStyle = '#fff9c4';
-        ctx.lineWidth = 8;
-        ctx.font = 'bold 90px Arial';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.strokeText(faceNum.toString(), 128, 128);
-        ctx.fillText(faceNum.toString(), 128, 128);
-        const texture = new THREE.CanvasTexture(canvas);
-        const planeMat = new THREE.MeshBasicMaterial({
-            map: texture,
-            transparent: true,
-            side: THREE.DoubleSide
-        });
-        const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), planeMat);
-        plane.position.copy(center.clone().add(normal.clone().multiplyScalar(outwardOffset)));
-        plane.lookAt(plane.position.clone().add(normal));
-        d12.add(plane);
-        d12Numbers.push(plane);
+// Center d12 numbers by averaging all three triangle centers per face
+for (let faceIdx = 0; faceIdx < 12; faceIdx++) {
+    // Each face is made of 3 triangles (9 vertices)
+    let center = new THREE.Vector3();
+    let normal = new THREE.Vector3();
+    for (let j = 0; j < 3; j++) {
+        const i = faceIdx * 9 + j * 3;
+        const vA = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i);
+        const vB = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i + 1);
+        const vC = new THREE.Vector3().fromBufferAttribute(d12PositionAttr, i + 2);
+        const triCenter = new THREE.Vector3().add(vA).add(vB).add(vC).divideScalar(3);
+        center.add(triCenter);
+        const triNormal = new THREE.Vector3().crossVectors(
+            vB.clone().sub(vA),
+            vC.clone().sub(vA)
+        ).normalize();
+        normal.add(triNormal);
     }
+    center.divideScalar(3);
+    normal.normalize();
+    if (normal.dot(center) < 0) normal.negate();
+    d12Faces.push({ center: center.clone(), normal: normal.clone() });
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffe066';
+    ctx.strokeStyle = '#fff9c4';
+    ctx.lineWidth = 8;
+    ctx.font = 'bold 90px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeText((faceIdx + 1).toString(), 128, 128);
+    ctx.fillText((faceIdx + 1).toString(), 128, 128);
+    const texture = new THREE.CanvasTexture(canvas);
+    const planeMat = new THREE.MeshBasicMaterial({
+        map: texture,
+        transparent: true,
+        side: THREE.DoubleSide
+    });
+    const plane = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.5), planeMat);
+    plane.position.copy(center.clone().add(normal.clone().multiplyScalar(outwardOffset)));
+    plane.lookAt(plane.position.clone().add(normal));
+    d12.add(plane);
+    d12Numbers.push(plane);
 }
 
 // Highlight top face for d20, d20b, d12
