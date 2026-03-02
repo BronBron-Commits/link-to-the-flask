@@ -33,11 +33,9 @@ const bowlRadius = trayRadius * 0.35;
 const bowlHeight = tableHeight * 0.7;
 const bowlGeometry = new THREE.CylinderGeometry(bowlRadius, bowlRadius * 0.8, bowlHeight, 32, 1, true);
 const bowlMaterial = new THREE.MeshStandardMaterial({
-    color: 0xcccccc,
-    transparent: true,
-    opacity: 0.32,
-    metalness: 0.25,
-    roughness: 0.45,
+    color: GOLD_COLOR, // metallic gold
+    metalness: 1.0,
+    roughness: 0.18,
     side: THREE.DoubleSide
 });
 const diceBowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
@@ -362,12 +360,37 @@ let dieAngularVelocityB = new THREE.Vector2(0, 0);
 // --- Example Player ---
 // Player tracked coordinate (can be updated for movement)
 // Place player above the table: y = tableHeight + (new sphere radius) + small offset
-const player = { x: 0, y: tableHeight + 0.11 + 0.1, z: 0 };
+// Place player above the map mesh: map mesh is at table.position.y + tableHeight / 2 + 2.0
+const player = { x: 0, y: tableHeight / 2 + 2.0 + 0.11 + 0.18, z: 0 }; // 0.18 offset for clear visibility
 // Create a simple sphere mesh for the player (half size)
-const playerGeometry = new THREE.SphereGeometry(0.11, 24, 24);
+
+// --- Humanoid polygon figure ---
 const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x22ff44, metalness: 0.3, roughness: 0.5 });
-const playerMesh = new THREE.Mesh(playerGeometry, playerMaterial);
-playerMesh.position.set(player.x, player.y, player.z);
+const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), playerMaterial);
+const playerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.18, 8), playerMaterial);
+const playerArmL = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), playerMaterial);
+const playerArmR = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), playerMaterial);
+const playerLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.13, 6), playerMaterial);
+const playerLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.13, 6), playerMaterial);
+
+// Assemble figure
+const playerMesh = new THREE.Group();
+playerHead.position.set(0, 0.18, 0);
+playerBody.position.set(0, 0.09, 0);
+playerArmL.position.set(-0.07, 0.13, 0);
+playerArmL.rotation.z = Math.PI / 2.2;
+playerArmR.position.set(0.07, 0.13, 0);
+playerArmR.rotation.z = -Math.PI / 2.2;
+playerLegL.position.set(-0.03, -0.045, 0);
+playerLegR.position.set(0.03, -0.045, 0);
+playerMesh.add(playerHead);
+playerMesh.add(playerBody);
+playerMesh.add(playerArmL);
+playerMesh.add(playerArmR);
+playerMesh.add(playerLegL);
+playerMesh.add(playerLegR);
+// Lower the group so the feet touch the map
+playerMesh.position.set(player.x, player.y - 1.30 , player.z);
 scene.add(playerMesh);
 
 // Roll dice on click
@@ -700,9 +723,10 @@ const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeig
 // Animated water shader material for tray
 const waterUniforms = {
     time: { value: 0 },
-    deepColor: { value: new THREE.Color(0x1a3d6b) },
-    shallowColor: { value: new THREE.Color(0x4fc3f7) },
-    foamColor: { value: new THREE.Color(0xf8fafc) }
+    // More pastel/dulled colors
+    deepColor: { value: new THREE.Color(0x8dbad6) }, // pastel blue-gray
+    shallowColor: { value: new THREE.Color(0xbbe4e9) }, // pastel aqua
+    foamColor: { value: new THREE.Color(0xf3f6f7) } // soft off-white
 };
 const trayMaterial = new THREE.ShaderMaterial({
     uniforms: waterUniforms,
@@ -733,28 +757,60 @@ const trayMaterial = new THREE.ShaderMaterial({
             vec2 u = f * f * (3.0 - 2.0 * f);
             return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
         }
+        // More complex, slower ocean wave function with more noise
+        float oceanWaves(vec2 uv, float t) {
+            float wave = 0.0;
+            float slowT = t * 0.08; // even slower
+            wave += sin(uv.x * 12.0 + slowT * 1.1) * 0.10;
+            wave += cos(uv.y * 14.0 + slowT * 0.9) * 0.08;
+            wave += sin((uv.x + uv.y) * 8.0 + slowT * 1.3) * 0.06;
+            wave += sin(uv.x * 24.0 - uv.y * 12.0 + slowT * 1.7) * 0.03;
+            // Add more noise layers
+            wave += noise(uv * 24.0 + slowT * 0.7) * 0.07;
+            wave += noise(uv * 72.0 - slowT * 0.5) * 0.04;
+            return wave;
+        }
         void main() {
-            // Ocean color blend
-            float wave = sin(10.0 * vUv.x + time * 2.0) * 0.08 + cos(12.0 * vUv.y + time * 1.5) * 0.08;
-            float ripple = sin(30.0 * (vUv.x + vUv.y) + time * 3.0) * 0.04;
-            float baseMix = 0.5 + 0.5 * sin(6.0 * vUv.x + 7.0 * vUv.y + time * 1.2 + wave + ripple);
+            float t = time;
+            // Distort the UVs for a more chaotic, warped pattern
+            vec2 distortedUv = vUv;
+            distortedUv.x += 0.08 * sin(10.0 * vUv.y + t * 0.3) + 0.06 * cos(18.0 * vUv.x + t * 0.2);
+            distortedUv.y += 0.08 * cos(12.0 * vUv.x - t * 0.25) + 0.06 * sin(16.0 * vUv.y - t * 0.15);
+            distortedUv += 0.04 * noise(vUv * 18.0 + t * 0.12);
+            float wave = oceanWaves(distortedUv, t);
+            float ripple = sin(40.0 * (distortedUv.x + distortedUv.y) + t * 0.18) * 0.02;
+            float baseMix = 0.5 + 0.5 * sin(7.0 * distortedUv.x + 8.0 * distortedUv.y + t * 0.07 + wave + ripple);
             vec3 waterColor = mix(shallowColor, deepColor, baseMix);
             // Sea foam
             float foam = 0.0;
-            float foamWaves = sin(18.0 * vUv.x + time * 2.5) * 0.5 + cos(22.0 * vUv.y + time * 2.2) * 0.5;
-            float foamNoise = noise(vUv * 8.0 + time * 0.7);
-            foam = smoothstep(0.65, 0.85, foamWaves + foamNoise);
+            float foamWaves = sin(22.0 * distortedUv.x + t * 0.15) * 0.5 + cos(26.0 * distortedUv.y + t * 0.13) * 0.5;
+            float foamNoise = noise(distortedUv * 64.0 + t * 0.07);
+            foam = smoothstep(0.62, 0.84, foamWaves + foamNoise + wave * 0.5);
             // Add foam streaks
-            float foamStreaks = smoothstep(0.7, 0.9, sin(40.0 * vUv.x + time * 3.0 + 8.0 * vUv.y));
+            float foamStreaks = smoothstep(0.7, 0.9, sin(48.0 * distortedUv.x + t * 0.22 + 10.0 * distortedUv.y));
             foam = max(foam, foamStreaks * 0.7);
             vec3 finalColor = mix(waterColor, foamColor, foam);
-            gl_FragColor = vec4(finalColor, 1.0);
+            gl_FragColor = vec4(finalColor, 0.6);
         }
     `
 });
 const tray = new THREE.Mesh(trayGeometry, trayMaterial);
+trayMaterial.transparent = true;
 tray.position.set(0, trayY, 0);
 scene.add(tray);
+
+// Add a metallic rim to the tray
+const rimGeometry = new THREE.TorusGeometry(trayRadius + 0.08, 0.09, 32, 100);
+const rimMaterial = new THREE.MeshStandardMaterial({
+    color: GOLD_COLOR,
+    metalness: 1.0,
+    roughness: 0.18,
+    envMapIntensity: 1.2
+});
+const trayRim = new THREE.Mesh(rimGeometry, rimMaterial);
+trayRim.position.y = trayY + 0.01; // Slightly above tray
+trayRim.rotation.x = Math.PI / 2;
+tray.add(trayRim);
 
 // Animate water
 function animateWater() {
@@ -905,9 +961,33 @@ loader.load('map.png', function(texture) {
             if (terrainMesh) scene.remove(terrainMesh);
             if (mapMesh) scene.remove(mapMesh);
             const geometry = createTerrainGeometry();
-            // Flat map: only albedo texture
+
+            // --- Load supplemental maps ---
+            const texLoader = new THREE.TextureLoader();
+            texLoader.setPath('static/');
+            const normalMap = texLoader.load('map_normal.png');
+            const specularMap = texLoader.load('map_specular.png');
+            const displacementMap = texLoader.load('map_displacement.png');
+            const aoMap = texLoader.load('map_ambient_occlusion.png');
+
+            // Set texture properties for best quality
+            [normalMap, specularMap, displacementMap, aoMap].forEach(t => {
+                if (t) {
+                    t.anisotropy = 8;
+                    t.wrapS = THREE.ClampToEdgeWrapping;
+                    t.wrapT = THREE.ClampToEdgeWrapping;
+                    t.minFilter = THREE.LinearFilter;
+                }
+            });
+
+            // Flat map: albedo + supplemental maps
             const mapMaterial = new THREE.MeshStandardMaterial({
                 map: gridTexture,
+                normalMap: normalMap,
+                displacementMap: displacementMap,
+                displacementScale: 0.7, // adjust for effect
+                aoMap: aoMap,
+                metalnessMap: specularMap, // MeshStandardMaterial uses metalnessMap, not specularMap
                 roughness: 0.7,
                 metalness: 0.05,
                 transparent: false,
@@ -1399,7 +1479,7 @@ function animate() {
             dieVelocityB.z -= (dz / dist) * vProj;
         }
         // Bowl floor
-        const bowlFloorY = diceBowl.position.y - bowlHeight / 2 + radius * 0.98;
+        const bowlFloorY = diceBowl.position.y - bowlHeight / 2 + radius * 0.9;
         if (d20b.position.y <= bowlFloorY) {
             d20b.position.y = bowlFloorY;
             fallingB = false;
@@ -1455,22 +1535,22 @@ function animate() {
             if (document.activeElement && document.activeElement.id === 'roll-adv-btn') {
                 // Advantage: show highest
                 const advValue = Math.max(numA, numB);
-                resultHtml = `<span style=\"color:#fff\">Advantage:</span> <span style=\"color:#66e0ff\">${advValue}</span>`;
+                resultHtml = `<span style="color:#fff">Advantage:</span> <span style="color:#66e0ff">${advValue}</span>`;
             } else if (document.activeElement && document.activeElement.id === 'roll-dis-btn') {
                 // Disadvantage: show lowest
                 const disValue = Math.min(numA, numB);
-                resultHtml = `<span style=\"color:#fff\">Disadvantage:</span> <span style=\"color:#ff2222\">${disValue}</span>`;
+                resultHtml = `<span style="color:#fff">Disadvantage:</span> <span style="color:#ff2222">${disValue}</span>`;
             } else {
                 // Fallback: show both
-                resultHtml = `<span style=\"color:#fff\">D20(1):</span> <span style=\"color:#ffe066\">${numA}</span> &nbsp; <span style=\"color:#fff\">D20(2):</span> <span style=\"color:#8fd6ff\">${numB}</span>`;
+                resultHtml = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span>`;
             }
         } else {
             // Still rolling, show both
-            resultHtml = `<span style=\"color:#fff\">D20(1):</span> <span style=\"color:#ffe066\">${numA}</span> &nbsp; <span style=\"color:#fff\">D20(2):</span> <span style=\"color:#8fd6ff\">${numB}</span>`;
+            resultHtml = `<span style="color:#fff">D20(1):</span> <span style="color:#ffe066">${numA}</span> &nbsp; <span style="color:#fff">D20(2):</span> <span style="color:#8fd6ff">${numB}</span>`;
         }
     } else if (d12 && d12.visible && (!d20 || !d20.visible) && (!d20b || !d20b.visible)) {
         // Only d12
-        resultHtml = `<span style=\"color:#fff\">D12:</span> <span style=\"color:#ffe066\">${numD12}</span>`;
+        resultHtml = `<span style="color:#fff">D12:</span> <span style="color:#ffe066">${numD12}</span>`;
     }
     resultDiv.innerHTML = resultHtml;
     // No idle spin
@@ -1480,13 +1560,13 @@ diceBowl.position.set(tableRadius * 0.7, table.position.y + tableHeight + bowlHe
 scene.add(diceBowl);
 
 
-    // Add a solid base to the bowl
+    // Add a solid gold base to the bowl (moved out of animate)
     const baseThickness = bowlHeight * 0.12;
     const baseGeometry = new THREE.CylinderGeometry(bowlRadius * 0.95, bowlRadius * 0.95, baseThickness, 32);
     const baseMaterial = new THREE.MeshStandardMaterial({
-        color: 0x888888,
-        metalness: 0.18,
-        roughness: 0.55
+        color: GOLD_COLOR,   // gold color
+        metalness: 1.0,
+        roughness: 0.18
     });
     const bowlBase = new THREE.Mesh(baseGeometry, baseMaterial);
     bowlBase.position.set(
