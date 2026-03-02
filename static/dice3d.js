@@ -3,17 +3,35 @@ let moveUp = false, moveDown = false;
 let orbitLeft = false, orbitRight = false;
 // Camera mode: "orbit" or "player"
 let cameraMode = "orbit";
+// First-person WASD state
+let fpForward = false, fpBackward = false, fpLeft = false, fpRight = false;
+let fpYaw = 0, fpPitch = 0;
+let fpMouseDown = false;
 document.addEventListener('keydown', (e) => {
-    if (e.code === 'KeyW') moveUp = true;
-    if (e.code === 'KeyS') moveDown = true;
-    if (e.code === 'KeyA') orbitLeft = true;
-    if (e.code === 'KeyD') orbitRight = true;
+    if (cameraMode === "orbit") {
+        if (e.code === 'KeyW') moveUp = true;
+        if (e.code === 'KeyS') moveDown = true;
+        if (e.code === 'KeyA') orbitLeft = true;
+        if (e.code === 'KeyD') orbitRight = true;
+    } else if (cameraMode === "player") {
+        if (e.code === 'KeyW') fpForward = true;
+        if (e.code === 'KeyS') fpBackward = true;
+        if (e.code === 'KeyA') fpLeft = true;
+        if (e.code === 'KeyD') fpRight = true;
+    }
 });
 document.addEventListener('keyup', (e) => {
-    if (e.code === 'KeyW') moveUp = false;
-    if (e.code === 'KeyS') moveDown = false;
-    if (e.code === 'KeyA') orbitLeft = false;
-    if (e.code === 'KeyD') orbitRight = false;
+    if (cameraMode === "orbit") {
+        if (e.code === 'KeyW') moveUp = false;
+        if (e.code === 'KeyS') moveDown = false;
+        if (e.code === 'KeyA') orbitLeft = false;
+        if (e.code === 'KeyD') orbitRight = false;
+    } else if (cameraMode === "player") {
+        if (e.code === 'KeyW') fpForward = false;
+        if (e.code === 'KeyS') fpBackward = false;
+        if (e.code === 'KeyA') fpLeft = false;
+        if (e.code === 'KeyD') fpRight = false;
+    }
 });
 // Escape returns to orbit mode
 document.addEventListener('keydown', (e) => {
@@ -1519,24 +1537,47 @@ document.body.appendChild(resultDiv);
 
 // Animate
 function animate() {
-    // Camera vertical movement with W/S
-    if (moveUp) orbitHeight += 0.12;
-    if (moveDown) orbitHeight -= 0.12;
-    // Unclamp W/S range by 15%
-    const minHeight = 2.5 - (8 - 2.5) * 0.15; // 15% lower
-    const maxHeight = 8 + (8 - 2.5) * 0.15;   // 15% higher
-    orbitHeight = Math.max(minHeight, Math.min(maxHeight, orbitHeight));
-
-    // Camera orbit with A/D
-    if (orbitLeft) orbitAngle -= 0.04;
-    if (orbitRight) orbitAngle += 0.04;
-
-    // Only update orbit camera if in orbit mode
+    // Orbit camera controls
     if (cameraMode === "orbit") {
+        if (moveUp) orbitHeight += 0.12;
+        if (moveDown) orbitHeight -= 0.12;
+        const minHeight = 2.5 - (8 - 2.5) * 0.15;
+        const maxHeight = 8 + (8 - 2.5) * 0.15;
+        orbitHeight = Math.max(minHeight, Math.min(maxHeight, orbitHeight));
+        if (orbitLeft) orbitAngle -= 0.04;
+        if (orbitRight) orbitAngle += 0.04;
         camera.position.x = Math.sin(orbitAngle) * orbitRadius;
         camera.position.z = Math.cos(orbitAngle) * orbitRadius;
         camera.position.y = orbitHeight;
         camera.lookAt(0, -1.5, 0);
+    }
+    // First-person player controls
+    if (cameraMode === "player") {
+        // WASD movement relative to camera yaw (W/S = forward/back, A/D = strafe, but flipped)
+        const moveSpeed = 0.08;
+        let moveVec = new THREE.Vector3();
+        // Flipped: W = back, S = forward, A = right, D = left
+        if (fpForward) moveVec.z += 1;   // W = back
+        if (fpBackward) moveVec.z -= 1;  // S = forward
+        if (fpLeft) moveVec.x += 1;      // A = right
+        if (fpRight) moveVec.x -= 1;     // D = left
+        if (moveVec.lengthSq() > 0) {
+            moveVec.normalize();
+            // Rotate by yaw
+            const cos = Math.cos(fpYaw), sin = Math.sin(fpYaw);
+            const x = moveVec.x * cos - moveVec.z * sin;
+            const z = moveVec.x * sin + moveVec.z * cos;
+            moveVec.set(x, 0, z);
+            playerMesh.position.add(moveVec.multiplyScalar(moveSpeed));
+        }
+        // Camera follows head
+        const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18, 0));
+        camera.position.copy(headPos);
+        // Look direction from yaw/pitch
+        const lookDir = new THREE.Vector3(0, 0, 1)
+            .applyAxisAngle(new THREE.Vector3(1, 0, 0), fpPitch)
+            .applyAxisAngle(new THREE.Vector3(0, 1, 0), fpYaw);
+        camera.lookAt(headPos.clone().add(lookDir));
     }
     requestAnimationFrame(animate);
     // Gravity/falling animation for both dice
