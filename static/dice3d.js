@@ -295,19 +295,25 @@ const d12Material = new THREE.MeshPhysicalMaterial({
     sheenColor: new THREE.Color(0xffffff)
 });
 
+// Move dice starting point over to the right (e.g., x = 4.5)
+const diceStartX = 4.5;
+const diceStartY = 1.5;
+const diceStartZ = 0;
+
 const d20 = new THREE.Mesh(d20Geometry, d20Material);
+d20.position.set(diceStartX, diceStartY, diceStartZ);
 scene.add(d20);
 d20.visible = false;
 
 // D12 die
 const d12 = new THREE.Mesh(d12Geometry, d12Material);
-d12.position.set(-1.2, 0, 0); // Offset d12 to the left
+d12.position.set(diceStartX - 0.5, diceStartY, diceStartZ); // Slightly left
 scene.add(d12);
 d12.visible = false;
 
 // Add second die (d20b)
 const d20b = new THREE.Mesh(d20Geometry.clone(), d20Material.clone());
-d20b.position.set(1.2, 0, 0); // Offset second die to the right
+d20b.position.set(diceStartX + 0.5, diceStartY, diceStartZ); // Slightly right
 scene.add(d20b);
 d20b.visible = false;
 
