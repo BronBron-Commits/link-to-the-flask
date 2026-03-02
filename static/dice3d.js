@@ -876,28 +876,110 @@ legendDiv.innerHTML = `
 `;
 document.body.appendChild(legendDiv);
 
+
 // --- Dice Action Menu ---
-const diceMenuDiv = document.createElement('div');
-diceMenuDiv.style.position = 'fixed';
-diceMenuDiv.style.top = '320px';
-diceMenuDiv.style.left = '16px';
-diceMenuDiv.style.zIndex = '1001';
-diceMenuDiv.style.background = 'rgba(34,34,34,0.92)';
-diceMenuDiv.style.color = '#ffe066';
-diceMenuDiv.style.padding = '12px 18px 12px 18px';
-diceMenuDiv.style.borderRadius = '8px';
-diceMenuDiv.style.fontSize = '1.05em';
-diceMenuDiv.style.fontFamily = 'sans-serif';
-diceMenuDiv.style.lineHeight = '1.6';
-diceMenuDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
-diceMenuDiv.innerHTML = `
+function createDiceMenu() {
+    const diceMenuDiv = document.createElement('div');
+    diceMenuDiv.style.position = 'fixed';
+    diceMenuDiv.style.top = '320px';
+    diceMenuDiv.style.left = '16px';
+    diceMenuDiv.style.zIndex = '2001'; // ensure on top
+    diceMenuDiv.style.background = 'rgba(34,34,34,0.92)';
+    diceMenuDiv.style.color = '#ffe066';
+    diceMenuDiv.style.padding = '12px 18px 12px 18px';
+    diceMenuDiv.style.borderRadius = '8px';
+    diceMenuDiv.style.fontSize = '1.05em';
+    diceMenuDiv.style.fontFamily = 'sans-serif';
+    diceMenuDiv.style.lineHeight = '1.6';
+    diceMenuDiv.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)';
+    diceMenuDiv.style.pointerEvents = 'auto';
+    diceMenuDiv.innerHTML = `
 <b>Dice Actions</b><br>
 <button id="roll-d20-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll Standard d20</button><br>
 <button id="roll-adv-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#66e0ff;border:1px solid #66e0ff;border-radius:6px;cursor:pointer;">Roll d20 (Advantage)</button><br>
-<button id="roll-dis-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ff2222;border:1px solid #ff2222;border-radius:6px;cursor:pointer;">Roll d20 (Disadvantage)</button>
-<button id="roll-d12-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll d12</button>
+<button id="roll-dis-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ff2222;border:1px solid #ff2222;border-radius:6px;cursor:pointer;">Roll d20 (Disadvantage)</button><br>
+<button id="roll-d12-btn" style="margin:6px 0;width:100%;padding:7px 0;background:#222;color:#ffe066;border:1px solid #ffe066;border-radius:6px;cursor:pointer;">Roll 12</button><br>
+<button id="put-away-dice-btn" style="margin:12px 0 0 0;width:100%;padding:7px 0;background:#222;color:#bbb;border:1px solid #bbb;border-radius:6px;cursor:pointer;">Put Away Dice</button>
 `;
-document.body.appendChild(diceMenuDiv);
+    document.body.appendChild(diceMenuDiv);
+    // Button handlers must be set after adding to DOM
+    document.getElementById('put-away-dice-btn').onclick = () => {
+        if (typeof d20 !== 'undefined') d20.visible = false;
+        if (typeof d20b !== 'undefined') d20b.visible = false;
+        if (typeof d12 !== 'undefined') d12.visible = false;
+        // Optionally clear result display
+        if (typeof resultDiv !== 'undefined') resultDiv.innerHTML = '';
+    };
+    // ...existing code for other button handlers...
+    document.getElementById('roll-d20-btn').onclick = () => {
+        if (!falling && !rolling) {
+            d20.visible = true;
+            if (typeof d20b !== 'undefined') d20b.visible = false;
+            if (typeof d12 !== 'undefined') d12.visible = false;
+            falling = true;
+            d20.position.y = dieInitialY;
+            dieVelocity.set(0, 0, 0);
+            dieVelocity.x = (Math.random() - 0.5) * 0.08;
+            dieVelocity.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+            spawnParticleBlast(d20.position.clone(), false);
+        }
+    };
+    document.getElementById('roll-adv-btn').onclick = () => {
+        if (!falling && !rolling && !fallingB && !rollingB) {
+            d20.visible = true;
+            d20b.visible = true;
+            if (typeof d12 !== 'undefined') d12.visible = false;
+            falling = true;
+            d20.position.y = dieInitialY;
+            dieVelocity.set(0, 0, 0);
+            dieVelocity.x = (Math.random() - 0.5) * 0.08;
+            dieVelocity.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+            spawnParticleBlast(d20.position.clone(), false);
+            fallingB = true;
+            d20b.position.y = dieInitialY;
+            dieVelocityB.set(0, 0, 0);
+            dieVelocityB.x = (Math.random() - 0.5) * 0.08;
+            dieVelocityB.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
+            spawnParticleBlast(d20b.position.clone(), true);
+        }
+    };
+    document.getElementById('roll-dis-btn').onclick = () => {
+        if (!falling && !rolling && !fallingB && !rollingB) {
+            d20.visible = true;
+            d20b.visible = true;
+            if (typeof d12 !== 'undefined') d12.visible = false;
+            falling = true;
+            d20.position.y = dieInitialY;
+            dieVelocity.set(0, 0, 0);
+            dieVelocity.x = (Math.random() - 0.5) * 0.08;
+            dieVelocity.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
+            spawnParticleBlast(d20.position.clone(), false);
+            fallingB = true;
+            d20b.position.y = dieInitialY;
+            dieVelocityB.set(0, 0, 0);
+            dieVelocityB.x = (Math.random() - 0.5) * 0.08;
+            dieVelocityB.z = (Math.random() - 0.5) * 0.08;
+            dieAngularVelocityB.x = 0.2 + Math.random() * 0.5;
+            dieAngularVelocityB.y = 0.2 + Math.random() * 0.5;
+            spawnParticleBlast(d20b.position.clone(), true);
+        }
+    };
+    // ...add other button handlers as needed...
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', createDiceMenu);
+} else {
+    createDiceMenu();
+}
 
 // Dice action handlers
 document.getElementById('roll-d20-btn').onclick = () => {
