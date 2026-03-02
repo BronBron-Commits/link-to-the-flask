@@ -770,6 +770,62 @@ const tray = new THREE.Mesh(trayGeometry, trayMaterial);
 tray.position.set(0, trayY, 0);
 scene.add(tray);
 
+// --- Image Plane Above Felt (shows map.png) ---
+const imagePlaneSize = trayRadius * 1.15; // slightly smaller than tray
+const imagePlaneHeight = trayY + trayHeight / 2 + 0.012; // just above felt
+const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
+const loader = new THREE.TextureLoader();
+loader.setPath('static/');
+loader.load('map.png', function(texture) {
+    texture.anisotropy = 8;
+    texture.wrapS = THREE.ClampToEdgeWrapping;
+    texture.wrapT = THREE.ClampToEdgeWrapping;
+    texture.minFilter = THREE.LinearFilter;
+
+    // Create a canvas to draw the image and grid
+    const gridCanvas = document.createElement('canvas');
+    gridCanvas.width = 1024;
+    gridCanvas.height = 1024;
+    const ctx = gridCanvas.getContext('2d');
+
+    // Draw the map image semi-transparent
+    const img = new window.Image();
+    img.onload = function() {
+        ctx.globalAlpha = 0.55; // semi-transparent
+        ctx.drawImage(img, 0, 0, gridCanvas.width, gridCanvas.height);
+        ctx.globalAlpha = 1.0;
+
+        // Draw grid
+        const gridCount = 20; // 20x20 grid
+        ctx.strokeStyle = 'rgba(255,255,255,0.38)';
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i <= gridCount; i++) {
+            let x = (i / gridCount) * gridCanvas.width;
+            ctx.beginPath();
+            ctx.moveTo(x, 0);
+            ctx.lineTo(x, gridCanvas.height);
+            ctx.stroke();
+            let y = (i / gridCount) * gridCanvas.height;
+            ctx.beginPath();
+            ctx.moveTo(0, y);
+            ctx.lineTo(gridCanvas.width, y);
+            ctx.stroke();
+        }
+
+        const gridTexture = new THREE.CanvasTexture(gridCanvas);
+        gridTexture.anisotropy = 8;
+        gridTexture.wrapS = THREE.ClampToEdgeWrapping;
+        gridTexture.wrapT = THREE.ClampToEdgeWrapping;
+        gridTexture.minFilter = THREE.LinearFilter;
+        const imagePlaneMaterial = new THREE.MeshStandardMaterial({ map: gridTexture, transparent: true, opacity: 0.85, roughness: 0.7, metalness: 0.05 });
+        const imagePlane = new THREE.Mesh(imagePlaneGeometry, imagePlaneMaterial);
+        imagePlane.position.set(0, imagePlaneHeight, 0);
+        imagePlane.rotation.x = -Math.PI / 2;
+        scene.add(imagePlane);
+    };
+    img.src = texture.image.currentSrc || texture.image.src;
+});
+
 
 // Fireplace (simple box with glowing fire)
 // Fireplace removed
