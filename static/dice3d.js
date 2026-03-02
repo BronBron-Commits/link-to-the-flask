@@ -1,6 +1,8 @@
 // Camera vertical movement controls
 let moveUp = false, moveDown = false;
 let orbitLeft = false, orbitRight = false;
+// Camera mode: "orbit" or "player"
+let cameraMode = "orbit";
 document.addEventListener('keydown', (e) => {
     if (e.code === 'KeyW') moveUp = true;
     if (e.code === 'KeyS') moveDown = true;
@@ -12,6 +14,12 @@ document.addEventListener('keyup', (e) => {
     if (e.code === 'KeyS') moveDown = false;
     if (e.code === 'KeyA') orbitLeft = false;
     if (e.code === 'KeyD') orbitRight = false;
+});
+// Escape returns to orbit mode
+document.addEventListener('keydown', (e) => {
+    if (e.code === 'Escape') {
+        cameraMode = "orbit";
+    }
 });
 import * as THREE from './three.module.js';
 
@@ -395,15 +403,22 @@ playerMesh.add(playerLegR);
 playerMesh.position.set(player.x, player.y - 1.30 , player.z);
 scene.add(playerMesh);
 
-// Roll dice on click
+// Roll dice or move camera on click
 renderer.domElement.addEventListener('click', (e) => {
-    // Raycast to check if any die was clicked
     const mouse = new THREE.Vector2(
         (e.clientX / renderer.domElement.clientWidth) * 2 - 1,
         -(e.clientY / renderer.domElement.clientHeight) * 2 + 1
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
+    // Check for player click first
+    const playerIntersects = raycaster.intersectObject(playerMesh, true);
+    if (playerIntersects.length > 0) {
+        cameraMode = "player";
+        moveToPlayerCamera();
+        return;
+    }
+    // Otherwise, check for dice clicks
     const intersects = raycaster.intersectObjects([d20, d20b, d12], true);
     if (intersects.length > 0) {
         // Which die?
@@ -438,6 +453,26 @@ renderer.domElement.addEventListener('click', (e) => {
         }
     }
 });
+// Animate camera to player's perspective
+function moveToPlayerCamera() {
+    const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18, 0));
+    // Camera slightly behind head
+    const targetPos = headPos.clone().add(new THREE.Vector3(0, 0.05, 0.35));
+    const duration = 800;
+    const startPos = camera.position.clone();
+    const startTime = performance.now();
+    function animateCamera() {
+        const t = Math.min(1, (performance.now() - startTime) / duration);
+        camera.position.lerpVectors(startPos, targetPos, t);
+        // Always look forward from head
+        const forwardLook = headPos.clone().add(new THREE.Vector3(0, 0, 1));
+        camera.lookAt(forwardLook);
+        if (t < 1) {
+            requestAnimationFrame(animateCamera);
+        }
+    }
+    animateCamera();
+}
 
 // Die hover detection and edge glow
 renderer.domElement.addEventListener('mousemove', (e) => {
@@ -1496,11 +1531,13 @@ function animate() {
     if (orbitLeft) orbitAngle -= 0.04;
     if (orbitRight) orbitAngle += 0.04;
 
-    // Update camera position to orbit around table center
-    camera.position.x = Math.sin(orbitAngle) * orbitRadius;
-    camera.position.z = Math.cos(orbitAngle) * orbitRadius;
-    camera.position.y = orbitHeight;
-    camera.lookAt(0, -1.5, 0);
+    // Only update orbit camera if in orbit mode
+    if (cameraMode === "orbit") {
+        camera.position.x = Math.sin(orbitAngle) * orbitRadius;
+        camera.position.z = Math.cos(orbitAngle) * orbitRadius;
+        camera.position.y = orbitHeight;
+        camera.lookAt(0, -1.5, 0);
+    }
     requestAnimationFrame(animate);
     // Gravity/falling animation for both dice
     // --- D20 ---
