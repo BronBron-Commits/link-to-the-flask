@@ -970,7 +970,6 @@ loader.load('map.png', function(texture) {
             const displacementMap = texLoader.load('map_displacement.png');
             const aoMap = texLoader.load('map_ambient_occlusion.png');
 
-            // Set texture properties for best quality
             [normalMap, specularMap, displacementMap, aoMap].forEach(t => {
                 if (t) {
                     t.anisotropy = 8;
@@ -980,26 +979,55 @@ loader.load('map.png', function(texture) {
                 }
             });
 
-            // Flat map: albedo + supplemental maps
-            const mapMaterial = new THREE.MeshStandardMaterial({
-                map: gridTexture,
-                normalMap: normalMap,
-                displacementMap: displacementMap,
-                displacementScale: 0.7, // adjust for effect
-                aoMap: aoMap,
-                metalnessMap: specularMap, // MeshStandardMaterial uses metalnessMap, not specularMap
-                roughness: 0.7,
-                metalness: 0.05,
-                transparent: false,
-                opacity: 1.0,
-                side: THREE.DoubleSide
+            // Subtle animated distortion ShaderMaterial for map
+            const mapUniforms = {
+                map: { value: gridTexture },
+                time: { value: 0 },
+                normalMap: { value: normalMap },
+                displacementMap: { value: displacementMap },
+                aoMap: { value: aoMap },
+                metalnessMap: { value: specularMap },
+            };
+            const mapMaterial = new THREE.ShaderMaterial({
+                uniforms: mapUniforms,
+                vertexShader: `
+                    varying vec2 vUv;
+                    void main() {
+                        vUv = uv;
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                    }
+                `,
+                fragmentShader: `
+                    uniform sampler2D map;
+                    uniform float time;
+                    varying vec2 vUv;
+                    // Subtle animated UV distortion
+                    void main() {
+                        float freq = 2.0;
+                        float amp = 0.012;
+                        vec2 uv = vUv;
+                        uv.x += sin(uv.y * 6.2831 * freq + time * 0.7) * amp;
+                        uv.y += cos(uv.x * 6.2831 * freq + time * 0.5) * amp;
+                        vec4 tex = texture2D(map, uv);
+                        gl_FragColor = tex;
+                    }
+                `,
+                side: THREE.DoubleSide,
+                transparent: false
             });
-            // Raise the mesh much higher above the table surface
-            const meshY = table.position.y + tableHeight / 2 + 2.0; // well above table
+            const meshY = table.position.y + tableHeight / 2 + 2.0;
             mapMesh = new THREE.Mesh(geometry.clone(), mapMaterial);
             mapMesh.position.set(0, meshY, 0);
             mapMesh.rotation.x = -Math.PI / 2;
             scene.add(mapMesh);
+            // Animate map distortion
+            function animateMapDistortion() {
+                if (mapMesh && mapMesh.material && mapMesh.material.uniforms && mapMesh.material.uniforms.time) {
+                    mapMesh.material.uniforms.time.value = performance.now() * 0.001;
+                }
+                requestAnimationFrame(animateMapDistortion);
+            }
+            animateMapDistortion();
             // Terrain wireframe overlay removed: no grid or wireframe visible
         }
         addTerrainMesh();
@@ -1258,6 +1286,7 @@ function createDiceMenu() {
             dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
             dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
             spawnParticleBlast(d20.position.clone(), false);
+
             fallingB = true;
             d20b.position.y = dieInitialY;
             dieVelocityB.set(0, 0, 0);
@@ -1281,6 +1310,7 @@ function createDiceMenu() {
             dieAngularVelocity.x = 0.2 + Math.random() * 0.5;
             dieAngularVelocity.y = 0.2 + Math.random() * 0.5;
             spawnParticleBlast(d20.position.clone(), false);
+
             fallingB = true;
             d20b.position.y = dieInitialY;
             dieVelocityB.set(0, 0, 0);
