@@ -778,13 +778,39 @@ scene.add(tray);
 // Bookshelves removed
 
 // Add a lit candle to the table
-const candleHeight = 0.7; // Increased height
-const candleRadius = 0.16; // Increased radius
-const candleGeometry = new THREE.CylinderGeometry(candleRadius, candleRadius, candleHeight, 32);
-const candleMaterial = new THREE.MeshStandardMaterial({ color: 0xf5e6c2, roughness: 0.6 });
+
+// Candle shape: more realistic (tapered, melted)
+const candleHeight = 0.72;
+const candleRadiusTop = 0.11; // Tapered top
+const candleRadiusBottom = 0.17;
+const candleGeometry = new THREE.CylinderGeometry(candleRadiusTop, candleRadiusBottom, candleHeight, 32, 1, false);
+// Add some melted wax effect by modifying vertices
+const pos = candleGeometry.attributes.position;
+for (let i = 0; i < pos.count; i++) {
+    let y = pos.getY(i);
+    // Only modify top edge vertices
+    if (Math.abs(y - candleHeight/2) < 0.01) {
+        let x = pos.getX(i);
+        let z = pos.getZ(i);
+        // Add random melt effect
+        let melt = Math.random() * 0.04 + 0.01;
+        pos.setY(i, y + melt);
+        // Optionally, bulge some points for wax drips
+        if (Math.random() < 0.18) {
+            pos.setX(i, x + (Math.random()-0.5)*0.03);
+            pos.setZ(i, z + (Math.random()-0.5)*0.03);
+        }
+    }
+}
+pos.needsUpdate = true;
+const candleMaterial = new THREE.MeshStandardMaterial({ color: 0xf5e6c2, roughness: 0.62 });
 const candle = new THREE.Mesh(candleGeometry, candleMaterial);
-const candleX = -tableRadius * 0.65; // Move to left side
-candle.position.set(candleX, -1.5 + tableHeight / 2 + candleHeight / 2, 0.7);
+// Move candle closer to edge of table (right side, not blocking dice)
+const candleAngle = Math.PI * 0.18; // ~10 degrees from x axis
+const candleEdgeDist = tableRadius - candleRadiusBottom - 0.11;
+const candleX = Math.cos(candleAngle) * candleEdgeDist;
+const candleZ = Math.sin(candleAngle) * candleEdgeDist;
+candle.position.set(candleX, -1.5 + tableHeight / 2 + candleHeight / 2, candleZ);
 scene.add(candle);
 
 // Candle flame (small sphere)
@@ -820,8 +846,9 @@ const flameMaterial = new THREE.ShaderMaterial({
     `,
     transparent: true
 });
+
 const flame = new THREE.Mesh(flameGeometry, flameMaterial);
-flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.06, 0.7);
+flame.position.set(candleX, candle.position.y + candleHeight / 2 + 0.06, candleZ);
 scene.add(flame);
 
 // Candle light
