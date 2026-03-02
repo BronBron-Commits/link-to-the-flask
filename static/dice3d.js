@@ -121,8 +121,14 @@ for (let i = 0; i < starCount; i++) {
 }
 
 function drawSky() {
-    // Fill pure black
-    skyCtx.fillStyle = '#000000';
+    // Fill with a vertical gradient: blue zenith, sunset pink/orange, dark at horizon
+    const grad = skyCtx.createLinearGradient(0, 0, 0, skyCanvas.height);
+    grad.addColorStop(0, '#3a5dbb'); // blue zenith
+    grad.addColorStop(0.38, '#1a2a4a'); // deep blue transition
+    grad.addColorStop(0.62, '#fca9c4'); // sunset pink
+    grad.addColorStop(0.78, '#ffb347'); // sunset orange
+    grad.addColorStop(1, '#0a0a1a'); // dark horizon
+    skyCtx.fillStyle = grad;
     skyCtx.fillRect(0, 0, skyCanvas.width, skyCanvas.height);
 
     // Draw animated stars
