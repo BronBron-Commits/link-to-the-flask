@@ -570,8 +570,8 @@ const tableCtx = tableCanvas.getContext('2d');
 const plankCount = 8 + Math.floor(Math.random() * 3); // 8-10 planks
 const plankHeight = tableCanvas.height / plankCount;
 for (let i = 0; i < plankCount; i++) {
-    // Alternate plank colors for realism
-    const baseColor = i % 2 === 0 ? '#3a2410' : '#5a3b1a'; // much darker browns
+    // Use a very dark brown for all planks
+    const baseColor = '#1a0e05'; // very dark brown
     tableCtx.fillStyle = baseColor;
     tableCtx.fillRect(0, i * plankHeight, tableCanvas.width, plankHeight);
     // Draw plank edge shadow
@@ -579,7 +579,7 @@ for (let i = 0; i < plankCount; i++) {
     tableCtx.moveTo(0, (i + 1) * plankHeight);
     tableCtx.lineTo(tableCanvas.width, (i + 1) * plankHeight);
     tableCtx.lineWidth = 3.2;
-    tableCtx.strokeStyle = 'rgba(30, 20, 10, 0.38)'; // darker plank edge
+    tableCtx.strokeStyle = 'rgba(20, 10, 5, 0.38)'; // even darker plank edge
     tableCtx.stroke();
     // Add some wood grain lines to each plank
     for (let g = 0; g < 7; g++) {
@@ -591,7 +591,7 @@ for (let i = 0; i < plankCount; i++) {
             tableCtx.lineTo(x, prevY + offset);
         }
         tableCtx.lineWidth = 1.1;
-        tableCtx.strokeStyle = 'rgba(40, 28, 14, 0.28)'; // darker grain
+        tableCtx.strokeStyle = 'rgba(30, 18, 8, 0.28)'; // very dark grain
         tableCtx.stroke();
     }
     // Add a few knots
@@ -600,8 +600,8 @@ for (let i = 0; i < plankCount; i++) {
         const knotY = (i * plankHeight) + Math.random() * plankHeight;
         const knotR = 6 + Math.random() * 7;
         const grad = tableCtx.createRadialGradient(knotX, knotY, 1, knotX, knotY, knotR);
-        grad.addColorStop(0, 'rgba(30,20,10,0.32)');
-        grad.addColorStop(1, 'rgba(30,20,10,0)');
+        grad.addColorStop(0, 'rgba(20,10,5,0.32)');
+        grad.addColorStop(1, 'rgba(20,10,5,0)');
         tableCtx.beginPath();
         tableCtx.arc(knotX, knotY, knotR, 0, Math.PI * 2);
         tableCtx.fillStyle = grad;
@@ -647,7 +647,7 @@ const trayHeight = 0.12;
 const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.01;
 const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeight, 48);
 const trayMaterial = new THREE.MeshStandardMaterial({
-    color: 0x2e7d32, // dark green felt
+    color: 0x7c3aed, // purple felt
     roughness: 0.85,
     metalness: 0.18
 });
