@@ -243,7 +243,7 @@ const ambient = new THREE.AmbientLight(0xffffff, 0.7); // increased intensity
 scene.add(ambient);
 
 // D20 and D12
-const radius = 0.3;
+const radius = 0.6;
 const d20Geometry = new THREE.IcosahedronGeometry(radius, 0);
 const d12Geometry = new THREE.DodecahedronGeometry(radius * 0.95, 0); // d12 slightly smaller
 
@@ -359,6 +359,17 @@ let fallingB = false;
 let dieVelocityB = new THREE.Vector3(0, 0, 0);
 let dieAngularVelocityB = new THREE.Vector2(0, 0);
 
+// --- Example Player ---
+// Player tracked coordinate (can be updated for movement)
+// Place player above the table: y = tableHeight + (new sphere radius) + small offset
+const player = { x: 0, y: tableHeight + 0.11 + 0.1, z: 0 };
+// Create a simple sphere mesh for the player (half size)
+const playerGeometry = new THREE.SphereGeometry(0.11, 24, 24);
+const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x22ff44, metalness: 0.3, roughness: 0.5 });
+const playerMesh = new THREE.Mesh(playerGeometry, playerMaterial);
+playerMesh.position.set(player.x, player.y, player.z);
+scene.add(playerMesh);
+
 // Roll dice on click
 renderer.domElement.addEventListener('click', (e) => {
     // Raycast to check if any die was clicked
@@ -437,6 +448,9 @@ renderer.domElement.addEventListener('mousemove', (e) => {
         d20bHovered = true;
         if (!d20bEdgeGlow) {
             const edges = new THREE.EdgesGeometry(d20b.geometry);
+
+        // --- Update player mesh position (if player moves) ---
+        playerMesh.position.set(player.x, player.y, player.z);
             d20bEdgeGlow = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: EDGE_GLOW_COLOR, linewidth: 2 }));
             d20bEdgeGlow.renderOrder = 10;
             d20b.add(d20bEdgeGlow);
@@ -488,7 +502,7 @@ for (let i = 0; i < d20PositionAttr.count; i += 3) {
     ctx.fillStyle = '#ffe066';
     ctx.strokeStyle = '#fff9c4';
     ctx.lineWidth = 8;
-    ctx.font = 'bold 90px Arial';
+    ctx.font = 'bold 68px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeText((i / 3 + 1).toString(), 128, 128);
@@ -545,7 +559,7 @@ for (let faceIdx = 0; faceIdx < 12; faceIdx++) {
     ctx.fillStyle = '#ffe066';
     ctx.strokeStyle = '#fff9c4';
     ctx.lineWidth = 8;
-    ctx.font = 'bold 90px Arial';
+    ctx.font = 'bold 68px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.strokeText((faceIdx + 1).toString(), 128, 128);
@@ -754,7 +768,7 @@ const imagePlaneSize = trayRadius * 1.15;
 const imagePlaneHeight = trayY + trayHeight / 2 + 0.024;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
 // Terrain heights must be accessible to all relevant functions
-const terrainGridSize = 40; // 40x40 grid (doubled faces)
+const terrainGridSize = 128; // Reasonable detail for color-based geometry
 let terrainHeights = [];
 for (let y = 0; y <= terrainGridSize; y++) {
     terrainHeights[y] = [];
@@ -824,19 +838,23 @@ loader.load('map.png', function(texture) {
 
         const gridCount = terrainGridSize;
 
-        // --- Generate heat map from image brightness ---
-        // Sample the image at grid points and set terrainHeights
+        // --- Generate height map from image color ---
+        // Sample the image at grid points and set terrainHeights based on color
+        function colorToHeight(r, g, b) {
+            // Example mapping: blue=water, green=grass, brown=mountain, gray=stone
+            if (b > 180 && r < 100 && g < 100) return -5.0; // Water (blue, much lower)
+            if (g > 140 && r < 120 && b < 120) return 2.0; // Grass (green, higher)
+            if (r > 120 && g > 80 && b < 80) return 8.0; // Mountain (brown, much higher)
+            if (r > 150 && g > 150 && b > 150) return 0.0; // Flat (white/gray)
+            return 0.0; // Default flat
+        }
         for (let y = 0; y <= gridCount; y++) {
             for (let x = 0; x <= gridCount; x++) {
                 // Sample center of each cell
                 const px = Math.floor((x / gridCount) * gridCanvas.width);
                 const py = Math.floor((y / gridCount) * gridCanvas.height);
                 const pixel = ctx.getImageData(px, py, 1, 1).data;
-                // Use brightness (simple average)
-                const brightness = (pixel[0] + pixel[1] + pixel[2]) / 3;
-                // Map brightness [0,255] to height [-1, 1]
-                const h = ((brightness / 255) - 0.5) * 2.0;
-                terrainHeights[y][x] = h;
+                terrainHeights[y][x] = colorToHeight(pixel[0], pixel[1], pixel[2]);
             }
         }
 
@@ -879,40 +897,19 @@ loader.load('map.png', function(texture) {
         let terrainMesh = null;
         let mapMesh = null;
         function createTerrainGeometry() {
-            const geometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize, terrainGridSize, terrainGridSize);
-            // Set heights
-            for (let i = 0; i < geometry.attributes.position.count; i++) {
-                const ix = i % (terrainGridSize + 1);
-                const iy = Math.floor(i / (terrainGridSize + 1));
-                geometry.attributes.position.setZ(i, terrainHeights[iy][ix]);
-            }
-            geometry.computeVertexNormals();
-            return geometry;
+            // Flat plane, no height modification
+            return new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize, 1, 1);
         }
 
         function addTerrainMesh() {
             if (terrainMesh) scene.remove(terrainMesh);
             if (mapMesh) scene.remove(mapMesh);
             const geometry = createTerrainGeometry();
-            // Load additional maps
-            const normalMap = loader.load('map_normal.png');
-            // Use map_displacement.png for both roughness and displacement if roughness is missing
-            const roughnessMap = loader.load('map_displacement.png');
-            const displacementMap = loader.load('map_displacement.png');
-            normalMap.wrapS = normalMap.wrapT = THREE.ClampToEdgeWrapping;
-            roughnessMap.wrapS = roughnessMap.wrapT = THREE.ClampToEdgeWrapping;
-            displacementMap.wrapS = displacementMap.wrapT = THREE.ClampToEdgeWrapping;
-            // Map mesh (deforms the map image)
+            // Flat map: only albedo texture
             const mapMaterial = new THREE.MeshStandardMaterial({
                 map: gridTexture,
-                normalMap: normalMap,
-                normalScale: new THREE.Vector2(1.0, 1.0),
-                roughnessMap: roughnessMap,
                 roughness: 0.7,
                 metalness: 0.05,
-                displacementMap: displacementMap,
-                displacementScale: 0.5,
-                displacementBias: 0.0,
                 transparent: false,
                 opacity: 1.0,
                 side: THREE.DoubleSide
