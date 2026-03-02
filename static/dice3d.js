@@ -97,7 +97,93 @@ function spawnParticleBlast(position, isDie2 = false) {
     group.position.copy(position);
     particleBlasts.push({ group, start: performance.now() });
     scene.add(group);
+
 }
+
+
+// --- Add a Dock on the Open Edge ---
+// (Moved here so oceanSize is defined)
+setTimeout(() => {
+    // Create a large simple rectangular dock at the open edge, extending onto land
+    const dockLength = 22; // along X (from water onto land)
+    const dockWidth = 30;  // along Z (width of the open gap, tripled)
+    const dockHeight = 0.38;
+    const dockPlankCount = 18;
+    const dockY = ocean.position.y + dockHeight / 2 + 0.12;
+    // Move the dock further to the right (positive Z direction) on the open edge
+    const dockCenterX = -(oceanSize * 0.5 - dockLength / 2 - 2.5); // start at water edge, extend onto land
+    const dockCenterZ = oceanSize * 0.28; // shift further right (positive Z)
+
+    // Planks (along X, side by side along Z)
+    for (let i = 0; i < dockPlankCount; i++) {
+        const zOffset = (i - (dockPlankCount - 1) / 2) * (dockWidth / dockPlankCount);
+        const plankGeometry = new THREE.BoxGeometry(dockLength * (0.96 + Math.random() * 0.06), dockHeight, (dockWidth / dockPlankCount) * (0.92 + Math.random() * 0.12));
+        const plankMaterial = new THREE.MeshStandardMaterial({
+            color: 0x8b6f3a,
+            roughness: 0.68,
+            metalness: 0.13,
+            flatShading: false
+        });
+        const plank = new THREE.Mesh(plankGeometry, plankMaterial);
+        plank.position.set(
+            dockCenterX + (Math.random() - 0.5) * 0.08,
+            dockY + (Math.random() - 0.5) * 0.04,
+            dockCenterZ + zOffset
+        );
+        plank.rotation.y = (Math.random() - 0.5) * 0.04;
+        plank.castShadow = true;
+        plank.receiveShadow = true;
+        scene.add(plank);
+    }
+
+    // Dock posts (4 corners)
+    const postGeometry = new THREE.CylinderGeometry(0.22, 0.26, 2.1, 14);
+    const postMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6b4a23,
+        roughness: 0.72,
+        metalness: 0.10
+    });
+    for (let i = 0; i < 2; i++) {
+        for (let j = 0; j < 2; j++) {
+            const post = new THREE.Mesh(postGeometry, postMaterial);
+            const xOffset = ((i === 0) ? -1 : 1) * (dockLength / 2 - 0.5);
+            const zOffset = ((j === 0) ? -1 : 1) * (dockWidth / 2 - 0.22);
+            post.position.set(
+                dockCenterX + xOffset,
+                dockY - 1.0,
+                dockCenterZ + zOffset
+            );
+            post.castShadow = true;
+            post.receiveShadow = true;
+            scene.add(post);
+        }
+    }
+
+    // --- Asphalt Road Seamlessly Connected to Dock (Counterclockwise Side, Extended Right) ---
+    // Road continues from the dock's far right edge (highest Z), extending further in the positive Z direction
+    const roadLength = 44; // extended length
+    const roadWidth = dockWidth; // match dock width
+    const roadHeight = dockHeight; // match dock height
+    const roadGeometry = new THREE.BoxGeometry(roadLength, roadHeight, roadWidth, 1, 1, 1);
+    const roadMaterial = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.82,
+        metalness: 0.12
+    });
+    const road = new THREE.Mesh(roadGeometry, roadMaterial);
+    // Place road so it starts at the dock's far right edge (highest Z), continues in +Z
+    // The dock's far right edge: X = dockCenterX, Y = dockY, Z = dockCenterZ + dockWidth / 2
+    // Road's center should be at the end of the dock plus half its length
+    road.position.set(
+        dockCenterX,
+        dockY,
+        dockCenterZ + dockWidth / 2 + roadLength / 2
+    );
+    road.rotation.y = Math.PI / 2; // rotate so road extends in +Z
+    road.castShadow = true;
+    road.receiveShadow = true;
+    scene.add(road);
+}, 0);
 
 
 // Procedural nighttime skybox (darker, animated stars)
@@ -400,31 +486,32 @@ const player = { x: 0, y: tableHeight / 2 + 2.0 + 0.11 + 0.18, z: 0 }; // 0.18 o
 
 // --- Humanoid polygon figure ---
 const playerMaterial = new THREE.MeshStandardMaterial({ color: 0x22ff44, metalness: 0.3, roughness: 0.5 });
-const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 10), playerMaterial);
-const playerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.07, 0.18, 8), playerMaterial);
-const playerArmL = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), playerMaterial);
-const playerArmR = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.13, 6), playerMaterial);
-const playerLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.13, 6), playerMaterial);
-const playerLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.13, 6), playerMaterial);
+const scaleFactor = 0.5;
+const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.07 * scaleFactor, 10, 10), playerMaterial);
+const playerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.055 * scaleFactor, 0.07 * scaleFactor, 0.18 * scaleFactor, 8), playerMaterial);
+const playerArmL = new THREE.Mesh(new THREE.CylinderGeometry(0.022 * scaleFactor, 0.022 * scaleFactor, 0.13 * scaleFactor, 6), playerMaterial);
+const playerArmR = new THREE.Mesh(new THREE.CylinderGeometry(0.022 * scaleFactor, 0.022 * scaleFactor, 0.13 * scaleFactor, 6), playerMaterial);
+const playerLegL = new THREE.Mesh(new THREE.CylinderGeometry(0.025 * scaleFactor, 0.025 * scaleFactor, 0.13 * scaleFactor, 6), playerMaterial);
+const playerLegR = new THREE.Mesh(new THREE.CylinderGeometry(0.025 * scaleFactor, 0.025 * scaleFactor, 0.13 * scaleFactor, 6), playerMaterial);
 
 // Assemble figure
 const playerMesh = new THREE.Group();
-playerHead.position.set(0, 0.18, 0);
-playerBody.position.set(0, 0.09, 0);
-playerArmL.position.set(-0.07, 0.13, 0);
+playerHead.position.set(0, 0.18 * scaleFactor, 0);
+playerBody.position.set(0, 0.09 * scaleFactor, 0);
+playerArmL.position.set(-0.07 * scaleFactor, 0.13 * scaleFactor, 0);
 playerArmL.rotation.z = Math.PI / 2.2;
-playerArmR.position.set(0.07, 0.13, 0);
+playerArmR.position.set(0.07 * scaleFactor, 0.13 * scaleFactor, 0);
 playerArmR.rotation.z = -Math.PI / 2.2;
-playerLegL.position.set(-0.03, -0.045, 0);
-playerLegR.position.set(0.03, -0.045, 0);
+playerLegL.position.set(-0.03 * scaleFactor, -0.045 * scaleFactor, 0);
+playerLegR.position.set(0.03 * scaleFactor, -0.045 * scaleFactor, 0);
 playerMesh.add(playerHead);
 playerMesh.add(playerBody);
 playerMesh.add(playerArmL);
 playerMesh.add(playerArmR);
 playerMesh.add(playerLegL);
 playerMesh.add(playerLegR);
-// Lower the group so the feet touch the map
-playerMesh.position.set(player.x, player.y - 1.30 , player.z);
+// Lower the group so the feet touch the map (adjust Y offset for new scale)
+playerMesh.position.set(player.x, player.y - 1.30 * scaleFactor, player.z);
 scene.add(playerMesh);
 
 // Roll dice or move camera on click
@@ -479,9 +566,9 @@ renderer.domElement.addEventListener('click', (e) => {
 });
 // Animate camera to player's perspective
 function moveToPlayerCamera() {
-    const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18, 0));
+    const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18 * scaleFactor, 0));
     // Camera slightly behind head
-    const targetPos = headPos.clone().add(new THREE.Vector3(0, 0.05, 0.35));
+    const targetPos = headPos.clone().add(new THREE.Vector3(0, 0.05 * scaleFactor, 0.35 * scaleFactor));
     const duration = 800;
     const startPos = camera.position.clone();
     const startTime = performance.now();
@@ -878,6 +965,258 @@ function animateWater() {
     waterUniforms.time.value = performance.now() * 0.001;
     requestAnimationFrame(animateWater);
 }
+
+// --- Water Overflow Effect ---
+// Create animated water drips/falls around the tray's rim, visually extending the water shader down the table's edge
+const overflowCount = 18;
+const overflowMeshes = [];
+for (let i = 0; i < overflowCount; i++) {
+    const angle = (i / overflowCount) * Math.PI * 2;
+    // Each overflow is a thin, vertical plane (like a waterfall sheet)
+    const width = 0.18 + Math.random() * 0.08;
+    const height = 1.6 + Math.random() * 0.5;
+    const geometry = new THREE.PlaneGeometry(width, height, 1, 16);
+    // Custom shader for animated water fall
+    const overflowUniforms = {
+        time: { value: 0 },
+        color1: { value: new THREE.Color(0xbbe4e9) }, // light blue
+        color2: { value: new THREE.Color(0x8dbad6) }, // deeper blue
+        foamColor: { value: new THREE.Color(0xf3f6f7) },
+        opacity: { value: 0.62 }
+    };
+    const material = new THREE.ShaderMaterial({
+        uniforms: overflowUniforms,
+        vertexShader: `
+            varying vec2 vUv;
+            void main() {
+                vUv = uv;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform float time;
+            uniform vec3 color1;
+            uniform vec3 color2;
+            uniform vec3 foamColor;
+            uniform float opacity;
+            varying vec2 vUv;
+            float hash(float n) { return fract(sin(n) * 43758.5453); }
+            void main() {
+                float t = time * 0.7;
+                float y = vUv.y + t * (0.7 + 0.3 * hash(gl_FragCoord.x));
+                float wave = sin(12.0 * vUv.x + t * 2.0) * 0.08 + sin(28.0 * vUv.x - t * 1.2) * 0.04;
+                float foam = smoothstep(0.92, 1.0, y + wave);
+                vec3 color = mix(color1, color2, y + wave);
+                color = mix(color, foamColor, foam * 0.7);
+                float alpha = opacity * (0.7 + 0.3 * (1.0 - vUv.y));
+                gl_FragColor = vec4(color, alpha * (1.0 - 0.18 * vUv.x * vUv.x));
+            }
+        `,
+        transparent: true,
+        depthWrite: false
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    // Position at tray rim, slightly outside
+    const r = trayRadius + 0.13;
+    mesh.position.set(Math.cos(angle) * r, tray.position.y - trayHeight / 2 - height / 2 + 0.04, Math.sin(angle) * r);
+    mesh.rotation.y = -angle;
+    mesh.rotation.x = -Math.PI / 2;
+    scene.add(mesh);
+    overflowMeshes.push({ mesh, uniforms: overflowUniforms });
+}
+
+function animateWaterOverflow() {
+    const t = performance.now() * 0.001;
+    for (const { uniforms } of overflowMeshes) {
+        uniforms.time.value = t + Math.random() * 10.0;
+    }
+    requestAnimationFrame(animateWaterOverflow);
+}
+animateWaterOverflow();
+
+
+// --- Ocean Underneath Table ---
+// Large animated water plane below the table
+const oceanSize = tableRadius * 7.5;
+const oceanGeometry = new THREE.PlaneGeometry(oceanSize, oceanSize, 128, 128);
+const oceanUniforms = {
+    time: { value: 0 },
+    deepColor: { value: new THREE.Color(0x3a5dbb) }, // deeper blue
+    shallowColor: { value: new THREE.Color(0x8dbad6) }, // lighter blue
+    foamColor: { value: new THREE.Color(0xf3f6f7) }
+};
+const oceanMaterial = new THREE.ShaderMaterial({
+    uniforms: oceanUniforms,
+    vertexShader: `
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform float time;
+        uniform vec3 deepColor;
+        uniform vec3 shallowColor;
+        uniform vec3 foamColor;
+        varying vec2 vUv;
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            float a = hash(i);
+            float b = hash(i + vec2(1.0, 0.0));
+            float c = hash(i + vec2(0.0, 1.0));
+            float d = hash(i + vec2(1.0, 1.0));
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+        }
+        float oceanWaves(vec2 uv, float t) {
+            float wave = 0.0;
+            float slowT = t * 0.07;
+            wave += sin(uv.x * 10.0 + slowT * 1.1) * 0.10;
+            wave += cos(uv.y * 12.0 + slowT * 0.9) * 0.08;
+            wave += sin((uv.x + uv.y) * 7.0 + slowT * 1.3) * 0.06;
+            wave += sin(uv.x * 22.0 - uv.y * 10.0 + slowT * 1.7) * 0.03;
+            wave += noise(uv * 18.0 + slowT * 0.7) * 0.07;
+            wave += noise(uv * 54.0 - slowT * 0.5) * 0.04;
+            return wave;
+        }
+        void main() {
+            float t = time;
+            vec2 distortedUv = vUv;
+            distortedUv.x += 0.09 * sin(10.0 * vUv.y + t * 0.2) + 0.07 * cos(18.0 * vUv.x + t * 0.13);
+            distortedUv.y += 0.09 * cos(12.0 * vUv.x - t * 0.18) + 0.07 * sin(16.0 * vUv.y - t * 0.11);
+            distortedUv += 0.05 * noise(vUv * 14.0 + t * 0.09);
+            float wave = oceanWaves(distortedUv, t);
+            float ripple = sin(38.0 * (distortedUv.x + distortedUv.y) + t * 0.13) * 0.02;
+            float baseMix = 0.5 + 0.5 * sin(6.0 * distortedUv.x + 7.0 * distortedUv.y + t * 0.05 + wave + ripple);
+            vec3 waterColor = mix(shallowColor, deepColor, baseMix);
+            float foam = 0.0;
+            float foamWaves = sin(18.0 * distortedUv.x + t * 0.11) * 0.5 + cos(20.0 * distortedUv.y + t * 0.09) * 0.5;
+            float foamNoise = noise(distortedUv * 48.0 + t * 0.05);
+            foam = smoothstep(0.62, 0.84, foamWaves + foamNoise + wave * 0.5);
+            float foamStreaks = smoothstep(0.7, 0.9, sin(40.0 * distortedUv.x + t * 0.16 + 8.0 * distortedUv.y));
+            foam = max(foam, foamStreaks * 0.7);
+            vec3 finalColor = mix(waterColor, foamColor, foam);
+            gl_FragColor = vec4(finalColor, 0.82);
+        }
+    `,
+    transparent: true
+});
+const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
+ocean.rotation.x = -Math.PI / 2;
+ocean.position.y = table.position.y - tableHeight / 2 - 1.8;
+scene.add(ocean);
+
+// --- Big Black Rocks Around Ocean Perimeter ---
+// --- Floating Wooden Crate ---
+const crateSize = 1.1;
+// Beveled box for more realism
+const crateGeometry = new THREE.BoxGeometry(crateSize, crateSize, crateSize, 2, 2, 2);
+// Add plank grooves by modifying geometry
+const cratePlankCount = 4;
+for (let i = 0; i < crateGeometry.attributes.position.count; i++) {
+    let v = new THREE.Vector3().fromBufferAttribute(crateGeometry.attributes.position, i);
+    // Add shallow grooves along X and Z faces
+    if (Math.abs(v.y) > crateSize * 0.45) {
+        v.x += Math.sin(v.z * cratePlankCount * Math.PI / crateSize) * 0.04;
+        v.z += Math.sin(v.x * cratePlankCount * Math.PI / crateSize) * 0.04;
+    }
+    crateGeometry.attributes.position.setXYZ(i, v.x, v.y, v.z);
+}
+crateGeometry.computeVertexNormals();
+
+// Load a wood texture for realism
+const crateTexture = new THREE.TextureLoader().load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@master/examples/textures/wood.jpg');
+crateTexture.wrapS = crateTexture.wrapT = THREE.RepeatWrapping;
+crateTexture.repeat.set(1.5, 1.5);
+
+const crateMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8b5a2b,
+    roughness: 0.48,
+    metalness: 0.13,
+    map: crateTexture,
+    normalScale: new THREE.Vector2(0.5, 0.5),
+});
+const crate = new THREE.Mesh(crateGeometry, crateMaterial);
+crate.castShadow = true;
+crate.receiveShadow = true;
+// Place crate somewhere in the water, not too close to tray or rocks
+const crateAngle = Math.PI * 1.12; // moved further left
+const crateDist = oceanSize * 0.36;
+crate.position.set(
+    Math.cos(crateAngle) * crateDist,
+    ocean.position.y + crateSize / 2 + 0.18,
+    Math.sin(crateAngle) * crateDist
+);
+scene.add(crate);
+
+// Add a subtle wetness effect to the bottom of the crate
+const wetMaterial = crateMaterial.clone();
+wetMaterial.color = new THREE.Color(0x5a3a1a);
+wetMaterial.roughness = 0.22;
+wetMaterial.metalness = 0.22;
+wetMaterial.opacity = 0.7;
+wetMaterial.transparent = true;
+const wetGeo = new THREE.BoxGeometry(crateSize * 0.98, crateSize * 0.18, crateSize * 0.98);
+const wetMesh = new THREE.Mesh(wetGeo, wetMaterial);
+wetMesh.position.y = -crateSize * 0.41;
+crate.add(wetMesh);
+
+// Animate crate bobbing up and down
+let crateBobPhase = Math.random() * Math.PI * 2;
+const rockCount = 22;
+const rocks = [];
+const rockRadius = oceanSize * 0.5 + 2.5;
+// Remove rocks from one edge (skip a segment, e.g., 6 rocks centered on negative X axis)
+const skipStart = Math.floor(rockCount * 0.23); // ~5 rocks in
+const skipEnd = Math.floor(rockCount * 0.50);   // ~11 rocks in
+for (let i = 0; i < rockCount; i++) {
+    // Skip rocks in the specified segment (one edge)
+    if (i >= skipStart && i <= skipEnd) continue;
+    const angle = (i / rockCount) * Math.PI * 2 + Math.random() * 0.18;
+    const scale = 2.8 + Math.random() * 2.7;
+    const height = 3.5 + Math.random() * 2.5;
+    // Higher detail geometry for smoother, more solid rocks
+    const geometry = new THREE.IcosahedronGeometry(1.0 + Math.random() * 0.7, 3);
+    // Gentle, less aggressive noise for organic but solid shape
+    const pos = geometry.attributes.position;
+    for (let j = 0; j < pos.count; j++) {
+        let v = new THREE.Vector3().fromBufferAttribute(pos, j);
+        v.multiplyScalar(1.0 + (Math.random() - 0.5) * 0.045); // less noise
+        pos.setXYZ(j, v.x, v.y, v.z);
+    }
+    pos.needsUpdate = true;
+    geometry.computeVertexNormals(); // ensure smooth normals
+    const material = new THREE.MeshStandardMaterial({
+        color: 0x181818,
+        roughness: 0.82,
+        metalness: 0.18,
+        flatShading: false // smooth shading for solid look
+    });
+    const mesh = new THREE.Mesh(geometry, material);
+    mesh.scale.set(scale, height, scale);
+    mesh.position.set(
+        Math.cos(angle) * rockRadius + (Math.random() - 0.5) * 2.5,
+        ocean.position.y + height / 2 - 0.7 + Math.random() * 0.7,
+        Math.sin(angle) * rockRadius + (Math.random() - 0.5) * 2.5
+    );
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    scene.add(mesh);
+    rocks.push(mesh);
+}
+
+function animateOcean() {
+    oceanUniforms.time.value = performance.now() * 0.001;
+    requestAnimationFrame(animateOcean);
+}
+animateOcean();
+
+// Call animateWater to keep the original water animation
 animateWater();
 
 // --- Image Plane Above Felt (shows map.png) ---
@@ -1205,6 +1544,97 @@ loader.load('map.png', function(texture) {
 // Bookshelves removed
 
 // Add a lit candle to the table
+// --- Barrel on the Dock ---
+// Barrel proportions
+const barrelHeight = 1.1;
+const barrelRadiusTop = 0.38;
+const barrelRadiusBottom = 0.38;
+const barrelRadiusMiddle = 0.48; // bulge in the middle
+const barrelSegments = 32;
+// Create a lathe geometry for the barrel profile
+const barrelProfile = [];
+for (let i = 0; i <= 16; i++) {
+    const t = i / 16;
+    // Bulge in the middle
+    const r = barrelRadiusTop + (barrelRadiusMiddle - barrelRadiusTop) * Math.sin(Math.PI * t);
+    barrelProfile.push(new THREE.Vector2(r, -barrelHeight/2 + t * barrelHeight));
+}
+const barrelGeometry = new THREE.LatheGeometry(barrelProfile, barrelSegments);
+// Wood material
+// Procedural noise-based wood effect using a custom shader material
+const barrelMaterial = new THREE.ShaderMaterial({
+    uniforms: {
+        baseColor: { value: new THREE.Color(0x8b5a2b) },
+        ringColor: { value: new THREE.Color(0x6b3a1a) },
+        noiseScale: { value: 6.0 },
+        ringScale: { value: 8.0 }
+    },
+    vertexShader: `
+        varying vec3 vPos;
+        varying vec2 vUv;
+        void main() {
+            vPos = position;
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform vec3 baseColor;
+        uniform vec3 ringColor;
+        uniform float noiseScale;
+        uniform float ringScale;
+        varying vec3 vPos;
+        varying vec2 vUv;
+
+        // Simple 2D noise (value noise)
+        float hash(vec2 p) {
+            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            float a = hash(i);
+            float b = hash(i + vec2(1.0, 0.0));
+            float c = hash(i + vec2(0.0, 1.0));
+            float d = hash(i + vec2(1.0, 1.0));
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+        }
+
+        void main() {
+            // Simulate wood rings using radial distance and noise
+            float r = length(vPos.xz);
+            float rings = sin((r + noise(vPos.xz * noiseScale)) * ringScale);
+            float wood = 0.5 + 0.5 * rings;
+            // Blend base and ring color
+            vec3 color = mix(baseColor, ringColor, wood * 0.45);
+            // Add subtle noise for grain
+            float grain = noise(vPos.xz * noiseScale * 2.0);
+            color += 0.08 * (grain - 0.5);
+            gl_FragColor = vec4(color, 1.0);
+        }
+    `
+});
+const barrel = new THREE.Mesh(barrelGeometry, barrelMaterial);
+// Add metal hoops (3 rings)
+const hoopMaterial = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.85, roughness: 0.22 });
+const hoops = [];
+for (let i = 0; i < 3; i++) {
+    const y = -barrelHeight/2 + (i / 2) * barrelHeight;
+    const hoopGeo = new THREE.TorusGeometry(barrelRadiusMiddle * 1.01, 0.035, 12, 32);
+    const hoop = new THREE.Mesh(hoopGeo, hoopMaterial);
+    hoop.position.y = y;
+    hoop.rotation.x = Math.PI / 2;
+    barrel.add(hoop);
+    hoops.push(hoop);
+}
+// Place barrel on dock: estimate dock position near ocean, slightly offset from center
+const dockX = ocean.position.x + 0.8;
+const dockY = ocean.position.y + 0.55; // slightly above dock
+const dockZ = ocean.position.z - 2.2;
+barrel.position.set(dockX, dockY + barrelHeight/2, dockZ);
+barrel.rotation.y = Math.random() * Math.PI * 2;
+scene.add(barrel);
 
 // Candle shape: more realistic (tapered, melted)
 const candleHeight = 1.44;
@@ -1558,6 +1988,43 @@ function animate() {
         camera.lookAt(0, -1.5, 0);
     }
     // First-person player controls
+    // --- First-person Mouse Look ---
+    // Pointer lock variables
+    let pointerLocked = false;
+    let mouseLookSensitivity = 0.0022;
+    // Yaw and pitch are assumed to be fpYaw and fpPitch
+    // Set up pointer lock controls if not already
+    if (typeof window._mouseLookSetup === 'undefined') {
+        window._mouseLookSetup = true;
+        const canvas = renderer.domElement;
+        canvas.tabIndex = 0;
+        canvas.style.outline = 'none';
+        // Request pointer lock on click in player mode
+        canvas.addEventListener('click', function() {
+            if (cameraMode === 'player' && !pointerLocked) {
+                canvas.requestPointerLock();
+            }
+        });
+        document.addEventListener('pointerlockchange', function() {
+            pointerLocked = (document.pointerLockElement === canvas);
+        });
+        // Mouse move event for look
+        document.addEventListener('mousemove', function(e) {
+            if (pointerLocked && cameraMode === 'player') {
+                fpYaw -= e.movementX * mouseLookSensitivity;
+                fpPitch -= e.movementY * mouseLookSensitivity;
+                // Clamp pitch to avoid flipping
+                const maxPitch = Math.PI / 2 - 0.08;
+                fpPitch = Math.max(-maxPitch, Math.min(maxPitch, fpPitch));
+            }
+        });
+        // Optional: exit pointer lock on Escape
+        document.addEventListener('keydown', function(e) {
+            if (pointerLocked && e.key === 'Escape') {
+                document.exitPointerLock();
+            }
+        });
+    }
     if (cameraMode === "player") {
         // WASD movement relative to camera yaw (W/S = forward/back, A/D = strafe, but flipped)
         const moveSpeed = 0.08;
@@ -1574,10 +2041,36 @@ function animate() {
             const x = moveVec.x * cos - moveVec.z * sin;
             const z = moveVec.x * sin + moveVec.z * cos;
             moveVec.set(x, 0, z);
+            // Save previous position
+            const prevPos = playerMesh.position.clone();
             playerMesh.position.add(moveVec.multiplyScalar(moveSpeed));
+            // Clamp player to tray/table area
+            // Assume tray is centered at (0, 0), use trayRadius
+            const px = playerMesh.position.x;
+            const pz = playerMesh.position.z;
+            const dist = Math.sqrt(px * px + pz * pz);
+            const maxDist = trayRadius * 0.97 - 0.18; // stay inside tray edge
+            if (dist > maxDist) {
+                // Clamp to edge
+                playerMesh.position.x = (px / dist) * maxDist;
+                playerMesh.position.z = (pz / dist) * maxDist;
+            }
+        }
+        // Always clamp Y to tray/terrain surface so player never falls through
+        // If you have terrain heights, sample here; otherwise, use trayY
+        const minPlayerY = trayY + trayHeight / 2 + 0.18 * scaleFactor;
+        if (playerMesh.position.y < minPlayerY) {
+            playerMesh.position.y = minPlayerY;
         }
         // Camera follows head
-        const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18, 0));
+        const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18 * scaleFactor, 0));
+        // Camera collision with tray edge: don't let camera go outside tray
+        const camDist = Math.sqrt(headPos.x * headPos.x + headPos.z * headPos.z);
+        const camMaxDist = trayRadius * 0.99 - 0.12;
+        if (camDist > camMaxDist) {
+            headPos.x = (headPos.x / camDist) * camMaxDist;
+            headPos.z = (headPos.z / camDist) * camMaxDist;
+        }
         camera.position.copy(headPos);
         // Look direction from yaw/pitch
         const lookDir = new THREE.Vector3(0, 0, 1)
@@ -1766,6 +2259,15 @@ scene.add(diceBowl);
             scene.remove(group);
             particleBlasts.splice(i, 1);
         }
+    }
+
+    // Animate floating crate bobbing up and down
+    if (crate) {
+        const t = performance.now() * 0.001;
+        crate.position.y = ocean.position.y + crateSize / 2 + 0.18 + Math.sin(t * 1.1 + crateBobPhase) * 0.22;
+        crate.rotation.y = crateBobPhase + Math.sin(t * 0.7) * 0.18;
+        crate.rotation.x = Math.sin(t * 0.5 + crateBobPhase) * 0.07;
+        crate.rotation.z = Math.cos(t * 0.6 + crateBobPhase) * 0.07;
     }
 
     // Mouse look only (disabled for orbit)
