@@ -1474,6 +1474,55 @@ function animate() {
 diceBowl.position.set(tableRadius * 0.7, table.position.y + tableHeight + bowlHeight / 2 + 0.05, 0);
 scene.add(diceBowl);
 
+// --- Castle Dice Tower ---
+// Hollow cylinder with battlements, positioned above the bowl
+const towerRadiusOuter = bowlRadius * 0.85;
+const towerRadiusInner = towerRadiusOuter * 0.7;
+const towerHeight = bowlHeight * 2.2;
+const towerWallThickness = towerRadiusOuter - towerRadiusInner;
+const towerSegments = 24;
+const towerY = diceBowl.position.y + bowlHeight / 2 + towerHeight / 2 + 0.05;
+
+// Outer and inner cylinders for hollow effect
+const towerOuterGeo = new THREE.CylinderGeometry(towerRadiusOuter, towerRadiusOuter, towerHeight, towerSegments, 1, true);
+const towerInnerGeo = new THREE.CylinderGeometry(towerRadiusInner, towerRadiusInner, towerHeight - 0.1, towerSegments, 1, true);
+// Move inner slightly up so bottom rim is not visible
+towerInnerGeo.translate(0, 0.05, 0);
+
+// Boolean geometry for hollow (using BufferGeometryUtils if available, else just overlay)
+// For simplicity, just overlay for now
+const towerMaterial = new THREE.MeshStandardMaterial({
+    color: 0xcccccc,
+    metalness: 0.18,
+    roughness: 0.62,
+    transparent: true,
+    opacity: 0.92,
+    side: THREE.DoubleSide
+});
+const towerOuter = new THREE.Mesh(towerOuterGeo, towerMaterial);
+const towerInner = new THREE.Mesh(towerInnerGeo, towerMaterial);
+towerOuter.position.set(diceBowl.position.x, towerY, diceBowl.position.z);
+towerInner.position.set(diceBowl.position.x, towerY, diceBowl.position.z);
+scene.add(towerOuter);
+scene.add(towerInner);
+
+// Add battlements (simple cubes) around the top
+const battlementCount = 8;
+const battlementWidth = (towerRadiusOuter - towerRadiusInner) * 1.2;
+const battlementDepth = battlementWidth * 0.7;
+const battlementHeight = towerWallThickness * 1.7;
+const battlementY = towerY + towerHeight / 2 + battlementHeight / 2 - 0.01;
+for (let i = 0; i < battlementCount; i++) {
+    const angle = (i / battlementCount) * Math.PI * 2;
+    const x = diceBowl.position.x + Math.cos(angle) * (towerRadiusOuter + towerRadiusInner) / 2;
+    const z = diceBowl.position.z + Math.sin(angle) * (towerRadiusOuter + towerRadiusInner) / 2;
+    const geo = new THREE.BoxGeometry(battlementWidth, battlementHeight, battlementDepth);
+    const mesh = new THREE.Mesh(geo, towerMaterial);
+    mesh.position.set(x, battlementY, z);
+    mesh.rotation.y = -angle;
+    scene.add(mesh);
+}
+
     // Add a solid base to the bowl
     const baseThickness = bowlHeight * 0.12;
     const baseGeometry = new THREE.CylinderGeometry(bowlRadius * 0.95, bowlRadius * 0.95, baseThickness, 32);
