@@ -1000,6 +1000,7 @@ const crate = new THREE.Mesh(crateGeometry, crateMaterial);
 crate.castShadow = true;
 crate.receiveShadow = true;
 // Place crate somewhere in the water, not too close to tray or rocks
+
 const crateAngle = Math.PI * 1.12; // moved further left
 const crateDist = oceanSize * 0.36;
 crate.position.set(
@@ -1008,6 +1009,105 @@ crate.position.set(
     Math.sin(crateAngle) * crateDist
 );
 scene.add(crate);
+
+// Add a wooden dock at the outer edge of the sea
+
+const dockLength = oceanSize * 0.38;
+const dockWidth = 1.2;
+const dockHeight = 0.18;
+const dockPlankCount = 7;
+const dockGeometry = new THREE.BoxGeometry(dockLength, dockHeight, dockWidth, dockPlankCount, 1, 2);
+// Add plank grooves
+for (let i = 0; i < dockGeometry.attributes.position.count; i++) {
+    let v = new THREE.Vector3().fromBufferAttribute(dockGeometry.attributes.position, i);
+    // Grooves between planks along the length
+    if (Math.abs(v.z) > dockWidth * 0.45) {
+        v.x += Math.sin(v.x * dockPlankCount * Math.PI / dockLength) * 0.04;
+    }
+    dockGeometry.attributes.position.setXYZ(i, v.x, v.y, v.z);
+}
+dockGeometry.computeVertexNormals();
+
+// Procedural wood texture for dock
+function createWoodTexture(size = 512, planks = 7) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    // Wood base color
+    ctx.fillStyle = '#a97c50';
+    ctx.fillRect(0, 0, size, size);
+    // Draw planks
+    for (let i = 0; i < planks; i++) {
+        ctx.save();
+        ctx.strokeStyle = '#7a5632';
+        ctx.lineWidth = 8;
+        ctx.beginPath();
+        let y = Math.round((i + 1) * size / (planks + 1));
+        ctx.moveTo(0, y);
+        ctx.lineTo(size, y);
+        ctx.stroke();
+        ctx.restore();
+    }
+    // Add wood grain
+    for (let i = 0; i < 120; i++) {
+        ctx.save();
+        ctx.globalAlpha = 0.18 + Math.random() * 0.12;
+        ctx.strokeStyle = '#6b4a2b';
+        ctx.lineWidth = 1 + Math.random() * 2;
+        ctx.beginPath();
+        let x = Math.random() * size;
+        let y = Math.random() * size;
+        let len = 60 + Math.random() * 120;
+        let angle = (Math.random() - 0.5) * 0.5;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + len * Math.cos(angle), y + len * Math.sin(angle));
+        ctx.stroke();
+        ctx.restore();
+    }
+    return canvas;
+}
+const dockTexture = new THREE.CanvasTexture(createWoodTexture(512, dockPlankCount));
+dockTexture.wrapS = dockTexture.wrapT = THREE.RepeatWrapping;
+dockTexture.repeat.set(2, 1.5);
+const dockMaterial = new THREE.MeshStandardMaterial({
+    color: 0x9b7653,
+    roughness: 0.44,
+    metalness: 0.11,
+    map: dockTexture,
+    normalScale: new THREE.Vector2(0.5, 0.5),
+});
+const dock = new THREE.Mesh(dockGeometry, dockMaterial);
+dock.castShadow = true;
+dock.receiveShadow = true;
+// Place dock at the outer front edge of the ocean, slightly above water
+const dockY = oceanY + oceanHeight + dockHeight / 2 - 0.08;
+dock.position.set(0, dockY, -oceanSize / 2 + dockLength / 2 + 0.2);
+scene.add(dock);
+
+// Add pilings (cylinders) under the dock
+const pilingRadius = 0.13;
+const pilingHeight = oceanHeight + 0.5;
+const pilingMaterial = new THREE.MeshStandardMaterial({
+    color: 0x7a5632,
+    roughness: 0.5,
+    metalness: 0.08
+});
+const pilingCount = 4;
+for (let i = 0; i < pilingCount; i++) {
+    const x = -dockLength/2 + (i + 0.5) * (dockLength / pilingCount);
+    for (let j = 0; j < 2; j++) { // two rows (front/back)
+        const z = (j === 0) ? -dockWidth/2 + pilingRadius*1.1 : dockWidth/2 - pilingRadius*1.1;
+        const piling = new THREE.Mesh(
+            new THREE.CylinderGeometry(pilingRadius, pilingRadius * 0.97, pilingHeight, 16),
+            pilingMaterial
+        );
+        piling.position.set(x, dockY - pilingHeight/2 - dockHeight/2 + 0.01, dock.position.z + z);
+        piling.castShadow = true;
+        piling.receiveShadow = true;
+        scene.add(piling);
+    }
+}
 
 // Add a subtle wetness effect to the bottom of the crate
 const wetMaterial = crateMaterial.clone();
@@ -1509,9 +1609,9 @@ for (let i = 0; i < 3; i++) {
 }
 // Place barrel on dock: estimate dock position near ocean, slightly offset from center
 const dockX = 0 + 0.8; // ocean is centered at (0, oceanY, 0)
-const dockY = oceanY + 0.55; // slightly above dock
+const dockYBarrel = oceanY + 0.55; // slightly above dock
 const dockZ = 0 - 2.2;
-barrel.position.set(dockX, dockY + barrelHeight/2, dockZ);
+barrel.position.set(dockX, dockYBarrel + barrelHeight/2, dockZ);
 barrel.rotation.y = Math.random() * Math.PI * 2;
 scene.add(barrel);
 
