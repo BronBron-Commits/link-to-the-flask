@@ -779,169 +779,13 @@ bevel.position.y = -1.5 + tableHeight / 2 + 0.01; // matches table.position.y, s
 bevel.rotation.x = Math.PI / 2;
 scene.add(bevel);
 
-// --- Dice Tray ---
-// A shallow cylinder with a felt-like material, slightly smaller than the table
-// const trayRadius = tableRadius * 0.7; // removed duplicate
-const trayHeight = 0.24;
-const trayY = table.position.y + tableHeight / 2 + trayHeight / 2 + 0.02;
-const trayGeometry = new THREE.CylinderGeometry(trayRadius, trayRadius, trayHeight, 48);
-
-// Animated water shader material for tray
-const waterUniforms = {
-    time: { value: 0 },
-    // More pastel/dulled colors
-    deepColor: { value: new THREE.Color(0x8dbad6) }, // pastel blue-gray
-    shallowColor: { value: new THREE.Color(0xbbe4e9) }, // pastel aqua
-    foamColor: { value: new THREE.Color(0xf3f6f7) } // soft off-white
-};
-const trayMaterial = new THREE.ShaderMaterial({
-    uniforms: waterUniforms,
-    vertexShader: `
-        varying vec2 vUv;
-        void main() {
-            vUv = uv;
-            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-    `,
-    fragmentShader: `
-        uniform float time;
-        uniform vec3 deepColor;
-        uniform vec3 shallowColor;
-        uniform vec3 foamColor;
-        varying vec2 vUv;
-        // Simple 2D noise
-        float hash(vec2 p) {
-            return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
-        }
-        float noise(vec2 p) {
-            vec2 i = floor(p);
-            vec2 f = fract(p);
-            float a = hash(i);
-            float b = hash(i + vec2(1.0, 0.0));
-            float c = hash(i + vec2(0.0, 1.0));
-            float d = hash(i + vec2(1.0, 1.0));
-            vec2 u = f * f * (3.0 - 2.0 * f);
-            return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-        }
-        // More complex, slower ocean wave function with more noise
-        float oceanWaves(vec2 uv, float t) {
-            float wave = 0.0;
-            float slowT = t * 0.08; // even slower
-            wave += sin(uv.x * 12.0 + slowT * 1.1) * 0.10;
-            wave += cos(uv.y * 14.0 + slowT * 0.9) * 0.08;
-            wave += sin((uv.x + uv.y) * 8.0 + slowT * 1.3) * 0.06;
-            wave += sin(uv.x * 24.0 - uv.y * 12.0 + slowT * 1.7) * 0.03;
-            // Add more noise layers
-            wave += noise(uv * 24.0 + slowT * 0.7) * 0.07;
-            wave += noise(uv * 72.0 - slowT * 0.5) * 0.04;
-            return wave;
-        }
-        void main() {
-            float t = time;
-            // Distort the UVs for a more chaotic, warped pattern
-            vec2 distortedUv = vUv;
-            distortedUv.x += 0.08 * sin(10.0 * vUv.y + t * 0.3) + 0.06 * cos(18.0 * vUv.x + t * 0.2);
-            distortedUv.y += 0.08 * cos(12.0 * vUv.x - t * 0.25) + 0.06 * sin(16.0 * vUv.y - t * 0.15);
-            distortedUv += 0.04 * noise(vUv * 18.0 + t * 0.12);
-            float wave = oceanWaves(distortedUv, t);
-            float ripple = sin(40.0 * (distortedUv.x + distortedUv.y) + t * 0.18) * 0.02;
-            float baseMix = 0.5 + 0.5 * sin(7.0 * distortedUv.x + 8.0 * distortedUv.y + t * 0.07 + wave + ripple);
-            vec3 waterColor = mix(shallowColor, deepColor, baseMix);
-            // Sea foam
-            float foam = 0.0;
-            float foamWaves = sin(22.0 * distortedUv.x + t * 0.15) * 0.5 + cos(26.0 * distortedUv.y + t * 0.13) * 0.5;
-            float foamNoise = noise(distortedUv * 64.0 + t * 0.07);
-            foam = smoothstep(0.62, 0.84, foamWaves + foamNoise + wave * 0.5);
-            // Add foam streaks
-            float foamStreaks = smoothstep(0.7, 0.9, sin(48.0 * distortedUv.x + t * 0.22 + 10.0 * distortedUv.y));
-            foam = max(foam, foamStreaks * 0.7);
-            vec3 finalColor = mix(waterColor, foamColor, foam);
-            gl_FragColor = vec4(finalColor, 0.6);
-        }
-    `
-});
-const tray = new THREE.Mesh(trayGeometry, trayMaterial);
-trayMaterial.transparent = true;
-tray.position.set(0, trayY, 0);
-scene.add(tray);
-
-// Add a metallic rim to the tray
-const rimGeometry = new THREE.TorusGeometry(trayRadius + 0.08, 0.09, 32, 100);
-const rimMaterial = new THREE.MeshStandardMaterial({
-    color: GOLD_COLOR,
-    metalness: 1.0,
-    roughness: 0.18,
-    envMapIntensity: 1.2
-});
-const trayRim = new THREE.Mesh(rimGeometry, rimMaterial);
-trayRim.position.y = trayY + 0.01; // Slightly above tray
-trayRim.rotation.x = Math.PI / 2;
-tray.add(trayRim);
-
-// Animate water
-function animateWater() {
-    waterUniforms.time.value = performance.now() * 0.001;
-    requestAnimationFrame(animateWater);
-}
+// ...tray removed...
 
 // --- Water Overflow Effect ---
 // Create animated water drips/falls around the tray's rim, visually extending the water shader down the table's edge
 const overflowCount = 18;
 const overflowMeshes = [];
-for (let i = 0; i < overflowCount; i++) {
-    const angle = (i / overflowCount) * Math.PI * 2;
-    // Each overflow is a thin, vertical plane (like a waterfall sheet)
-    const width = 0.18 + Math.random() * 0.08;
-    const height = 1.6 + Math.random() * 0.5;
-    const geometry = new THREE.PlaneGeometry(width, height, 1, 16);
-    // Custom shader for animated water fall
-    const overflowUniforms = {
-        time: { value: 0 },
-        color1: { value: new THREE.Color(0xbbe4e9) }, // light blue
-        color2: { value: new THREE.Color(0x8dbad6) }, // deeper blue
-        foamColor: { value: new THREE.Color(0xf3f6f7) },
-        opacity: { value: 0.62 }
-    };
-    const material = new THREE.ShaderMaterial({
-        uniforms: overflowUniforms,
-        vertexShader: `
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `,
-        fragmentShader: `
-            uniform float time;
-            uniform vec3 color1;
-            uniform vec3 color2;
-            uniform vec3 foamColor;
-            uniform float opacity;
-            varying vec2 vUv;
-            float hash(float n) { return fract(sin(n) * 43758.5453); }
-            void main() {
-                float t = time * 0.7;
-                float y = vUv.y + t * (0.7 + 0.3 * hash(gl_FragCoord.x));
-                float wave = sin(12.0 * vUv.x + t * 2.0) * 0.08 + sin(28.0 * vUv.x - t * 1.2) * 0.04;
-                float foam = smoothstep(0.92, 1.0, y + wave);
-                vec3 color = mix(color1, color2, y + wave);
-                color = mix(color, foamColor, foam * 0.7);
-                float alpha = opacity * (0.7 + 0.3 * (1.0 - vUv.y));
-                gl_FragColor = vec4(color, alpha * (1.0 - 0.18 * vUv.x * vUv.x));
-            }
-        `,
-        transparent: true,
-        depthWrite: false
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    // Position at tray rim, slightly outside
-    const r = trayRadius + 0.13;
-    mesh.position.set(Math.cos(angle) * r, tray.position.y - trayHeight / 2 - height / 2 + 0.04, Math.sin(angle) * r);
-    mesh.rotation.y = -angle;
-    mesh.rotation.x = -Math.PI / 2;
-    scene.add(mesh);
-    overflowMeshes.push({ mesh, uniforms: overflowUniforms });
-}
+// Tray and its overflow effect removed
 
 function animateWaterOverflow() {
     const t = performance.now() * 0.001;
@@ -1093,12 +937,11 @@ function animateOcean() {
 }
 animateOcean();
 
-// Call animateWater to keep the original water animation
-animateWater();
+// ...animateWater removed...
 
-// --- Image Plane Above Felt (shows map.png) ---
-const imagePlaneSize = trayRadius * 1.15;
-const imagePlaneHeight = trayY + trayHeight / 2 + 0.024;
+// --- Image Plane Above Table (shows map.png) ---
+const imagePlaneSize = tableRadius * 0.8;
+const imagePlaneHeight = table.position.y + tableHeight / 2 + 0.024;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
 // Terrain heights must be accessible to all relevant functions
 const terrainGridSize = 128; // Reasonable detail for color-based geometry
