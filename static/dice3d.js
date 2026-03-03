@@ -1099,11 +1099,13 @@ const dockPositions = [
     dockBaseOffset - dockSeparation
 ];
 const docks = [];
+const groupSeparation = 32; // distance between the two groups
+// First group (back/left)
 for (let d = 0; d < 3; d++) {
     const dock = new THREE.Mesh(dockGeometry, dockMaterial);
     dock.castShadow = true;
     dock.receiveShadow = true;
-    dock.position.set(dockPositions[d], dockY, -oceanSize / 2 + dockLength / 2 + 0.2);
+    dock.position.set(dockPositions[d], dockY, -oceanSize / 2 + dockLength / 2 + 0.2 - groupSeparation / 2);
     dock.rotation.y = Math.PI / 2;
     scene.add(dock);
     docks.push(dock);
@@ -1123,12 +1125,12 @@ for (let d = 0; d < 3; d++) {
         }
     }
 }
-// Add three more docks on the opposite side of the table (mirrored z)
+// Second group (front/right)
 for (let d = 0; d < 3; d++) {
     const dock = new THREE.Mesh(dockGeometry, dockMaterial);
     dock.castShadow = true;
     dock.receiveShadow = true;
-    dock.position.set(dockPositions[d], dockY, oceanSize / 2 - dockLength / 2 - 0.2);
+    dock.position.set(dockPositions[d], dockY, oceanSize / 2 - dockLength / 2 - 0.2 + groupSeparation / 2);
     dock.rotation.y = Math.PI / 2;
     scene.add(dock);
     docks.push(dock);
