@@ -806,48 +806,7 @@ const oceanHeight = 8; // height of the sea walls
 const oceanThickness = 1.2; // thickness of the cube walls
 const oceanY = table.position.y - tableHeight / 2 - 1.8;
 
-const wallMaterial = new THREE.MeshPhongMaterial({
-    color: 0x3a5dbb,
-    side: THREE.DoubleSide,
-    transparent: true,
-    opacity: 0.82
-});
-
-// Front wall
-const wallFront = new THREE.Mesh(
-    new THREE.BoxGeometry(oceanSize, oceanHeight, oceanThickness),
-    wallMaterial
-);
-wallFront.position.set(0, oceanY + oceanHeight / 2, -oceanSize / 2 + oceanThickness / 2);
-scene.add(wallFront);
-
-// Back wall
-const wallBack = new THREE.Mesh(
-    new THREE.BoxGeometry(oceanSize, oceanHeight, oceanThickness),
-    wallMaterial
-);
-wallBack.position.set(0, oceanY + oceanHeight / 2, oceanSize / 2 - oceanThickness / 2);
-scene.add(wallBack);
-
-// Left wall
-const wallLeft = new THREE.Mesh(
-    new THREE.BoxGeometry(oceanThickness, oceanHeight, oceanSize),
-    wallMaterial
-);
-wallLeft.position.set(-oceanSize / 2 + oceanThickness / 2, oceanY + oceanHeight / 2, 0);
-scene.add(wallLeft);
-
-// Right wall
-const wallRight = new THREE.Mesh(
-    new THREE.BoxGeometry(oceanThickness, oceanHeight, oceanSize),
-    wallMaterial
-);
-wallRight.position.set(oceanSize / 2 - oceanThickness / 2, oceanY + oceanHeight / 2, 0);
-scene.add(wallRight);
-
-// Base (bottom) of the sea cube
-
-// Water shader for the base
+// Water shader for the base and walls
 const waterUniforms = {
     time: { value: 0 },
     deepColor: { value: new THREE.Color(0x3a5dbb) },
@@ -915,6 +874,43 @@ const waterMaterial = new THREE.ShaderMaterial({
     `,
     transparent: true
 });
+
+// Use the water shader material for the walls
+// (waterMaterial is now defined above)
+
+// Front wall
+const wallFront = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanSize, oceanHeight, oceanThickness),
+    waterMaterial
+);
+wallFront.position.set(0, oceanY + oceanHeight / 2, -oceanSize / 2 + oceanThickness / 2);
+scene.add(wallFront);
+
+// Back wall
+const wallBack = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanSize, oceanHeight, oceanThickness),
+    waterMaterial
+);
+wallBack.position.set(0, oceanY + oceanHeight / 2, oceanSize / 2 - oceanThickness / 2);
+scene.add(wallBack);
+
+// Left wall
+const wallLeft = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanThickness, oceanHeight, oceanSize),
+    waterMaterial
+);
+wallLeft.position.set(-oceanSize / 2 + oceanThickness / 2, oceanY + oceanHeight / 2, 0);
+scene.add(wallLeft);
+
+// Right wall
+const wallRight = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanThickness, oceanHeight, oceanSize),
+    waterMaterial
+);
+wallRight.position.set(oceanSize / 2 - oceanThickness / 2, oceanY + oceanHeight / 2, 0);
+scene.add(wallRight);
+
+// Base (bottom) of the sea cube
 const base = new THREE.Mesh(
     new THREE.BoxGeometry(oceanSize, oceanThickness, oceanSize),
     waterMaterial
@@ -994,7 +990,7 @@ let crateBobPhase = Math.random() * Math.PI * 2;
 
 // --- Image Plane Above Table (shows map.png) ---
 const imagePlaneSize = tableRadius * 0.8;
-const imagePlaneHeight = table.position.y + tableHeight /  + 0.0241 + -2 - 2;
+const imagePlaneHeight = table.position.y + tableHeight / 2 + 0.0241 - 2 - 2;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
 // Terrain heights must be accessible to all relevant functions
 const terrainGridSize = 32; // Reasonable detail for color-based geometry
@@ -1204,21 +1200,16 @@ loader.load('map.png', function(texture) {
             const mapMaterial = new THREE.ShaderMaterial({
                 uniforms: mapUniforms,
                 vertexShader: `
-                    uniform sampler2D displacementMap;
-                    uniform float displacementScale;
                     varying vec2 vUv;
                     void main() {
                         vUv = uv;
-                        // Sample displacement map
-                        float disp = texture2D(displacementMap, uv).r;
-                        // Center around 0, scale very subtly
-                        float d = (disp - 0.5) * displacementScale;
-                        vec3 displaced = position + normal * d;
-                        gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
                     }
                 `,
                 fragmentShader: `
                     uniform sampler2D map;
+                    uniform sampler2D displacementMap;
+                    uniform float displacementScale;
                     uniform float time;
                     varying vec2 vUv;
                     void main() {
@@ -1227,6 +1218,10 @@ loader.load('map.png', function(texture) {
                         vec2 uv = vUv;
                         uv.x += sin(uv.y * 6.2831 * freq + time * 0.7) * amp;
                         uv.y += cos(uv.x * 6.2831 * freq + time * 0.5) * amp;
+                        // Sample displacement map in fragment shader
+                        float disp = texture2D(displacementMap, uv).r;
+                        float d = (disp - 0.5) * displacementScale;
+                        // Optionally use d to modulate color, alpha, or lighting
                         vec4 tex = texture2D(map, uv);
                         gl_FragColor = tex;
                     }
