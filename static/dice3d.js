@@ -101,89 +101,7 @@ function spawnParticleBlast(position, isDie2 = false) {
 }
 
 
-// --- Add a Dock on the Open Edge ---
-// (Moved here so oceanSize is defined)
-setTimeout(() => {
-    // Create a large simple rectangular dock at the open edge, extending onto land
-    const dockLength = 22; // along X (from water onto land)
-    const dockWidth = 30;  // along Z (width of the open gap, tripled)
-    const dockHeight = 0.38;
-    const dockPlankCount = 18;
-    const dockY = ocean.position.y + dockHeight / 2 + 0.12;
-    // Move the dock further to the right (positive Z direction) on the open edge
-    const dockCenterX = -(oceanSize * 0.5 - dockLength / 2 - 2.5); // start at water edge, extend onto land
-    const dockCenterZ = oceanSize * 0.28; // shift further right (positive Z)
-
-    // Planks (along X, side by side along Z)
-    for (let i = 0; i < dockPlankCount; i++) {
-        const zOffset = (i - (dockPlankCount - 1) / 2) * (dockWidth / dockPlankCount);
-        const plankGeometry = new THREE.BoxGeometry(dockLength * (0.96 + Math.random() * 0.06), dockHeight, (dockWidth / dockPlankCount) * (0.92 + Math.random() * 0.12));
-        const plankMaterial = new THREE.MeshStandardMaterial({
-            color: 0x8b6f3a,
-            roughness: 0.68,
-            metalness: 0.13,
-            flatShading: false
-        });
-        const plank = new THREE.Mesh(plankGeometry, plankMaterial);
-        plank.position.set(
-            dockCenterX + (Math.random() - 0.5) * 0.08,
-            dockY + (Math.random() - 0.5) * 0.04,
-            dockCenterZ + zOffset
-        );
-        plank.rotation.y = (Math.random() - 0.5) * 0.04;
-        plank.castShadow = true;
-        plank.receiveShadow = true;
-        scene.add(plank);
-    }
-
-    // Dock posts (4 corners)
-    const postGeometry = new THREE.CylinderGeometry(0.22, 0.26, 2.1, 14);
-    const postMaterial = new THREE.MeshStandardMaterial({
-        color: 0x6b4a23,
-        roughness: 0.72,
-        metalness: 0.10
-    });
-    for (let i = 0; i < 2; i++) {
-        for (let j = 0; j < 2; j++) {
-            const post = new THREE.Mesh(postGeometry, postMaterial);
-            const xOffset = ((i === 0) ? -1 : 1) * (dockLength / 2 - 0.5);
-            const zOffset = ((j === 0) ? -1 : 1) * (dockWidth / 2 - 0.22);
-            post.position.set(
-                dockCenterX + xOffset,
-                dockY - 1.0,
-                dockCenterZ + zOffset
-            );
-            post.castShadow = true;
-            post.receiveShadow = true;
-            scene.add(post);
-        }
-    }
-
-    // --- Asphalt Road Seamlessly Connected to Dock (Counterclockwise Side, Extended Right) ---
-    // Road continues from the dock's far right edge (highest Z), extending further in the positive Z direction
-    const roadLength = 44; // extended length
-    const roadWidth = dockWidth; // match dock width
-    const roadHeight = dockHeight; // match dock height
-    const roadGeometry = new THREE.BoxGeometry(roadLength, roadHeight, roadWidth, 1, 1, 1);
-    const roadMaterial = new THREE.MeshStandardMaterial({
-        color: 0x333333,
-        roughness: 0.82,
-        metalness: 0.12
-    });
-    const road = new THREE.Mesh(roadGeometry, roadMaterial);
-    // Place road so it starts at the dock's far right edge (highest Z), continues in +Z
-    // The dock's far right edge: X = dockCenterX, Y = dockY, Z = dockCenterZ + dockWidth / 2
-    // Road's center should be at the end of the dock plus half its length
-    road.position.set(
-        dockCenterX,
-        dockY,
-        dockCenterZ + dockWidth / 2 + roadLength / 2
-    );
-    road.rotation.y = Math.PI / 2; // rotate so road extends in +Z
-    road.castShadow = true;
-    road.receiveShadow = true;
-    scene.add(road);
-}, 0);
+// ...dock removed...
 
 
 // Procedural nighttime skybox (darker, animated stars)
@@ -1111,7 +1029,6 @@ ocean.rotation.x = -Math.PI / 2;
 ocean.position.y = table.position.y - tableHeight / 2 - 1.8;
 scene.add(ocean);
 
-// --- Big Black Rocks Around Ocean Perimeter ---
 // --- Floating Wooden Crate ---
 const crateSize = 1.1;
 // Beveled box for more realism
@@ -1168,47 +1085,7 @@ crate.add(wetMesh);
 
 // Animate crate bobbing up and down
 let crateBobPhase = Math.random() * Math.PI * 2;
-const rockCount = 22;
-const rocks = [];
-const rockRadius = oceanSize * 0.5 + 2.5;
-// Remove rocks from one edge (skip a segment, e.g., 6 rocks centered on negative X axis)
-const skipStart = Math.floor(rockCount * 0.23); // ~5 rocks in
-const skipEnd = Math.floor(rockCount * 0.50);   // ~11 rocks in
-for (let i = 0; i < rockCount; i++) {
-    // Skip rocks in the specified segment (one edge)
-    if (i >= skipStart && i <= skipEnd) continue;
-    const angle = (i / rockCount) * Math.PI * 2 + Math.random() * 0.18;
-    const scale = 2.8 + Math.random() * 2.7;
-    const height = 3.5 + Math.random() * 2.5;
-    // Higher detail geometry for smoother, more solid rocks
-    const geometry = new THREE.IcosahedronGeometry(1.0 + Math.random() * 0.7, 3);
-    // Gentle, less aggressive noise for organic but solid shape
-    const pos = geometry.attributes.position;
-    for (let j = 0; j < pos.count; j++) {
-        let v = new THREE.Vector3().fromBufferAttribute(pos, j);
-        v.multiplyScalar(1.0 + (Math.random() - 0.5) * 0.045); // less noise
-        pos.setXYZ(j, v.x, v.y, v.z);
-    }
-    pos.needsUpdate = true;
-    geometry.computeVertexNormals(); // ensure smooth normals
-    const material = new THREE.MeshStandardMaterial({
-        color: 0x181818,
-        roughness: 0.82,
-        metalness: 0.18,
-        flatShading: false // smooth shading for solid look
-    });
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.scale.set(scale, height, scale);
-    mesh.position.set(
-        Math.cos(angle) * rockRadius + (Math.random() - 0.5) * 2.5,
-        ocean.position.y + height / 2 - 0.7 + Math.random() * 0.7,
-        Math.sin(angle) * rockRadius + (Math.random() - 0.5) * 2.5
-    );
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
-    scene.add(mesh);
-    rocks.push(mesh);
-}
+// ...rocks removed...
 
 function animateOcean() {
     oceanUniforms.time.value = performance.now() * 0.001;
