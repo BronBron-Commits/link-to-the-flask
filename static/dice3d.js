@@ -1123,6 +1123,31 @@ for (let d = 0; d < 3; d++) {
         }
     }
 }
+// Add three more docks on the opposite side of the table (mirrored z)
+for (let d = 0; d < 3; d++) {
+    const dock = new THREE.Mesh(dockGeometry, dockMaterial);
+    dock.castShadow = true;
+    dock.receiveShadow = true;
+    dock.position.set(dockPositions[d], dockY, oceanSize / 2 - dockLength / 2 - 0.2);
+    dock.rotation.y = Math.PI / 2;
+    scene.add(dock);
+    docks.push(dock);
+    // Add pilings for each dock
+    for (let i = 0; i < pilingCount; i++) {
+        const x = -dockLength/2 + (i + 0.5) * (dockLength / pilingCount);
+        for (let j = 0; j < 2; j++) { // two rows (front/back)
+            const z = (j === 0) ? -dockWidth/2 + pilingRadius*1.1 : dockWidth/2 - pilingRadius*1.1;
+            const piling = new THREE.Mesh(
+                new THREE.CylinderGeometry(pilingRadius, pilingRadius * 0.97, pilingHeight, 16),
+                pilingMaterial
+            );
+            piling.position.set(dock.position.x + z, dockY - pilingHeight/2 - dockHeight/2 + 0.01, dock.position.z + x);
+            piling.castShadow = true;
+            piling.receiveShadow = true;
+            scene.add(piling);
+        }
+    }
+}
 
 
 // Add a subtle wetness effect to the bottom of the crate
