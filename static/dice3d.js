@@ -1125,6 +1125,56 @@ for (let d = 0; d < 3; d++) {
         }
     }
 }
+// Third group (middle, rotated 90 degrees around origin)
+const middleGroupOffset = 0; // Centered between the two groups
+const dockWorldPositions = [
+    [dockPositions[0], dockY, -oceanSize / 2 + dockLength / 2 + 0.2 - groupSeparation / 2],
+    [dockPositions[1], dockY, -oceanSize / 2 + dockLength / 2 + 0.2 - groupSeparation / 2],
+    [dockPositions[2], dockY, -oceanSize / 2 + dockLength / 2 + 0.2 - groupSeparation / 2],
+];
+const middleGroupSpacing = 18; // spread out after rotation
+for (let d = 0; d < 3; d++) {
+    // Start with the same position as the first group, but shift along x for spacing
+    let baseX = (d - 1) * middleGroupSpacing;
+    let baseY = dockY;
+    let baseZ = 0;
+    // Create the dock at (baseX, baseY, baseZ), then rotate 90deg around origin
+    // Rotation matrix for 90deg: x' = -z, z' = x
+    let rotatedX = -baseZ;
+    let rotatedZ = baseX;
+    const dock = new THREE.Mesh(dockGeometry, dockMaterial);
+    dock.castShadow = true;
+    dock.receiveShadow = true;
+    dock.position.set(rotatedX, baseY, rotatedZ);
+    dock.rotation.y = 0; // No local rotation, just world rotation
+    // Apply world rotation by rotating the object around Y axis at origin
+    dock.rotateY(0); // Already aligned
+    scene.add(dock);
+    docks.push(dock);
+    // Add pilings for each dock (same as original orientation)
+    for (let i = 0; i < pilingCount; i++) {
+        const x = -dockLength/2 + (i + 0.5) * (dockLength / pilingCount);
+        for (let j = 0; j < 2; j++) { // two rows (front/back)
+            const z = (j === 0) ? -dockWidth/2 + pilingRadius*1.1 : dockWidth/2 - pilingRadius*1.1;
+            // Place piling in local dock space, then rotate to world
+            // Local piling position
+            let pilingLocal = new THREE.Vector3(z, dockY - pilingHeight/2 - dockHeight/2 + 0.01, x);
+            // Rotate 90deg around Y axis at origin
+            let pilingWorld = new THREE.Vector3();
+            pilingWorld.x = -pilingLocal.z + dock.position.x;
+            pilingWorld.y = pilingLocal.y;
+            pilingWorld.z = pilingLocal.x + dock.position.z;
+            const piling = new THREE.Mesh(
+                new THREE.CylinderGeometry(pilingRadius, pilingRadius * 0.97, pilingHeight, 16),
+                pilingMaterial
+            );
+            piling.position.copy(pilingWorld);
+            piling.castShadow = true;
+            piling.receiveShadow = true;
+            scene.add(piling);
+        }
+    }
+}
 // Second group (front/right)
 for (let d = 0; d < 3; d++) {
     const dock = new THREE.Mesh(dockGeometry, dockMaterial);
