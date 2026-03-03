@@ -853,12 +853,11 @@ function draw() {
                 // Ellipse equation: (dx/tableRX)^2 + (dy/tableRY)^2 <= 1
                 if ((dx*dx)/(tableRX*tableRX) + (dy*dy)/(tableRY*tableRY) <= 1) {
                     // Only trigger for first dice (purple dice with candle)
-                    // Hide canvas and load 3D scene
+                    // Dynamically load map3d.js as a module
                     canvas.style.display = 'none';
-                    // Dynamically load dice3d.js
                     const script = document.createElement('script');
                     script.type = 'module';
-                    script.src = '/static/dice3d.js';
+                    script.src = '/static/map3d.js';
                     document.body.appendChild(script);
                 }
             });

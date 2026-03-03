@@ -81,7 +81,18 @@ function updateRain() {
     rainGeometry.attributes.position.needsUpdate = true;
 }
 
+
+// --- Main Scene ---
 const scene = new THREE.Scene();
+
+// --- Map3D Scene ---
+const map3d = new THREE.Scene();
+// Example: add a simple grid helper to map3d for visualization
+const gridHelper = new THREE.GridHelper(20, 20);
+map3d.add(gridHelper);
+
+// Export map3d for use in other modules if needed (ESM style)
+// export { map3d };
 
 // Particle blast system
 const particleBlasts = [];
@@ -482,6 +493,13 @@ renderer.domElement.addEventListener('click', (e) => {
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
+    // Check for table click
+    const tableIntersects = raycaster.intersectObject(table, true);
+    if (tableIntersects.length > 0) {
+        // Open map3d scene (assumes map3d.html exists and loads map3d.js)
+        window.location.href = 'map3d.html';
+        return;
+    }
     // Check for player click first
     const playerIntersects = raycaster.intersectObject(playerMesh, true);
     if (playerIntersects.length > 0) {
