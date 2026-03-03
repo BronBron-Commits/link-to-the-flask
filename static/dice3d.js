@@ -941,10 +941,10 @@ animateOcean();
 
 // --- Image Plane Above Table (shows map.png) ---
 const imagePlaneSize = tableRadius * 0.8;
-const imagePlaneHeight = table.position.y + tableHeight / 2 + 0.024;
+const imagePlaneHeight = table.position.y + tableHeight / 2 - 2;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
 // Terrain heights must be accessible to all relevant functions
-const terrainGridSize = 128; // Reasonable detail for color-based geometry
+const terrainGridSize = 32; // Reasonable detail for color-based geometry
 let terrainHeights = [];
 for (let y = 0; y <= terrainGridSize; y++) {
     terrainHeights[y] = [];
@@ -1181,7 +1181,7 @@ loader.load('map.png', function(texture) {
                 side: THREE.DoubleSide,
                 transparent: false
             });
-            const meshY = table.position.y + tableHeight / 2 + 2.0;
+            const meshY = table.position.y + tableHeight / 2 + .1;
             mapMesh = new THREE.Mesh(geometry.clone(), mapMaterial);
             mapMesh.position.set(0, meshY, 0);
             mapMesh.rotation.x = -Math.PI / 2;
