@@ -397,7 +397,7 @@ let dieAngularVelocityB = new THREE.Vector2(0, 0);
 // Player tracked coordinate (can be updated for movement)
 // Place player above the table: y = tableHeight + (new sphere radius) + small offset
 // Place player above the map mesh: map mesh is at table.position.y + tableHeight / 2 + 2.0
-const player = { x: 0, y: tableHeight / 2 + 2.0 + 0.11 + 0.18, z: 0 }; // 0.18 offset for clear visibility
+const player = { x: 0, y: tableHeight / 2 - .5, z: 0 }; // Lowered closer to table
 // Create a simple sphere mesh for the player (half size)
 
 // (Player glow mesh code moved below, after imagePlaneSize and table are defined)
@@ -797,18 +797,65 @@ function animateWaterOverflow() {
 animateWaterOverflow();
 
 
+
 // --- Ocean Underneath Table ---
-// Large animated water plane below the table
+
+// Large animated water cube (open box, no top)
 const oceanSize = tableRadius * 7.5;
-const oceanGeometry = new THREE.PlaneGeometry(oceanSize, oceanSize, 128, 128);
-const oceanUniforms = {
+const oceanHeight = 8; // height of the sea walls
+const oceanThickness = 1.2; // thickness of the cube walls
+const oceanY = table.position.y - tableHeight / 2 - 1.8;
+
+const wallMaterial = new THREE.MeshPhongMaterial({
+    color: 0x3a5dbb,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.82
+});
+
+// Front wall
+const wallFront = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanSize, oceanHeight, oceanThickness),
+    wallMaterial
+);
+wallFront.position.set(0, oceanY + oceanHeight / 2, -oceanSize / 2 + oceanThickness / 2);
+scene.add(wallFront);
+
+// Back wall
+const wallBack = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanSize, oceanHeight, oceanThickness),
+    wallMaterial
+);
+wallBack.position.set(0, oceanY + oceanHeight / 2, oceanSize / 2 - oceanThickness / 2);
+scene.add(wallBack);
+
+// Left wall
+const wallLeft = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanThickness, oceanHeight, oceanSize),
+    wallMaterial
+);
+wallLeft.position.set(-oceanSize / 2 + oceanThickness / 2, oceanY + oceanHeight / 2, 0);
+scene.add(wallLeft);
+
+// Right wall
+const wallRight = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanThickness, oceanHeight, oceanSize),
+    wallMaterial
+);
+wallRight.position.set(oceanSize / 2 - oceanThickness / 2, oceanY + oceanHeight / 2, 0);
+scene.add(wallRight);
+
+// Base (bottom) of the sea cube
+
+// Water shader for the base
+const waterUniforms = {
     time: { value: 0 },
-    deepColor: { value: new THREE.Color(0x3a5dbb) }, // deeper blue
-    shallowColor: { value: new THREE.Color(0x8dbad6) }, // lighter blue
-    foamColor: { value: new THREE.Color(0xf3f6f7) }
+    deepColor: { value: new THREE.Color(0x3a5dbb) },
+    shallowColor: { value: new THREE.Color(0x8dbad6) },
+    foamColor: { value: new THREE.Color(0x3a5dbb) }
 };
-const oceanMaterial = new THREE.ShaderMaterial({
-    uniforms: oceanUniforms,
+const waterMaterial = new THREE.ShaderMaterial({
+    uniforms: waterUniforms,
     vertexShader: `
         varying vec2 vUv;
         void main() {
@@ -863,15 +910,24 @@ const oceanMaterial = new THREE.ShaderMaterial({
             float foamStreaks = smoothstep(0.7, 0.9, sin(40.0 * distortedUv.x + t * 0.16 + 8.0 * distortedUv.y));
             foam = max(foam, foamStreaks * 0.7);
             vec3 finalColor = mix(waterColor, foamColor, foam);
-            gl_FragColor = vec4(finalColor, 0.82);
+            gl_FragColor = vec4(finalColor, 0.92);
         }
     `,
     transparent: true
 });
-const ocean = new THREE.Mesh(oceanGeometry, oceanMaterial);
-ocean.rotation.x = -Math.PI / 2;
-ocean.position.y = table.position.y - tableHeight / 2 - 1.8;
-scene.add(ocean);
+const base = new THREE.Mesh(
+    new THREE.BoxGeometry(oceanSize, oceanThickness, oceanSize),
+    waterMaterial
+);
+base.position.set(0, oceanY + oceanThickness / 2, 0);
+scene.add(base);
+
+// Animate water shader
+function animateWaterBase() {
+    waterUniforms.time.value = performance.now() * 0.001;
+    requestAnimationFrame(animateWaterBase);
+}
+animateWaterBase();
 
 // --- Floating Wooden Crate ---
 const crateSize = 1.1;
@@ -910,7 +966,7 @@ const crateAngle = Math.PI * 1.12; // moved further left
 const crateDist = oceanSize * 0.36;
 crate.position.set(
     Math.cos(crateAngle) * crateDist,
-    ocean.position.y + crateSize / 2 + 0.18,
+    oceanY + crateSize / 2 + 0.18,
     Math.sin(crateAngle) * crateDist
 );
 scene.add(crate);
@@ -931,17 +987,14 @@ crate.add(wetMesh);
 let crateBobPhase = Math.random() * Math.PI * 2;
 // ...rocks removed...
 
-function animateOcean() {
-    oceanUniforms.time.value = performance.now() * 0.001;
-    requestAnimationFrame(animateOcean);
-}
-animateOcean();
+
+// Ocean animation removed (no animated ocean shader in use)
 
 // ...animateWater removed...
 
 // --- Image Plane Above Table (shows map.png) ---
 const imagePlaneSize = tableRadius * 0.8;
-const imagePlaneHeight = table.position.y + tableHeight / 2 - 2;
+const imagePlaneHeight = table.position.y + tableHeight /  + 0.0241 + -2 - 2;
 const imagePlaneGeometry = new THREE.PlaneGeometry(imagePlaneSize, imagePlaneSize);
 // Terrain heights must be accessible to all relevant functions
 const terrainGridSize = 32; // Reasonable detail for color-based geometry
@@ -1264,6 +1317,75 @@ loader.load('map.png', function(texture) {
 // Bookshelves removed
 
 // Add a lit candle to the table
+
+// --- Waterfall Cylinder ---
+// Create a hollow open-ended cylinder for the waterfall
+const waterfallRadius = tableRadius * 1.18; // slightly outside the table
+const waterfallHeight = 6.0;
+const waterfallRadialSegments = 96;
+const waterfallHeightSegments = 32;
+const waterfallGeometry = new THREE.CylinderGeometry(
+    waterfallRadius, waterfallRadius, waterfallHeight, waterfallRadialSegments, waterfallHeightSegments, true // openEnded
+);
+const waterfallUniforms = {
+    time: { value: 0 },
+    color1: { value: new THREE.Color(0x7fd8ff) }, // light blue
+    color2: { value: new THREE.Color(0x0055aa) }, // deep blue
+    alpha: { value: 0.82 }
+};
+const waterfallMaterial = new THREE.ShaderMaterial({
+    uniforms: waterfallUniforms,
+    vertexShader: `
+        uniform float time;
+        varying vec2 vUv;
+        void main() {
+            vUv = uv;
+            vec3 pos = position;
+            // Animate waves around the cylinder
+            float angle = atan(pos.x, pos.z);
+            float wave = sin(vUv.y * 12.0 + time * 1.2 + angle * 4.0) * 0.18;
+            float wave2 = cos(vUv.y * 8.0 + time * 1.5 + angle * 2.0) * 0.12;
+            pos.x += cos(angle) * wave;
+            pos.z += sin(angle) * wave2;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+        }
+    `,
+    fragmentShader: `
+        uniform float time;
+        uniform vec3 color1;
+        uniform vec3 color2;
+        uniform float alpha;
+        varying vec2 vUv;
+        void main() {
+            float stripe = smoothstep(0.45, 0.55, abs(sin(vUv.y * 24.0 + time * 2.0)));
+            vec3 color = mix(color1, color2, vUv.y) + vec3(0.18 * stripe);
+            float a = alpha * (0.7 + 0.3 * sin(vUv.y * 8.0 + time * 2.5));
+            gl_FragColor = vec4(color, a);
+        }
+    `,
+    transparent: true,
+    side: THREE.DoubleSide
+});
+const waterfallMesh = new THREE.Mesh(waterfallGeometry, waterfallMaterial);
+// Place the cylinder so it surrounds the table, centered at (0, y, 0)
+waterfallMesh.position.set(0, -1.5 + waterfallHeight / 2, 0);
+scene.add(waterfallMesh);
+
+// Optional: Add a cliff cylinder behind the waterfall
+const cliffRadius = waterfallRadius * 1.04;
+const cliffHeight = waterfallHeight * 1.05;
+const cliffGeometry = new THREE.CylinderGeometry(
+    cliffRadius, cliffRadius, cliffHeight, waterfallRadialSegments, 1, true
+);
+const cliffMaterial = new THREE.MeshStandardMaterial({
+    color: 0x444444,
+    roughness: 0.95,
+    metalness: 0.05,
+    side: THREE.BackSide
+});
+const cliffMesh = new THREE.Mesh(cliffGeometry, cliffMaterial);
+cliffMesh.position.set(0, -1.5 + cliffHeight / 2 - 0.12, 0);
+scene.add(cliffMesh);
 // --- Barrel on the Dock ---
 // Barrel proportions
 const barrelHeight = 1.1;
@@ -1349,9 +1471,9 @@ for (let i = 0; i < 3; i++) {
     hoops.push(hoop);
 }
 // Place barrel on dock: estimate dock position near ocean, slightly offset from center
-const dockX = ocean.position.x + 0.8;
-const dockY = ocean.position.y + 0.55; // slightly above dock
-const dockZ = ocean.position.z - 2.2;
+const dockX = 0 + 0.8; // ocean is centered at (0, oceanY, 0)
+const dockY = oceanY + 0.55; // slightly above dock
+const dockZ = 0 - 2.2;
 barrel.position.set(dockX, dockY + barrelHeight/2, dockZ);
 barrel.rotation.y = Math.random() * Math.PI * 2;
 scene.add(barrel);
@@ -1769,16 +1891,16 @@ function animate() {
             const px = playerMesh.position.x;
             const pz = playerMesh.position.z;
             const dist = Math.sqrt(px * px + pz * pz);
-            const maxDist = trayRadius * 0.97 - 0.18; // stay inside tray edge
+            const maxDist = tableRadius * 0.97 - 0.18; // stay inside table edge
             if (dist > maxDist) {
                 // Clamp to edge
                 playerMesh.position.x = (px / dist) * maxDist;
                 playerMesh.position.z = (pz / dist) * maxDist;
             }
         }
-        // Always clamp Y to tray/terrain surface so player never falls through
-        // If you have terrain heights, sample here; otherwise, use trayY
-        const minPlayerY = trayY + trayHeight / 2 + 0.18 * scaleFactor;
+        // Always clamp Y to table surface so player never falls through
+        // If you have terrain heights, sample here; otherwise, use table top
+        const minPlayerY = table.position.y + tableHeight / 2 + 0.18 * scaleFactor;
         if (playerMesh.position.y < minPlayerY) {
             playerMesh.position.y = minPlayerY;
         }
@@ -1786,7 +1908,7 @@ function animate() {
         const headPos = playerMesh.position.clone().add(new THREE.Vector3(0, 0.18 * scaleFactor, 0));
         // Camera collision with tray edge: don't let camera go outside tray
         const camDist = Math.sqrt(headPos.x * headPos.x + headPos.z * headPos.z);
-        const camMaxDist = trayRadius * 0.99 - 0.12;
+        const camMaxDist = tableRadius * 0.99 - 0.12;
         if (camDist > camMaxDist) {
             headPos.x = (headPos.x / camDist) * camMaxDist;
             headPos.z = (headPos.z / camDist) * camMaxDist;
@@ -1929,6 +2051,26 @@ function animate() {
     }
     resultDiv.innerHTML = resultHtml;
     // No idle spin
+    // Procedural nighttime skybox (darker, animated stars)
+    const skyCanvas = document.createElement('canvas');
+    skyCanvas.width = 2048;
+    skyCanvas.height = 2048;
+    const skyCtx = skyCanvas.getContext('2d');
+
+    // Store star data for animation
+    const starCount = 900;
+    const stars = [];
+    for (let i = 0; i < starCount; i++) {
+        stars.push({
+            x: Math.random() * skyCanvas.width,
+            y: Math.random() * skyCanvas.height,
+            r: 0.3 + Math.random() * 0.7,
+            twinkle: Math.random() * Math.PI * 2,
+            speed: 0.5 + Math.random() * 1.5,
+            alpha: 0.5 + Math.random() * 0.5
+        });
+    }
+
     // ...existing code...
 // Place the bowl on the table, to the right
 diceBowl.position.set(tableRadius * 0.7, table.position.y + tableHeight + bowlHeight / 2 + 0.05, 0);
@@ -1984,7 +2126,7 @@ scene.add(diceBowl);
     // Animate floating crate bobbing up and down
     if (crate) {
         const t = performance.now() * 0.001;
-        crate.position.y = ocean.position.y + crateSize / 2 + 0.18 + Math.sin(t * 1.1 + crateBobPhase) * 0.22;
+        crate.position.y = oceanY + crateSize / 2 + 0.18 + Math.sin(t * 1.1 + crateBobPhase) * 0.22;
         crate.rotation.y = crateBobPhase + Math.sin(t * 0.7) * 0.18;
         crate.rotation.x = Math.sin(t * 0.5 + crateBobPhase) * 0.07;
         crate.rotation.z = Math.cos(t * 0.6 + crateBobPhase) * 0.07;
@@ -1997,6 +2139,10 @@ scene.add(diceBowl);
     // Keep camera above and angled down
     // camera.position.y = Math.max(camera.position.y, 2.5);
 
+    // Animate waterfall
+    if (waterfallUniforms && waterfallUniforms.time) {
+        waterfallUniforms.time.value = performance.now() * 0.001;
+    }
     renderer.render(scene, camera);
 }
 
