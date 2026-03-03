@@ -1133,6 +1133,7 @@ const dockWorldPositions = [
     [dockPositions[2], dockY, -oceanSize / 2 + dockLength / 2 + 0.2 - groupSeparation / 2],
 ];
 const middleGroupSpacing = 18; // spread out after rotation
+const middleGroupRightOffset = 44; // move the group even further right (positive x after rotation)
 for (let d = 0; d < 3; d++) {
     // Start with the same position as the first group, but shift along x for spacing
     let baseX = (d - 1) * middleGroupSpacing;
@@ -1140,7 +1141,7 @@ for (let d = 0; d < 3; d++) {
     let baseZ = 0;
     // Create the dock at (baseX, baseY, baseZ), then rotate 90deg around origin
     // Rotation matrix for 90deg: x' = -z, z' = x
-    let rotatedX = -baseZ;
+    let rotatedX = -baseZ + middleGroupRightOffset;
     let rotatedZ = baseX;
     const dock = new THREE.Mesh(dockGeometry, dockMaterial);
     dock.castShadow = true;
