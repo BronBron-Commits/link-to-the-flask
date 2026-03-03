@@ -41,6 +41,46 @@ document.addEventListener('keydown', (e) => {
 });
 import * as THREE from './three.module.js';
 
+// --- Rain Effect ---
+const RAIN_COUNT = 800;
+const rainDrops = [];
+let rainGeometry, rainMaterial, rainMesh;
+
+function createRain() {
+    rainGeometry = new THREE.BufferGeometry();
+    const positions = [];
+    for (let i = 0; i < RAIN_COUNT; i++) {
+        // Spread rain over a wide area above the table
+        const x = (Math.random() - 0.5) * 32;
+        const y = 8 + Math.random() * 8; // start above the scene
+        const z = (Math.random() - 0.5) * 32;
+        positions.push(x, y, z);
+        rainDrops.push({ x, y, z, velocity: 0.18 + Math.random() * 0.12 });
+    }
+    rainGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    rainMaterial = new THREE.PointsMaterial({ color: 0x99ccff, size: 0.13, transparent: true, opacity: 0.7 });
+    rainMesh = new THREE.Points(rainGeometry, rainMaterial);
+    scene.add(rainMesh);
+}
+
+function updateRain() {
+    const positions = rainGeometry.attributes.position.array;
+    for (let i = 0; i < RAIN_COUNT; i++) {
+        let drop = rainDrops[i];
+        drop.y -= drop.velocity;
+        if (drop.y < -1.5) { // reset to top
+            drop.x = (Math.random() - 0.5) * 32;
+            drop.y = 8 + Math.random() * 8;
+            drop.z = (Math.random() - 0.5) * 32;
+            drop.velocity = 0.18 + Math.random() * 0.12;
+        }
+        positions[i * 3] = drop.x;
+        positions[i * 3 + 1] = drop.y;
+        positions[i * 3 + 2] = drop.z;
+    }
+    rainGeometry.attributes.position.needsUpdate = true;
+}
+
 const scene = new THREE.Scene();
 
 // Particle blast system
@@ -173,6 +213,8 @@ const skySphere = new THREE.Mesh(skyGeo, skyMat);
 scene.add(skySphere);
 
 drawSky();
+
+createRain();
 
 const camera = new THREE.PerspectiveCamera(
     75,
@@ -1824,6 +1866,8 @@ function animate() {
         camera.position.y = orbitHeight;
         camera.lookAt(0, -1.5, 0);
     }
+    // --- Rain update ---
+    updateRain();
     // First-person player controls
     // --- First-person Mouse Look ---
     // Pointer lock variables
@@ -1916,6 +1960,7 @@ function animate() {
         camera.lookAt(headPos.clone().add(lookDir));
     }
     requestAnimationFrame(animate);
+    // ...existing code...
     // Gravity/falling animation for both dice
     // --- D20 ---
     if (falling) {
