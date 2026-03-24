@@ -11,7 +11,8 @@
 </head>
 <body>
     <!-- 3D scene will be rendered here -->
-    <script type="module" src="./three.module.js"></script>
-    <script type="module" src="./map3d.js"></script>
+    <!-- Socket.IO client for multiplayer support (served by Flask-SocketIO) -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="module" src="/static/map3d.js"></script>
 </body>
 </html>

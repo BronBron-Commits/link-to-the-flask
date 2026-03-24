@@ -510,6 +510,11 @@ renderer.domElement.addEventListener('click', (e) => {
     // Otherwise, check for dice clicks
     const intersects = raycaster.intersectObjects([d20, d20b, d12], true);
     if (intersects.length > 0) {
+        // Route to GLB scene page on any die click
+        window.location.href = 'map3d.html';
+        return;
+        // --- If you want to keep the dice roll animation, move the redirect after the animation or add a confirmation ---
+        /*
         // Which die?
         const obj = intersects[0].object;
         if ((obj === d20 || d20.children.includes(obj)) && !falling && !rolling) {
@@ -540,6 +545,7 @@ renderer.domElement.addEventListener('click', (e) => {
             dieAngularVelocityD12.y = 0.2 + Math.random() * 0.5;
             spawnParticleBlast(d12.position.clone(), false);
         }
+        */
     }
 });
 // Animate camera to player's perspective
@@ -838,8 +844,6 @@ const bevel = new THREE.Mesh(bevelGeometry, bevelMaterial);
 bevel.position.y = -1.5 + tableHeight / 2 + 0.01; // matches table.position.y, slight offset for flush
 bevel.rotation.x = Math.PI / 2;
 scene.add(bevel);
-
-// ...tray removed...
 
 // --- Water Overflow Effect ---
 // Create animated water drips/falls around the tray's rim, visually extending the water shader down the table's edge
@@ -1467,17 +1471,10 @@ loader.load('map.png', function(texture) {
                     uniform float time;
                     varying vec2 vUv;
                     void main() {
-                        float freq = 2.0;
-                        float amp = 0.0015;
-                        vec2 uv = vUv;
-                        uv.x += sin(uv.y * 6.2831 * freq + time * 0.7) * amp;
-                        uv.y += cos(uv.x * 6.2831 * freq + time * 0.5) * amp;
-                        // Sample displacement map in fragment shader
-                        float disp = texture2D(displacementMap, uv).r;
-                        float d = (disp - 0.5) * displacementScale;
-                        // Optionally use d to modulate color, alpha, or lighting
-                        vec4 tex = texture2D(map, uv);
-                        gl_FragColor = tex;
+                        float stripe = smoothstep(0.45, 0.55, abs(sin(vUv.y * 24.0 + time * 2.0)));
+                        vec3 color = mix(color1, color2, vUv.y) + vec3(0.18 * stripe);
+                        float a = alpha * (0.7 + 0.3 * sin(vUv.y * 8.0 + time * 2.5));
+                        gl_FragColor = vec4(color, a);
                     }
                 `,
                 side: THREE.DoubleSide,
