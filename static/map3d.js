@@ -5728,6 +5728,245 @@ let orbitPreviewLastY = 0;
 const orbitPreviewSensitivity = 0.006;
 const orbitPreviewMaxYaw = Math.PI * 0.7;
 const orbitPreviewMaxPitch = 1.2;
+const MOBILE_TOUCH_ENABLED = ('ontouchstart' in window) || ((navigator && navigator.maxTouchPoints) ? navigator.maxTouchPoints > 0 : false);
+const TOUCH_MOVE_DEADZONE = 0.22;
+const TOUCH_LOOK_DEADZONE = 0.08;
+const TOUCH_LOOK_SPEED = 2.45;
+let touchControlsRootEl = null;
+let touchMovePadEl = null;
+let touchMoveStickEl = null;
+let touchLookPadEl = null;
+let touchLookStickEl = null;
+let touchMovePointerId = null;
+let touchLookPointerId = null;
+const touchMoveAxis = new THREE.Vector2(0, 0);
+const touchLookAxis = new THREE.Vector2(0, 0);
+
+function resetTouchMoveState() {
+    touchMoveAxis.set(0, 0);
+    moveForward = false;
+    moveBackward = false;
+    moveLeft = false;
+    moveRight = false;
+    dmFreeMoveForward = false;
+    dmFreeMoveBackward = false;
+    dmFreeMoveLeft = false;
+    dmFreeMoveRight = false;
+}
+
+function resetTouchLookState() {
+    touchLookAxis.set(0, 0);
+}
+
+function updateTouchMoveFlags() {
+    if (Math.abs(touchMoveAxis.x) < TOUCH_MOVE_DEADZONE && Math.abs(touchMoveAxis.y) < TOUCH_MOVE_DEADZONE) {
+        moveForward = false;
+        moveBackward = false;
+        moveLeft = false;
+        moveRight = false;
+        dmFreeMoveForward = false;
+        dmFreeMoveBackward = false;
+        dmFreeMoveLeft = false;
+        dmFreeMoveRight = false;
+        return;
+    }
+
+    const forward = touchMoveAxis.y < -TOUCH_MOVE_DEADZONE;
+    const backward = touchMoveAxis.y > TOUCH_MOVE_DEADZONE;
+    const left = touchMoveAxis.x < -TOUCH_MOVE_DEADZONE;
+    const right = touchMoveAxis.x > TOUCH_MOVE_DEADZONE;
+
+    if (isDmFreeCamera()) {
+        dmFreeMoveForward = forward;
+        dmFreeMoveBackward = backward;
+        dmFreeMoveLeft = left;
+        dmFreeMoveRight = right;
+        moveForward = false;
+        moveBackward = false;
+        moveLeft = false;
+        moveRight = false;
+        return;
+    }
+
+    if (hasModePermission('player.keyboardInput')) {
+        moveForward = forward;
+        moveBackward = backward;
+        moveLeft = left;
+        moveRight = right;
+    }
+}
+
+function applyTouchLookInput(delta) {
+    if (!MOBILE_TOUCH_ENABLED) return;
+    if (Math.abs(touchLookAxis.x) < TOUCH_LOOK_DEADZONE && Math.abs(touchLookAxis.y) < TOUCH_LOOK_DEADZONE) return;
+    if (consoleState.open || isCombatReviewUiOpen()) return;
+
+    const lookYaw = touchLookAxis.x * TOUCH_LOOK_SPEED * Math.max(0, delta);
+    const lookPitch = touchLookAxis.y * TOUCH_LOOK_SPEED * Math.max(0, delta);
+
+    if (isDmFreeCamera() && dmCamera) {
+        dmCamera.rotation.order = 'YXZ';
+        dmCamera.rotation.y -= lookYaw;
+        dmCamera.rotation.x = Math.max(-1.45, Math.min(1.45, dmCamera.rotation.x - lookPitch));
+        return;
+    }
+
+    if (!hasModePermission('player.keyboardInput')) return;
+    yaw -= lookYaw;
+    if (!combatCameraActive) {
+        pitch -= lookPitch;
+        pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+    }
+    if (playerRig) {
+        playerRig.rotation.y = yaw;
+    }
+    if (!combatCameraActive) {
+        camera.rotation.x = pitch;
+    }
+}
+
+function setTouchPadAxisFromEvent(padEl, stickEl, touch, axisVec) {
+    if (!padEl || !stickEl || !touch) return;
+    const rect = padEl.getBoundingClientRect();
+    const cx = rect.left + (rect.width * 0.5);
+    const cy = rect.top + (rect.height * 0.5);
+    const maxRadius = rect.width * 0.35;
+    let dx = touch.clientX - cx;
+    let dy = touch.clientY - cy;
+    const len = Math.hypot(dx, dy);
+    if (len > maxRadius && len > 0.0001) {
+        const s = maxRadius / len;
+        dx *= s;
+        dy *= s;
+    }
+    axisVec.set(dx / Math.max(1, maxRadius), dy / Math.max(1, maxRadius));
+    stickEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+}
+
+function createMobileTouchControls() {
+    if (!MOBILE_TOUCH_ENABLED || touchControlsRootEl) return;
+
+    const root = document.createElement('div');
+    root.id = 'mobile-touch-controls';
+    root.style.position = 'fixed';
+    root.style.inset = '0';
+    root.style.pointerEvents = 'none';
+    root.style.zIndex = '2600';
+
+    const createPad = (left, right) => {
+        const pad = document.createElement('div');
+        pad.style.position = 'absolute';
+        if (left !== null) pad.style.left = left;
+        if (right !== null) pad.style.right = right;
+        pad.style.bottom = '24px';
+        pad.style.width = '130px';
+        pad.style.height = '130px';
+        pad.style.borderRadius = '999px';
+        pad.style.background = 'rgba(18, 26, 42, 0.45)';
+        pad.style.border = '1px solid rgba(160, 200, 255, 0.55)';
+        pad.style.backdropFilter = 'blur(3px)';
+        pad.style.touchAction = 'none';
+        pad.style.pointerEvents = 'auto';
+
+        const stick = document.createElement('div');
+        stick.style.position = 'absolute';
+        stick.style.left = '50%';
+        stick.style.top = '50%';
+        stick.style.width = '58px';
+        stick.style.height = '58px';
+        stick.style.borderRadius = '999px';
+        stick.style.transform = 'translate(-50%, -50%)';
+        stick.style.background = 'rgba(160, 205, 255, 0.24)';
+        stick.style.border = '1px solid rgba(190, 225, 255, 0.75)';
+        stick.style.boxShadow = '0 0 16px rgba(110, 170, 255, 0.4)';
+        pad.appendChild(stick);
+
+        root.appendChild(pad);
+        return { pad, stick };
+    };
+
+    const leftPad = createPad('18px', null);
+    const rightPad = createPad(null, '18px');
+
+    touchMovePadEl = leftPad.pad;
+    touchMoveStickEl = leftPad.stick;
+    touchLookPadEl = rightPad.pad;
+    touchLookStickEl = rightPad.stick;
+
+    touchMovePadEl.addEventListener('touchstart', (event) => {
+        if (isTextInputTarget(event.target) || consoleState.open) return;
+        if (touchMovePointerId !== null) return;
+        const touch = event.changedTouches && event.changedTouches[0];
+        if (!touch) return;
+        touchMovePointerId = touch.identifier;
+        setTouchPadAxisFromEvent(touchMovePadEl, touchMoveStickEl, touch, touchMoveAxis);
+        updateTouchMoveFlags();
+        event.preventDefault();
+    }, { passive: false });
+
+    touchMovePadEl.addEventListener('touchmove', (event) => {
+        if (touchMovePointerId === null) return;
+        for (const t of event.changedTouches) {
+            if (t.identifier !== touchMovePointerId) continue;
+            setTouchPadAxisFromEvent(touchMovePadEl, touchMoveStickEl, t, touchMoveAxis);
+            updateTouchMoveFlags();
+            event.preventDefault();
+            break;
+        }
+    }, { passive: false });
+
+    const endMove = (event) => {
+        if (touchMovePointerId === null) return;
+        for (const t of event.changedTouches) {
+            if (t.identifier !== touchMovePointerId) continue;
+            touchMovePointerId = null;
+            touchMoveStickEl.style.transform = 'translate(-50%, -50%)';
+            resetTouchMoveState();
+            updateTouchMoveFlags();
+            event.preventDefault();
+            break;
+        }
+    };
+    touchMovePadEl.addEventListener('touchend', endMove, { passive: false });
+    touchMovePadEl.addEventListener('touchcancel', endMove, { passive: false });
+
+    touchLookPadEl.addEventListener('touchstart', (event) => {
+        if (isTextInputTarget(event.target) || consoleState.open) return;
+        if (touchLookPointerId !== null) return;
+        const touch = event.changedTouches && event.changedTouches[0];
+        if (!touch) return;
+        touchLookPointerId = touch.identifier;
+        setTouchPadAxisFromEvent(touchLookPadEl, touchLookStickEl, touch, touchLookAxis);
+        event.preventDefault();
+    }, { passive: false });
+
+    touchLookPadEl.addEventListener('touchmove', (event) => {
+        if (touchLookPointerId === null) return;
+        for (const t of event.changedTouches) {
+            if (t.identifier !== touchLookPointerId) continue;
+            setTouchPadAxisFromEvent(touchLookPadEl, touchLookStickEl, t, touchLookAxis);
+            event.preventDefault();
+            break;
+        }
+    }, { passive: false });
+
+    const endLook = (event) => {
+        if (touchLookPointerId === null) return;
+        for (const t of event.changedTouches) {
+            if (t.identifier !== touchLookPointerId) continue;
+            touchLookPointerId = null;
+            touchLookStickEl.style.transform = 'translate(-50%, -50%)';
+            resetTouchLookState();
+            event.preventDefault();
+            break;
+        }
+    };
+    touchLookPadEl.addEventListener('touchend', endLook, { passive: false });
+    touchLookPadEl.addEventListener('touchcancel', endLook, { passive: false });
+
+    document.body.appendChild(root);
+    touchControlsRootEl = root;
+}
 
 // Auto-orbit during animations (dance, flip)
 let autoOrbitYaw = 0;
@@ -17004,6 +17243,7 @@ document.body.appendChild(combatFlashEl);
 const canvas = renderer.domElement;
 canvas.tabIndex = 0;
 canvas.style.outline = 'none';
+createMobileTouchControls();
 
 canvas.addEventListener('click', (event) => {
     if (isDmFreeCamera()) {
@@ -17576,6 +17816,7 @@ function updateFlyControls(delta) {
     }
 
     const fixedDelta = Math.min(delta, MAX_PHYSICS_DELTA);
+    applyTouchLookInput(fixedDelta);
 
     const animMode = (localPlayerAvatarRigState && typeof localPlayerAvatarRigState.getMode === 'function')
         ? localPlayerAvatarRigState.getMode()
