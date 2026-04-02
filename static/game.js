@@ -5,6 +5,368 @@ import { drawScepter } from "./weapon.js?v=1";
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 
+let mainPageMusicReady = false;
+let mainPageMusicStarted = false;
+let mainPageMusicLead = null;
+let mainPageMusicBass = null;
+let mainPageMusicTop = null;
+let mainPageMusicKick = null;
+let mainPageMusicSnare = null;
+let mainPageMusicHat = null;
+let mainPageMusicLeadPart = null;
+let mainPageMusicBassPart = null;
+let mainPageMusicTopPart = null;
+let mainPageMusicKickPart = null;
+let mainPageMusicSnarePart = null;
+let mainPageMusicHatPart = null;
+let mainPageMusicReverb = null;
+let mainPageMusicGain = null;
+
+async function ensureMainPageMusicSetup() {
+    if (mainPageMusicReady) return true;
+    if (!window.Tone) {
+        console.warn('Tone.js is not available; main page synth music disabled.');
+        return false;
+    }
+
+    const Tone = window.Tone;
+
+    mainPageMusicGain = new Tone.Gain(0.8).toDestination();
+    mainPageMusicReverb = new Tone.Reverb({
+        decay: 2,
+        wet: 0.2,
+    }).connect(mainPageMusicGain);
+
+    mainPageMusicLead = new Tone.Synth({
+        oscillator: { type: 'triangle' },
+        envelope: {
+            attack: 0.01,
+            decay: 0.08,
+            sustain: 0.2,
+            release: 0.14,
+        },
+    }).connect(mainPageMusicGain);
+    mainPageMusicLead.connect(mainPageMusicReverb);
+    mainPageMusicLead.volume.value = -6;
+
+    mainPageMusicBass = new Tone.MonoSynth({
+        oscillator: { type: 'triangle' },
+        filter: {
+            Q: 1,
+            type: 'lowpass',
+            rolloff: -24,
+        },
+        envelope: {
+            attack: 0.01,
+            decay: 0.2,
+            sustain: 0.25,
+            release: 0.18,
+        },
+        filterEnvelope: {
+            attack: 0.01,
+            decay: 0.15,
+            sustain: 0.3,
+            release: 0.2,
+            baseFrequency: 120,
+            octaves: 2,
+        },
+    }).connect(mainPageMusicGain);
+    mainPageMusicBass.connect(mainPageMusicReverb);
+    mainPageMusicBass.volume.value = -8;
+
+    mainPageMusicTop = new Tone.Synth({
+        oscillator: { type: 'square4' },
+        envelope: {
+            attack: 0.01,
+            decay: 0.07,
+            sustain: 0.18,
+            release: 0.16,
+        },
+    }).connect(mainPageMusicGain);
+    mainPageMusicTop.connect(mainPageMusicReverb);
+    mainPageMusicTop.volume.value = -10;
+
+    mainPageMusicKick = new Tone.MembraneSynth({
+        pitchDecay: 0.04,
+        octaves: 6,
+        oscillator: { type: 'sine' },
+        envelope: {
+            attack: 0.001,
+            decay: 0.22,
+            sustain: 0,
+            release: 0.06,
+        },
+    }).connect(mainPageMusicGain);
+    mainPageMusicKick.volume.value = -4;
+
+    mainPageMusicSnare = new Tone.NoiseSynth({
+        noise: { type: 'white' },
+        envelope: {
+            attack: 0.001,
+            decay: 0.11,
+            sustain: 0,
+            release: 0.02,
+        },
+    }).connect(mainPageMusicGain);
+    mainPageMusicSnare.volume.value = -12;
+
+    mainPageMusicHat = new Tone.MetalSynth({
+        frequency: 230,
+        envelope: {
+            attack: 0.001,
+            decay: 0.045,
+            release: 0.02,
+        },
+        harmonicity: 5.1,
+        modulationIndex: 42,
+        resonance: 1100,
+        octaves: 1.5,
+    }).connect(mainPageMusicGain);
+    mainPageMusicHat.volume.value = -16;
+
+    const musicForm = ['A', 'A', 'B', 'B', 'A', 'A', 'B', 'B'];
+    const sectionMeasures = 2;
+    const totalLoopMeasures = musicForm.length * sectionMeasures;
+
+    function shiftEventTime(time, measureOffset) {
+        const parts = time.split(':');
+        return `${Number(parts[0]) + measureOffset}:${parts[1]}:${parts[2]}`;
+    }
+
+    function buildFormEvents(sectionTemplates) {
+        const events = [];
+        musicForm.forEach((sectionName, index) => {
+            const measureOffset = index * sectionMeasures;
+            const template = sectionTemplates[sectionName] || [];
+            template.forEach((event) => {
+                events.push({
+                    ...event,
+                    time: shiftEventTime(event.time, measureOffset),
+                });
+            });
+        });
+        return events;
+    }
+
+    const leadAEvents = [
+        { time: '0:0:0', note: 'A3' }, { time: '0:0:1', note: 'C4' }, { time: '0:0:2', note: 'E4' }, { time: '0:0:3', note: 'C4' },
+        { time: '0:1:0', note: 'G3' }, { time: '0:1:1', note: 'B3' }, { time: '0:1:2', note: 'D4' }, { time: '0:1:3', note: 'B3' },
+        { time: '0:2:0', note: 'F3' }, { time: '0:2:1', note: 'A3' }, { time: '0:2:2', note: 'C4' }, { time: '0:2:3', note: 'A3' },
+        { time: '0:3:0', note: 'E3' }, { time: '0:3:1', note: 'G3' }, { time: '0:3:2', note: 'B3' }, { time: '0:3:3', note: 'G3' },
+
+        { time: '1:0:0', note: 'A3' }, { time: '1:0:1', note: 'C4' }, { time: '1:0:2', note: 'E4' }, { time: '1:0:3', note: 'C4' },
+        { time: '1:1:0', note: 'G3' }, { time: '1:1:1', note: 'B3' }, { time: '1:1:2', note: 'D4' }, { time: '1:1:3', note: 'B3' },
+        { time: '1:2:0', note: 'F3' }, { time: '1:2:1', note: 'A3' }, { time: '1:2:2', note: 'C4' }, { time: '1:2:3', note: 'A3' },
+        { time: '1:3:0', note: 'E3' }, { time: '1:3:1', note: 'G3' }, { time: '1:3:2', note: 'B3' }, { time: '1:3:3', note: 'G3' },
+    ];
+
+    const leadBEvents = [
+        { time: '0:0:0', note: 'A3' }, { time: '0:0:2', note: 'C4' },
+        { time: '0:1:0', note: 'E4' }, { time: '0:1:2', note: 'C4' },
+        { time: '0:2:0', note: 'F3' }, { time: '0:2:2', note: 'A3' },
+        { time: '0:3:0', note: 'C4' }, { time: '0:3:2', note: 'A3' },
+
+        { time: '1:0:0', note: 'E3' }, { time: '1:0:2', note: 'G#3' },
+        { time: '1:1:0', note: 'B3' }, { time: '1:1:2', note: 'G#3' },
+        { time: '1:2:0', note: 'A3' }, { time: '1:2:2', note: 'C4' },
+        { time: '1:3:0', note: 'E4' }, { time: '1:3:2', note: 'C4' },
+    ];
+
+    mainPageMusicLeadPart = new Tone.Part((time, event) => {
+        mainPageMusicLead.triggerAttackRelease(
+            event.note,
+            event.dur || '16n',
+            time,
+            typeof event.vel === 'number' ? event.vel : 0.72
+        );
+    }, buildFormEvents({ A: leadAEvents, B: leadBEvents }));
+    mainPageMusicLeadPart.loop = true;
+    mainPageMusicLeadPart.loopEnd = `${totalLoopMeasures}m`;
+
+    const bassAEvents = [
+        { time: '0:0:0', note: 'A2' }, { time: '0:0:2', note: 'A2' },
+        { time: '0:1:0', note: 'G2' }, { time: '0:1:2', note: 'G2' },
+        { time: '0:2:0', note: 'F2' }, { time: '0:2:2', note: 'F2' },
+        { time: '0:3:0', note: 'E2' }, { time: '0:3:2', note: 'E2' },
+
+        { time: '1:0:0', note: 'A2' }, { time: '1:0:2', note: 'A2' },
+        { time: '1:1:0', note: 'G2' }, { time: '1:1:2', note: 'G2' },
+        { time: '1:2:0', note: 'F2' }, { time: '1:2:2', note: 'F2' },
+        { time: '1:3:0', note: 'E2' }, { time: '1:3:2', note: 'E2' },
+    ];
+
+    const bassBEvents = [
+        { time: '0:0:0', note: 'A2', dur: '2n', vel: 0.62 },
+        { time: '0:2:0', note: 'F2', dur: '2n', vel: 0.62 },
+        { time: '1:0:0', note: 'E2', dur: '2n', vel: 0.62 },
+        { time: '1:2:0', note: 'A2', dur: '2n', vel: 0.62 },
+    ];
+
+    mainPageMusicBassPart = new Tone.Part((time, event) => {
+        mainPageMusicBass.triggerAttackRelease(
+            event.note,
+            event.dur || '16n',
+            time,
+            typeof event.vel === 'number' ? event.vel : 0.65
+        );
+    }, buildFormEvents({ A: bassAEvents, B: bassBEvents }));
+    mainPageMusicBassPart.loop = true;
+    mainPageMusicBassPart.loopEnd = `${totalLoopMeasures}m`;
+
+    const topAEvents = [
+        { time: '0:0:2', note: 'A4' }, { time: '0:0:3', note: 'C5' }, { time: '0:1:0', note: 'D5' },
+        { time: '0:1:2', note: 'C5' }, { time: '0:2:0', note: 'A4' }, { time: '0:2:2', note: 'G4' },
+        { time: '0:3:0', note: 'G#4' }, { time: '0:3:2', note: 'A4' },
+
+        { time: '1:0:2', note: 'A4' }, { time: '1:1:0', note: 'C5' }, { time: '1:1:2', note: 'E5' },
+        { time: '1:2:0', note: 'D5' }, { time: '1:2:2', note: 'C5' }, { time: '1:3:0', note: 'G#4' }, { time: '1:3:2', note: 'A4' },
+    ];
+
+    const topBEvents = [
+        { time: '0:0:0', note: 'E5', dur: '2n', vel: 0.52 },
+        { time: '0:2:0', note: 'C5', dur: '2n', vel: 0.52 },
+        { time: '1:0:0', note: 'B4', dur: '2n', vel: 0.52 },
+        { time: '1:2:0', note: 'A4', dur: '2n', vel: 0.52 },
+    ];
+
+    // Top line in the relative minor (A minor) over the same harmonic loop.
+    mainPageMusicTopPart = new Tone.Part((time, event) => {
+        mainPageMusicTop.triggerAttackRelease(
+            event.note,
+            event.dur || '16n',
+            time,
+            typeof event.vel === 'number' ? event.vel : 0.58
+        );
+    }, buildFormEvents({ A: topAEvents, B: topBEvents }));
+    mainPageMusicTopPart.loop = true;
+    mainPageMusicTopPart.loopEnd = `${totalLoopMeasures}m`;
+
+    const kickAEvents = [
+        { time: '0:0:0', note: 'C1' }, { time: '0:1:0', note: 'C1' }, { time: '0:2:0', note: 'C1' }, { time: '0:3:0', note: 'C1' },
+        { time: '0:3:2', note: 'C1', vel: 0.74 },
+        { time: '1:0:0', note: 'C1' }, { time: '1:1:0', note: 'C1' }, { time: '1:2:0', note: 'C1' }, { time: '1:3:0', note: 'C1' },
+        { time: '1:3:2', note: 'C1', vel: 0.74 },
+    ];
+
+    const kickBEvents = [
+        { time: '0:0:0', note: 'C1' },
+        { time: '0:2:0', note: 'C1' },
+        { time: '1:0:0', note: 'C1' },
+        { time: '1:2:0', note: 'C1' },
+    ];
+
+    mainPageMusicKickPart = new Tone.Part((time, event) => {
+        mainPageMusicKick.triggerAttackRelease(
+            event.note || 'C1',
+            event.dur || '16n',
+            time,
+            typeof event.vel === 'number' ? event.vel : 0.82
+        );
+    }, buildFormEvents({ A: kickAEvents, B: kickBEvents }));
+    mainPageMusicKickPart.loop = true;
+    mainPageMusicKickPart.loopEnd = `${totalLoopMeasures}m`;
+
+    const snareAEvents = [
+        { time: '0:1:0', dur: '16n' }, { time: '0:3:0', dur: '16n' },
+        { time: '1:1:0', dur: '16n' }, { time: '1:3:0', dur: '16n' },
+    ];
+
+    const snareBEvents = [
+        { time: '0:2:0', dur: '16n', vel: 0.62 },
+        { time: '1:2:0', dur: '16n', vel: 0.62 },
+    ];
+
+    mainPageMusicSnarePart = new Tone.Part((time, event) => {
+        mainPageMusicSnare.triggerAttackRelease(
+            event.dur || '16n',
+            time,
+            typeof event.vel === 'number' ? event.vel : 0.7
+        );
+    }, buildFormEvents({ A: snareAEvents, B: snareBEvents }));
+    mainPageMusicSnarePart.loop = true;
+    mainPageMusicSnarePart.loopEnd = `${totalLoopMeasures}m`;
+
+    const hatAEvents = [
+        { time: '0:0:0' }, { time: '0:0:2' }, { time: '0:1:0' }, { time: '0:1:2' },
+        { time: '0:2:0' }, { time: '0:2:2' }, { time: '0:3:0' }, { time: '0:3:2' },
+        { time: '1:0:0' }, { time: '1:0:2' }, { time: '1:1:0' }, { time: '1:1:2' },
+        { time: '1:2:0' }, { time: '1:2:2' }, { time: '1:3:0' }, { time: '1:3:2' },
+    ];
+
+    const hatBEvents = [
+        { time: '0:0:0', dur: '8n', vel: 0.4 }, { time: '0:2:0', dur: '8n', vel: 0.4 },
+        { time: '1:0:0', dur: '8n', vel: 0.4 }, { time: '1:2:0', dur: '8n', vel: 0.4 },
+    ];
+
+    mainPageMusicHatPart = new Tone.Part((time, event) => {
+        mainPageMusicHat.triggerAttackRelease(
+            event.dur || '16n',
+            time,
+            typeof event.vel === 'number' ? event.vel : 0.48
+        );
+    }, buildFormEvents({ A: hatAEvents, B: hatBEvents }));
+    mainPageMusicHatPart.loop = true;
+    mainPageMusicHatPart.loopEnd = `${totalLoopMeasures}m`;
+
+    Tone.Transport.bpm.value = 112;
+    mainPageMusicReady = true;
+    return true;
+}
+
+async function startMainPageMusic() {
+    if (mainPageMusicStarted) return;
+    if (!window.Tone) return;
+    const Tone = window.Tone;
+    await Tone.start();
+
+    const ok = await ensureMainPageMusicSetup();
+    if (!ok) return;
+
+    if (Tone.Transport.state !== 'started') {
+        Tone.Transport.stop();
+        Tone.Transport.position = 0;
+        mainPageMusicLeadPart.start(0);
+        mainPageMusicBassPart.start(0);
+        mainPageMusicTopPart.start(0);
+        mainPageMusicKickPart.start(0);
+        mainPageMusicSnarePart.start(0);
+        mainPageMusicHatPart.start(0);
+        Tone.Transport.start();
+    }
+
+    mainPageMusicStarted = true;
+}
+
+function stopMainPageMusic() {
+    if (!window.Tone || !mainPageMusicReady) return;
+    const Tone = window.Tone;
+    if (mainPageMusicLeadPart) mainPageMusicLeadPart.stop();
+    if (mainPageMusicBassPart) mainPageMusicBassPart.stop();
+    if (mainPageMusicTopPart) mainPageMusicTopPart.stop();
+    if (mainPageMusicKickPart) mainPageMusicKickPart.stop();
+    if (mainPageMusicSnarePart) mainPageMusicSnarePart.stop();
+    if (mainPageMusicHatPart) mainPageMusicHatPart.stop();
+    Tone.Transport.stop();
+    mainPageMusicStarted = false;
+}
+
+function installMusicStartHooks() {
+    const activateMusic = async () => {
+        document.removeEventListener('pointerdown', activateMusic);
+        document.removeEventListener('keydown', activateMusic);
+        try {
+            await startMainPageMusic();
+        } catch (err) {
+            console.warn('Unable to start main page music:', err);
+        }
+    };
+
+    document.addEventListener('pointerdown', activateMusic, { once: true });
+    document.addEventListener('keydown', activateMusic, { once: true });
+}
+
+installMusicStartHooks();
+
 // Zoom state
 let zoom = 2.0; // doubled zoom
 const maxZoom = 4.0; // allow higher zoom
@@ -27,6 +389,9 @@ const tileSize = 80; // doubled tile size
 
 let player = { x: 0, y: 0 };
 let facing={x:1,y:0};
+
+// Screen-space hotspot for clicking the fireplace.
+let fireplaceHotspot = null;
 
 let camera = { x:0, y:0, targetX:0, targetY:0 };
 const cameraLerp = 0.12;
@@ -472,6 +837,17 @@ function draw() {
         ctx.restore();
     }
     ctx.restore();
+
+    // Track clickable fireplace bounds in screen-space using the current canvas transform.
+    const m = ctx.getTransform();
+    const p1 = new DOMPoint(fireplaceX, fireplaceY).matrixTransform(m);
+    const p2 = new DOMPoint(fireplaceX + fireplaceW, fireplaceY + fireplaceH).matrixTransform(m);
+    fireplaceHotspot = {
+        x: Math.min(p1.x, p2.x),
+        y: Math.min(p1.y, p2.y),
+        w: Math.abs(p2.x - p1.x),
+        h: Math.abs(p2.y - p1.y),
+    };
     // Draw larger black carpet with frills under table
     ctx.save();
     ctx.fillStyle = '#0a0608'; // even darker base
@@ -854,6 +1230,7 @@ function draw() {
                 if ((dx*dx)/(tableRX*tableRX) + (dy*dy)/(tableRY*tableRY) <= 1) {
                     // Only trigger for first dice (purple dice with candle)
                     // Dynamically load map3d.js as a module
+                    stopMainPageMusic();
                     canvas.style.display = 'none';
                     const script = document.createElement('script');
                     script.type = 'module';
@@ -886,6 +1263,62 @@ function draw() {
         idleTime
     );
 
+    // ── Speech bubble: "Welcome to Paraval!" ───────────────────────────────
+    {
+        const bubText  = 'Welcome to Paraval!';
+        const bubFont  = 'bold 22px "Courier New", monospace';
+        ctx.font = bubFont;
+        const textW   = ctx.measureText(bubText).width;
+        const padX    = 18, padY = 12;
+        const bubW    = textW + padX * 2;
+        const bubH    = 44;
+        const bubX    = charX + 52;     // right of character
+        const bubY    = charY - 110;    // above character
+        const radius  = 10;
+        const tailTX  = bubX + 18;      // tail tip x (points down-left toward character)
+        const tailTY  = bubY + bubH;
+        const tailBX  = tailTX - 22;    // tail base spread
+        const tailBY  = bubY + bubH - 2;
+
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.45)';
+        ctx.shadowBlur  = 10;
+        ctx.shadowOffsetY = 3;
+
+        // bubble fill
+        ctx.beginPath();
+        ctx.moveTo(bubX + radius, bubY);
+        ctx.lineTo(bubX + bubW - radius, bubY);
+        ctx.quadraticCurveTo(bubX + bubW, bubY, bubX + bubW, bubY + radius);
+        ctx.lineTo(bubX + bubW, bubY + bubH - radius);
+        ctx.quadraticCurveTo(bubX + bubW, bubY + bubH, bubX + bubW - radius, bubY + bubH);
+        ctx.lineTo(tailTX + 10, tailBY);
+        // tail
+        ctx.lineTo(tailTX, tailTY + 16);
+        ctx.lineTo(tailBX, tailBY);
+        ctx.lineTo(bubX + radius, bubY + bubH);
+        ctx.quadraticCurveTo(bubX, bubY + bubH, bubX, bubY + bubH - radius);
+        ctx.lineTo(bubX, bubY + radius);
+        ctx.quadraticCurveTo(bubX, bubY, bubX + radius, bubY);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(255,252,235,0.97)';
+        ctx.fill();
+
+        // bubble border
+        ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+        ctx.strokeStyle = 'rgba(80,60,20,0.55)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // text
+        ctx.fillStyle = '#2a1a04';
+        ctx.font = bubFont;
+        ctx.textBaseline = 'middle';
+        ctx.fillText(bubText, bubX + padX, bubY + bubH / 2);
+        ctx.restore();
+    }
+    // ──────────────────────────────────────────────────────────────────────
+
     // scepter: position relative to centered player
     // tweak these offsets to move it into the hand
     const sx = charX + 80; // moved a little more to the right
@@ -893,6 +1326,28 @@ function draw() {
     drawScepter(ctx, sx, sy, 6, walkFrame); // double the scale for scepter
     ctx.restore(); // Restore after scaling
 }
+
+function pointInRect(px, py, rect) {
+    if (!rect) return false;
+    return px >= rect.x && px <= (rect.x + rect.w) && py >= rect.y && py <= (rect.y + rect.h);
+}
+
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    canvas.style.cursor = pointInRect(mx, my, fireplaceHotspot) ? 'pointer' : 'default';
+});
+
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    if (pointInRect(mx, my, fireplaceHotspot)) {
+        stopMainPageMusic();
+        window.location.href = '/static/fireplace_scene.html';
+    }
+});
 
 let last=performance.now();
 
