@@ -93,6 +93,21 @@ def to_int(value: str | None) -> int | None:
     return int(match.group(0)) if match else None
 
 
+def coerce_hp_value(raw_value: str | int | None, fallback: int | None = None) -> int | None:
+    """Normalize HP-ish values from PDF text into integers.
+
+    D&D Beyond exports sometimes contain placeholders like "--" for current HP.
+    Downstream game logic expects numeric HP, so we coerce when possible and
+    fall back to max HP (or caller-provided fallback) when missing.
+    """
+    if isinstance(raw_value, int):
+        return raw_value
+    parsed = to_int(str(raw_value) if raw_value is not None else None)
+    if parsed is not None:
+        return parsed
+    return fallback
+
+
 def parse_ability_scores(text: str, character_id: str) -> list[dict]:
     rows: list[dict] = []
     seen: set[str] = set()
@@ -685,6 +700,9 @@ def parse_character_tables(pdf_path: Path) -> dict:
     speed = core["speed"] or to_int(find_first((r"\bSpeed\s*[:\-]?\s*(\d+)",), full_text))
     proficiency_bonus = core["proficiency_bonus"] or to_int(find_first((r"\bProficiency\s+Bonus\s*[:\-]?\s*([+-]?\d+)",), full_text))
 
+    normalized_max_hp = to_int(str(hit_points) if hit_points is not None else None)
+    normalized_current_hp = coerce_hp_value(core.get("current_hp"), fallback=normalized_max_hp)
+
     character = {
         "character_id": character_id,
         "source_file": pdf_path.name,
@@ -695,8 +713,8 @@ def parse_character_tables(pdf_path: Path) -> dict:
         "background": identity["background"],
         "level": level,
         "armor_class": armor_class,
-        "hit_points": hit_points,
-        "current_hp": core["current_hp"],
+        "hit_points": normalized_max_hp,
+        "current_hp": normalized_current_hp,
         "hit_dice": core["hit_dice"],
         "speed": speed,
         "proficiency_bonus": proficiency_bonus,
