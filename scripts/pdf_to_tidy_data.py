@@ -69,6 +69,140 @@ def extract_text_by_page(pdf_path: Path) -> list[str]:
     return pypdf_pages
 
 
+def _clean_pdf_value(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    # Common placeholders in empty form widgets.
+    if text in {"--", "-", "N/A", "n/a"}:
+        return None
+    return text
+
+
+def extract_pdf_form_values(pdf_path: Path) -> dict[str, str]:
+    """Extract AcroForm/widget values from PDFs that don't expose rich text.
+
+    Some character-sheet exports include data in form widgets while page text
+    extraction returns mostly labels. This helper reads both `get_fields()` and
+    per-page widget annotations.
+    """
+    out: dict[str, str] = {}
+    reader = PdfReader(str(pdf_path))
+
+    # Path 1: named fields exposed by pypdf.
+    try:
+        fields = reader.get_fields() or {}
+    except Exception:
+        fields = {}
+
+    for key, field in fields.items():
+        raw = getattr(field, "value", None)
+        if raw is None and isinstance(field, dict):
+            raw = field.get("/V")
+        cleaned = _clean_pdf_value(raw)
+        if cleaned is not None:
+            out[str(key)] = cleaned
+
+    # Path 2: widget annotations not listed in get_fields().
+    for page in reader.pages:
+        annots = page.get("/Annots") or []
+        for annot_ref in annots:
+            try:
+                annot = annot_ref.get_object()
+            except Exception:
+                continue
+            if str(annot.get("/Subtype") or "") != "/Widget":
+                continue
+            key = annot.get("/T")
+            raw = annot.get("/V")
+            cleaned = _clean_pdf_value(raw)
+            if key and cleaned is not None:
+                out[str(key)] = cleaned
+
+    return out
+
+
+def _get_form_value(form_values: dict[str, str], *key_fragments: str) -> str | None:
+    """Find the first form value whose field name contains all fragments."""
+    if not form_values:
+        return None
+    fragments = [frag.lower() for frag in key_fragments if frag]
+    for key, value in form_values.items():
+        k = key.lower()
+        if all(frag in k for frag in fragments):
+            return value
+    return None
+
+
+def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: dict[str, str]) -> None:
+    """Patch missing parsed values using PDF AcroForm/widget data when present."""
+    if not form_values:
+        return
+
+    if not character.get("name"):
+        character["name"] = _get_form_value(form_values, "character", "name") or character.get("name")
+    if not character.get("player_name"):
+        character["player_name"] = _get_form_value(form_values, "player", "name") or character.get("player_name")
+    if not character.get("class_level"):
+        character["class_level"] = _get_form_value(form_values, "class") or character.get("class_level")
+    if not character.get("species"):
+        character["species"] = _get_form_value(form_values, "species") or _get_form_value(form_values, "race") or character.get("species")
+    if not character.get("background"):
+        character["background"] = _get_form_value(form_values, "background") or character.get("background")
+
+    if character.get("armor_class") is None:
+        character["armor_class"] = to_int(_get_form_value(form_values, "armor", "class") or _get_form_value(form_values, "ac"))
+    if character.get("hit_points") is None:
+        character["hit_points"] = to_int(_get_form_value(form_values, "hit", "point", "max") or _get_form_value(form_values, "max", "hp"))
+    if character.get("current_hp") is None:
+        character["current_hp"] = coerce_hp_value(
+            _get_form_value(form_values, "hit", "point", "current") or _get_form_value(form_values, "current", "hp"),
+            fallback=character.get("hit_points"),
+        )
+    if character.get("speed") is None:
+        character["speed"] = to_int(_get_form_value(form_values, "speed"))
+    if character.get("proficiency_bonus") is None:
+        character["proficiency_bonus"] = to_int(_get_form_value(form_values, "proficiency"))
+    if character.get("initiative_bonus") is None:
+        character["initiative_bonus"] = to_int(_get_form_value(form_values, "initiative"))
+
+    if abilities:
+        return
+
+    # Build ability scores from form fields only when text parsing found none.
+    found: list[dict] = []
+    for ability in ("STR", "DEX", "CON", "INT", "WIS", "CHA"):
+        score_text = (
+            _get_form_value(form_values, ability.lower(), "score")
+            or _get_form_value(form_values, full_name(ability).lower(), "score")
+            or _get_form_value(form_values, ability.lower())
+        )
+        mod_text = (
+            _get_form_value(form_values, ability.lower(), "mod")
+            or _get_form_value(form_values, full_name(ability).lower(), "mod")
+        )
+
+        score = to_int(score_text)
+        if score is None:
+            continue
+        modifier = to_int(mod_text)
+        if modifier is None:
+            modifier = (score - 10) // 2
+        found.append(
+            {
+                "character_id": character.get("character_id"),
+                "ability": ability,
+                "score": score,
+                "modifier": modifier,
+            }
+        )
+
+    if found:
+        abilities.extend(found)
+
+
 def normalize_lines(text: str) -> list[str]:
     lines = []
     for raw in text.splitlines():
@@ -680,6 +814,7 @@ def parse_core_from_first_page_lines(first_page_lines: list[str]) -> dict[str, i
 
 def parse_character_tables(pdf_path: Path) -> dict:
     pages = extract_text_by_page(pdf_path)
+    form_values = extract_pdf_form_values(pdf_path)
     full_text = "\n\n".join(pages)
     lines = normalize_lines(full_text)
     first_page_lines = normalize_lines(pages[0]) if pages else []
@@ -731,6 +866,8 @@ def parse_character_tables(pdf_path: Path) -> dict:
     abilities = parse_ability_scores_from_lines(first_page_lines, character_id)
     if not abilities:
         abilities = parse_ability_scores(full_text, character_id)
+
+    apply_form_fallbacks(character, abilities, form_values)
 
     saves_and_skills = parse_saves_and_skills(first_page_lines, abilities)
     inventory_roleplay = parse_inventory_summary_and_roleplay(pages)
