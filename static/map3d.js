@@ -1169,6 +1169,26 @@ function registerSocketHandlers() {
         console.log('[COMBAT] end-turn accepted by server:', reason);
     });
 
+    socket.on('combat-action-result', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        const attacker = String(packet.attacker || 'Unknown');
+        const actorType = String(packet.actorType || 'unknown');
+        const isHit = Boolean(packet.hit);
+        const damage = Number(packet.damage) || 0;
+        const targetId = String(packet.targetId || '');
+        const hitRoll = Number(packet.hitRoll) || 0;
+        const toHit = Number(packet.toHit) || 0;
+        const targetAC = Number(packet.targetAC) || 0;
+
+        if (actorType === 'enemy') {
+            const resultText = isHit
+                ? `${attacker} hit${targetId ? ' ' + targetId : ''} for ${damage} dmg (roll ${hitRoll}+${packet.attackBonus||0}=${toHit} vs AC ${targetAC})`
+                : `${attacker} missed${targetId ? ' ' + targetId : ''} (roll ${hitRoll}+${packet.attackBonus||0}=${toHit} vs AC ${targetAC})`;
+            logCombatEvent(resultText, isHit ? 'miss' : 'miss');
+            showFloatingText(isHit ? `${attacker}: ${damage} DMG` : `${attacker}: MISS`, isHit ? '#ff8a8a' : '#aaa', true);
+        }
+    });
+
     socket.on('combat-turn-sync-denied', () => {
         // Server is authoritative — sync attempts are silently ignored; incoming combat-turn drives state.
         console.warn('[COMBAT] combat-turn-sync rejected: server-authoritative mode active');
@@ -11650,6 +11670,11 @@ function dispatchCombatTurnActor(entry) {
     if (!enemy || !enemy.parent || (enemy.userData?.hp || 0) <= 0) {
         // Server is authoritative for turn advancement; do not emit local step-turn
         // when an enemy actor is missing client-side.
+        // Still show turn feedback so the player knows the enemy is acting.
+        const enemyLabel = entry.name || entry.id || 'Enemy';
+        addDmEvent(`TURN START: ${enemyLabel}`, 'system');
+        showFloatingText(`${enemyLabel} Turn`, '#ff8a8a');
+        logCombatEvent(`${enemyLabel} turn`, 'system');
         setCombatPhase('TRANSITION');
         setCombatLock(true);
         setCombatTimelineBusy(false);
