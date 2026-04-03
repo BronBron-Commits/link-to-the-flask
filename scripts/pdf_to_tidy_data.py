@@ -128,12 +128,22 @@ def _get_form_value(form_values: dict[str, str], *key_fragments: str) -> str | N
     """Find the first form value whose field name contains all fragments."""
     if not form_values:
         return None
-    fragments = [frag.lower() for frag in key_fragments if frag]
+    fragments = [re.sub(r"[^a-z0-9]+", "", frag.lower()) for frag in key_fragments if frag]
     for key, value in form_values.items():
-        k = key.lower()
+        k = re.sub(r"[^a-z0-9]+", "", key.lower())
         if all(frag in k for frag in fragments):
             return value
     return None
+
+
+def _debug_form_values(form_values: dict[str, str], limit: int = 20) -> None:
+    """Print a compact view of available form keys for alias tuning."""
+    if not form_values:
+        print("[PDF FORM FIELDS] total=0")
+        return
+    keys = sorted(form_values.keys())
+    sample = keys[:limit]
+    print(f"[PDF FORM FIELDS] total={len(keys)} sample_keys={sample}")
 
 
 _TEMPLATE_LABEL_TOKENS = {
@@ -162,6 +172,30 @@ _TEMPLATE_LABEL_TOKENS = {
     "QTY",
     "WEIGHT",
     "ATTUNED MAGIC ITEMS",
+    "HAIR",
+    "SKIN",
+    "ABILITY",
+    "BONUS",
+    "TOOLS",
+    "LANGUAGES",
+    "TRAITS",
+    "IDEALS",
+    "BONDS",
+    "FLAWS",
+}
+
+
+_SECTION_NOISE_SUBSTRINGS = {
+    "HAIRSKIN",
+    "ABILITY BONUS",
+    "SPELL SAVE",
+    "SAVE/ATK",
+    "COMP DURATION",
+    "PERSONALITY TRAITS",
+    "ALLIES & ORGANIZATIONS",
+    "ADDITIONAL FEATURES",
+    "TREASURE",
+    "CHARACTER APPEARANCE",
 }
 
 
@@ -378,6 +412,7 @@ def clean_section_lines(section_lines: list[str], identity: dict[str, str | None
 
     cleaned: list[str] = []
     for line in section_lines:
+        upper = line.upper()
         if line in noisy_exact:
             continue
         if line in identity_values:
@@ -385,6 +420,10 @@ def clean_section_lines(section_lines: list[str], identity: dict[str, str | None
         if re.search(r"Wizards of the Coast", line, flags=re.IGNORECASE):
             continue
         if _looks_like_template_label(line):
+            continue
+        if any(token in upper for token in _SECTION_NOISE_SUBSTRINGS):
+            continue
+        if re.fullmatch(r"[A-Z\s/&\-]{4,}", line) and len(line.split()) <= 4:
             continue
         if re.fullmatch(r"\(Milestone\)", line):
             continue
@@ -416,6 +455,8 @@ def extract_inventory_triplets(lines: list[str]) -> list[str]:
         if not re.fullmatch(r"(?:\d+\s*lb\.|--)", weight, flags=re.IGNORECASE):
             continue
         if name in {"NAME", "QTY", "WEIGHT", "ATTUNED MAGIC ITEMS"}:
+            continue
+        if any(token in name.upper() for token in _SECTION_NOISE_SUBSTRINGS):
             continue
         if re.fullmatch(r"\d+(?:\.\d+)?", name):
             continue
@@ -646,6 +687,75 @@ def parse_saves_and_skills(first_page_lines: list[str], abilities: list[dict]) -
     }
 
 
+def apply_form_fallbacks_to_saves_and_skills(parsed: dict, form_values: dict[str, str]) -> None:
+    if not form_values:
+        return
+
+    save_name_by_ability = {
+        "STR": "strength",
+        "DEX": "dexterity",
+        "CON": "constitution",
+        "INT": "intelligence",
+        "WIS": "wisdom",
+        "CHA": "charisma",
+    }
+
+    for row in parsed.get("saving_throws", []):
+        if row.get("bonus") is not None:
+            continue
+        ability = str(row.get("ability") or "").upper()
+        if not ability:
+            continue
+        full = save_name_by_ability.get(ability, "")
+        value = (
+            _get_form_value(form_values, full, "saving", "throw")
+            or _get_form_value(form_values, ability.lower(), "save")
+            or _get_form_value(form_values, full, "save")
+        )
+        parsed_bonus = to_int(value)
+        if parsed_bonus is not None:
+            row["bonus"] = parsed_bonus
+
+    for row in parsed.get("skills", []):
+        if row.get("bonus") is not None:
+            continue
+        name = str(row.get("name") or "").lower()
+        words = [w for w in re.split(r"\s+", name) if w and w not in {"of", "and"}]
+        value = _get_form_value(form_values, *words) if words else None
+        if value is None and words:
+            value = _get_form_value(form_values, words[0], "skill")
+        parsed_bonus = to_int(value)
+        if parsed_bonus is not None:
+            row["bonus"] = parsed_bonus
+
+
+def select_feature_lines_from_pages(pages: list[str]) -> list[str]:
+    lines: list[str] = []
+    for page_text in pages:
+        page_lines = normalize_lines(page_text)
+        page_upper = [ln.upper() for ln in page_lines]
+        has_feature_markers = any(
+            marker in page_upper
+            for marker in ("FEATURES & TRAITS", "FEATURES AND TRAITS", "=== ACTIONS ===")
+        )
+        if not has_feature_markers:
+            continue
+        lines.extend(page_lines)
+    return lines
+
+
+def select_inventory_lines_from_pages(pages: list[str]) -> list[str]:
+    lines: list[str] = []
+    for page_text in pages:
+        page_lines = normalize_lines(page_text)
+        page_upper = [ln.upper() for ln in page_lines]
+        has_inventory_markers = "EQUIPMENT" in page_upper or "WEIGHT CARRIED" in page_upper
+        if not has_inventory_markers:
+            continue
+        lines.extend(page_lines)
+    return lines
+
+
 def parse_inventory_summary_and_roleplay(pages: list[str]) -> dict:
     currency = {"cp": None, "sp": None, "ep": None, "gp": None, "pp": None}
     capacity = {"weight_carried": None, "encumbered": None, "push_drag_lift": None}
@@ -869,6 +979,7 @@ def parse_core_from_first_page_lines(first_page_lines: list[str]) -> dict[str, i
 def parse_character_tables(pdf_path: Path) -> dict:
     pages = extract_text_by_page(pdf_path)
     form_values = extract_pdf_form_values(pdf_path)
+    _debug_form_values(form_values)
     full_text = "\n\n".join(pages)
     lines = normalize_lines(full_text)
     first_page_lines = normalize_lines(pages[0]) if pages else []
@@ -932,15 +1043,19 @@ def parse_character_tables(pdf_path: Path) -> dict:
         character["current_hp"] = character.get("hit_points")
 
     saves_and_skills = parse_saves_and_skills(first_page_lines, abilities)
+    apply_form_fallbacks_to_saves_and_skills(saves_and_skills, form_values)
     inventory_roleplay = parse_inventory_summary_and_roleplay(pages)
     spell_meta = parse_spellcasting_metadata(pages)
 
+    feature_scope_lines = select_feature_lines_from_pages(pages)
+    inventory_scope_lines = select_inventory_lines_from_pages(pages)
+
     feature_lines = extract_section(
-        lines,
+        feature_scope_lines or lines,
         start_keywords=("Features & Traits", "Features and Traits"),
         stop_keywords=("Equipment", "Attacks", "Spells"),
     )
-    marker_feature_lines = extract_feature_lines_from_markers(lines)
+    marker_feature_lines = extract_feature_lines_from_markers(feature_scope_lines or lines)
     if marker_feature_lines:
         feature_lines = marker_feature_lines
 
@@ -957,11 +1072,11 @@ def parse_character_tables(pdf_path: Path) -> dict:
     ]
 
     inventory_lines = extract_section(
-        lines,
+        inventory_scope_lines or lines,
         start_keywords=("Equipment",),
         stop_keywords=("Attacks", "Spells", "Features"),
     )
-    inventory_triplets = extract_inventory_triplets(lines)
+    inventory_triplets = extract_inventory_triplets(inventory_scope_lines or lines)
     if inventory_triplets:
         inventory_lines = inventory_triplets
 
