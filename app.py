@@ -283,6 +283,11 @@ def _save_resume_snapshot_for_sid(sid: str, now: float | None = None):
         "rotation": deepcopy(player_data.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})),
         "avatar": deepcopy(player_data.get("avatar")) if isinstance(player_data.get("avatar"), dict) else None,
         "movementPreview": deepcopy(player_data.get("movementPreview")) if isinstance(player_data.get("movementPreview"), dict) else None,
+        "ac": player_data.get("ac"),
+        "max_hp": player_data.get("max_hp"),
+        "hp": player_data.get("hp"),
+        "initiative_bonus": player_data.get("initiative_bonus"),
+        "speed_ft": player_data.get("speed_ft"),
         "expiresAt": current + RESUME_SESSION_TTL_SEC,
         "lastSeen": current,
     }
@@ -595,6 +600,19 @@ def socket_connect(connect_payload=None):
                     player_entry["avatar"] = resumed_snapshot["avatar"]
                 if isinstance(resumed_snapshot.get("movementPreview"), dict):
                     player_entry["movementPreview"] = resumed_snapshot["movementPreview"]
+                # Restore character combat stats saved from prior PDF import.
+                if resumed_snapshot.get("ac") is not None:
+                    player_entry["ac"] = int(_safe_float(resumed_snapshot["ac"]))
+                if resumed_snapshot.get("max_hp") is not None:
+                    player_entry["max_hp"] = int(_safe_float(resumed_snapshot["max_hp"]))
+                if resumed_snapshot.get("hp") is not None:
+                    player_entry["hp"] = _safe_float(resumed_snapshot["hp"])
+                elif player_entry.get("max_hp") is not None:
+                    player_entry["hp"] = float(player_entry["max_hp"])
+                if resumed_snapshot.get("initiative_bonus") is not None:
+                    player_entry["initiative_bonus"] = int(_safe_float(resumed_snapshot["initiative_bonus"]))
+                if resumed_snapshot.get("speed_ft") is not None:
+                    player_entry["speed_ft"] = int(_safe_float(resumed_snapshot["speed_ft"]))
 
             _save_resume_snapshot_for_sid(sid)
 
@@ -1070,6 +1088,49 @@ def socket_timeline_start(data):
         broadcast=True,
         include_self=False,
     )
+
+
+@socketio.on("player-character-stats")
+def socket_player_character_stats(data):
+    """Client pushes key character stats (AC, max HP, etc.) to the server so
+    combat calculations use real values from the imported character sheet."""
+    sid = request.sid
+    if sid not in players or not isinstance(data, dict):
+        return
+    if _normalize_role(client_roles.get(sid, "player")) != "player":
+        return
+
+    player_entry = players[sid]
+
+    def _coerce_int(key: str):
+        raw = data.get(key)
+        if raw is None:
+            return None
+        try:
+            return int(float(raw))
+        except (TypeError, ValueError):
+            return None
+
+    ac = _coerce_int("ac")
+    max_hp = _coerce_int("maxHp")
+    initiative_bonus = _coerce_int("initiativeBonus")
+    speed_ft = _coerce_int("speedFt")
+
+    if ac is not None:
+        player_entry["ac"] = ac
+    if max_hp is not None:
+        player_entry["max_hp"] = max_hp
+        # Only set current hp from max if not already tracking damage.
+        if "hp" not in player_entry:
+            player_entry["hp"] = float(max_hp)
+    if initiative_bonus is not None:
+        player_entry["initiative_bonus"] = initiative_bonus
+    if speed_ft is not None:
+        player_entry["speed_ft"] = speed_ft
+
+    _save_resume_snapshot_for_sid(sid)
+    print(f"[CHAR-STATS] sid={sid[:6]} ac={ac} max_hp={max_hp} init={initiative_bonus} spd={speed_ft}", flush=True)
+    emit("player-character-stats-ack", {"ok": True, "ac": ac, "maxHp": max_hp})
 
 
 @socketio.on("dice-roll-event")

@@ -191,6 +191,19 @@ btnPdf.addEventListener('click', async () => {
     }
 
     setStatus(`Loaded: ${data.source_file}`);
+
+    // Push character combat stats to the server so AC, max HP, etc.
+    // are used in server-side combat calculations for this session.
+    if (data.character && window.socket) {
+      const ch = data.character;
+      window.socket.emit('player-character-stats', {
+        ac:               ch.armor_class        ?? null,
+        maxHp:            ch.hit_points         ?? null,
+        initiativeBonus:  ch.initiative_bonus   ?? null,
+        speedFt:          ch.speed              ?? null,
+      });
+    }
+
     document.dispatchEvent(new CustomEvent('hud:refresh'));
     setTimeout(dismiss, 800);
   } catch (err) {
