@@ -2363,6 +2363,7 @@ let consoleRootEl = null;
 let consoleModeEl = null;
 let consoleLogEl = null;
 let consoleInputEl = null;
+let consoleSuggestionsEl = null;
 let combatParticlesEnabled = true;
 let consoleAudioMuted = false;
 let modeOverlayEl = null;
@@ -2427,6 +2428,65 @@ function renderConsoleHistory() {
 function updateConsoleModeBadge() {
     if (!consoleModeEl) return;
     consoleModeEl.textContent = `mode: ${modeManager.current}`;
+    renderConsoleSuggestions();
+}
+
+function getAvailableConsoleCommandNames() {
+    return Object.keys(consoleCommands)
+        .filter((name) => {
+            const cmd = consoleCommands[name];
+            return !!(cmd && Array.isArray(cmd.modes) && cmd.modes.includes(modeManager.current));
+        })
+        .sort();
+}
+
+function renderConsoleSuggestions() {
+    if (!consoleSuggestionsEl || !consoleInputEl) return;
+
+    const raw = String(consoleInputEl.value || '');
+    const trimmedStart = raw.trimStart();
+    if (!trimmedStart.startsWith('/')) {
+        consoleSuggestionsEl.style.display = 'none';
+        consoleSuggestionsEl.innerHTML = '';
+        return;
+    }
+
+    const token = String(trimmedStart.split(/\s+/)[0] || '').slice(1).toLowerCase();
+    const all = getAvailableConsoleCommandNames();
+    const matches = all.filter((name) => name.includes(token)).slice(0, 12);
+
+    if (matches.length <= 0) {
+        consoleSuggestionsEl.style.display = 'none';
+        consoleSuggestionsEl.innerHTML = '';
+        return;
+    }
+
+    consoleSuggestionsEl.innerHTML = '';
+    matches.forEach((name) => {
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.textContent = `/${name}`;
+        row.style.textAlign = 'left';
+        row.style.background = 'rgba(8, 14, 28, 0.92)';
+        row.style.color = '#d9e8ff';
+        row.style.border = '1px solid rgba(120, 168, 255, 0.34)';
+        row.style.borderRadius = '6px';
+        row.style.padding = '6px 8px';
+        row.style.cursor = 'pointer';
+        row.style.fontFamily = 'Consolas, "Segoe UI", monospace';
+        row.style.fontSize = '12px';
+        row.addEventListener('mousedown', (event) => {
+            event.preventDefault();
+            consoleInputEl.value = `/${name} `;
+            renderConsoleSuggestions();
+            requestAnimationFrame(() => {
+                consoleInputEl.focus();
+                consoleInputEl.setSelectionRange(consoleInputEl.value.length, consoleInputEl.value.length);
+            });
+        });
+        consoleSuggestionsEl.appendChild(row);
+    });
+    consoleSuggestionsEl.style.display = 'grid';
 }
 
 function ensureConsoleUi() {
@@ -2496,6 +2556,9 @@ function ensureConsoleUi() {
     consoleInputEl.style.outline = 'none';
     consoleInputEl.style.fontFamily = 'Consolas, "Segoe UI", monospace';
     consoleInputEl.style.fontSize = '14px';
+    consoleInputEl.addEventListener('input', () => {
+        renderConsoleSuggestions();
+    });
     consoleInputEl.addEventListener('keydown', (event) => {
         event.stopPropagation();
 
@@ -2551,6 +2614,19 @@ function ensureConsoleUi() {
     consoleRootEl.appendChild(topRow);
     consoleRootEl.appendChild(consoleLogEl);
     consoleRootEl.appendChild(consoleInputEl);
+
+    consoleSuggestionsEl = document.createElement('div');
+    consoleSuggestionsEl.style.display = 'none';
+    consoleSuggestionsEl.style.marginTop = '6px';
+    consoleSuggestionsEl.style.maxHeight = '150px';
+    consoleSuggestionsEl.style.overflowY = 'auto';
+    consoleSuggestionsEl.style.gap = '6px';
+    consoleSuggestionsEl.style.padding = '6px';
+    consoleSuggestionsEl.style.border = '1px solid rgba(120, 168, 255, 0.34)';
+    consoleSuggestionsEl.style.borderRadius = '6px';
+    consoleSuggestionsEl.style.background = 'rgba(4, 8, 16, 0.9)';
+    consoleRootEl.appendChild(consoleSuggestionsEl);
+
     document.body.appendChild(consoleRootEl);
 
     updateConsoleModeBadge();
@@ -2566,6 +2642,9 @@ function setConsoleOpen(open) {
     }
     consoleState.open = !!open;
     consoleRootEl.style.display = consoleState.open ? 'flex' : 'none';
+    if (!consoleState.open && consoleSuggestionsEl) {
+        consoleSuggestionsEl.style.display = 'none';
+    }
     updateConsoleModeBadge();
     if (consoleState.open) {
         if (document.pointerLockElement) {
@@ -2575,6 +2654,7 @@ function setConsoleOpen(open) {
             if (!consoleInputEl) return;
             consoleInputEl.focus();
             consoleInputEl.select();
+            renderConsoleSuggestions();
         });
     } else if (consoleInputEl) {
         consoleInputEl.blur();
@@ -2723,7 +2803,8 @@ function runConsoleCommand(input) {
 
     const tokens = tokenizeConsoleInput(trimmed);
     if (tokens.length === 0) return;
-    const name = String(tokens[0] || '').toLowerCase();
+    const rawName = String(tokens[0] || '').toLowerCase();
+    const name = rawName.startsWith('/') ? rawName.slice(1) : rawName;
     const args = tokens.slice(1);
     const command = consoleCommands[name];
 
