@@ -611,6 +611,12 @@ function isDmConnectedForCombatApproval() {
     return occupied > 0;
 }
 
+function notifyPendingDmApproval(kind = 'combat', targetLabel = '') {
+    const scope = String(kind || 'combat').trim().toLowerCase() || 'combat';
+    const suffix = targetLabel ? ` (${targetLabel})` : '';
+    appendConsoleHistory(`Waiting for DM approval for ${scope}${suffix}...`, 'ok');
+}
+
 function requestCombatStartApproval(targetActor) {
     if (!socket || !targetActor) return false;
     const targetId = getCombatActorId(targetActor);
@@ -631,7 +637,9 @@ function requestCombatStartApproval(targetActor) {
         requestId,
         targetId,
     });
-    appendConsoleHistory('Combat request sent to DM for approval', 'ok');
+    const targetLabel = getCombatActorLabel(targetActor);
+    appendConsoleHistory(`Combat request sent to DM for approval (${targetLabel})`, 'ok');
+    notifyPendingDmApproval('combat', targetLabel);
     showFloatingText('Combat request sent to DM', '#9ec9ff', true);
     return true;
 }
@@ -1002,7 +1010,7 @@ function registerSocketHandlers() {
         const targetId = String(packet.targetId || '').trim();
 
         if (status === 'pending') {
-            appendConsoleHistory('Combat request pending DM response...', 'ok');
+            notifyPendingDmApproval('combat', targetId || 'target');
             return;
         }
 
