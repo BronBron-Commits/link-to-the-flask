@@ -7009,7 +7009,8 @@ function getCombatActorId(actor) {
     if (actor === playerState || actor === playerRig) return getLocalCombatActorId();
     if (actor.userData?.actorId) return actor.userData.actorId;
     if (actor.userData?.playerId) return actor.userData.playerId;
-    return actor.userData?.actorId || actor.userData?.name || null;
+    // Do not fall back to display names; combat ids must be stable/network-safe.
+    return null;
 }
 
 function getCombatActorLabel(actor) {

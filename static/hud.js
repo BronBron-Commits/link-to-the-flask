@@ -280,6 +280,14 @@
   // Load on startup (works if a character was already imported previously)
   load();
 
-  // Re-populate when the entry modal finishes an import
-  document.addEventListener('hud:refresh', load);
+  // Re-populate when the entry modal finishes an import.
+  // If the event carries detail.summary (from the import API response),
+  // use it directly instead of a second fetch so the HUD always populates.
+  document.addEventListener('hud:refresh', (e) => {
+    if (e && e.detail && e.detail.summary) {
+      render(e.detail.summary, e.detail.abilities ?? {});
+    } else {
+      load();
+    }
+  });
 })();

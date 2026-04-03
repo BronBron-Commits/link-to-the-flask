@@ -457,6 +457,9 @@ def _build_turn_order(initiator_sid: str | None = None) -> list[dict]:
         for entity_id, entity in entities.items():
             if not _is_enemy_entity(entity):
                 continue
+            # Ignore stale placeholder entities that have no world-space presence.
+            if not isinstance((entity or {}).get("position"), dict):
+                continue
             actor_id = str(entity_id or "").strip()
             if not actor_id:
                 continue
@@ -897,7 +900,12 @@ def _broadcast_combat_state(active: bool, initiator: str, target_id: str | None 
             "state": combat_state,
         }
         if target_id:
-            _ensure_enemy_actor_registered(target_id)
+            entities = world_state.get("entities", {})
+            has_real_target = isinstance(entities, dict) and isinstance(entities.get(target_id), dict)
+            if has_real_target:
+                _ensure_enemy_actor_registered(target_id)
+            else:
+                print(f"[COMBAT] ignoring unknown target_id at start: {target_id}", flush=True)
         socketio.emit(
             "combat-state",
             {

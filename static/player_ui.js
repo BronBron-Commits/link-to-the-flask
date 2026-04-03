@@ -204,7 +204,31 @@ btnPdf.addEventListener('click', async () => {
       });
     }
 
-    document.dispatchEvent(new CustomEvent('hud:refresh'));
+    // Pass the master record directly in the event so the HUD doesn't need
+    // a second HTTP round-trip and always shows freshly parsed data.
+    if (data.master) {
+      const m = data.master;
+      const hp = m.hit_points ?? {};
+      const maxHp = hp.max_hp ?? null;
+      document.dispatchEvent(new CustomEvent('hud:refresh', {
+        detail: {
+          summary: {
+            name:              m.identity?.character_name  ?? null,
+            class_level:       m.identity?.class_level     ?? null,
+            armor_class:       m.core_stats?.armor_class   ?? null,
+            max_hp:            maxHp,
+            current_hp:        maxHp,
+            speed_ft:          m.core_stats?.speed_ft      ?? null,
+            proficiency_bonus: m.core_stats?.proficiency_bonus ?? null,
+            initiative_bonus:  m.core_stats?.initiative_bonus  ?? null,
+          },
+          abilities: m.abilities ?? {},
+        },
+      }));
+    } else {
+      document.dispatchEvent(new CustomEvent('hud:refresh'));
+    }
+
     setTimeout(dismiss, 800);
   } catch (err) {
     setStatus(`Error: ${err}`, true);
