@@ -2592,6 +2592,9 @@ function isTextInputTarget(target) {
 
 function isConsoleToggleKey(event) {
     if (event.repeat) return false;
+    // Reliable fallback shortcuts across keyboard layouts.
+    if (event.code === 'F2') return true;
+    if (event.code === 'KeyK' && event.ctrlKey && event.shiftKey) return true;
     if (isGodModeActive() && event.code === 'Tab') return true;
     if (event.code === 'Backquote' || event.code === 'Slash' || event.code === 'NumpadDivide') return true;
     return event.key === '`' || event.key === '/';
@@ -3493,6 +3496,10 @@ function showRuntimeModeSelectionOverlay() {
 
 function initializeCommandConsole() {
     registerDefaultConsoleCommands();
+    // Debug escape hatch for cases where browser/input layers swallow hotkeys.
+    window.__openCommandConsole = () => setConsoleOpen(true);
+    window.__closeCommandConsole = () => setConsoleOpen(false);
+    window.__toggleCommandConsole = () => toggleConsoleOpen();
     window.addEventListener('keydown', handleConsoleGlobalKeydown, true);
     modeManager.onChange((nextMode) => {
         updateConsoleModeBadge();
