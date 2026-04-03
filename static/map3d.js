@@ -9078,6 +9078,27 @@ function getActiveInputActor() {
     return getControlledActor() || playerState;
 }
 
+function attachCameraToPlayerRigView() {
+    if (!camera || !playerRig) return;
+    if (camera.parent !== playerRig) {
+        playerRig.add(camera);
+    }
+    camera.position.set(0, FREE_CAMERA_HEIGHT, 4.8);
+    camera.rotation.set(pitch, 0, 0);
+}
+
+function attachCameraToPossessedActorView(actor) {
+    if (!camera || !actor || actor === playerState || actor === playerRig) {
+        attachCameraToPlayerRigView();
+        return;
+    }
+    if (camera.parent !== actor) {
+        actor.add(camera);
+    }
+    camera.position.set(0, FREE_CAMERA_HEIGHT, 4.8);
+    camera.rotation.set(pitch, 0, 0);
+}
+
 function focusCameraOnPossessedActor(actor) {
     if (!actor) return;
     const focusTarget = actor === playerState ? playerRig : actor;
@@ -9092,6 +9113,7 @@ function possessActor(actor) {
     }
     controlledActor = resolved;
     controlledActorId = getCombatActorId(resolved);
+    attachCameraToPossessedActorView(resolved);
     activeCamera = camera;
     focusCameraOnPossessedActor(resolved);
     showFloatingText(`POSSESSING ${getCombatActorLabel(resolved).toUpperCase()}`, '#ffcf85', true, {
@@ -9106,6 +9128,7 @@ function releasePossession() {
     controlledActor = null;
     controlledActorId = null;
     if (modeManager.current === MODE.DM) {
+        attachCameraToPlayerRigView();
         activeCamera = dmCamera || camera;
     }
     updatePossessionStatusUI();
@@ -18949,8 +18972,12 @@ function updateFlyControls(delta) {
     if (moveRight) direction.x += 1;
     direction.normalize();
 
-    // Keep the player facing in the heading controlled by mouse/turn input.
-    if (playerRig) {
+    // Keep the active controlled body facing in the heading controlled by mouse/turn input.
+    const controlled = getControlledActor();
+    if (modeManager.current === MODE.DM && controlled && controlled !== playerState) {
+        controlled.rotation.y = yaw;
+        if (playerRig) playerRig.rotation.y = yaw;
+    } else if (playerRig) {
         playerRig.rotation.y = yaw;
     }
 
@@ -19056,9 +19083,7 @@ function updateFlyControls(delta) {
         const actor = activeInputActor;
         actor.position.x += moveVectorWorld.x * currentSpeed * fixedDelta;
         actor.position.z += moveVectorWorld.z * currentSpeed * fixedDelta;
-        if (moveVectorWorld.lengthSq() > 0.0001) {
-            actor.lookAt(playerState.position.x, actor.position.y, playerState.position.z);
-        }
+        actor.rotation.y = yaw;
     }
 
     // Resolve collisions using BVH or fall back to Box3
