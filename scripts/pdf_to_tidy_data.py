@@ -136,20 +136,72 @@ def _get_form_value(form_values: dict[str, str], *key_fragments: str) -> str | N
     return None
 
 
+_TEMPLATE_LABEL_TOKENS = {
+    "SPECIES",
+    "CLASS",
+    "CLASS & LEVEL",
+    "PLAYER NAME",
+    "CHARACTER NAME",
+    "EXPERIENCE POINTS",
+    "BACKGROUND",
+    "HIT POINTS",
+    "ARMOR CLASS",
+    "SPEED",
+    "PROFICIENCY BONUS",
+    "ABILITY SAVE DC",
+    "PASSIVE PERCEPTION",
+    "PASSIVE INSIGHT",
+    "PASSIVE INVESTIGATION",
+    "SPELLCASTING",
+    "SPELL SAVE DC",
+    "SPELL ATTACK",
+    "PAGE REF",
+    "SOURCE",
+    "PREP SPELL NAME",
+    "NAME",
+    "QTY",
+    "WEIGHT",
+    "ATTUNED MAGIC ITEMS",
+}
+
+
+def _looks_like_template_label(value: str | None) -> bool:
+    if value is None:
+        return True
+    text = str(value).strip()
+    if not text:
+        return True
+
+    upper = text.upper()
+    if upper in _TEMPLATE_LABEL_TOKENS:
+        return True
+
+    # Composite label lines from template-only extraction, e.g.
+    # "CLASS & LEVEL PLAYER NAME" or "CHARACTER NAME EXPERIENCE POINTSBACKGROUND".
+    token_hits = sum(1 for token in _TEMPLATE_LABEL_TOKENS if token in upper)
+    if token_hits >= 2:
+        return True
+
+    if re.fullmatch(r"[A-Z0-9\s&/'\-\.]+", text) and token_hits >= 1:
+        return True
+
+    return False
+
+
 def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: dict[str, str]) -> None:
     """Patch missing parsed values using PDF AcroForm/widget data when present."""
     if not form_values:
         return
 
-    if not character.get("name"):
+    if _looks_like_template_label(character.get("name")):
         character["name"] = _get_form_value(form_values, "character", "name") or character.get("name")
-    if not character.get("player_name"):
+    if _looks_like_template_label(character.get("player_name")):
         character["player_name"] = _get_form_value(form_values, "player", "name") or character.get("player_name")
-    if not character.get("class_level"):
+    if _looks_like_template_label(character.get("class_level")):
         character["class_level"] = _get_form_value(form_values, "class") or character.get("class_level")
-    if not character.get("species"):
+    if _looks_like_template_label(character.get("species")):
         character["species"] = _get_form_value(form_values, "species") or _get_form_value(form_values, "race") or character.get("species")
-    if not character.get("background"):
+    if _looks_like_template_label(character.get("background")):
         character["background"] = _get_form_value(form_values, "background") or character.get("background")
 
     if character.get("armor_class") is None:
@@ -331,6 +383,8 @@ def clean_section_lines(section_lines: list[str], identity: dict[str, str | None
         if line in identity_values:
             continue
         if re.search(r"Wizards of the Coast", line, flags=re.IGNORECASE):
+            continue
+        if _looks_like_template_label(line):
             continue
         if re.fullmatch(r"\(Milestone\)", line):
             continue
@@ -868,6 +922,14 @@ def parse_character_tables(pdf_path: Path) -> dict:
         abilities = parse_ability_scores(full_text, character_id)
 
     apply_form_fallbacks(character, abilities, form_values)
+
+    # Recompute level after fallbacks in case class_level was repaired from form fields.
+    if character.get("level") is None:
+        character["level"] = to_int(find_first((r"\b(\d{1,2})\b",), str(character.get("class_level") or "")))
+
+    # Keep HP coherent when one side is present.
+    if character.get("hit_points") is not None and character.get("current_hp") is None:
+        character["current_hp"] = character.get("hit_points")
 
     saves_and_skills = parse_saves_and_skills(first_page_lines, abilities)
     inventory_roleplay = parse_inventory_summary_and_roleplay(pages)
