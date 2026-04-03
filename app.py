@@ -8,6 +8,7 @@ from uuid import uuid4
 from time import perf_counter
 from threading import Lock
 import os
+import time as _time
 import random as _random
 
 from flask import Flask, request, jsonify, render_template, send_file, send_from_directory, Response
@@ -1362,6 +1363,9 @@ def _handle_enemy_turn(enemy_actor: dict) -> dict:
         print(f"[ENEMY] no valid target for {actor_id}", flush=True)
         return {"attacker": actor_id, "type": "none", "reason": "no-target"}
 
+    start_time_ms = int(_time.time() * 1000)
+    timeline_id = f"enemy-turn-{actor_id}-{start_time_ms}"
+
     target_player = players[target_sid]
     target_actor_id = str(target_player.get("actorId") or "")
     player_pos = target_player.get("position") if isinstance(target_player.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
@@ -1408,6 +1412,21 @@ def _handle_enemy_turn(enemy_actor: dict) -> dict:
     rdz = pz - move_z
     remaining_dist = (rdx * rdx + rdz * rdz) ** 0.5
     if remaining_dist >= 6.0:
+        socketio.emit(
+            "combat-action-record",
+            {
+                "record": {
+                    "type": "enemy-move",
+                    "actorId": actor_id,
+                    "targetId": target_actor_id or None,
+                    "attackType": "melee",
+                    "result": "MOVE",
+                    "damage": 0,
+                },
+                "startTimeMs": start_time_ms,
+                "timelineId": timeline_id,
+            },
+        )
         print(f"[ENEMY TURN END] {actor_id} (out of range)", flush=True)
         return {
             "attacker": actor_id,
@@ -1443,6 +1462,22 @@ def _handle_enemy_turn(enemy_actor: dict) -> dict:
         "hit": is_hit,
         "damage": damage,
     }
+
+    socketio.emit(
+        "combat-action-record",
+        {
+            "record": {
+                "type": "enemy-attack",
+                "actorId": actor_id,
+                "targetId": target_actor_id or None,
+                "attackType": "melee",
+                "result": "HIT" if is_hit else "MISS",
+                "damage": damage,
+            },
+            "startTimeMs": start_time_ms,
+            "timelineId": timeline_id,
+        },
+    )
     socketio.emit("combat-action-result", event)
     gevent.sleep(0.7)
     print(f"[ENEMY TURN END] {actor_id}", flush=True)
