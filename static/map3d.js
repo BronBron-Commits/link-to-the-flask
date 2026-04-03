@@ -1181,11 +1181,16 @@ function registerSocketHandlers() {
         const targetAC = Number(packet.targetAC) || 0;
 
         if (actorType === 'enemy') {
-            const resultText = isHit
-                ? `${attacker} hit${targetId ? ' ' + targetId : ''} for ${damage} dmg (roll ${hitRoll}+${packet.attackBonus||0}=${toHit} vs AC ${targetAC})`
-                : `${attacker} missed${targetId ? ' ' + targetId : ''} (roll ${hitRoll}+${packet.attackBonus||0}=${toHit} vs AC ${targetAC})`;
-            logCombatEvent(resultText, isHit ? 'miss' : 'miss');
-            showFloatingText(isHit ? `${attacker}: ${damage} DMG` : `${attacker}: MISS`, isHit ? '#ff8a8a' : '#aaa', true);
+            const atkBonus = Number(packet.attackBonus) || 0;
+            const rollDetail = `(${hitRoll}+${atkBonus}=${toHit} vs AC ${targetAC})`;
+            const logText = isHit
+                ? `${attacker} hits you for ${damage} dmg ${rollDetail}`
+                : `${attacker} miss ${rollDetail}`;
+            const floatText = isHit
+                ? `${attacker} hits you — ${damage} DMG`
+                : `${attacker} miss`;
+            logCombatEvent(logText, isHit ? 'miss' : 'hit');
+            showFloatingText(floatText, isHit ? '#ff8a8a' : '#8dd694', true);
         }
     });
 
@@ -11673,7 +11678,7 @@ function dispatchCombatTurnActor(entry) {
         // Still show turn feedback so the player knows the enemy is acting.
         const enemyLabel = entry.name || entry.id || 'Enemy';
         addDmEvent(`TURN START: ${enemyLabel}`, 'system');
-        showFloatingText(`${enemyLabel} Turn`, '#ff8a8a');
+        showFloatingText(`Enemy Turn — ${enemyLabel}`, '#ff8a8a');
         logCombatEvent(`${enemyLabel} turn`, 'system');
         setCombatPhase('TRANSITION');
         setCombatLock(true);
@@ -11691,7 +11696,7 @@ function dispatchCombatTurnActor(entry) {
     clearCombatMoveTiles();
     showActionUI(false);
     addDmEvent(`TURN START: ${entry.name || 'Enemy'}`, 'system');
-    showFloatingText(`${entry.name || 'Enemy'} Turn`, '#ff8a8a');
+    showFloatingText(`Enemy Turn — ${entry.name || 'Enemy'}`, '#ff8a8a');
     playCombatSfxCue('turn-enemy');
     logCombatEvent(`${entry.name || 'Enemy'} turn`, 'system');
     // Server resolves enemy actions and will broadcast combat-action-result/combat-turn.
