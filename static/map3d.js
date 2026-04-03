@@ -13160,7 +13160,7 @@ function executeAttack(target) {
                     type: 'attack',
                     attackType: 'melee',
                     actorId: getLocalCombatActorId(),
-                    targetId: target?.userData?.name || null,
+                    targetId: getCombatActorId(target),
                     resolution,
                     result: resolution.hit ? 'hit' : 'miss',
                     damage: resolution.totalDamage,
@@ -13391,7 +13391,7 @@ function rangedAttack(target) {
                     type: 'attack',
                     attackType: 'ranged',
                     actorId: getLocalCombatActorId(),
-                    targetId: target?.userData?.name || null,
+                    targetId: getCombatActorId(target),
                     resolution,
                     result: resolution.hit ? 'hit' : 'miss',
                     damage: resolution.totalDamage,
@@ -14901,7 +14901,11 @@ function applyDmCommandFromServer(packet) {
         const z = Number(pos.z);
         const name = String(payload.name || 'Training Dummy');
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
-        spawnTrainingDummy(x, y, z, name);
+        const dummy = spawnTrainingDummy(x, y, z, name);
+        const actorId = String(payload.actorId || '').trim();
+        if (dummy && dummy.userData && actorId) {
+            dummy.userData.actorId = actorId;
+        }
         break;
     }
     case 'spawn-entity': {
@@ -14920,6 +14924,10 @@ function applyDmCommandFromServer(packet) {
         }
         console.log(`[SPAWN] Spawning ${type} at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
         const result = spawnEntityByType(x, y, z, type);
+        const actorId = String(payload.actorId || '').trim();
+        if (result && result.userData && actorId) {
+            result.userData.actorId = actorId;
+        }
         console.log(`[SPAWN] Spawn result:`, result ? 'success' : 'failed');
         break;
     }

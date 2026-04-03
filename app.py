@@ -302,6 +302,42 @@ def _safe_float(value, default: float = 0.0) -> float:
         return default
 
 
+def _register_spawned_entity(entity_type: str, position: dict, name: str | None = None) -> str:
+    normalized_type = str(entity_type or "training-dummy").strip().lower()
+    if normalized_type not in {"training-dummy", "player-dummy", "elite-dummy"}:
+        normalized_type = "training-dummy"
+
+    actor_id = uuid4().hex
+    display_name = str(name or "").strip()
+    if not display_name:
+        if normalized_type == "player-dummy":
+            display_name = "Dummy Player"
+        elif normalized_type == "elite-dummy":
+            display_name = "Elite Dummy"
+        else:
+            display_name = "Training Dummy"
+
+    px = _safe_float((position or {}).get("x", 0.0), 0.0)
+    py = _safe_float((position or {}).get("y", 0.0), 0.0)
+    pz = _safe_float((position or {}).get("z", 0.0), 0.0)
+
+    entities = world_state.setdefault("entities", {})
+    if not isinstance(entities, dict):
+        world_state["entities"] = {}
+        entities = world_state["entities"]
+
+    entities[actor_id] = {
+        "id": actor_id,
+        "type": normalized_type,
+        "name": display_name,
+        "position": {"x": px, "y": py, "z": pz},
+        "attackBonus": 4,
+        "damageRoll": 6,
+        "damageBonus": 0,
+    }
+    return actor_id
+
+
 def _sanitize_dm_command(raw_command: dict | None) -> dict | None:
     if not isinstance(raw_command, dict):
         return None
@@ -819,6 +855,22 @@ def socket_dm_command(data):
             emit("dm-command-denied", {"reason": "invalid-command"})
             return
 
+        command_type = str(command.get("type") or "").strip().lower()
+        payload = command.get("payload") if isinstance(command.get("payload"), dict) else {}
+
+        if command_type in {"spawn-entity", "spawn-training-dummy"}:
+            entity_type = str(payload.get("entityType") or "training-dummy").strip().lower()
+            if command_type == "spawn-training-dummy":
+                entity_type = "training-dummy"
+            actor_id = _register_spawned_entity(
+                entity_type=entity_type,
+                position=payload.get("position") if isinstance(payload.get("position"), dict) else {},
+                name=payload.get("name"),
+            )
+            payload["actorId"] = actor_id
+            if world_state.get("combat", {}).get("state", {}).get("inCombat"):
+                _sync_enemy_entries_into_combat_order()
+
         print(f"[DM-COMMAND] sid={sid[:6]} type={command.get('type')}", flush=True)
         emit(
             "dm-command",
@@ -829,6 +881,8 @@ def socket_dm_command(data):
             },
             broadcast=True,
         )
+        if command_type in {"spawn-entity", "spawn-training-dummy"}:
+            _broadcast_world_update(include_scene=False)
     except Exception as e:
         print(f"[ERROR] socket_dm_command exception: {e}", flush=True)
         import traceback
@@ -1667,7 +1721,11 @@ def socket_combat_action(data):
         if not target_id:
             emit("combat-action-denied", {"reason": "missing-target"})
             return
-        _ensure_enemy_actor_registered(target_id)
+        entities = world_state.get("entities", {})
+        has_real_target = isinstance(entities, dict) and isinstance(entities.get(target_id), dict)
+        if not has_real_target:
+            emit("combat-action-denied", {"reason": "unknown-target"})
+            return
         hit_roll = _random.randint(1, 20)
         damage_roll = _random.randint(1, 8)
         result.update({"targetId": target_id, "hitRoll": hit_roll, "damage": damage_roll})
