@@ -138,8 +138,12 @@ def import_pdf_api():
     pdf_file.save(source_path)
     gs.CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
     tables = parse_character_tables(source_path)
-    write_outputs(gs.CONTRACTS_DIR, tables)
+    print("[PDF PARSE OUTPUT]", tables, flush=True)
+
     master = build_master_character_record(tables)
+    print("[MASTER RECORD]", master, flush=True)
+
+    write_outputs(gs.CONTRACTS_DIR, tables)
     return jsonify(ok=True, source_file=filename, character=tables.get("character", {}), master=master)
 
 
