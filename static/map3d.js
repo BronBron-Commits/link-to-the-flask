@@ -2174,7 +2174,8 @@ function nukeUiForDm() {
         if (!el) return;
         const isDmRoot = dmRootUI && el === dmRootUI;
         const isCanvas = el.tagName === 'CANVAS' || el.id === 'canvas';
-        if (isDmRoot || isCanvas) return;
+        const isConsoleRoot = el.id === 'console-root' || (consoleRootEl && el === consoleRootEl);
+        if (isDmRoot || isCanvas || isConsoleRoot) return;
         detachLegacyUiNode(el);
     });
 }
@@ -2559,6 +2560,10 @@ function ensureConsoleUi() {
 function setConsoleOpen(open) {
     ensureConsoleUi();
     if (!consoleRootEl) return;
+    if (!consoleRootEl.parentNode && document.body) {
+        document.body.appendChild(consoleRootEl);
+        consoleRootEl.__dmDetachedLegacy = false;
+    }
     consoleState.open = !!open;
     consoleRootEl.style.display = consoleState.open ? 'flex' : 'none';
     updateConsoleModeBadge();
