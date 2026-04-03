@@ -10,7 +10,7 @@ from threading import Lock
 import os
 import random as _random
 
-from flask import Flask, request, jsonify, render_template, send_file, send_from_directory
+from flask import Flask, request, jsonify, render_template, send_file, send_from_directory, Response
 from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
 
@@ -1532,6 +1532,14 @@ def socket_request_combat_state(data=None):
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/favicon.ico")
+def favicon():
+    icon_path = STATIC_DIR / "favicon.ico"
+    if icon_path.exists():
+        return send_file(icon_path, mimetype="image/x-icon")
+    return Response(status=204)
 
 
 @app.route("/map3d")
