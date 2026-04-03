@@ -1353,26 +1353,83 @@ _ENEMY_TURN_DISPLAY_DELAY_SEC = 1.5
 
 
 def _handle_enemy_turn(enemy_actor: dict) -> dict:
-    """Resolve one server-authoritative enemy turn action."""
+    """Resolve one server-authoritative enemy turn with visible movement and attack."""
     actor_id = str((enemy_actor or {}).get("id") or "enemy")
-    print(f"[ENEMY] Acting: {actor_id}", flush=True)
+    print(f"[ENEMY TURN START] {actor_id}", flush=True)
 
     target_sid = _choose_enemy_target_sid(enemy_actor or {})
-    target_actor_id = str(players.get(target_sid, {}).get("actorId") or "") if target_sid else ""
+    if not target_sid or not isinstance(players.get(target_sid), dict):
+        print(f"[ENEMY] no valid target for {actor_id}", flush=True)
+        return {"attacker": actor_id, "type": "none", "reason": "no-target"}
 
+    target_player = players[target_sid]
+    target_actor_id = str(target_player.get("actorId") or "")
+    player_pos = target_player.get("position") if isinstance(target_player.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
+
+    entities = world_state.setdefault("entities", {})
+    enemy_entity = entities.get(actor_id)
+    if not isinstance(enemy_entity, dict):
+        enemy_entity = {"id": actor_id, "type": "enemy", "position": {"x": 0.0, "y": 0.0, "z": 0.0}}
+        entities[actor_id] = enemy_entity
+
+    enemy_pos = enemy_entity.get("position") if isinstance(enemy_entity.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
+    ex = _safe_float(enemy_pos.get("x", 0.0), 0.0)
+    ey = _safe_float(enemy_pos.get("y", 0.0), 0.0)
+    ez = _safe_float(enemy_pos.get("z", 0.0), 0.0)
+    px = _safe_float(player_pos.get("x", 0.0), 0.0)
+    pz = _safe_float(player_pos.get("z", 0.0), 0.0)
+
+    # Step 1: move toward player.
+    dx = px - ex
+    dz = pz - ez
+    dist = max(0.001, (dx * dx + dz * dz) ** 0.5)
+    move_speed = 5.0
+    step = min(move_speed, dist)
+    move_x = ex + (dx / dist) * step
+    move_z = ez + (dz / dist) * step
+
+    enemy_entity["position"] = {
+        "x": move_x,
+        "y": ey,
+        "z": move_z,
+    }
+
+    socketio.emit(
+        "entity-move",
+        {
+            "id": actor_id,
+            "position": enemy_entity["position"],
+        },
+    )
+    gevent.sleep(0.5)
+
+    # Step 2: attack only if in melee range after moving.
+    rdx = px - move_x
+    rdz = pz - move_z
+    remaining_dist = (rdx * rdx + rdz * rdz) ** 0.5
+    if remaining_dist >= 6.0:
+        print(f"[ENEMY TURN END] {actor_id} (out of range)", flush=True)
+        return {
+            "attacker": actor_id,
+            "actorType": "enemy",
+            "type": "move",
+            "targetId": target_actor_id or None,
+            "hit": False,
+            "damage": 0,
+        }
+
+    print(f"[ENEMY] attacking {target_sid}", flush=True)
     attack_bonus, damage_die, damage_bonus = _resolve_enemy_attack_stats(enemy_actor or {})
     hit_roll = _random.randint(1, 20)
     total_to_hit = hit_roll + attack_bonus
-
-    target_ac = int(_safe_float(players.get(target_sid, {}).get("ac", 10), 10)) if target_sid else 10
+    target_ac = int(_safe_float(target_player.get("ac", 10), 10))
     is_hit = hit_roll == 20 or (hit_roll != 1 and total_to_hit >= target_ac)
 
     damage = 0
     if is_hit:
         damage = max(0, _random.randint(1, damage_die) + damage_bonus)
-        if target_sid and isinstance(players.get(target_sid), dict):
-            current_hp = _safe_float(players[target_sid].get("hp", 100.0), 100.0)
-            players[target_sid]["hp"] = max(0.0, current_hp - float(damage))
+        current_hp = _safe_float(target_player.get("hp", 100.0), 100.0)
+        target_player["hp"] = max(0.0, current_hp - float(damage))
 
     event = {
         "attacker": actor_id,
@@ -1386,9 +1443,9 @@ def _handle_enemy_turn(enemy_actor: dict) -> dict:
         "hit": is_hit,
         "damage": damage,
     }
-
     socketio.emit("combat-action-result", event)
-    gevent.sleep(_ENEMY_TURN_DISPLAY_DELAY_SEC)
+    gevent.sleep(0.7)
+    print(f"[ENEMY TURN END] {actor_id}", flush=True)
     return event
 
 
@@ -1443,6 +1500,8 @@ def socket_end_turn(data=None):
         if actor_type == "enemy" and role not in {"dm", "dev"}:
             print(f"[END-TURN] Is enemy turn, handling enemy action")
             with turn_lock:
+                # Ensure clients see enemy as active actor before action resolves.
+                socketio.emit("combat-turn", _build_combat_turn_payload())
                 _handle_enemy_turn(current_actor)
                 turn_data = _advance_server_turn()
             if turn_data is None:
