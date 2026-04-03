@@ -1425,6 +1425,7 @@ let dmZoneToggleRightEl = null;
 let dmZoneToggleTopEl = null;
 let dmZoneToggleBottomEl = null;
 let dmZoneToggleCenterEl = null;
+const DM_SHOW_TIMELINE = false;
 const dmZoneCollapsed = {
     top: false,
     left: false,
@@ -2198,12 +2199,6 @@ function suppressDiceUiForDm(suppress) {
 
 function hardSuppressPlayerFacingUiForDm() {
     // DM command center is the only active UI authority in DM mode.
-    if (consoleRootEl) {
-        consoleState.open = false;
-        consoleRootEl.style.display = 'none';
-        detachLegacyUiNode(consoleRootEl);
-    }
-
     const detachIds = [
         'combat-log',
         'action-bar',
@@ -2452,7 +2447,7 @@ function ensureConsoleUi() {
     consoleRootEl.style.background = 'rgba(6, 10, 20, 0.9)';
     consoleRootEl.style.backdropFilter = 'blur(3px)';
     consoleRootEl.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.5)';
-    consoleRootEl.style.zIndex = '3200';
+    consoleRootEl.style.zIndex = '131520';
     consoleRootEl.addEventListener('mousedown', (event) => event.stopPropagation());
 
     const topRow = document.createElement('div');
@@ -3295,6 +3290,11 @@ function applyRuntimeMode(mode) {
         hardSuppressPlayerFacingUiForDm();
         suppressDiceUiForDm(true);
         setCombatUiSuppressed(true);
+        if (consoleRootEl) {
+            consoleRootEl.style.left = '14px';
+            consoleRootEl.style.bottom = '14px';
+        }
+        setConsoleOpen(true);
     } else {
         suppressDiceUiForDm(false);
         restoreDetachedLegacyUiNodes();
@@ -7960,7 +7960,7 @@ function ensureDmControlPanel() {
         timelineWrap.id = 'dm-timeline-panel';
         timelineWrap.style.width = '100%';
         timelineWrap.style.height = '100%';
-        timelineWrap.style.display = 'flex';
+        timelineWrap.style.display = DM_SHOW_TIMELINE ? 'flex' : 'none';
         timelineWrap.style.alignItems = 'center';
         timelineWrap.style.gap = '10px';
         timelineWrap.style.padding = '8px 12px';
@@ -8037,7 +8037,7 @@ function ensureDmControlPanel() {
         timelineWrap.appendChild(playbackBar);
         timelineWrap.appendChild(branchState);
         timelineWrap.appendChild(authoritySelect);
-        if (dmBottomBarEl) dmBottomBarEl.appendChild(timelineWrap);
+        if (dmBottomBarEl && DM_SHOW_TIMELINE) dmBottomBarEl.appendChild(timelineWrap);
         dmTimelineEl = timelineWrap;
         dmTimelineRangeEl = timelineRange;
         dmTimelineLabelEl = timelineLabel;
@@ -8136,7 +8136,7 @@ function ensureDmControlPanel() {
     dmTimelineEl.style.width = '100%';
     dmTimelineEl.style.height = '100%';
     dmTimelineEl.style.maxHeight = '82px';
-    dmTimelineEl.style.display = 'flex';
+    dmTimelineEl.style.display = DM_SHOW_TIMELINE ? 'flex' : 'none';
     dmTimelineEl.style.flexDirection = 'row';
     dmTimelineEl.style.alignItems = 'center';
     dmTimelineEl.style.gap = '8px';
@@ -8192,7 +8192,7 @@ function ensureDmControlPanel() {
     dmTimelineEl.appendChild(dmTimelineTitleEl);
     dmTimelineEl.appendChild(dmTimelineRangeEl);
     dmTimelineEl.appendChild(dmTimelineLabelEl);
-    if (dmBottomBarEl) dmBottomBarEl.appendChild(dmTimelineEl);
+    if (dmBottomBarEl && DM_SHOW_TIMELINE) dmBottomBarEl.appendChild(dmTimelineEl);
 
     const controls = document.createElement('div');
     controls.style.position = 'relative';
@@ -13941,6 +13941,11 @@ async function scrubDmTimelineToIndex(index) {
 
 function updateDmTimelineUI() {
     if (!dmTimelineRangeEl || !dmTimelineLabelEl) return;
+
+    if (!DM_SHOW_TIMELINE) {
+        if (dmTimelineEl) dmTimelineEl.style.display = 'none';
+        return;
+    }
 
     if (modeManager.current !== MODE.DM) {
         if (dmTimelineEl) dmTimelineEl.style.display = 'none';
