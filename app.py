@@ -1,7 +1,13 @@
+from gevent import monkey
+monkey.patch_all()
+
 from pathlib import Path
 from copy import deepcopy
 from uuid import uuid4
 from time import perf_counter
+from threading import Lock
+import os
+import random as _random
 
 from flask import Flask, request, jsonify, render_template, send_file, send_from_directory
 from flask_socketio import SocketIO, emit
@@ -10,7 +16,8 @@ from werkzeug.utils import secure_filename
 from scripts.pdf_to_tidy_data import parse_character_tables, write_outputs
 
 app = Flask(__name__)
-socketio = SocketIO(app, cors_allowed_origins='*', async_mode='threading')
+socketio = SocketIO(app, cors_allowed_origins='*', async_mode='gevent', 
+                   ping_timeout=60, ping_interval=25)
 
 LOBBY_ROLE_CAPACITY: dict[str, int] = {
     "player": 4,
@@ -22,11 +29,23 @@ CONTRACTS_DIR = Path("data") / "character_tidy"
 STATIC_DIR = Path("static")
 UPLOADS_DIR = Path("data") / "uploads"
 CHARACTER_MODELS_DIR = STATIC_DIR / "user_models"
+SERVER_BUILD_TAG = "combat-debug-2026-04-02b"
+
+
+def _resolve_training_dummy_fallback_model_url() -> str:
+    return "/static/untitled.glb"
+
+
+TRAINING_DUMMY_FALLBACK_MODEL_URL = _resolve_training_dummy_fallback_model_url()
 
 players: dict[str, dict] = {}
 client_roles: dict[str, str] = {}
+client_resume_keys: dict[str, str] = {}
 player_update_last_seen: dict[str, float] = {}
 PLAYER_UPDATE_MIN_INTERVAL_SEC = 1.0 / 20.0  # 20Hz cap per client
+RESUME_SESSION_TTL_SEC = 300.0
+turn_lock = Lock()
+resume_sessions: dict[str, dict] = {}
 game_session_state: str = "in_game"
 player_slot_owner: list[str | None] = [None] * int(LOBBY_ROLE_CAPACITY.get("player", 4))
 pending_combat_start_requests: dict[str, dict] = {}
@@ -210,6 +229,65 @@ def _broadcast_lobby_state():
     socketio.emit("lobby-state", _build_lobby_state())
 
 
+def _sanitize_resume_key(value: str | None) -> str | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    if len(raw) > 96:
+        raw = raw[:96]
+    allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+    cleaned = "".join(ch for ch in raw if ch in allowed)
+    return cleaned or None
+
+
+def _extract_resume_key(connect_payload: dict | None = None) -> str | None:
+    if isinstance(connect_payload, dict):
+        from_payload = _sanitize_resume_key(connect_payload.get("resumeKey"))
+        if from_payload:
+            return from_payload
+    return _sanitize_resume_key(request.args.get("resumeKey"))
+
+
+def _cleanup_resume_sessions(now: float | None = None):
+    current = now if now is not None else perf_counter()
+    expired: list[str] = []
+    for key, session in resume_sessions.items():
+        expires_at = float(session.get("expiresAt", 0.0))
+        if expires_at <= current:
+            expired.append(key)
+    for key in expired:
+        resume_sessions.pop(key, None)
+
+
+def _save_resume_snapshot_for_sid(sid: str, now: float | None = None):
+    resume_key = client_resume_keys.get(sid)
+    if not resume_key:
+        return
+
+    player_data = players.get(sid)
+    if not isinstance(player_data, dict):
+        return
+
+    current = now if now is not None else perf_counter()
+    role = _normalize_role(client_roles.get(sid, player_data.get("role", "player")))
+    slot_index = _get_player_slot_index(sid)
+
+    snapshot = {
+        "sid": sid,
+        "role": role,
+        "slotIndex": slot_index,
+        "actorId": player_data.get("actorId"),
+        "isAuthoritative": bool(player_data.get("isAuthoritative", False)),
+        "position": deepcopy(player_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})),
+        "rotation": deepcopy(player_data.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})),
+        "avatar": deepcopy(player_data.get("avatar")) if isinstance(player_data.get("avatar"), dict) else None,
+        "movementPreview": deepcopy(player_data.get("movementPreview")) if isinstance(player_data.get("movementPreview"), dict) else None,
+        "expiresAt": current + RESUME_SESSION_TTL_SEC,
+        "lastSeen": current,
+    }
+    resume_sessions[resume_key] = snapshot
+
+
 def _safe_float(value, default: float = 0.0) -> float:
     try:
         return float(value)
@@ -287,6 +365,7 @@ def _sanitize_dm_command(raw_command: dict | None) -> dict | None:
 
 def _build_world_payload(include_scene: bool = True) -> dict:
     payload = {
+        "serverBuild": SERVER_BUILD_TAG,
         "players": deepcopy(players),
         "entities": deepcopy(world_state.get("entities", {})),
         "mode": str(world_state.get("mode", "exploration")),
@@ -312,11 +391,176 @@ def _broadcast_world_update(include_scene: bool = False):
     socketio.emit("world-update", _build_world_payload(include_scene=include_scene))
 
 
+def _is_enemy_entity(entity: dict) -> bool:
+    if not isinstance(entity, dict):
+        return False
+    entity_type = str(entity.get("type") or entity.get("entityType") or "").strip().lower()
+    return entity_type in {"enemy", "training-dummy", "player-dummy", "elite-dummy"}
+
+
+def _apply_training_dummy_avatar_fallbacks(entities: dict) -> dict:
+    if not isinstance(entities, dict):
+        return {}
+
+    for entity in entities.values():
+        if not isinstance(entity, dict):
+            continue
+
+        entity_type = str(entity.get("type") or entity.get("entityType") or "").strip().lower()
+        if entity_type != "training-dummy":
+            continue
+
+        avatar = entity.get("avatar") if isinstance(entity.get("avatar"), dict) else {}
+        model_url = str(avatar.get("modelUrl") or entity.get("modelUrl") or "").strip()
+        if not model_url:
+            avatar["modelUrl"] = TRAINING_DUMMY_FALLBACK_MODEL_URL
+            entity["modelUrl"] = TRAINING_DUMMY_FALLBACK_MODEL_URL
+            entity["avatar"] = avatar
+
+    return entities
+
+
+def _build_turn_order(initiator_sid: str | None = None) -> list[dict]:
+    order: list[dict] = []
+
+    for sid, player_entry in players.items():
+        if not isinstance(player_entry, dict):
+            continue
+        if _normalize_role(player_entry.get("role")) != "player":
+            continue
+        actor_id = str(player_entry.get("actorId") or "").strip()
+        if not actor_id:
+            continue
+        order.append({
+            "id": actor_id,
+            "type": "player",
+            "ownerSid": sid,
+            "name": str(player_entry.get("name") or actor_id),
+        })
+
+    if initiator_sid:
+        for idx, entry in enumerate(order):
+            if entry.get("ownerSid") == initiator_sid:
+                if idx > 0:
+                    order.insert(0, order.pop(idx))
+                break
+
+    entities = world_state.get("entities", {})
+    if isinstance(entities, dict):
+        for entity_id, entity in entities.items():
+            if not _is_enemy_entity(entity):
+                continue
+            actor_id = str(entity_id or "").strip()
+            if not actor_id:
+                continue
+            order.append({
+                "id": actor_id,
+                "type": "enemy",
+                "name": str((entity or {}).get("name") or actor_id),
+            })
+
+    return order
+
+
+def _is_players_turn(sid: str) -> bool:
+    """Check whether the active turn belongs to the player identified by sid.
+
+    Validates by actorId (slot-stable) rather than ownerSid (connection-volatile)
+    so that brief disconnects and reconnects do not invalidate turn ownership.
+    """
+    combat = world_state.get("combat", {})
+    order = combat.get("order") or []
+    turn = combat.get("turn", 0)
+    turn_index = int(turn) if turn is not None else 0
+
+    if not order or not (0 <= turn_index < len(order)):
+        return False
+
+    current = order[turn_index]
+    if not isinstance(current, dict):
+        return False
+    if current.get("type") != "player":
+        return False
+
+    # Primary: match by actorId (slot-based, survives reconnect)
+    actor_id = str(players.get(sid, {}).get("actorId") or "").strip()
+    if actor_id and current.get("id") == actor_id:
+        return True
+
+    # Fallback: ownerSid for initial connection before resume restores slot
+    return str(current.get("ownerSid") or "") == sid
+
+
+def _update_turn_order_owner(previous_sid: str, new_sid: str):
+    """Repoint ownerSid in the live combat order when a player reconnects."""
+    combat = world_state.get("combat", {})
+    order = combat.get("order")
+    if not isinstance(order, list):
+        return
+    for entry in order:
+        if isinstance(entry, dict) and entry.get("ownerSid") == previous_sid:
+            entry["ownerSid"] = new_sid
+
+
+def _emit_current_combat_state(to_sid: str):
+    combat_state = world_state.setdefault("combat", {}).setdefault("state", {})
+    in_combat = bool(combat_state.get("inCombat", False))
+    if in_combat:
+        emit(
+            "combat-state",
+            {
+                "active": True,
+                "initiator": combat_state.get("initiator"),
+                "targetId": combat_state.get("targetId"),
+                "mode": "combat",
+                "approvedBy": combat_state.get("approvedBy"),
+            },
+            to=to_sid,
+        )
+    else:
+        emit(
+            "combat-state",
+            {
+                "active": False,
+                "initiator": combat_state.get("initiator"),
+                "mode": "exploration",
+            },
+            to=to_sid,
+        )
+
+
 @socketio.on("connect")
-def socket_connect():
+def socket_connect(connect_payload=None):
     try:
+        _cleanup_resume_sessions()
         sid = request.sid
-        role = _normalize_role(client_roles.get(sid, "player"))
+
+        resume_key = _extract_resume_key(connect_payload)
+        if resume_key:
+            client_resume_keys[sid] = resume_key
+
+        resumed = False
+        resumed_snapshot = None
+        if resume_key:
+            snapshot = resume_sessions.get(resume_key)
+            if isinstance(snapshot, dict):
+                previous_sid = str(snapshot.get("sid") or "").strip()
+                if previous_sid and previous_sid != sid:
+                    previous_slot_index = _get_player_slot_index(previous_sid)
+                    if previous_slot_index is not None:
+                        player_slot_owner[previous_slot_index] = None
+                    player_update_last_seen.pop(previous_sid, None)
+                    players.pop(previous_sid, None)
+                    client_roles.pop(previous_sid, None)
+                    client_resume_keys.pop(previous_sid, None)
+                resumed_snapshot = snapshot
+                resumed = True
+                # Repoint ownerSid in live combat order so turn ownership survives reconnect.
+                if previous_sid and previous_sid != sid:
+                    _update_turn_order_owner(previous_sid, sid)
+
+        role = _normalize_role((resumed_snapshot or {}).get("role") if resumed_snapshot else client_roles.get(sid, "player"))
+
         players[sid] = {
             "id": sid,
             "role": role,
@@ -328,17 +572,39 @@ def socket_connect():
         }
         player_update_last_seen[sid] = 0.0
 
+        if resumed_snapshot and isinstance(resumed_snapshot.get("slotIndex"), int):
+            slot_index = int(resumed_snapshot.get("slotIndex"))
+            if 0 <= slot_index < len(player_slot_owner):
+                player_slot_owner[slot_index] = sid
+
         # Ensure connect-time default role goes through normal assignment flow so player slot ownership
         # and authoritative player selection are initialized immediately.
         if not _apply_role_assignment(sid, role):
             fallback_role = "dev" if _can_assign_role("dev", sid=sid) else "player"
             _apply_role_assignment(sid, fallback_role)
 
+        if resumed and resumed_snapshot:
+            player_entry = players.get(sid)
+            if isinstance(player_entry, dict):
+                if isinstance(resumed_snapshot.get("position"), dict):
+                    player_entry["position"] = resumed_snapshot["position"]
+                if isinstance(resumed_snapshot.get("rotation"), dict):
+                    player_entry["rotation"] = resumed_snapshot["rotation"]
+                if isinstance(resumed_snapshot.get("avatar"), dict):
+                    player_entry["avatar"] = resumed_snapshot["avatar"]
+                if isinstance(resumed_snapshot.get("movementPreview"), dict):
+                    player_entry["movementPreview"] = resumed_snapshot["movementPreview"]
+
+            _save_resume_snapshot_for_sid(sid)
+
         emit("player-id", {"id": sid})
+        emit("server-build", {"build": SERVER_BUILD_TAG})
         emit("world-init", _build_world_payload(include_scene=True))
         emit("players-state", players)
         emit("scene-state", latest_scene_state)
         emit("lobby-state", _build_lobby_state())
+        _emit_current_combat_state(sid)
+        _emit_combat_turn_to_sid(sid)
         emit("player-joined", players[sid], broadcast=True, include_self=False)
         socketio.emit("players-state", players)
         _broadcast_world_update(include_scene=False)
@@ -353,14 +619,14 @@ def socket_connect():
 @socketio.on("disconnect")
 def socket_disconnect():
     sid = request.sid
-    was_authoritative = sid == _get_authoritative_player_sid()
+    _save_resume_snapshot_for_sid(sid)
+    # Release slot so reconnect resume can reclaim it, but DO NOT touch combat state.
+    # Combat must survive transient disconnects; the resume system restores authority.
     _release_player_slot(sid)
     player_update_last_seen.pop(sid, None)
     players.pop(sid, None)
     client_roles.pop(sid, None)
-    if was_authoritative:
-        world_state["mode"] = "exploration"
-        world_state.setdefault("combat", {}).setdefault("state", {})["inCombat"] = False
+    client_resume_keys.pop(sid, None)
     _refresh_player_authority_flags()
     emit("player-left", {"id": sid}, broadcast=True)
     socketio.emit("players-state", players)
@@ -402,6 +668,7 @@ def socket_register_role(data):
         return
 
     if sid in players:
+        _save_resume_snapshot_for_sid(sid)
         emit("player-update", players[sid], broadcast=True, include_self=False)
         socketio.emit("players-state", players)
         _broadcast_world_update(include_scene=False)
@@ -496,91 +763,7 @@ def socket_player_update(data):
     else:
         players[sid].pop("movementPreview", None)
 
-    combat_sync = data.get("combatSync") if isinstance(data.get("combatSync"), dict) else None
-    authoritative_sid = _get_authoritative_player_sid()
-    if combat_sync and sid == authoritative_sid:
-        phase_raw = str(combat_sync.get("phase", "PLAYER")).strip().upper()
-        phase = phase_raw if phase_raw in {"PLAYER", "ENEMY", "TRANSITION"} else "PLAYER"
-
-        turn_queue_raw = combat_sync.get("turnQueue") if isinstance(combat_sync.get("turnQueue"), list) else []
-        turn_queue = []
-        for entry in turn_queue_raw[:32]:
-            if not isinstance(entry, dict):
-                continue
-            entry_id = str(entry.get("id") or "").strip()
-            if not entry_id:
-                continue
-            entry_type = str(entry.get("type") or "enemy").strip().lower()
-            if entry_type not in {"player", "enemy"}:
-                entry_type = "enemy"
-            turn_queue.append(
-                {
-                    "id": entry_id,
-                    "type": entry_type,
-                    "name": str(entry.get("name") or ("Player" if entry_type == "player" else "Enemy")),
-                }
-            )
-
-        enemies_raw = combat_sync.get("enemies") if isinstance(combat_sync.get("enemies"), list) else []
-        enemies = []
-        for enemy in enemies_raw[:64]:
-            if not isinstance(enemy, dict):
-                continue
-            actor_id = str(enemy.get("actorId") or "").strip()
-            if not actor_id:
-                continue
-            position = enemy.get("position") if isinstance(enemy.get("position"), dict) else {}
-            enemies.append(
-                {
-                    "actorId": actor_id,
-                    "name": str(enemy.get("name") or "Training Dummy"),
-                    "position": {
-                        "x": _safe_float(position.get("x", 0.0)),
-                        "y": _safe_float(position.get("y", 0.0)),
-                        "z": _safe_float(position.get("z", 0.0)),
-                    },
-                    "rotationY": _safe_float(enemy.get("rotationY", 0.0)),
-                    "hp": max(0.0, _safe_float(enemy.get("hp", 0.0))),
-                    "maxHp": max(1.0, _safe_float(enemy.get("maxHp", 50.0), 50.0)),
-                    "radius": max(0.1, _safe_float(enemy.get("radius", 0.5), 0.5)),
-                    "movementRemaining": max(0.0, _safe_float(enemy.get("movementRemaining", 30.0), 30.0)),
-                    "actionAvailable": bool(enemy.get("actionAvailable", True)),
-                    "playerSpotted": bool(enemy.get("playerSpotted", False)),
-                    "ac": max(1.0, _safe_float(enemy.get("ac", 12.0), 12.0)),
-                    "attackBonus": _safe_float(enemy.get("attackBonus", 4.0), 4.0),
-                    "damageRoll": max(1.0, _safe_float(enemy.get("damageRoll", 1.0), 1.0)),
-                    "damageBonus": _safe_float(enemy.get("damageBonus", 0.0), 0.0),
-                }
-            )
-
-        player_sync_raw = combat_sync.get("player") if isinstance(combat_sync.get("player"), dict) else {}
-        player_position = player_sync_raw.get("position") if isinstance(player_sync_raw.get("position"), dict) else {}
-        player_sync = {
-            "hp": max(0.0, _safe_float(player_sync_raw.get("hp", players[sid].get("hp", 100.0)), 100.0)),
-            "maxHp": max(1.0, _safe_float(player_sync_raw.get("maxHp", players[sid].get("maxHp", 100.0)), 100.0)),
-            "movementRemaining": max(0.0, _safe_float(player_sync_raw.get("movementRemaining", 30.0), 30.0)),
-            "actionUsed": bool(player_sync_raw.get("actionUsed", False)),
-            "bonusUsed": bool(player_sync_raw.get("bonusUsed", False)),
-            "hasActed": bool(player_sync_raw.get("hasActed", False)),
-            "position": {
-                "x": _safe_float(player_position.get("x", players[sid]["position"].get("x", 0.0))),
-                "y": _safe_float(player_position.get("y", players[sid]["position"].get("y", 0.0))),
-                "z": _safe_float(player_position.get("z", players[sid]["position"].get("z", 0.0))),
-            },
-        }
-
-        players[sid]["combatSync"] = {
-            "inCombat": bool(combat_sync.get("inCombat", False)),
-            "phase": phase,
-            "currentTurnIndex": max(0, int(_safe_float(combat_sync.get("currentTurnIndex", 0)))),
-            "roundNumber": max(0, int(_safe_float(combat_sync.get("roundNumber", 0)))),
-            "turnQueue": turn_queue,
-            "player": player_sync,
-            "enemies": enemies,
-            "timestamp": int(_safe_float(combat_sync.get("timestamp", 0))),
-        }
-    else:
-        players[sid].pop("combatSync", None)
+    _save_resume_snapshot_for_sid(sid)
 
     emit("player-update", players[sid], broadcast=True, include_self=False)
     _broadcast_world_update(include_scene=False)
@@ -678,12 +861,23 @@ def _get_dm_sids() -> list[str]:
 def _broadcast_combat_state(active: bool, initiator: str, target_id: str | None = None, approver: str | None = None):
     if active:
         world_state["mode"] = "combat"
-        world_state.setdefault("combat", {}).setdefault("state", {})["inCombat"] = True
-        world_state["combat"]["state"]["initiator"] = initiator
+        combat_order = _build_turn_order(initiator_sid=initiator)
+        combat_state = {
+            "inCombat": True,
+            "initiator": initiator,
+            "roundNumber": 1,
+        }
         if approver:
-            world_state["combat"]["state"]["approvedBy"] = approver
+            combat_state["approvedBy"] = approver
         if target_id:
-            world_state["combat"]["state"]["targetId"] = target_id
+            combat_state["targetId"] = target_id
+        world_state["combat"] = {
+            "turn": 0,
+            "order": combat_order,
+            "state": combat_state,
+        }
+        if target_id:
+            _ensure_enemy_actor_registered(target_id)
         socketio.emit(
             "combat-state",
             {
@@ -694,11 +888,16 @@ def _broadcast_combat_state(active: bool, initiator: str, target_id: str | None 
                 "approvedBy": approver,
             },
         )
+        # Emit turn payload immediately so late-joiners get the current state.
+        socketio.emit("combat-turn", _build_combat_turn_payload())
+        socketio.emit("combat-full-state", world_state.get("combat", {}))
     else:
         world_state["mode"] = "exploration"
-        world_state.setdefault("combat", {}).setdefault("state", {})["inCombat"] = False
-        world_state["combat"]["state"].pop("targetId", None)
-        world_state["combat"]["state"].pop("approvedBy", None)
+        world_state["combat"] = {
+            "turn": None,
+            "order": [],
+            "state": {"inCombat": False},
+        }
         socketio.emit(
             "combat-state",
             {
@@ -707,6 +906,8 @@ def _broadcast_combat_state(active: bool, initiator: str, target_id: str | None 
                 "mode": "exploration",
             },
         )
+        socketio.emit("combat-full-state", world_state.get("combat", {}))
+        socketio.emit("combat-reset", {})
     _broadcast_world_update(include_scene=False)
 
 
@@ -719,6 +920,16 @@ def socket_combat_start_request(data):
     payload = data if isinstance(data, dict) else {}
     target_id = str(payload.get("targetId") or "").strip()
     request_id = str(payload.get("requestId") or uuid4().hex).strip() or uuid4().hex
+
+    if world_state.get("combat", {}).get("state", {}).get("inCombat"):
+        emit("combat-start-result", {
+            "requestId": request_id,
+            "approved": False,
+            "targetId": target_id or None,
+            "status": "already-in-combat",
+        }, to=sid)
+        return
+
     dm_sids = _get_dm_sids()
 
     if not dm_sids:
@@ -734,6 +945,7 @@ def socket_combat_start_request(data):
     pending_combat_start_requests[request_id] = {
         "requesterSid": sid,
         "targetId": target_id,
+        "createdAt": perf_counter(),
     }
 
     emit("combat-start-result", {
@@ -770,6 +982,10 @@ def socket_combat_start_decision(data):
         emit("combat-state-denied", {"reason": "unknown-request"})
         return
 
+    if perf_counter() - float(pending.get("createdAt", 0.0)) > 30.0:
+        emit("combat-state-denied", {"reason": "request-expired"})
+        return
+
     requester_sid = str(pending.get("requesterSid") or "").strip()
     target_id = str(pending.get("targetId") or "").strip()
     approved = bool(payload.get("approved", False))
@@ -797,6 +1013,9 @@ def socket_combat_start(data):
         emit("combat-state-denied", {"reason": "requires-dm-role"})
         return
 
+    if world_state.get("combat", {}).get("state", {}).get("inCombat"):
+        return
+
     payload = data if isinstance(data, dict) else {}
     target_id = str(payload.get("targetId") or "").strip()
     print(f"[COMBAT] start sid={sid[:6]} target={target_id or '-'}")
@@ -817,6 +1036,8 @@ def socket_combat_end(data=None):
 
     print(f"[COMBAT] end sid={sid[:6]}")
     _broadcast_combat_state(False, initiator=sid)
+    for player_sid in list(players.keys()):
+        _save_resume_snapshot_for_sid(player_sid)
 
 @socketio.on("timeline-start")
 def socket_timeline_start(data):
@@ -874,6 +1095,427 @@ def socket_dice_roll_event(data):
         include_self=False,
     )
 
+
+def _advance_server_turn() -> dict | None:
+    combat = world_state.setdefault("combat", {})
+    order = combat.get("order") or []
+    if not order:
+        return None
+    current = combat.get("turn")
+    current_index = int(current) if current is not None else -1
+    next_index = (current_index + 1) % len(order)
+    combat["turn"] = next_index
+    combat_state = combat.setdefault("state", {})
+    round_number = max(1, int(_safe_float(combat_state.get("roundNumber", 1))))
+    if next_index == 0 and current_index >= 0:
+        round_number += 1
+        combat_state["roundNumber"] = round_number
+    return {
+        "turnIndex": next_index,
+        "order": order,
+        "roundNumber": round_number,
+        "currentActor": order[next_index] if next_index < len(order) else None,
+    }
+
+
+def _build_combat_turn_payload() -> dict:
+    combat = world_state.get("combat", {})
+    order = combat.get("order") or []
+    turn = combat.get("turn")
+    turn_index = int(turn) if turn is not None else 0
+    if order:
+        turn_index = max(0, min(turn_index, len(order) - 1))
+    else:
+        turn_index = 0
+    round_number = max(1, int(_safe_float(combat.get("state", {}).get("roundNumber", 1))))
+    return {
+        "turnIndex": turn_index,
+        "order": order,
+        "roundNumber": round_number,
+        "currentActor": order[turn_index] if order and 0 <= turn_index < len(order) else None,
+    }
+
+
+def _emit_combat_turn_to_sid(to_sid: str):
+    emit("combat-turn", _build_combat_turn_payload(), to=to_sid)
+
+
+def _sync_enemy_entries_into_combat_order() -> bool:
+    combat = world_state.setdefault("combat", {})
+    order = combat.get("order")
+    if not isinstance(order, list):
+        return False
+
+    existing_ids: set[str] = set()
+    for entry in order:
+        if not isinstance(entry, dict):
+            continue
+        entry_id = str(entry.get("id") or "").strip()
+        if entry_id:
+            existing_ids.add(entry_id)
+
+    entities = world_state.get("entities", {})
+    if not isinstance(entities, dict):
+        return False
+
+    changed = False
+    for entity_id, entity in entities.items():
+        if not _is_enemy_entity(entity):
+            continue
+        actor_id = str(entity_id or "").strip()
+        if not actor_id or actor_id in existing_ids:
+            continue
+        order.append(
+            {
+                "id": actor_id,
+                "type": "enemy",
+                "name": str((entity or {}).get("name") or actor_id),
+            }
+        )
+        existing_ids.add(actor_id)
+        changed = True
+
+    return changed
+
+
+def _ensure_enemy_actor_registered(actor_id: str, name: str | None = None) -> bool:
+    enemy_id = str(actor_id or "").strip()
+    if not enemy_id:
+        return False
+
+    entities = world_state.setdefault("entities", {})
+    if not isinstance(entities, dict):
+        world_state["entities"] = {}
+        entities = world_state["entities"]
+
+    entity = entities.get(enemy_id)
+    if not isinstance(entity, dict):
+        entity = {
+            "id": enemy_id,
+            "type": "training-dummy",
+            "name": str(name or enemy_id),
+            "attackBonus": 4,
+            "damageRoll": 6,
+            "damageBonus": 0,
+        }
+        entities[enemy_id] = entity
+    else:
+        entity.setdefault("type", "training-dummy")
+        entity.setdefault("name", str(name or enemy_id))
+        entity.setdefault("attackBonus", 4)
+        entity.setdefault("damageRoll", 6)
+        entity.setdefault("damageBonus", 0)
+
+    combat = world_state.setdefault("combat", {})
+    order = combat.get("order")
+    if not isinstance(order, list):
+        return False
+
+    for entry in order:
+        if isinstance(entry, dict) and str(entry.get("id") or "").strip() == enemy_id:
+            return True
+
+    order.append(
+        {
+            "id": enemy_id,
+            "type": "enemy",
+            "name": str(entity.get("name") or name or enemy_id),
+        }
+    )
+    return True
+
+
+def _sid_for_actor_id(actor_id: str) -> str | None:
+    for sid, player_entry in players.items():
+        if not isinstance(player_entry, dict):
+            continue
+        if str(player_entry.get("actorId") or "").strip() == actor_id:
+            return sid
+    return None
+
+
+def _choose_enemy_target_sid(enemy_actor: dict) -> str | None:
+    combat_state = world_state.get("combat", {}).get("state", {})
+    initiator_sid = str(combat_state.get("initiator") or "").strip()
+    if initiator_sid and initiator_sid in players:
+        player_entry = players.get(initiator_sid)
+        if isinstance(player_entry, dict) and _normalize_role(player_entry.get("role")) == "player":
+            return initiator_sid
+
+    combat = world_state.get("combat", {})
+    order = combat.get("order") or []
+    for entry in order:
+        if not isinstance(entry, dict):
+            continue
+        if str(entry.get("type") or "").strip().lower() != "player":
+            continue
+        entry_sid = str(entry.get("ownerSid") or "").strip()
+        if entry_sid in players:
+            return entry_sid
+        actor_id = str(entry.get("id") or "").strip()
+        resolved_sid = _sid_for_actor_id(actor_id)
+        if resolved_sid:
+            return resolved_sid
+
+    return None
+
+
+def _resolve_enemy_attack_stats(enemy_actor: dict) -> tuple[int, int, int]:
+    enemy_id = str(enemy_actor.get("id") or "").strip()
+    entities = world_state.get("entities", {})
+    entity = entities.get(enemy_id) if isinstance(entities, dict) else None
+    attack_bonus = int(_safe_float((entity or {}).get("attackBonus", 4), 4))
+    damage_die = int(_safe_float((entity or {}).get("damageRoll", 6), 6))
+    damage_bonus = int(_safe_float((entity or {}).get("damageBonus", 0), 0))
+    damage_die = max(1, damage_die)
+    return attack_bonus, damage_die, damage_bonus
+
+
+def _run_enemy_turn_resolution_until_player() -> tuple[list[dict], dict | None]:
+    events: list[dict] = []
+    combat = world_state.get("combat", {})
+    order = combat.get("order") or []
+    if not order:
+        return events, None
+
+    turn_data = _build_combat_turn_payload()
+    max_steps = len(order)
+    for _ in range(max_steps):
+        current = turn_data.get("currentActor") if isinstance(turn_data, dict) else None
+        current_type = str((current or {}).get("type") or "").strip().lower()
+        if current_type != "enemy":
+            break
+
+        socketio.emit("combat-turn", turn_data)
+
+        enemy_actor = current if isinstance(current, dict) else {}
+        target_sid = _choose_enemy_target_sid(enemy_actor)
+        target_actor_id = str(players.get(target_sid, {}).get("actorId") or "") if target_sid else ""
+
+        attack_bonus, damage_die, damage_bonus = _resolve_enemy_attack_stats(enemy_actor)
+        hit_roll = _random.randint(1, 20)
+        total_to_hit = hit_roll + attack_bonus
+
+        target_ac = int(_safe_float(players.get(target_sid, {}).get("ac", 10), 10)) if target_sid else 10
+        is_hit = hit_roll == 20 or (hit_roll != 1 and total_to_hit >= target_ac)
+
+        damage = 0
+        if is_hit:
+            damage = max(0, _random.randint(1, damage_die) + damage_bonus)
+            if target_sid and isinstance(players.get(target_sid), dict):
+                current_hp = _safe_float(players[target_sid].get("hp", 100.0), 100.0)
+                players[target_sid]["hp"] = max(0.0, current_hp - float(damage))
+
+        events.append(
+            {
+                "attacker": str(enemy_actor.get("id") or "enemy"),
+                "actorType": "enemy",
+                "type": "attack",
+                "targetId": target_actor_id or None,
+                "hitRoll": hit_roll,
+                "attackBonus": attack_bonus,
+                "toHit": total_to_hit,
+                "targetAC": target_ac,
+                "hit": is_hit,
+                "damage": damage,
+            }
+        )
+
+        next_turn = _advance_server_turn()
+        if next_turn is None:
+            return events, None
+        turn_data = next_turn
+
+    return events, turn_data
+
+
+@socketio.on("end-turn")
+def socket_end_turn(data=None):
+    """Player ends their turn; server validates ownership before advancing."""
+    sid = request.sid
+    try:
+        def _deny(reason: str, detail: str | None = None) -> dict:
+            payload = {"reason": reason}
+            if detail:
+                payload["detail"] = detail
+            emit("end-turn-denied", payload, to=sid)
+            emit("combat-error", payload, to=sid)
+            return {"ok": False, **payload}
+
+        payload = data if isinstance(data, dict) else {}
+        print(f"[END-TURN] Received from {sid} payload={payload}")
+        emit("end-turn-accepted", {"reason": "received"}, to=sid)
+
+        if sid not in players:
+            print(f"[END-TURN] {sid} not in players dict")
+            return _deny("player-not-registered")
+
+        combat = world_state.get("combat", {})
+        if not combat.get("state", {}).get("inCombat"):
+            print(f"[END-TURN] Combat not active")
+            return _deny("combat-not-active")
+
+        _sync_enemy_entries_into_combat_order()
+
+        order = combat.get("order") or []
+        if not order:
+            print(f"[END-TURN] No turn order")
+            return _deny("no-turn-order")
+
+        turn = combat.get("turn", 0)
+        turn_index = int(turn) if turn is not None else 0
+        if not (0 <= turn_index < len(order)):
+            print(f"[END-TURN] Invalid turn_index {turn_index}/{len(order)}")
+            return _deny("invalid-turn-index")
+
+        current_actor = order[turn_index]
+        if not isinstance(current_actor, dict):
+            print(f"[END-TURN] Invalid current actor payload: {current_actor}")
+            return _deny("invalid-current-actor")
+
+        actor_type = str(current_actor.get("type") or "enemy").strip().lower()
+        role = _normalize_role(client_roles.get(sid, "player"))
+        print(f"[END-TURN] Current actor: {current_actor.get('id')} type={actor_type} role={role}")
+
+        if actor_type == "enemy" and role not in {"dm", "dev"}:
+            print(f"[END-TURN] Is enemy turn, running enemy resolution")
+            with turn_lock:
+                enemy_events, turn_data = _run_enemy_turn_resolution_until_player()
+            if turn_data is None:
+                print(f"[END-TURN] Enemy resolution returned None")
+                return _deny("enemy-resolution-failed")
+
+            for event in enemy_events:
+                socketio.emit("combat-action-result", event)
+
+            print(f"[END-TURN] Emitting combat-turn after enemy: {turn_data}")
+            socketio.emit("combat-turn", turn_data)
+            _broadcast_world_update(include_scene=False)
+            return {"ok": True, "reason": "enemy-advanced", "turnIndex": turn_data.get("turnIndex")}
+
+        # DM and dev may always advance. For players, validate ownership based on actor type.
+        if role not in {"dm", "dev"}:
+            if not _is_players_turn(sid):
+                print(f"[END-TURN] {sid} is not the player's turn (actor {current_actor.get('id')})")
+                return _deny("not-your-turn")
+
+        print(f"[END-TURN] Advancing turn")
+        with turn_lock:
+            turn_data = _advance_server_turn()
+            enemy_events: list[dict] = []
+            if turn_data is not None:
+                enemy_events, turn_data = _run_enemy_turn_resolution_until_player()
+        if turn_data is None:
+            print(f"[END-TURN] turn_data is None after advance")
+            return _deny("turn-advance-failed")
+
+        print(f"[END-TURN] Emitting combat-turn: {turn_data}")
+
+        for event in enemy_events:
+            socketio.emit("combat-action-result", event)
+
+        socketio.emit("combat-turn", turn_data)
+        _broadcast_world_update(include_scene=False)
+        return {"ok": True, "reason": "advanced", "turnIndex": turn_data.get("turnIndex")}
+    except Exception as exc:
+        print(f"[END-TURN] Exception: {exc}")
+        detail = str(exc)
+        emit("end-turn-denied", {"reason": "internal-error", "detail": detail}, to=sid)
+        emit("combat-error", {"reason": "internal-error", "detail": detail}, to=sid)
+        return {"ok": False, "reason": "internal-error", "detail": detail}
+
+
+@socketio.on("advance-combat-turn")
+def socket_advance_combat_turn(data=None):
+    """DM/dev force-advance the server turn counter."""
+    sid = request.sid
+    if sid not in players:
+        return
+
+    role = _normalize_role(client_roles.get(sid, "player"))
+    if role not in {"dm", "dev"}:
+        return
+
+    _sync_enemy_entries_into_combat_order()
+
+    with turn_lock:
+        turn_data = _advance_server_turn()
+        enemy_events: list[dict] = []
+        if turn_data is not None:
+            enemy_events, turn_data = _run_enemy_turn_resolution_until_player()
+    if turn_data is None:
+        return
+
+    for event in enemy_events:
+        socketio.emit("combat-action-result", event)
+
+    socketio.emit("combat-turn", turn_data)
+    _broadcast_world_update(include_scene=False)
+
+
+@socketio.on("combat-action")
+def socket_combat_action(data):
+    """Player submits a combat action; server validates turn ownership and broadcasts result."""
+    sid = request.sid
+    if sid not in players or not isinstance(data, dict):
+        return
+
+    combat = world_state.get("combat", {})
+    if not combat.get("state", {}).get("inCombat"):
+        emit("combat-action-denied", {"reason": "not-in-combat"})
+        return
+
+    order = combat.get("order") or []
+    turn = combat.get("turn", 0)
+    turn_index = int(turn) if turn is not None else 0
+    if not order or not (0 <= turn_index < len(order)):
+        emit("combat-action-denied", {"reason": "no-active-turn"})
+        return
+
+    current_actor_entry = order[turn_index]
+    role = _normalize_role(client_roles.get(sid, "player"))
+
+    if role not in {"dm", "dev"}:
+        if not _is_players_turn(sid):
+            emit("combat-action-denied", {"reason": "not-your-turn"})
+            return
+
+    _ALLOWED_ACTIONS = {"attack", "move", "dodge", "dash", "help", "hide", "ready", "disengage"}
+    action_type = str(data.get("type") or "").strip().lower()
+    if action_type not in _ALLOWED_ACTIONS:
+        emit("combat-action-denied", {"reason": "unknown-action"})
+        return
+
+    result: dict = {
+        "attacker": current_actor_entry.get("id"),
+        "actorType": current_actor_entry.get("type", "player"),
+        "type": action_type,
+    }
+
+    if action_type == "attack":
+        target_id = str(data.get("targetId") or "").strip()
+        if not target_id:
+            emit("combat-action-denied", {"reason": "missing-target"})
+            return
+        _ensure_enemy_actor_registered(target_id)
+        hit_roll = _random.randint(1, 20)
+        damage_roll = _random.randint(1, 8)
+        result.update({"targetId": target_id, "hitRoll": hit_roll, "damage": damage_roll})
+
+    socketio.emit("combat-action-result", result)
+    _broadcast_world_update(include_scene=False)
+
+
+@socketio.on("request-combat-state")
+def socket_request_combat_state(data=None):
+    """Client requests a hard resync of the current combat turn state."""
+    sid = request.sid
+    if sid not in players:
+        return
+    _emit_combat_turn_to_sid(sid)
+    emit("combat-full-state", world_state.get("combat", {}))
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -918,7 +1560,10 @@ def scene_state_post():
     world_state["scene"] = latest_scene_state
 
     if isinstance(data.get("entities"), dict):
-        world_state["entities"] = data.get("entities", {})
+        incoming_entities = data.get("entities", {})
+        world_state["entities"] = _apply_training_dummy_avatar_fallbacks(incoming_entities)
+        if world_state.get("combat", {}).get("state", {}).get("inCombat"):
+            _sync_enemy_entries_into_combat_order()
     if isinstance(data.get("combat"), dict):
         world_state["combat"] = data.get("combat", world_state["combat"])
 
@@ -1036,6 +1681,21 @@ def lobby_state_api():
     return jsonify(ok=True, lobby=_build_lobby_state())
 
 
+@app.route("/debug/combat", methods=["GET"])
+def debug_combat_api():
+    return jsonify(ok=True, combat=world_state.get("combat", {}))
+
+
+@app.route("/server-build", methods=["GET"])
+def server_build_api():
+    return jsonify(
+        ok=True,
+        build=SERVER_BUILD_TAG,
+        pid=os.getpid(),
+        async_mode=socketio.async_mode,
+    )
+
+
 @app.route("/api/upload-character-model", methods=["POST"])
 def upload_character_model_api():
     files = [f for f in request.files.getlist("model_files") if f and f.filename]
@@ -1083,4 +1743,24 @@ def upload_character_model_api():
     )
 
 if __name__ == "__main__":
-    socketio.run(app, host="0.0.0.0", port=5000, debug=True)
+    import sys
+    print(f"[BOOT] Python {sys.version}", flush=True)
+    print(f"[BOOT] Flask-SocketIO async_mode={socketio.async_mode}", flush=True)
+
+    if socketio.async_mode != "gevent":
+        raise RuntimeError(
+            f"ERROR: async_mode is {socketio.async_mode!r}, not 'gevent'. "
+            "Run: pip install gevent gevent-websocket && python app.py"
+        )
+
+    try:
+        import geventwebsocket
+        print(f"[BOOT] gevent-websocket OK: {geventwebsocket.__version__}", flush=True)
+    except ImportError as exc:
+        raise RuntimeError(
+            "ERROR: gevent-websocket not installed — WebSocket will not work.\n"
+            "Fix: pip install gevent-websocket"
+        ) from exc
+
+    print("[BOOT] Starting on http://0.0.0.0:5000 with gevent WebSocket support", flush=True)
+    socketio.run(app, host="0.0.0.0", port=5000, debug=False)

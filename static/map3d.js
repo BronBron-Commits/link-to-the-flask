@@ -46,6 +46,23 @@ let pendingRuntimeMode = null;
 let pendingSceneState = null;
 let pendingWorldHydrationPayload = null;
 
+const CLIENT_RESUME_STORAGE_KEY = 'map3d_resume_key_v1';
+
+function getOrCreateClientResumeKey() {
+    const fallback = `anon-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    try {
+        const existing = String(localStorage.getItem(CLIENT_RESUME_STORAGE_KEY) || '').trim();
+        if (existing) return existing;
+        const generated = (window.crypto && typeof window.crypto.randomUUID === 'function')
+            ? window.crypto.randomUUID()
+            : fallback;
+        localStorage.setItem(CLIENT_RESUME_STORAGE_KEY, generated);
+        return generated;
+    } catch (_err) {
+        return fallback;
+    }
+}
+
 function isCameraReadyForRuntimeMode() {
     try {
         return !!camera;
@@ -806,6 +823,13 @@ function registerSocketHandlers() {
     socket.on('connect_error', (err) => {
         netWarn('connect_error', err && err.message ? err.message : err);
         appendConsoleHistory(`[NET] connection error: ${err && err.message ? err.message : String(err)}`, 'error');
+        if (socket && socket.disconnected) {
+            try {
+                socket.connect();
+            } catch (_reconnectErr) {
+                // Socket.IO already handles internal backoff; this is best-effort nudging.
+            }
+        }
     });
 
     socket.on('disconnect', (reason) => {
@@ -843,12 +867,20 @@ function registerSocketHandlers() {
         const inCombat = packetMode
             ? packetMode === 'combat'
             : !!(packet && packet.active);
+        const packetInitiatorSid = String(packet && packet.initiator ? packet.initiator : '').trim() || null;
         console.log('[NET] combat-state received', {
             active: inCombat,
             mode: packet && packet.mode,
             initiator: packet && packet.initiator,
         });
         if (inCombat) {
+            combatInitiatorSid = packetInitiatorSid || combatInitiatorSid;
+            if (packetInitiatorSid) {
+                const resolvedInitiatorActorId = resolveCombatActorIdForPlayerSid(packetInitiatorSid);
+                if (resolvedInitiatorActorId) {
+                    combatInitiatorActorId = resolvedInitiatorActorId;
+                }
+            }
             combatState.inCombat = true;
             if (currentGameMode !== GAME_MODE.COMBAT) {
                 currentGameMode = GAME_MODE.COMBAT;
@@ -860,6 +892,8 @@ function registerSocketHandlers() {
             ensureCombatEnvironmentPresentation({ targetActor });
             syncCombatMusicToGameMode();
         } else {
+            combatInitiatorSid = null;
+            combatInitiatorActorId = null;
             combatState.inCombat = false;
             if (currentGameMode === GAME_MODE.COMBAT) {
                 currentGameMode = GAME_MODE.FREE;
@@ -914,9 +948,6 @@ function registerSocketHandlers() {
     socket.on('player-left', (data) => {
         netLog(`player-left  id=${data && data.id}`);
         if (data && data.id) {
-            if (authoritativeCombatSourceId && data.id === authoritativeCombatSourceId) {
-                authoritativeCombatSourceId = null;
-            }
             appendConsoleHistory(`[NET] player left: ${data.id}`, 'ok');
             removePlayerAvatar(data.id);
         }
@@ -1035,6 +1066,115 @@ function registerSocketHandlers() {
         }
     });
 
+    // ── Server-authoritative turn state ────────────────────────────────────────
+    socket.on('combat-turn', (packet) => {
+        console.log('[COMBAT-TURN] received', {
+            turnIndex: packet && packet.turnIndex,
+            actor: packet && packet.currentActor && packet.currentActor.id,
+            type: packet && packet.currentActor && packet.currentActor.type,
+            round: packet && packet.roundNumber,
+        });
+        if (!packet || typeof packet !== 'object') return;
+        endTurnPending = false;
+        if (endTurnWatchdog) {
+            clearTimeout(endTurnWatchdog);
+            endTurnWatchdog = null;
+        }
+        const order = Array.isArray(packet.order) ? packet.order : [];
+        const turnIndex = Math.max(0, Math.min(Number(packet.turnIndex) || 0, order.length > 0 ? order.length - 1 : 0));
+        const roundNumber = Math.max(1, Number(packet.roundNumber) || 1);
+        const currentActor = packet.currentActor || (order[turnIndex] ?? null);
+
+        // Hard-overwrite local turn state with server authority — no merging.
+        combatState.turnQueue = order;
+        combatState.currentTurnIndex = turnIndex;
+        combatState.turnIndex = turnIndex;
+        combatState.roundNumber = roundNumber;
+        combatState.turnOrder = order.map((entry) => {
+            if (!entry) return null;
+            if (entry.type === 'player') {
+                return isLocalPlayerTurnEntry(entry) ? playerState : findCombatActorById(entry.id);
+            }
+            return findCombatActorById(entry.id)?.userData;
+        }).filter(Boolean);
+
+        if (currentGameMode === GAME_MODE.COMBAT && currentActor) {
+            dispatchCombatTurnActor(currentActor);
+        }
+        updateCombatUI();
+        updateDmControlPanel();
+    });
+
+    socket.on('combat-full-state', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        const order = Array.isArray(packet.order) ? packet.order : [];
+        const turn = Number(packet.turn) || 0;
+        const turnIndex = order.length > 0 ? Math.max(0, Math.min(turn, order.length - 1)) : 0;
+        const roundNumber = Math.max(1, Number((packet.state || {}).roundNumber) || 1);
+
+        combatState.turnQueue = order;
+        combatState.currentTurnIndex = turnIndex;
+        combatState.turnIndex = turnIndex;
+        combatState.roundNumber = roundNumber;
+        combatState.turnOrder = order.map((entry) => {
+            if (!entry) return null;
+            if (entry.type === 'player') {
+                return isLocalPlayerTurnEntry(entry) ? playerState : findCombatActorById(entry.id);
+            }
+            return findCombatActorById(entry.id)?.userData;
+        }).filter(Boolean);
+
+        updateCombatUI();
+        updateDmControlPanel();
+    });
+
+    socket.on('combat-reset', () => {
+        endTurnPending = false;
+        if (endTurnWatchdog) {
+            clearTimeout(endTurnWatchdog);
+            endTurnWatchdog = null;
+        }
+        combatState.turnQueue = [];
+        combatState.turnOrder = [];
+        combatState.currentTurnIndex = 0;
+        combatState.turnIndex = 0;
+        combatState.roundNumber = 0;
+        combatState.phase = 'TRANSITION';
+        updateCombatUI();
+        updateDmControlPanel();
+    });
+
+    socket.on('end-turn-denied', (packet) => {
+        endTurnPending = false;
+        if (endTurnWatchdog) {
+            clearTimeout(endTurnWatchdog);
+            endTurnWatchdog = null;
+        }
+        const reason = String((packet && packet.reason) || 'unknown');
+        console.warn('[COMBAT] end-turn denied by server:', reason);
+    });
+
+    socket.on('combat-error', (packet) => {
+        endTurnPending = false;
+        if (endTurnWatchdog) {
+            clearTimeout(endTurnWatchdog);
+            endTurnWatchdog = null;
+        }
+        const reason = String((packet && packet.reason) || 'unknown');
+        console.warn('[COMBAT] combat-error from server:', reason, packet);
+    });
+
+    socket.on('end-turn-accepted', (packet) => {
+        const reason = String((packet && packet.reason) || 'received');
+        console.log('[COMBAT] end-turn accepted by server:', reason);
+    });
+
+    socket.on('combat-turn-sync-denied', () => {
+        // Server is authoritative — sync attempts are silently ignored; incoming combat-turn drives state.
+        console.warn('[COMBAT] combat-turn-sync rejected: server-authoritative mode active');
+    });
+    // ── End server-authoritative turn state ────────────────────────────────────
+
     socket.on('dice-roll-event', (packet) => {
         const roll = packet && packet.roll ? packet.roll : null;
         if (!roll) return;
@@ -1090,6 +1230,13 @@ function registerSocketHandlers() {
         }
         updateLobbyOverlayFromState();
     });
+
+    // Debug: log all socket events except high-frequency noise
+    const _debugIgnoredEvents = new Set(['player-update', 'players-state', 'world-update', 'combat-action-record']);
+    socket.onAny((eventName, data) => {
+        if (_debugIgnoredEvents.has(eventName)) return;
+        console.log('[SOCKET-EVENT]', eventName, typeof data === 'object' ? JSON.stringify(data).slice(0, 120) : data);
+    });
 }
 
 async function initializeSocketConnection() {
@@ -1101,6 +1248,22 @@ async function initializeSocketConnection() {
     if (!modeManager.current) {
         netWarn('initializeSocketConnection called but modeManager.current is not set — this should not happen');
         return;
+    }
+
+    try {
+        const buildProbe = await fetch('/server-build', {
+            method: 'GET',
+            headers: { Accept: 'application/json' },
+        });
+        if (buildProbe.ok) {
+            const buildInfo = await buildProbe.json();
+            console.log('[NET] server-build probe', buildInfo);
+            appendConsoleHistory(`[NET] server-build ${String(buildInfo && buildInfo.build ? buildInfo.build : 'unknown')}`, 'ok');
+        } else {
+            console.warn('[NET] server-build probe failed:', buildProbe.status);
+        }
+    } catch (_buildErr) {
+        console.warn('[NET] server-build probe failed: network error');
     }
     
     try {
@@ -1119,13 +1282,15 @@ async function initializeSocketConnection() {
         return;
     }
 
-    socket = window.io({
-        reconnection: false,
-        timeout: 2500,
-        transports: ['polling', 'websocket'],
+    const resumeKey = getOrCreateClientResumeKey();
+
+    socket = window.io(window.location.origin, {
+        transports: ['websocket'],
+        upgrade: false,
     });
     window.socket = socket;
     netLog('socket created, registering handlers…');
+    appendConsoleHistory('[NET] transport mode: websocket-only', 'ok');
     registerSocketHandlers();
 
     if (socketModeUnsubscribe) {
@@ -1441,9 +1606,16 @@ const floorProbeRaycaster = new THREE.Raycaster();
 const floorProbeOrigin = new THREE.Vector3();
 const floorProbeDirection = new THREE.Vector3(0, -1, 0);
 let localPlayerId = null;
-let authoritativeCombatSourceId = null;
+let localPlayerCombatActorId = null;
+let combatInitiatorSid = null;
+let combatInitiatorActorId = null;
+let lastAppliedCombatSyncTimestamp = 0;
 let lastPlayerSyncAt = 0;
 const PLAYER_UPDATE_MIN_INTERVAL_MS = 66; // ~15 updates/sec max
+const PLAYER_HEAVY_SYNC_INTERVAL_MS = 250;
+const PLAYER_COMBAT_SYNC_INTERVAL_MS = 100;
+let lastHeavyPlayerSyncAt = 0;
+let lastCombatSyncAt = 0;
 const localPlayerWorldPos = new THREE.Vector3();
 const localPlayerWorldQuat = new THREE.Quaternion();
 const thirdPersonLookTarget = new THREE.Vector3();
@@ -1681,7 +1853,9 @@ function isSimulationOwner() {
 }
 
 function updateClientRuntimeModeFromAuthority() {
-    const nextMode = (forceObserverMode || !isSimulationOwner()) ? CLIENT_MODE_OBSERVER : CLIENT_MODE_FULL;
+    // Online multiplayer should not auto-degrade non-authoritative clients.
+    // Keep observer mode as an explicit dev/testing override only.
+    const nextMode = forceObserverMode ? CLIENT_MODE_OBSERVER : CLIENT_MODE_FULL;
     if (CLIENT_MODE === nextMode) return false;
     CLIENT_MODE = nextMode;
     applySettings();
@@ -2041,7 +2215,7 @@ function addDmEvent(text, tone = 'info') {
 
 function getCombatActorLabelById(actorId) {
     if (!actorId) return 'Unknown';
-    if (actorId === 'player') return 'Player';
+    if (actorId === 'player' || actorId === getLocalCombatActorId()) return 'Player';
     const actor = findCombatActorById(actorId);
     if (actor) return getCombatActorLabel(actor);
     return String(actorId);
@@ -4164,6 +4338,9 @@ async function initDataDrivenLayer(staticWorldRoot) {
 function upsertPlayerAvatar(player) {
     if (!player || !player.id) return;
 
+    if (!scene.userData.playerAvatarStates) scene.userData.playerAvatarStates = {};
+    scene.userData.playerAvatarStates[player.id] = player;
+
     if (window.__NET_DEBUG__) {
         console.log('[AVATAR DEBUG]', {
             id: player.id,
@@ -4174,6 +4351,10 @@ function upsertPlayerAvatar(player) {
     const mode = modeManager.current;
     const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
     const isLocalPlayer = !!(effectiveLocalId && player.id === effectiveLocalId);
+
+    if (isLocalPlayer) {
+        localPlayerCombatActorId = String(player.actorId || player.id || localPlayerCombatActorId || '').trim() || localPlayerCombatActorId;
+    }
 
     if (mode === MODE.DM && window.__NET_DEBUG__) {
         console.log('[DEBUG]', {
@@ -4233,6 +4414,8 @@ function upsertPlayerAvatar(player) {
         avatarRoot = new THREE.Group();
         avatarRoot.userData.playerId = player.id;
         avatarRoot.userData.playerRole = player.role;
+        avatarRoot.userData.actorId = String(player.actorId || player.id || '').trim() || player.id;
+        avatarRoot.userData.playerLabel = String(player.actorId || player.id || 'Player');
         
         // Simple cube visual for remote player (fallback if no mesh data)
         const geometry = new THREE.BoxGeometry(0.6, 1.8, 0.6);
@@ -4292,6 +4475,17 @@ function upsertPlayerAvatar(player) {
         if (player.avatar && player.avatar.modelUrl && player.avatar.modelUrl !== 'fallback') {
             ensureRemoteAvatarModelLoaded(avatarRoot, player.avatar.modelUrl, player.avatar.scale);
         }
+    }
+
+    avatarRoot.userData.playerId = player.id;
+    avatarRoot.userData.playerRole = player.role;
+    avatarRoot.userData.actorId = String(player.actorId || player.id || avatarRoot.userData.actorId || '').trim() || player.id;
+    avatarRoot.userData.playerLabel = String(player.actorId || player.id || avatarRoot.userData.playerLabel || 'Player');
+    if (Number.isFinite(Number(player.combatSync?.player?.hp))) {
+        avatarRoot.userData.hp = Math.max(0, Number(player.combatSync.player.hp));
+    }
+    if (Number.isFinite(Number(player.combatSync?.player?.maxHp))) {
+        avatarRoot.userData.maxHp = Math.max(1, Number(player.combatSync.player.maxHp));
     }
     
     // Update position if available
@@ -4810,6 +5004,9 @@ function removePlayerAvatar(playerId) {
     }
     
     delete scene.userData.playerAvatars[playerId];
+    if (scene.userData.playerAvatarStates) {
+        delete scene.userData.playerAvatarStates[playerId];
+    }
     removeRemoteMovementVisual(playerId);
     removePlayerHeadHealthBar(`remote-${playerId}`);
 }
@@ -5729,6 +5926,11 @@ const orbitPreviewSensitivity = 0.006;
 const orbitPreviewMaxYaw = Math.PI * 0.7;
 const orbitPreviewMaxPitch = 1.2;
 const MOBILE_TOUCH_ENABLED = ('ontouchstart' in window) || ((navigator && navigator.maxTouchPoints) ? navigator.maxTouchPoints > 0 : false);
+const MOBILE_TOUCH_MAX_WIDTH = 900;
+const MOBILE_TOUCH_PAD_SIZE = 180;
+const MOBILE_TOUCH_STICK_SIZE = 88;
+const MOBILE_TOUCH_PAD_OFFSET_X = 20;
+const MOBILE_TOUCH_PAD_OFFSET_BOTTOM = 20;
 const TOUCH_MOVE_DEADZONE = 0.22;
 const TOUCH_LOOK_DEADZONE = 0.08;
 const TOUCH_LOOK_SPEED = 2.45;
@@ -5741,6 +5943,35 @@ let touchMovePointerId = null;
 let touchLookPointerId = null;
 const touchMoveAxis = new THREE.Vector2(0, 0);
 const touchLookAxis = new THREE.Vector2(0, 0);
+
+function isMobileTouchScreenLayout() {
+    if (!MOBILE_TOUCH_ENABLED) return false;
+    if (window.matchMedia && window.matchMedia(`(max-width: ${MOBILE_TOUCH_MAX_WIDTH}px)`).matches) {
+        return true;
+    }
+    const width = Number(window.innerWidth) || 0;
+    const height = Number(window.innerHeight) || 0;
+    return Math.min(width, height) > 0 && Math.min(width, height) <= MOBILE_TOUCH_MAX_WIDTH;
+}
+
+function resetTouchJoystickState() {
+    touchMovePointerId = null;
+    touchLookPointerId = null;
+    if (touchMoveStickEl) touchMoveStickEl.style.transform = 'translate(-50%, -50%)';
+    if (touchLookStickEl) touchLookStickEl.style.transform = 'translate(-50%, -50%)';
+    resetTouchMoveState();
+    resetTouchLookState();
+    updateTouchMoveFlags();
+}
+
+function refreshMobileTouchControlsVisibility() {
+    if (!touchControlsRootEl) return;
+    const shouldShow = isMobileTouchScreenLayout();
+    touchControlsRootEl.style.display = shouldShow ? 'block' : 'none';
+    if (!shouldShow) {
+        resetTouchJoystickState();
+    }
+}
 
 function resetTouchMoveState() {
     touchMoveAxis.set(0, 0);
@@ -5797,7 +6028,7 @@ function updateTouchMoveFlags() {
 }
 
 function applyTouchLookInput(delta) {
-    if (!MOBILE_TOUCH_ENABLED) return;
+    if (!MOBILE_TOUCH_ENABLED || !isMobileTouchScreenLayout()) return;
     if (Math.abs(touchLookAxis.x) < TOUCH_LOOK_DEADZONE && Math.abs(touchLookAxis.y) < TOUCH_LOOK_DEADZONE) return;
     if (consoleState.open || isCombatReviewUiOpen()) return;
 
@@ -5858,9 +6089,9 @@ function createMobileTouchControls() {
         pad.style.position = 'absolute';
         if (left !== null) pad.style.left = left;
         if (right !== null) pad.style.right = right;
-        pad.style.bottom = '24px';
-        pad.style.width = '130px';
-        pad.style.height = '130px';
+        pad.style.bottom = `${MOBILE_TOUCH_PAD_OFFSET_BOTTOM}px`;
+        pad.style.width = `${MOBILE_TOUCH_PAD_SIZE}px`;
+        pad.style.height = `${MOBILE_TOUCH_PAD_SIZE}px`;
         pad.style.borderRadius = '999px';
         pad.style.background = 'rgba(18, 26, 42, 0.45)';
         pad.style.border = '1px solid rgba(160, 200, 255, 0.55)';
@@ -5872,8 +6103,8 @@ function createMobileTouchControls() {
         stick.style.position = 'absolute';
         stick.style.left = '50%';
         stick.style.top = '50%';
-        stick.style.width = '58px';
-        stick.style.height = '58px';
+        stick.style.width = `${MOBILE_TOUCH_STICK_SIZE}px`;
+        stick.style.height = `${MOBILE_TOUCH_STICK_SIZE}px`;
         stick.style.borderRadius = '999px';
         stick.style.transform = 'translate(-50%, -50%)';
         stick.style.background = 'rgba(160, 205, 255, 0.24)';
@@ -5885,8 +6116,8 @@ function createMobileTouchControls() {
         return { pad, stick };
     };
 
-    const leftPad = createPad('18px', null);
-    const rightPad = createPad(null, '18px');
+    const leftPad = createPad(`${MOBILE_TOUCH_PAD_OFFSET_X}px`, null);
+    const rightPad = createPad(null, `${MOBILE_TOUCH_PAD_OFFSET_X}px`);
 
     touchMovePadEl = leftPad.pad;
     touchMoveStickEl = leftPad.stick;
@@ -5966,6 +6197,7 @@ function createMobileTouchControls() {
 
     document.body.appendChild(root);
     touchControlsRootEl = root;
+    refreshMobileTouchControlsVisibility();
 }
 
 // Auto-orbit during animations (dance, flip)
@@ -6304,6 +6536,8 @@ const combatState = {
     roundNumber: 0,             // Current round
 };
 let spectatorCombat = false; // when true, player turns are auto-skipped (dummy-vs-dummy brawls)
+let endTurnPending = false;
+let endTurnWatchdog = null;
 
 const combatTimeline = [];
 const COMBAT_TIMELINE_MAX = 64;
@@ -6323,6 +6557,133 @@ function turnPhaseToCombatPhase(phase) {
 
 function cloneJsonSafe(value) {
     return JSON.parse(JSON.stringify(value));
+}
+
+function getLocalCombatActorId() {
+    const effectiveLocalId = String(((socket && socket.id) ? socket.id : localPlayerId) || '').trim();
+    if (!localPlayerCombatActorId && effectiveLocalId) {
+        const playerStateMap = (scene && scene.userData && scene.userData.playerAvatarStates)
+            ? scene.userData.playerAvatarStates
+            : null;
+        const localState = playerStateMap ? playerStateMap[effectiveLocalId] : null;
+        const actorId = String(localState?.actorId || '').trim();
+        if (actorId) {
+            localPlayerCombatActorId = actorId;
+        }
+    }
+    return String(localPlayerCombatActorId || effectiveLocalId || 'player').trim() || 'player';
+}
+
+function isLocalPlayerTurnEntry(entry) {
+    if (!entry || entry.type !== 'player') return false;
+    const entryId = String(entry.id || '').trim();
+    let localActorId = String(localPlayerCombatActorId || '').trim();
+    if (!localActorId) {
+        localActorId = String(getLocalCombatActorId() || '').trim();
+    }
+    if (entryId && localActorId && entryId === localActorId) return true;
+
+    const socketSid = String((socket && socket.id) || '').trim();
+    const cachedSid = String(localPlayerId || '').trim();
+    const ownerSid = String(entry.ownerSid || entry.playerId || entry.sid || '').trim();
+    const ownerMatchesLocal = !!(
+        ownerSid && (
+            (socketSid && ownerSid === socketSid) ||
+            (cachedSid && ownerSid === cachedSid)
+        )
+    );
+    if (ownerMatchesLocal) {
+        if (!localActorId && entryId) {
+            localPlayerCombatActorId = entryId;
+        }
+        return true;
+    }
+
+    // Fallback: derive local actor id from known player avatar state by either SID.
+    const playerStateMap = (scene && scene.userData && scene.userData.playerAvatarStates)
+        ? scene.userData.playerAvatarStates
+        : null;
+    const localState = playerStateMap
+        ? (playerStateMap[socketSid] || playerStateMap[cachedSid] || null)
+        : null;
+    const derivedActorId = String(localState && localState.actorId ? localState.actorId : '').trim();
+    if (entryId && derivedActorId && entryId === derivedActorId) {
+        localPlayerCombatActorId = derivedActorId;
+        return true;
+    }
+
+    return false;
+}
+
+function resolveCombatActorIdForPlayerSid(sid) {
+    const normalizedSid = String(sid || '').trim();
+    if (!normalizedSid) return null;
+
+    const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
+    if (effectiveLocalId && normalizedSid === effectiveLocalId) {
+        return getLocalCombatActorId();
+    }
+
+    const playerStateMap = (scene && scene.userData && scene.userData.playerAvatarStates)
+        ? scene.userData.playerAvatarStates
+        : null;
+    const playerState = playerStateMap ? playerStateMap[normalizedSid] : null;
+    if (!playerState) return null;
+    const actorId = String(playerState.actorId || playerState.id || '').trim();
+    return actorId || null;
+}
+
+function getCombatOpeningActorId() {
+    if (!combatState.inCombat) return null;
+    if (Math.max(1, Number(combatState.roundNumber) || 1) > 1) return null;
+
+    if (combatInitiatorActorId) return combatInitiatorActorId;
+    if (combatInitiatorSid) {
+        const resolved = resolveCombatActorIdForPlayerSid(combatInitiatorSid);
+        if (resolved) {
+            combatInitiatorActorId = resolved;
+            return resolved;
+        }
+    }
+    return null;
+}
+
+function getConnectedCombatPlayerEntries() {
+    const playerStateMap = (scene && scene.userData && scene.userData.playerAvatarStates)
+        ? scene.userData.playerAvatarStates
+        : {};
+    const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
+    const localActorId = getLocalCombatActorId();
+    const entries = [];
+
+    Object.values(playerStateMap).forEach((player) => {
+        if (!player || String(player.role || '').toLowerCase() !== 'player') return;
+        const playerId = String(player.id || '').trim();
+        const actorId = String(player.actorId || playerId || '').trim();
+        if (!playerId || !actorId) return;
+        entries.push({
+            id: actorId,
+            playerId,
+            name: actorId,
+            isLocal: !!(effectiveLocalId && playerId === effectiveLocalId),
+        });
+    });
+
+    if (!entries.some((entry) => entry.id === localActorId)) {
+        entries.push({
+            id: localActorId,
+            playerId: String(effectiveLocalId || localActorId),
+            name: String(localPlayerCombatActorId || 'Player'),
+            isLocal: true,
+        });
+    }
+
+    entries.sort((left, right) => left.id.localeCompare(right.id));
+    return entries;
+}
+
+function isLocalCombatQueueEntry(entry) {
+    return isLocalPlayerTurnEntry(entry);
 }
 
 function buildResolutionFromActionRecord(actionRecord) {
@@ -6444,6 +6805,7 @@ function buildLiveCombatSyncPayload() {
             name: String(entry?.name || (entry?.type === 'player' ? 'Player' : 'Enemy')),
         })).filter((entry) => !!entry.id),
         player: {
+            actorId: getLocalCombatActorId(),
             hp: Math.max(0, Number(playerState.hp) || 0),
             maxHp: Math.max(1, Number(playerState.maxHp) || 1),
             movementRemaining: Math.max(0, Number(combatState.player?.movementRemaining) || 0),
@@ -6466,42 +6828,47 @@ function buildLiveCombatSyncPayload() {
 
 function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
     if (!combatSync || typeof combatSync !== 'object') return;
-    if (isLocalCombatAuthority()) return;
 
     const sourceId = String(playerId || '').trim();
     if (!sourceId) return;
-    if (!authoritativeCombatSourceId) {
-        authoritativeCombatSourceId = sourceId;
-    }
-    if (authoritativeCombatSourceId !== sourceId) {
+    const payloadTimestamp = Math.max(0, Number(combatSync.timestamp) || 0);
+    if (payloadTimestamp > 0 && payloadTimestamp < lastAppliedCombatSyncTimestamp) {
         return;
+    }
+    if (payloadTimestamp > 0) {
+        lastAppliedCombatSyncTimestamp = payloadTimestamp;
     }
 
     const inCombat = !!combatSync.inCombat;
 
+    if (inCombat && !combatInitiatorActorId && Number(combatSync.roundNumber) <= 1) {
+        const queueFromSync = Array.isArray(combatSync.turnQueue) ? combatSync.turnQueue : [];
+        const firstPlayerEntry = queueFromSync.find((entry) => String(entry?.type || '').toLowerCase() === 'player');
+        const firstPlayerId = String(firstPlayerEntry?.id || '').trim();
+        if (firstPlayerId) {
+            combatInitiatorActorId = firstPlayerId;
+        }
+    }
+
     currentGameMode = inCombat ? GAME_MODE.COMBAT : GAME_MODE.FREE;
     combatState.inCombat = inCombat;
 
-    const phase = String(combatSync.phase || 'PLAYER').toUpperCase();
-    if (inCombat) {
-        setCombatPhase((phase === 'ENEMY' || phase === 'TRANSITION') ? phase : 'PLAYER');
-    } else {
-        currentTurnPhase = TURN_PHASE.IDLE;
-        combatState.phase = 'TRANSITION';
-    }
-
     combatState.roundNumber = Math.max(0, Number(combatSync.roundNumber) || 0);
-    combatState.player.actionUsed = !!combatSync.player?.actionUsed;
-    combatState.player.bonusUsed = !!combatSync.player?.bonusUsed;
-    combatState.player.hasActed = !!combatSync.player?.hasActed;
-    combatState.player.movementRemaining = Math.max(0, Number(combatSync.player?.movementRemaining) || 0);
-    syncCombatPlayerToLegacyState();
 
-    if (Number.isFinite(Number(combatSync.player?.hp))) {
-        playerState.hp = Math.max(0, Number(combatSync.player.hp));
-    }
-    if (Number.isFinite(Number(combatSync.player?.maxHp))) {
-        playerState.maxHp = Math.max(1, Number(combatSync.player.maxHp));
+    const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
+    if (effectiveLocalId && sourceId === effectiveLocalId) {
+        combatState.player.actionUsed = !!combatSync.player?.actionUsed;
+        combatState.player.bonusUsed = !!combatSync.player?.bonusUsed;
+        combatState.player.hasActed = !!combatSync.player?.hasActed;
+        combatState.player.movementRemaining = Math.max(0, Number(combatSync.player?.movementRemaining) || 0);
+        syncCombatPlayerToLegacyState();
+
+        if (Number.isFinite(Number(combatSync.player?.hp))) {
+            playerState.hp = Math.max(0, Number(combatSync.player.hp));
+        }
+        if (Number.isFinite(Number(combatSync.player?.maxHp))) {
+            playerState.maxHp = Math.max(1, Number(combatSync.player.maxHp));
+        }
     }
 
     const enemyStates = Array.isArray(combatSync.enemies) ? combatSync.enemies : [];
@@ -6563,13 +6930,46 @@ function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
         })).filter((entry) => !!entry.id)
         : [];
     combatState.turnQueue = queue;
-    combatState.turnOrder = queue.map((entry) => (entry.type === 'player' ? playerState : findCombatActorById(entry.id)?.userData)).filter(Boolean);
+    combatState.turnOrder = queue.map((entry) => {
+        if (entry.type === 'player') {
+            return isLocalPlayerTurnEntry(entry) ? playerState : findCombatActorById(entry.id);
+        }
+        return findCombatActorById(entry.id)?.userData;
+    }).filter(Boolean);
     if (queue.length > 0) {
         combatState.currentTurnIndex = THREE.MathUtils.clamp(Number(combatSync.currentTurnIndex) || 0, 0, queue.length - 1);
     } else {
         combatState.currentTurnIndex = 0;
     }
+
+    const openingActorId = getCombatOpeningActorId();
+    if (openingActorId && queue.length > 0) {
+        const openerIndex = queue.findIndex((entry) => entry && entry.id === openingActorId);
+        if (openerIndex >= 0) {
+            combatState.currentTurnIndex = openerIndex;
+        }
+    }
     combatState.turnIndex = combatState.currentTurnIndex;
+
+    if (inCombat) {
+        const currentEntry = getCurrentCombatQueueEntry();
+        if (currentEntry?.type === 'enemy') {
+            setCombatPhase('ENEMY');
+        } else if (isLocalCombatQueueEntry(currentEntry)) {
+            setCombatPhase('PLAYER');
+        } else {
+            setCombatPhase('TRANSITION');
+            setCombatLock(true);
+            setCombatTimelineBusy(false);
+            clearCombatMoveTiles();
+            showActionUI(false);
+        }
+    } else {
+        currentTurnPhase = TURN_PHASE.IDLE;
+        combatState.phase = 'TRANSITION';
+        combatInitiatorSid = null;
+        combatInitiatorActorId = null;
+    }
 
     if (inCombat) {
         rebuildCombatArenaFromCurrentState();
@@ -6581,7 +6981,9 @@ function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
 
 function getCombatActorId(actor) {
     if (!actor) return null;
-    if (actor === playerState || actor === playerRig) return 'player';
+    if (actor === playerState || actor === playerRig) return getLocalCombatActorId();
+    if (actor.userData?.actorId) return actor.userData.actorId;
+    if (actor.userData?.playerId) return actor.userData.playerId;
     return actor.userData?.actorId || actor.userData?.name || null;
 }
 
@@ -7870,6 +8272,7 @@ function refreshDmWhoListPanel() {
         .filter((avatar) => avatar && avatar.userData)
         .map((avatar) => ({
             id: String(avatar.userData.playerId || ''),
+            actorId: String(avatar.userData.actorId || avatar.userData.playerId || ''),
             role: String(avatar.userData.playerRole || 'player').toLowerCase(),
             hp: Number.isFinite(Number(avatar.userData.hp)) ? Math.max(0, Number(avatar.userData.hp)) : null,
             maxHp: Number.isFinite(Number(avatar.userData.maxHp)) ? Math.max(1, Number(avatar.userData.maxHp)) : null,
@@ -7950,9 +8353,9 @@ function refreshDmWhoListPanel() {
 
     const playerLines = playerRows.map((row) => {
         const hpText = Number.isFinite(row.hp) && Number.isFinite(row.maxHp) ? ` HP ${row.hp}/${row.maxHp}` : '';
-        return `  - Player ${shortId(row.id)}${hpText}`;
+        return `  - Player ${shortId(row.actorId || row.id)}${hpText}`;
     });
-    const playerEntities = playerRows.map(() => playerState);
+    const playerEntities = playerRows.map((row) => findCombatActorById(row.actorId || row.id));
 
     const dummyLines = enemyDummies.map((dummy) => {
         const name = String(dummy.userData?.name || 'Training Dummy');
@@ -8238,9 +8641,15 @@ function getCurrentCombatQueueEntry() {
 
 function syncCombatTurnQueue(preferredActorId = null) {
     const currentEntry = getCurrentCombatQueueEntry();
-    const preferredId = preferredActorId || currentEntry?.id || 'player';
+    const openingActorId = getCombatOpeningActorId();
+    const shouldUseOpeningPriority = !preferredActorId && !currentEntry?.id;
+    const preferredId = preferredActorId || currentEntry?.id || (shouldUseOpeningPriority ? openingActorId : null) || getLocalCombatActorId();
     const queue = [
-        { id: 'player', type: 'player', name: 'Player' },
+        ...getConnectedCombatPlayerEntries().map((entry) => ({
+            id: entry.id,
+            type: 'player',
+            name: entry.isLocal ? 'Player' : entry.name,
+        })),
         ...trainingDummies
             .filter((dummy) => dummy && dummy.parent && (dummy.userData?.hp || 0) > 0)
             .map((dummy) => ({
@@ -8250,7 +8659,12 @@ function syncCombatTurnQueue(preferredActorId = null) {
             })),
     ];
     combatState.turnQueue = queue;
-    combatState.turnOrder = [playerState, ...trainingDummies.filter((dummy) => dummy && dummy.parent && (dummy.userData?.hp || 0) > 0).map((dummy) => dummy.userData)];
+    combatState.turnOrder = queue.map((entry) => {
+        if (entry.type === 'player') {
+            return isLocalPlayerTurnEntry(entry) ? playerState : findCombatActorById(entry.id);
+        }
+        return findCombatActorById(entry.id)?.userData;
+    }).filter(Boolean);
 
     const preferredIndex = queue.findIndex((entry) => entry.id === preferredId);
     if (preferredIndex >= 0) {
@@ -8266,9 +8680,22 @@ function syncCombatTurnQueue(preferredActorId = null) {
 }
 
 function advanceCombatTurnQueue() {
-    const queue = syncCombatTurnQueue();
+    const previousEntry = getCurrentCombatQueueEntry();
+    const previousActorId = previousEntry?.id || null;
+    const previousIndex = Math.max(0, Number(combatState.currentTurnIndex) || 0);
+    const queue = syncCombatTurnQueue(previousActorId);
     if (queue.length <= 0) return null;
-    combatState.currentTurnIndex = (combatState.currentTurnIndex + 1) % queue.length;
+
+    let anchorIndex = -1;
+    if (previousActorId) {
+        anchorIndex = queue.findIndex((entry) => entry && entry.id === previousActorId);
+    }
+    if (anchorIndex < 0) {
+        // If the previous actor is gone (e.g., defeated/disconnected), keep index continuity.
+        anchorIndex = THREE.MathUtils.clamp(previousIndex, 0, queue.length - 1);
+    }
+
+    combatState.currentTurnIndex = (anchorIndex + 1) % queue.length;
     combatState.turnIndex = combatState.currentTurnIndex;
     if (combatState.currentTurnIndex === 0) {
         combatState.roundNumber = Math.max(1, Number(combatState.roundNumber) || 1) + 1;
@@ -8407,7 +8834,15 @@ function getCombatActionAtCursor(offset = 0) {
 
 function findCombatActorById(actorId) {
     if (!actorId) return null;
-    if (actorId === 'player') return playerRig;
+    if (actorId === 'player' || actorId === getLocalCombatActorId()) return playerRig;
+    const avatars = scene && scene.userData && scene.userData.playerAvatars ? scene.userData.playerAvatars : null;
+    if (avatars) {
+        const avatar = Object.values(avatars).find((candidate) => {
+            if (!candidate || !candidate.userData) return false;
+            return candidate.userData.actorId === actorId || candidate.userData.playerId === actorId;
+        });
+        if (avatar) return avatar;
+    }
     return trainingDummies.find((dummy) => {
         if (!dummy || !dummy.parent) return false;
         const id = getCombatActorId(dummy);
@@ -8606,7 +9041,7 @@ function applyCombatState(snapshot) {
     if (currentGameMode === GAME_MODE.COMBAT) {
         activateCombatCamera();
         rebuildCombatArenaFromCurrentState();
-        syncCombatTurnQueue(restoredCurrentActorId || 'player');
+        syncCombatTurnQueue(restoredCurrentActorId || getLocalCombatActorId());
         showActionUI(combatState.phase === 'PLAYER');
     } else {
         deactivateCombatCamera();
@@ -10907,7 +11342,7 @@ function getMostRelevantActor() {
     }
     const queueEntry = getCurrentCombatQueueEntry();
     if (queueEntry && queueEntry.id) {
-        if (queueEntry.id === 'player') return playerState;
+        if (isLocalPlayerTurnEntry(queueEntry)) return playerState;
         const queueActor = findCombatActorById(queueEntry.id);
         if (queueActor && queueActor.position) return queueActor;
     }
@@ -10966,6 +11401,9 @@ function tryEnterCombat(target, options = {}) {
     resetCombatActionHistory();
     currentGameMode = GAME_MODE.COMBAT;
     combatState.inCombat = true;
+    const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
+    combatInitiatorSid = String(effectiveLocalId || '').trim() || combatInitiatorSid;
+    combatInitiatorActorId = getLocalCombatActorId();
     syncSkyboxWithGameMode();
     syncCombatMusicToGameMode();
     setCombatPhase('PLAYER');
@@ -10989,7 +11427,7 @@ function tryEnterCombat(target, options = {}) {
     ensureCombatEnvironmentPresentation({ targetActor: target });
 
     activateCombatCamera();
-    syncCombatTurnQueue('player');
+    syncCombatTurnQueue(getLocalCombatActorId());
 
     // Snap camera directly behind the player based on their current facing direction.
     {
@@ -11052,6 +11490,19 @@ function tryEnterCombat(target, options = {}) {
     }
 
     announceCombatStart();
+
+    // Push the authoritative turn order (players + enemies) to the server now that the
+    // local queue has been built. The server cannot see training dummies, so the client
+    // must supply the order once at combat start. Subsequent advancement is server-driven.
+    if (socket && socket.connected) {
+        const queueForServer = syncCombatTurnQueue(getLocalCombatActorId());
+        socket.emit('combat-turn-sync', {
+            order: queueForServer,
+            turnIndex: 0,
+            roundNumber: 1,
+        });
+    }
+
     startPlayerTurn();
     return true;
 }
@@ -11072,6 +11523,8 @@ function exitCombatIfNoTargets() {
     resetCombatInteraction();
     
     combatState.inCombat = false;
+    combatInitiatorSid = null;
+    combatInitiatorActorId = null;
     spectatorCombat = false;
 
     emitCombatStateEvent(false, {
@@ -11159,6 +11612,29 @@ function dispatchCombatTurnActor(entry) {
     updateActionMenu();
 
     if (entry.type === 'player') {
+        const isLocal = isLocalCombatQueueEntry(entry);
+        console.log('[DISPATCH]', {
+            entryId: entry.id,
+            entryOwnerSid: entry.ownerSid,
+            localActorId: getLocalCombatActorId(),
+            socketId: socket && socket.id,
+            isLocal,
+        });
+        if (!isLocal) {
+            clearTurnEndState();
+            setCombatPhase('TRANSITION');
+            setCombatLock(true);
+            setCombatTimelineBusy(false);
+            clearCombatMoveTiles();
+            showActionUI(false);
+            const actorLabel = entry.name || getCombatActorLabelById(entry.id) || 'Player';
+            addDmEvent(`TURN START: ${actorLabel}`, 'system');
+            showFloatingText(`${actorLabel} Turn`, '#8ab4ff');
+            logCombatEvent(`${actorLabel} turn`, 'system');
+            updateCombatUI();
+            updateDmControlPanel();
+            return true;
+        }
         if (spectatorCombat) {
             // Auto-skip player turn in spectator (brawl) mode
             showFloatingText('SPECTATING', '#b9c0cf');
@@ -11172,7 +11648,16 @@ function dispatchCombatTurnActor(entry) {
 
     const enemy = findCombatActorById(entry.id);
     if (!enemy || !enemy.parent || (enemy.userData?.hp || 0) <= 0) {
-        return stepTurn();
+        // Server is authoritative for turn advancement; do not emit local step-turn
+        // when an enemy actor is missing client-side.
+        setCombatPhase('TRANSITION');
+        setCombatLock(true);
+        setCombatTimelineBusy(false);
+        clearCombatMoveTiles();
+        showActionUI(false);
+        updateCombatUI();
+        updateDmControlPanel();
+        return true;
     }
 
     clearTurnEndState();
@@ -11184,16 +11669,24 @@ function dispatchCombatTurnActor(entry) {
     showFloatingText(`${entry.name || 'Enemy'} Turn`, '#ff8a8a');
     playCombatSfxCue('turn-enemy');
     logCombatEvent(`${entry.name || 'Enemy'} turn`, 'system');
-    setTimeout(() => { void runEnemyTurn(enemy); }, 320);
+    // Server resolves enemy actions and will broadcast combat-action-result/combat-turn.
     return true;
 }
 
 function stepTurn() {
-    if (currentGameMode !== GAME_MODE.COMBAT) return false;
-    if (combatReplayActive || combatState.timelineBusy) return false;
-    const nextEntry = advanceCombatTurnQueue();
-    if (!nextEntry) return false;
-    return dispatchCombatTurnActor(nextEntry);
+    if (currentGameMode !== GAME_MODE.COMBAT) {
+        console.log('[END-TURN] stepTurn: not in combat mode');
+        return false;
+    }
+    if (combatReplayActive) {
+        console.log('[END-TURN] stepTurn: replay active, skipping');
+        return false;
+    }
+    console.log('[END-TURN] stepTurn: emitting end-turn to server');
+    // Delegate turn advancement to the server. The server validates ownership and
+    // broadcasts 'combat-turn' to all clients, which drives dispatchCombatTurnActor.
+    socket.emit('end-turn', {});
+    return true;
 }
 
 // Check line of sight from position A to B (uses raycasting)
@@ -12635,7 +13128,7 @@ function executeAttack(target) {
                 recordCombatAction({
                     type: 'attack',
                     attackType: 'melee',
-                    actorId: 'player',
+                    actorId: getLocalCombatActorId(),
                     targetId: target?.userData?.name || null,
                     resolution,
                     result: resolution.hit ? 'hit' : 'miss',
@@ -12866,7 +13359,7 @@ function rangedAttack(target) {
                 recordCombatAction({
                     type: 'attack',
                     attackType: 'ranged',
-                    actorId: 'player',
+                    actorId: getLocalCombatActorId(),
                     targetId: target?.userData?.name || null,
                     resolution,
                     result: resolution.hit ? 'hit' : 'miss',
@@ -12897,7 +13390,7 @@ function startPlayerTurn() {
     clearTurnEndState();
     syncPlayerHealthFromHudIfAvailable();
     updatePlayerHealthHud();
-    syncCombatTurnQueue('player');
+    syncCombatTurnQueue(getLocalCombatActorId());
     setCombatPhase('PLAYER');
     setCombatTimelineBusy(false);
     setCombatLock(false);
@@ -12921,16 +13414,53 @@ function startPlayerTurn() {
 }
 
 function endTurn() {
-    if (currentGameMode !== GAME_MODE.COMBAT) return;
+    if (!socket || !socket.connected) {
+        console.warn('[END-TURN] blocked: no connection');
+        return;
+    }
+    if (endTurnPending) {
+        console.log('[END-TURN] blocked: already pending');
+        return;
+    }
+    if (currentGameMode !== GAME_MODE.COMBAT) {
+        console.log('[END-TURN] endTurn: not in combat mode');
+        return;
+    }
+
+    endTurnPending = true;
+    if (endTurnWatchdog) {
+        clearTimeout(endTurnWatchdog);
+        endTurnWatchdog = null;
+    }
+    endTurnWatchdog = setTimeout(() => {
+        if (!endTurnPending) return;
+        endTurnPending = false;
+        console.warn('[END-TURN] watchdog timeout: no server response; pending cleared');
+        showFloatingText('Turn sync timeout, retrying allowed', '#ffd166', true);
+    }, 3500);
+
     addDmEvent('PLAYER TURN: Ended', 'system');
     clearTurnEndState();
     pendingAction = null;
     resetCombatInteraction();
     updateActionMenu();
-    
     clearCombatMoveTiles();
     showActionUI(false);
-    stepTurn();
+
+    console.log('[END-TURN] emitting once');
+    socket.emit('end-turn', { clientTs: Date.now() }, (ack) => {
+        console.log('[END-TURN] server ack:', ack);
+        if (!ack || ack.ok === true) {
+            return;
+        }
+        endTurnPending = false;
+        if (endTurnWatchdog) {
+            clearTimeout(endTurnWatchdog);
+            endTurnWatchdog = null;
+        }
+        const reason = String(ack.reason || 'unknown');
+        console.warn('[END-TURN] ack reported failure:', reason);
+    });
 }
 
 function canEnemySeePlayer(enemy, player) {
@@ -14240,7 +14770,7 @@ function requestReleasePossession() {
 function resolveCombatActorForDm(actorId) {
     const id = String(actorId || '').trim();
     if (!id) return null;
-    if (id === 'player') return playerState;
+    if (id === 'player' || id === getLocalCombatActorId()) return playerState;
     return findCombatActorById(id);
 }
 
@@ -15709,6 +16239,7 @@ function updateWorldDmSetpiece(setpiece, elapsedSeconds) {
 const scene = new THREE.Scene();
 // Initialize userData for tracking remote player avatars
 scene.userData.playerAvatars = {};
+scene.userData.playerAvatarStates = {};
 flushPendingWorldState();
 
 const diceScene = new THREE.Scene();
@@ -16252,6 +16783,10 @@ function updateXRHandRays() {
 initXRHandRays();
 
 function addWebXRButton() {
+    if (isMobileTouchScreenLayout()) {
+        return;
+    }
+
     const btn = document.createElement('button');
     const status = document.createElement('div');
     btn.style.position = 'fixed';
@@ -18066,6 +18601,11 @@ window.addEventListener('resize', () => {
     const dpr = window.devicePixelRatio || 1;
     renderer.setPixelRatio(dpr * Math.max(0.35, Math.min(1.0, Number(SETTINGS.renderScale) || 1)));
     renderer.setSize(window.innerWidth, window.innerHeight);
+    refreshMobileTouchControlsVisibility();
+});
+
+window.addEventListener('orientationchange', () => {
+    refreshMobileTouchControlsVisibility();
 });
 
 // --- Zoom in/out with mouse wheel ---
@@ -18673,6 +19213,9 @@ function animate(nowMs) {
                 cursor: movementCursor,
             }
             : null;
+        const includeHeavySync = (now - lastHeavyPlayerSyncAt) >= PLAYER_HEAVY_SYNC_INTERVAL_MS;
+        const includeCombatSync = currentGameMode === GAME_MODE.COMBAT
+            && (includeHeavySync || (now - lastCombatSyncAt) >= PLAYER_COMBAT_SYNC_INTERVAL_MS);
     // Avatar bone caching to avoid full traverse every sync
     if (!window.avatarBoneCacheMap) {
         window.avatarBoneCacheMap = new Map();
@@ -18680,7 +19223,7 @@ function animate(nowMs) {
     
     // Extract avatar pose (bone quaternions) if avatar is loaded
     let avatarData = null;
-    if (localPlayerAvatarRoot && localPlayerAvatarRigState) {
+    if (includeHeavySync && localPlayerAvatarRoot && localPlayerAvatarRigState) {
         let boneCache = window.avatarBoneCacheMap.get(localPlayerAvatarRoot);
         
         // Rebuild cache if first time or avatar changed
@@ -18723,10 +19266,14 @@ function animate(nowMs) {
                 y: actorYaw,
                 z: 0,
             },
-            avatar: avatarData,  // Include avatar pose
             movementPreview,
-            combatSync: buildLiveCombatSyncPayload(),
         };
+        if (avatarData) {
+            playerUpdatePayload.avatar = avatarData;
+        }
+        if (includeCombatSync) {
+            playerUpdatePayload.combatSync = buildLiveCombatSyncPayload();
+        }
         _netStats.playerUpdatesOut += 1;
         if (_netStats.playerUpdatesOut % 120 === 0) {
             netLog(`player-update OUT  out#=${_netStats.playerUpdatesOut}  pos=(${localPlayerWorldPos.x.toFixed(2)}, ${localPlayerWorldPos.y.toFixed(2)}, ${localPlayerWorldPos.z.toFixed(2)})`);
@@ -18743,6 +19290,12 @@ function animate(nowMs) {
         }
         socket.emit('player-update', playerUpdatePayload);
         lastPlayerSyncAt = now;
+        if (includeHeavySync) {
+            lastHeavyPlayerSyncAt = now;
+        }
+        if (includeCombatSync) {
+            lastCombatSyncAt = now;
+        }
     }
 
     animateSceneTextures(delta);
