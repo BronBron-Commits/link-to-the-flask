@@ -1467,12 +1467,15 @@ def socket_end_turn(data=None):
                 current = turn_data.get("currentActor") if isinstance(turn_data, dict) else None
                 current_type = str((current or {}).get("type") or "").strip().lower()
                 if current_type == "enemy":
+                    print("[TURN] Emitting enemy turn", flush=True)
+                    socketio.emit("combat-turn", turn_data)
                     _handle_enemy_turn(current if isinstance(current, dict) else {})
                     turn_data = _advance_server_turn()
         if turn_data is None:
             print(f"[END-TURN] turn_data is None after advance")
             return _deny("turn-advance-failed")
 
+        print("[TURN] Emitting next player turn", flush=True)
         print(f"[END-TURN] Emitting combat-turn: {turn_data}")
 
         socketio.emit("combat-turn", turn_data)
@@ -1505,11 +1508,14 @@ def socket_advance_combat_turn(data=None):
             current = turn_data.get("currentActor") if isinstance(turn_data, dict) else None
             current_type = str((current or {}).get("type") or "").strip().lower()
             if current_type == "enemy":
+                print("[TURN] Emitting enemy turn", flush=True)
+                socketio.emit("combat-turn", turn_data)
                 _handle_enemy_turn(current if isinstance(current, dict) else {})
                 turn_data = _advance_server_turn()
     if turn_data is None:
         return
 
+    print("[TURN] Emitting next player turn", flush=True)
     socketio.emit("combat-turn", turn_data)
     _broadcast_world_update(include_scene=False)
 
