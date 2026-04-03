@@ -1891,6 +1891,14 @@ function isDmFreeCamera() {
     return modeManager.current === MODE.DM && !getControlledActor();
 }
 
+function hasDmPossessionControl() {
+    return modeManager.current === MODE.DM && !!getControlledActor();
+}
+
+function canUseStandardMovementControls() {
+    return hasModePermission('player.keyboardInput') || hasDmPossessionControl();
+}
+
 function isLocalCombatAuthority() {
     if (modeManager.current === MODE.DM) return true;
     if (modeManager.current !== MODE.PLAYER) return false;
@@ -6474,7 +6482,7 @@ function updateTouchMoveFlags() {
         return;
     }
 
-    if (hasModePermission('player.keyboardInput')) {
+    if (canUseStandardMovementControls()) {
         moveForward = forward;
         moveBackward = backward;
         moveLeft = left;
@@ -6497,7 +6505,7 @@ function applyTouchLookInput(delta) {
         return;
     }
 
-    if (!hasModePermission('player.keyboardInput')) return;
+    if (!canUseStandardMovementControls()) return;
     yaw -= lookYaw;
     if (!combatCameraActive) {
         pitch -= lookPitch;
@@ -18435,7 +18443,7 @@ document.addEventListener('keydown', (event) => {
 
     const tagName = event.target && event.target.tagName ? event.target.tagName : '';
     const isTextInput = tagName === 'INPUT' || tagName === 'TEXTAREA';
-    const isPlayerInputMode = hasModePermission('player.keyboardInput');
+    const isPlayerInputMode = canUseStandardMovementControls();
 
     if (!isPlayerInputMode) {
         if (modeManager.current === MODE.DM && !event.repeat && (event.code === 'Digit4' || event.code === 'Numpad4')) {
@@ -18797,7 +18805,7 @@ document.addEventListener('keyup', (event) => {
         }
     }
 
-    if (!hasModePermission('player.keyboardInput')) {
+    if (!canUseStandardMovementControls()) {
         return;
     }
 
@@ -19014,8 +19022,8 @@ function updateFlyControls(delta) {
 
     const activeInputActor = getActiveInputActor();
 
-    // DM observer has no physical presence — suppress player movement application.
-    if (modeManager.current === MODE.DM && activeInputActor === playerState) {
+    // DM free camera has no physical presence — suppress player movement only when unpossessed.
+    if (modeManager.current === MODE.DM && !hasDmPossessionControl() && activeInputActor === playerState) {
         playerState.velocity.set(0, 0, 0);
         moveX = 0;
         moveZ = 0;
