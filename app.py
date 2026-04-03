@@ -222,6 +222,7 @@ def _apply_role_assignment(sid: str, role: str) -> bool:
         player_entry["actorId"] = "dm_1"
     else:
         player_entry["actorId"] = "dev_1"
+    player_entry["networkId"] = str(player_entry.get("actorId") or sid)
 
     _refresh_player_authority_flags()
     return True
@@ -279,6 +280,7 @@ def _save_resume_snapshot_for_sid(sid: str, now: float | None = None):
         "role": role,
         "slotIndex": slot_index,
         "actorId": player_data.get("actorId"),
+        "networkId": player_data.get("networkId"),
         "isAuthoritative": bool(player_data.get("isAuthoritative", False)),
         "position": deepcopy(player_data.get("position", {"x": 0.0, "y": 0.0, "z": 0.0})),
         "rotation": deepcopy(player_data.get("rotation", {"x": 0.0, "y": 0.0, "z": 0.0})),
@@ -328,6 +330,7 @@ def _register_spawned_entity(entity_type: str, position: dict, name: str | None 
 
     entities[actor_id] = {
         "id": actor_id,
+        "networkId": actor_id,
         "type": normalized_type,
         "name": display_name,
         "position": {"x": px, "y": py, "z": pz},
@@ -471,7 +474,7 @@ def _build_turn_order(initiator_sid: str | None = None) -> list[dict]:
             continue
         if _normalize_role(player_entry.get("role")) != "player":
             continue
-        actor_id = str(player_entry.get("actorId") or "").strip()
+        actor_id = str(player_entry.get("networkId") or player_entry.get("actorId") or "").strip()
         if not actor_id:
             continue
         order.append({
@@ -496,9 +499,11 @@ def _build_turn_order(initiator_sid: str | None = None) -> list[dict]:
             # Ignore stale placeholder entities that have no world-space presence.
             if not isinstance((entity or {}).get("position"), dict):
                 continue
-            actor_id = str(entity_id or "").strip()
+            actor_id = str((entity or {}).get("networkId") or entity_id or "").strip()
             if not actor_id:
                 continue
+            if isinstance(entity, dict) and not entity.get("networkId"):
+                entity["networkId"] = actor_id
             order.append({
                 "id": actor_id,
                 "type": "enemy",
@@ -612,6 +617,7 @@ def socket_connect(connect_payload=None):
             "role": role,
             "slot": None,
             "actorId": None,
+            "networkId": None,
             "isAuthoritative": False,
             "position": {"x": 0.0, "y": 0.0, "z": 0.0},
             "rotation": {"x": 0.0, "y": 0.0, "z": 0.0},
@@ -632,6 +638,8 @@ def socket_connect(connect_payload=None):
         if resumed and resumed_snapshot:
             player_entry = players.get(sid)
             if isinstance(player_entry, dict):
+                if resumed_snapshot.get("networkId") is not None:
+                    player_entry["networkId"] = str(resumed_snapshot.get("networkId") or "").strip() or None
                 if isinstance(resumed_snapshot.get("position"), dict):
                     player_entry["position"] = resumed_snapshot["position"]
                 if isinstance(resumed_snapshot.get("rotation"), dict):
@@ -1302,9 +1310,11 @@ def _sync_enemy_entries_into_combat_order() -> bool:
     for entity_id, entity in entities.items():
         if not _is_enemy_entity(entity):
             continue
-        actor_id = str(entity_id or "").strip()
+        actor_id = str((entity or {}).get("networkId") or entity_id or "").strip()
         if not actor_id or actor_id in existing_ids:
             continue
+        if isinstance(entity, dict) and not entity.get("networkId"):
+            entity["networkId"] = actor_id
         order.append(
             {
                 "id": actor_id,
@@ -1332,6 +1342,7 @@ def _ensure_enemy_actor_registered(actor_id: str, name: str | None = None) -> bo
     if not isinstance(entity, dict):
         entity = {
             "id": enemy_id,
+            "networkId": enemy_id,
             "type": "training-dummy",
             "name": str(name or enemy_id),
             "attackBonus": 4,
@@ -1340,6 +1351,7 @@ def _ensure_enemy_actor_registered(actor_id: str, name: str | None = None) -> bo
         }
         entities[enemy_id] = entity
     else:
+        entity.setdefault("networkId", enemy_id)
         entity.setdefault("type", "training-dummy")
         entity.setdefault("name", str(name or enemy_id))
         entity.setdefault("attackBonus", 4)
@@ -1429,7 +1441,7 @@ def _run_enemy_turn(enemy_actor: dict) -> dict:
     timeline_id = f"enemy-turn-{actor_id}-{start_time_ms}"
 
     target_player = players[target_sid]
-    target_actor_id = str(target_player.get("actorId") or "")
+    target_actor_id = str(target_player.get("networkId") or target_player.get("actorId") or "")
     player_pos = target_player.get("position") if isinstance(target_player.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
 
     entities = world_state.setdefault("entities", {})

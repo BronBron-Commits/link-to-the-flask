@@ -4378,7 +4378,7 @@ function upsertPlayerAvatar(player) {
     const isLocalPlayer = !!(effectiveLocalId && player.id === effectiveLocalId);
 
     if (isLocalPlayer) {
-        localPlayerCombatActorId = String(player.actorId || player.id || localPlayerCombatActorId || '').trim() || localPlayerCombatActorId;
+        localPlayerCombatActorId = String(player.networkId || player.actorId || player.id || localPlayerCombatActorId || '').trim() || localPlayerCombatActorId;
     }
 
     if (mode === MODE.DM && window.__NET_DEBUG__) {
@@ -4439,7 +4439,8 @@ function upsertPlayerAvatar(player) {
         avatarRoot = new THREE.Group();
         avatarRoot.userData.playerId = player.id;
         avatarRoot.userData.playerRole = player.role;
-        avatarRoot.userData.actorId = String(player.actorId || player.id || '').trim() || player.id;
+        avatarRoot.userData.networkId = String(player.networkId || player.actorId || player.id || '').trim() || player.id;
+        avatarRoot.userData.actorId = String(player.actorId || player.networkId || player.id || '').trim() || player.id;
         avatarRoot.userData.playerLabel = String(player.actorId || player.id || 'Player');
         
         // Simple cube visual for remote player (fallback if no mesh data)
@@ -4504,7 +4505,8 @@ function upsertPlayerAvatar(player) {
 
     avatarRoot.userData.playerId = player.id;
     avatarRoot.userData.playerRole = player.role;
-    avatarRoot.userData.actorId = String(player.actorId || player.id || avatarRoot.userData.actorId || '').trim() || player.id;
+    avatarRoot.userData.networkId = String(player.networkId || player.actorId || player.id || avatarRoot.userData.networkId || '').trim() || player.id;
+    avatarRoot.userData.actorId = String(player.actorId || player.networkId || player.id || avatarRoot.userData.actorId || '').trim() || player.id;
     avatarRoot.userData.playerLabel = String(player.actorId || player.id || avatarRoot.userData.playerLabel || 'Player');
     if (Number.isFinite(Number(player.combatSync?.player?.hp))) {
         avatarRoot.userData.hp = Math.max(0, Number(player.combatSync.player.hp));
@@ -6591,7 +6593,7 @@ function getLocalCombatActorId() {
             ? scene.userData.playerAvatarStates
             : null;
         const localState = playerStateMap ? playerStateMap[effectiveLocalId] : null;
-        const actorId = String(localState?.actorId || '').trim();
+        const actorId = String(localState?.networkId || localState?.actorId || '').trim();
         if (actorId) {
             localPlayerCombatActorId = actorId;
         }
@@ -6631,7 +6633,7 @@ function isLocalPlayerTurnEntry(entry) {
     const localState = playerStateMap
         ? (playerStateMap[socketSid] || playerStateMap[cachedSid] || null)
         : null;
-    const derivedActorId = String(localState && localState.actorId ? localState.actorId : '').trim();
+    const derivedActorId = String(localState && (localState.networkId || localState.actorId) ? (localState.networkId || localState.actorId) : '').trim();
     if (entryId && derivedActorId && entryId === derivedActorId) {
         localPlayerCombatActorId = derivedActorId;
         return true;
@@ -6654,7 +6656,7 @@ function resolveCombatActorIdForPlayerSid(sid) {
         : null;
     const playerState = playerStateMap ? playerStateMap[normalizedSid] : null;
     if (!playerState) return null;
-    const actorId = String(playerState.actorId || playerState.id || '').trim();
+    const actorId = String(playerState.networkId || playerState.actorId || playerState.id || '').trim();
     return actorId || null;
 }
 
@@ -6795,6 +6797,7 @@ function createCombatSnapshot(reason = 'snapshot') {
 function serializeTrainingDummy(dummy) {
     if (!dummy) return null;
     return {
+        networkId: dummy.userData?.networkId || dummy.userData?.actorId || null,
         actorId: dummy.userData?.actorId || null,
         name: dummy.userData?.name || 'Training Dummy',
         position: {
@@ -6899,16 +6902,18 @@ function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
     const enemyStates = Array.isArray(combatSync.enemies) ? combatSync.enemies : [];
     const existingById = new Map(trainingDummies
         .filter((dummy) => dummy && dummy.userData)
-        .map((dummy) => [String(dummy.userData.actorId || ''), dummy]));
+        .map((dummy) => [String(dummy.userData.networkId || dummy.userData.actorId || ''), dummy]));
     const syncedIds = new Set();
 
     for (const enemyState of enemyStates) {
         if (!enemyState || typeof enemyState !== 'object') continue;
         const actorId = String(enemyState.actorId || '').trim();
-        if (!actorId) continue;
-        syncedIds.add(actorId);
+        const networkId = String(enemyState.networkId || enemyState.actorId || '').trim();
+        if (!networkId) continue;
+        const effectiveActorId = String(actorId || networkId).trim();
+        syncedIds.add(networkId);
 
-        let dummy = existingById.get(actorId);
+        let dummy = existingById.get(networkId) || existingById.get(effectiveActorId);
         if (!dummy || !dummy.parent) {
             dummy = spawnTrainingDummy(
                 Number(enemyState.position?.x) || 0,
@@ -6916,11 +6921,13 @@ function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
                 Number(enemyState.position?.z) || 0,
                 String(enemyState.name || 'Training Dummy')
             );
-            dummy.userData.actorId = actorId;
-            existingById.set(actorId, dummy);
+            dummy.userData.networkId = networkId;
+            dummy.userData.actorId = effectiveActorId;
+            existingById.set(networkId, dummy);
         }
 
-        dummy.userData.actorId = actorId;
+        dummy.userData.networkId = networkId;
+        dummy.userData.actorId = effectiveActorId;
         dummy.userData.name = String(enemyState.name || dummy.userData.name || 'Training Dummy');
         dummy.position.set(
             Number(enemyState.position?.x) || 0,
@@ -6941,7 +6948,7 @@ function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
     }
 
     for (const dummy of [...trainingDummies]) {
-        const actorId = String(dummy?.userData?.actorId || '').trim();
+        const actorId = String(dummy?.userData?.networkId || dummy?.userData?.actorId || '').trim();
         if (actorId && !syncedIds.has(actorId)) {
             removeTrainingDummy(dummy);
         }
@@ -7007,6 +7014,7 @@ function applyLiveCombatSyncFromPlayer(playerId, combatSync) {
 function getCombatActorId(actor) {
     if (!actor) return null;
     if (actor === playerState || actor === playerRig) return getLocalCombatActorId();
+    if (actor.userData?.networkId) return actor.userData.networkId;
     if (actor.userData?.actorId) return actor.userData.actorId;
     if (actor.userData?.playerId) return actor.userData.playerId;
     // Do not fall back to display names; combat ids must be stable/network-safe.
@@ -7016,7 +7024,7 @@ function getCombatActorId(actor) {
 function getCombatActorLabel(actor) {
     if (!actor) return 'Unknown';
     if (actor === playerState || actor === playerRig) return 'Player';
-    return actor.userData?.name || actor.userData?.actorId || 'Enemy';
+    return actor.userData?.name || actor.userData?.networkId || actor.userData?.actorId || 'Enemy';
 }
 
 function isGodModeActive() {
@@ -8865,7 +8873,9 @@ function findCombatActorById(actorId) {
     if (avatars) {
         const avatar = Object.values(avatars).find((candidate) => {
             if (!candidate || !candidate.userData) return false;
-            return candidate.userData.actorId === actorId || candidate.userData.playerId === actorId;
+            return candidate.userData.networkId === actorId
+                || candidate.userData.actorId === actorId
+                || candidate.userData.playerId === actorId;
         });
         if (avatar) return avatar;
     }
@@ -14905,6 +14915,7 @@ function applyDmCommandFromServer(packet) {
         const actorId = String(payload.actorId || '').trim();
         if (dummy && dummy.userData && actorId) {
             dummy.userData.actorId = actorId;
+            dummy.userData.networkId = actorId;
         }
         break;
     }
@@ -14927,6 +14938,7 @@ function applyDmCommandFromServer(packet) {
         const actorId = String(payload.actorId || '').trim();
         if (result && result.userData && actorId) {
             result.userData.actorId = actorId;
+            result.userData.networkId = actorId;
         }
         console.log(`[SPAWN] Spawn result:`, result ? 'success' : 'failed');
         break;
@@ -15071,6 +15083,7 @@ function spawnTrainingDummy(x, y, z, name = 'Training Dummy') {
 
     dummy.userData = {
         actorId: `enemy-${combatActorIdCounter++}`,
+        networkId: null,
         isTargetable: true,
         name,
         hp: 50,
@@ -15084,6 +15097,7 @@ function spawnTrainingDummy(x, y, z, name = 'Training Dummy') {
         dynamic: true,
         collider: 'ignore',
     };
+    dummy.userData.networkId = dummy.userData.actorId;
     scene.add(dummy);
     trainingDummies.push(dummy);
     createEnemyHealthBar(dummy);
