@@ -2826,6 +2826,18 @@ function runConsoleCommand(input) {
     }
 }
 
+function parseConsoleScalar(raw) {
+    const text = String(raw ?? '').trim();
+    if (!text.length) return '';
+    const lower = text.toLowerCase();
+    if (lower === 'true' || lower === 'on' || lower === 'yes') return true;
+    if (lower === 'false' || lower === 'off' || lower === 'no') return false;
+    if (lower === 'null') return null;
+    const numeric = Number(text);
+    if (Number.isFinite(numeric)) return numeric;
+    return text;
+}
+
 function registerDefaultConsoleCommands() {
     registerConsoleCommand('help', {
         modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
@@ -3245,6 +3257,302 @@ function registerDefaultConsoleCommands() {
                 toggleGrid();
             }
             appendConsoleHistory(`Grid ${gridVisible ? 'enabled' : 'disabled'}`, 'ok');
+        },
+    });
+
+    const runtimeTunables = {
+        'camera.fov': {
+            get: () => Number(camera?.fov) || 0,
+            set: (value) => {
+                const next = THREE.MathUtils.clamp(Number(value) || 58, 5, 120);
+                camera.fov = next;
+                camera.updateProjectionMatrix();
+                return next;
+            },
+        },
+        'camera.yaw': {
+            get: () => Number(yaw) || 0,
+            set: (value) => {
+                yaw = Number(value) || 0;
+                return yaw;
+            },
+        },
+        'camera.pitch': {
+            get: () => Number(pitch) || 0,
+            set: (value) => {
+                pitch = THREE.MathUtils.clamp(Number(value) || 0, -Math.PI / 2, Math.PI / 2);
+                return pitch;
+            },
+        },
+        'input.lookSpeed': {
+            get: () => Number(lookSpeed) || 0,
+            set: (value) => {
+                lookSpeed = THREE.MathUtils.clamp(Number(value) || 0.0025, 0.0001, 0.02);
+                return lookSpeed;
+            },
+        },
+        'player.hp': {
+            get: () => Number(playerState?.hp) || 0,
+            set: (value) => {
+                const hp = Math.max(0, Number(value) || 0);
+                const maxHp = Math.max(1, Number(playerState?.maxHp) || 1);
+                playerState.hp = Math.min(maxHp, hp);
+                updatePlayerHealthHud();
+                return playerState.hp;
+            },
+        },
+        'player.maxHp': {
+            get: () => Number(playerState?.maxHp) || 0,
+            set: (value) => {
+                playerState.maxHp = Math.max(1, Number(value) || 1);
+                playerState.hp = Math.min(Number(playerState.hp) || 0, playerState.maxHp);
+                updatePlayerHealthHud();
+                return playerState.maxHp;
+            },
+        },
+        'player.speed': {
+            get: () => Number(playerState?.speed) || 0,
+            set: (value) => {
+                playerState.speed = Math.max(0.1, Number(value) || 5);
+                return playerState.speed;
+            },
+        },
+        'combat.inCombat': {
+            get: () => !!combatState?.inCombat,
+            set: (value) => {
+                const on = !!value;
+                if (on) {
+                    currentGameMode = GAME_MODE.COMBAT;
+                    combatState.inCombat = true;
+                    setCombatPhase(combatState.phase || 'PLAYER');
+                } else {
+                    currentGameMode = GAME_MODE.FREE;
+                    combatState.inCombat = false;
+                    setCombatPhase('TRANSITION');
+                    setCombatLock(false);
+                    deactivateCombatCamera();
+                }
+                updateCombatUI();
+                updateActionMenu();
+                return combatState.inCombat;
+            },
+        },
+        'combat.round': {
+            get: () => Number(combatState?.roundNumber) || 0,
+            set: (value) => {
+                combatState.roundNumber = Math.max(0, Math.floor(Number(value) || 0));
+                updateCombatUI();
+                return combatState.roundNumber;
+            },
+        },
+        'combat.turnIndex': {
+            get: () => Number(combatState?.currentTurnIndex) || 0,
+            set: (value) => {
+                combatState.currentTurnIndex = Math.max(0, Math.floor(Number(value) || 0));
+                updateCombatUI();
+                return combatState.currentTurnIndex;
+            },
+        },
+        'combat.lock': {
+            get: () => !!combatState?.lock,
+            set: (value) => {
+                setCombatLock(!!value);
+                return !!combatState.lock;
+            },
+        },
+        'dm.autostep': {
+            get: () => !!dmAutoStepEnabled,
+            set: (value) => {
+                setDmAutoStepEnabled(!!value);
+                return !!dmAutoStepEnabled;
+            },
+        },
+        'dm.authority': {
+            get: () => String(simulationAuthority || ''),
+            set: (value) => {
+                const next = String(value || '').toLowerCase();
+                if (next === SIMULATION_AUTHORITY.SERVER || next === SIMULATION_AUTHORITY.LOCAL_DM) {
+                    setSimulationAuthority(next);
+                    syncDmAuthorityLayerFromState();
+                }
+                return String(simulationAuthority || '');
+            },
+        },
+        'dm.layer': {
+            get: () => String(dmAuthorityLayer || ''),
+            set: (value) => {
+                const next = String(value || '').toLowerCase();
+                if (Object.values(DM_AUTHORITY_LAYER).includes(next)) {
+                    setDmAuthorityLayer(next);
+                }
+                return String(dmAuthorityLayer || '');
+            },
+        },
+    };
+
+    registerConsoleCommand('vars', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'vars [filter]',
+        description: 'List runtime variable keys that can be controlled via console',
+        execute: (_ctx, args) => {
+            const filter = String(args[0] || '').toLowerCase();
+            const keys = Object.keys(runtimeTunables)
+                .filter((k) => !filter || k.toLowerCase().includes(filter))
+                .sort();
+            appendConsoleHistory(keys.length ? `Vars: ${keys.join(', ')}` : 'No vars matched filter', keys.length ? 'ok' : 'error');
+        },
+    });
+
+    registerConsoleCommand('get', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'get <varKey>',
+        description: 'Read a runtime variable from the control registry',
+        execute: (_ctx, args) => {
+            const key = String(args[0] || '').trim();
+            const tunable = runtimeTunables[key];
+            if (!tunable) {
+                appendConsoleHistory(`Unknown var key: ${key}`, 'error');
+                return;
+            }
+            const value = tunable.get();
+            appendConsoleHistory(`${key} = ${String(value)}`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('set', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'set <varKey> <value>',
+        description: 'Set a runtime variable in the control registry',
+        execute: (_ctx, args) => {
+            const key = String(args[0] || '').trim();
+            const tunable = runtimeTunables[key];
+            if (!tunable) {
+                appendConsoleHistory(`Unknown var key: ${key}`, 'error');
+                return;
+            }
+            if (args.length < 2) {
+                appendConsoleHistory('Usage: set <varKey> <value>', 'error');
+                return;
+            }
+            const value = parseConsoleScalar(args.slice(1).join(' '));
+            const updated = tunable.set(value);
+            appendConsoleHistory(`${key} -> ${String(updated)}`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('inc', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'inc <varKey> [delta]',
+        description: 'Increment a numeric runtime variable by delta (default 1)',
+        execute: (_ctx, args) => {
+            const key = String(args[0] || '').trim();
+            const tunable = runtimeTunables[key];
+            if (!tunable) {
+                appendConsoleHistory(`Unknown var key: ${key}`, 'error');
+                return;
+            }
+            const current = Number(tunable.get());
+            if (!Number.isFinite(current)) {
+                appendConsoleHistory(`${key} is not numeric`, 'error');
+                return;
+            }
+            const delta = Number(args[1]);
+            const next = current + (Number.isFinite(delta) ? delta : 1);
+            const updated = tunable.set(next);
+            appendConsoleHistory(`${key} -> ${String(updated)}`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('tp', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
+        usage: 'tp <x> <y> <z>',
+        description: 'Teleport local player actor to world coordinates',
+        execute: (_ctx, args) => {
+            if (args.length < 3) {
+                appendConsoleHistory('Usage: tp <x> <y> <z>', 'error');
+                return;
+            }
+            const x = Number(args[0]);
+            const y = Number(args[1]);
+            const z = Number(args[2]);
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+                appendConsoleHistory('tp requires numeric x y z', 'error');
+                return;
+            }
+            playerState.position.set(x, y, z);
+            playerState.prevPosition.copy(playerState.position);
+            syncPlayerRigFromState();
+            appendConsoleHistory(`Teleported to (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('gamemode', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'gamemode <combat|free>',
+        description: 'Switch between combat and exploration mode quickly',
+        execute: (_ctx, args) => {
+            const mode = String(args[0] || '').toLowerCase();
+            if (mode !== 'combat' && mode !== 'free') {
+                appendConsoleHistory('Usage: gamemode <combat|free>', 'error');
+                return;
+            }
+            runtimeTunables['combat.inCombat'].set(mode === 'combat');
+            appendConsoleHistory(`Game mode set to ${mode}`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('phase', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'phase <player|enemy|transition>',
+        description: 'Set combat phase directly',
+        execute: (_ctx, args) => {
+            const phase = String(args[0] || '').toUpperCase();
+            if (!['PLAYER', 'ENEMY', 'TRANSITION'].includes(phase)) {
+                appendConsoleHistory('Usage: phase <player|enemy|transition>', 'error');
+                return;
+            }
+            setCombatPhase(phase);
+            updateCombatUI();
+            appendConsoleHistory(`Combat phase set to ${phase}`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('authority', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'authority <server|local-dm>',
+        description: 'Set DM simulation authority source',
+        execute: (_ctx, args) => {
+            const next = String(args[0] || '').toLowerCase();
+            if (next !== SIMULATION_AUTHORITY.SERVER && next !== SIMULATION_AUTHORITY.LOCAL_DM) {
+                appendConsoleHistory('Usage: authority <server|local-dm>', 'error');
+                return;
+            }
+            runtimeTunables['dm.authority'].set(next);
+            appendConsoleHistory(`Authority set to ${simulationAuthority}`, 'ok');
+        },
+    });
+
+    registerConsoleCommand('autostep', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
+        usage: 'autostep <on|off|toggle|status>',
+        description: 'Control DM auto-step timeline behavior',
+        execute: (_ctx, args) => {
+            const op = String(args[0] || 'status').toLowerCase();
+            if (op === 'status') {
+                appendConsoleHistory(`autostep: ${dmAutoStepEnabled ? 'ON' : 'OFF'}`, 'ok');
+                return;
+            }
+            if (op === 'toggle') {
+                setDmAutoStepEnabled(!dmAutoStepEnabled);
+                appendConsoleHistory(`autostep: ${dmAutoStepEnabled ? 'ON' : 'OFF'}`, 'ok');
+                return;
+            }
+            if (op === 'on' || op === 'off') {
+                setDmAutoStepEnabled(op === 'on');
+                appendConsoleHistory(`autostep: ${dmAutoStepEnabled ? 'ON' : 'OFF'}`, 'ok');
+                return;
+            }
+            appendConsoleHistory('Usage: autostep <on|off|toggle|status>', 'error');
         },
     });
 }
