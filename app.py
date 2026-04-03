@@ -1755,7 +1755,8 @@ if __name__ == "__main__":
 
     try:
         import geventwebsocket
-        print(f"[BOOT] gevent-websocket OK: {geventwebsocket.__version__}", flush=True)
+        version = getattr(geventwebsocket, '__version__', None) or getattr(geventwebsocket, 'version', 'unknown')
+        print(f"[BOOT] gevent-websocket OK: {version}", flush=True)
     except ImportError as exc:
         raise RuntimeError(
             "ERROR: gevent-websocket not installed — WebSocket will not work.\n"
