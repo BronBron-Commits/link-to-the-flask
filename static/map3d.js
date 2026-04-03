@@ -2564,11 +2564,6 @@ function ensureConsoleUi() {
 function setConsoleOpen(open) {
     ensureConsoleUi();
     if (!consoleRootEl) return;
-    if (modeManager.current === MODE.DM && open) {
-        consoleState.open = false;
-        consoleRootEl.style.display = 'none';
-        return;
-    }
     consoleState.open = !!open;
     consoleRootEl.style.display = consoleState.open ? 'flex' : 'none';
     updateConsoleModeBadge();
