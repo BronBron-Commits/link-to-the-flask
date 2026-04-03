@@ -45,6 +45,7 @@ function traceDmPipeline(stage, details) {
 let pendingRuntimeMode = null;
 let pendingSceneState = null;
 let pendingWorldHydrationPayload = null;
+const serverEntityNetworkIds = new Set();
 
 const CLIENT_RESUME_STORAGE_KEY = 'map3d_resume_key_v1';
 
@@ -614,6 +615,12 @@ function requestCombatStartApproval(targetActor) {
     if (!socket || !targetActor) return false;
     const targetId = getCombatActorId(targetActor);
     if (!targetId) return false;
+    const isPlayerActor = targetActor === playerState || targetActor === playerRig || !!targetActor.userData?.playerId;
+    if (!isPlayerActor && !serverEntityNetworkIds.has(String(targetId))) {
+        showFloatingText('Select a server-spawned target first', '#ff8a8a', true);
+        appendConsoleHistory(`[COMBAT] blocked start request for local-only target: ${targetId}`, 'error');
+        return false;
+    }
     const requestId = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     pendingCombatStartRequest = {
         requestId,
@@ -635,6 +642,14 @@ function requestDmStartCombat(targetActor = null) {
     if (currentGameMode === GAME_MODE.COMBAT || combatState.inCombat) return false;
 
     const targetId = targetActor ? getCombatActorId(targetActor) : null;
+    if (targetActor && targetId) {
+        const isPlayerActor = targetActor === playerState || targetActor === playerRig || !!targetActor.userData?.playerId;
+        if (!isPlayerActor && !serverEntityNetworkIds.has(String(targetId))) {
+            showFloatingText('Target is local-only. Spawn/select a network dummy.', '#ff8a8a', true);
+            appendConsoleHistory(`[COMBAT] blocked start for non-network target: ${targetId}`, 'error');
+            return false;
+        }
+    }
     emitCombatStateEvent(true, {
         initiator: localPlayerId || (socket ? socket.id : null),
         targetId,
@@ -714,6 +729,15 @@ function updateSceneVisibilityForCombatState(inCombat) {
 
 function hydrateWorld(payload) {
     if (!payload || typeof payload !== 'object') return;
+
+    serverEntityNetworkIds.clear();
+    if (payload.entities && typeof payload.entities === 'object') {
+        Object.entries(payload.entities).forEach(([entityId, entity]) => {
+            if (!entity || typeof entity !== 'object') return;
+            const networkId = String(entity.networkId || entityId || '').trim();
+            if (networkId) serverEntityNetworkIds.add(networkId);
+        });
+    }
 
     if (payload.session && typeof payload.session === 'object') {
         sessionGameState = String(payload.session.gameState || sessionGameState || 'lobby');
@@ -16671,12 +16695,14 @@ function renderWorldWithDmInset(primaryView) {
     renderer.setScissor(0, 0, fullWidth, fullHeight);
 }
 
-// Spawn multiple training dummies to test target choice and range decisions.
-const trainingDummy = spawnTrainingDummy(20, 12.14, 15, 'Training Dummy A');
-const trainingDummyB = spawnTrainingDummy(24, 12.14, 18, 'Training Dummy B');
-const trainingDummyC = spawnTrainingDummy(18, 12.14, 20, 'Training Dummy C');
-window.trainingDummy = trainingDummy;
-window.trainingDummies = [trainingDummy, trainingDummyB, trainingDummyC];
+// Optional local-only diagnostics dummies. Disabled for normal network play.
+if (window.__DM_FORCE_LOCAL_DM_COMMANDS__ === true || __urlSearch.get('seedlocaldummies') === '1') {
+    const trainingDummy = spawnTrainingDummy(20, 12.14, 15, 'Training Dummy A');
+    const trainingDummyB = spawnTrainingDummy(24, 12.14, 18, 'Training Dummy B');
+    const trainingDummyC = spawnTrainingDummy(18, 12.14, 20, 'Training Dummy C');
+    window.trainingDummy = trainingDummy;
+    window.trainingDummies = [trainingDummy, trainingDummyB, trainingDummyC];
+}
 
 // LOS blocker wall for tactical tests (targeting should fail when blocked).
 const losWall = new THREE.Mesh(
