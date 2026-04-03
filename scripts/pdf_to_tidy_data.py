@@ -138,15 +138,29 @@ def _get_form_value(form_values: dict[str, str], *key_fragments: str, debug: boo
     if not form_values:
         return None
     fragments = [re.sub(r"[^a-z0-9]+", "", frag.lower()) for frag in key_fragments if frag]
+    normalized_items = [(key, re.sub(r"[^a-z0-9]+", "", key.lower()), value) for key, value in form_values.items()]
     
     if debug and fragments:
         print(f"    [FORM LOOKUP] searching for fragments: {fragments}")
+
+    # Pass 1: exact normalized key match for single-fragment lookups.
+    # This avoids false positives like "ac" -> "CharacterName".
+    if len(fragments) == 1:
+        target = fragments[0]
+        for key, normalized_key, value in normalized_items:
+            if normalized_key == target:
+                if debug:
+                    print(
+                        f"    [FORM LOOKUP] ✓ EXACT MATCH: "
+                        f"form_key='{key}' (normalized='{normalized_key}') value='{value}'"
+                    )
+                return value
     
-    for key, value in form_values.items():
-        k = re.sub(r"[^a-z0-9]+", "", key.lower())
-        if all(frag in k for frag in fragments):
+    # Pass 2: fuzzy contains-all-fragments fallback.
+    for key, normalized_key, value in normalized_items:
+        if all(frag in normalized_key for frag in fragments):
             if debug:
-                print(f"    [FORM LOOKUP] ✓ MATCH: form_key='{key}' (normalized='{k}') value='{value}'")
+                print(f"    [FORM LOOKUP] ✓ MATCH: form_key='{key}' (normalized='{normalized_key}') value='{value}'")
             return value
     
     if debug:
@@ -154,10 +168,9 @@ def _get_form_value(form_values: dict[str, str], *key_fragments: str, debug: boo
         # Show available keys that partially match (helpful for debugging)
         if fragments:
             partial_matches = []
-            for key in form_values.keys():
-                k = re.sub(r"[^a-z0-9]+", "", key.lower())
-                if any(frag in k for frag in fragments):
-                    partial_matches.append((key, k))
+            for key, normalized_key, _ in normalized_items:
+                if any(frag in normalized_key for frag in fragments):
+                    partial_matches.append((key, normalized_key))
             if partial_matches:
                 print(f"    [FORM LOOKUP] Partial matches (1+ fragments): {[m[0] for m in partial_matches[:5]]}")
     
