@@ -124,26 +124,63 @@ def extract_pdf_form_values(pdf_path: Path) -> dict[str, str]:
     return out
 
 
-def _get_form_value(form_values: dict[str, str], *key_fragments: str) -> str | None:
-    """Find the first form value whose field name contains all fragments."""
+def _get_form_value(form_values: dict[str, str], *key_fragments: str, debug: bool = False) -> str | None:
+    """Find the first form value whose field name contains all fragments.
+    
+    Args:
+        form_values: Dictionary of form field keys to values
+        key_fragments: One or more fragments to search for in field names
+        debug: If True, log all matching attempts
+    
+    Returns:
+        The matched value or None
+    """
     if not form_values:
         return None
     fragments = [re.sub(r"[^a-z0-9]+", "", frag.lower()) for frag in key_fragments if frag]
+    
+    if debug and fragments:
+        print(f"    [FORM LOOKUP] searching for fragments: {fragments}")
+    
     for key, value in form_values.items():
         k = re.sub(r"[^a-z0-9]+", "", key.lower())
         if all(frag in k for frag in fragments):
+            if debug:
+                print(f"    [FORM LOOKUP] ✓ MATCH: form_key='{key}' (normalized='{k}') value='{value}'")
             return value
+    
+    if debug:
+        print(f"    [FORM LOOKUP] ✗ NO MATCH for fragments {fragments}")
+        # Show available keys that partially match (helpful for debugging)
+        if fragments:
+            partial_matches = []
+            for key in form_values.keys():
+                k = re.sub(r"[^a-z0-9]+", "", key.lower())
+                if any(frag in k for frag in fragments):
+                    partial_matches.append((key, k))
+            if partial_matches:
+                print(f"    [FORM LOOKUP] Partial matches (1+ fragments): {[m[0] for m in partial_matches[:5]]}")
+    
     return None
 
 
-def _debug_form_values(form_values: dict[str, str], limit: int = 20) -> None:
-    """Print a compact view of available form keys for alias tuning."""
+def _debug_form_values(form_values: dict[str, str], limit: int = 200) -> None:
+    """Print a comprehensive view of available form keys for alias tuning."""
     if not form_values:
         print("[PDF FORM FIELDS] total=0")
         return
     keys = sorted(form_values.keys())
-    sample = keys[:limit]
-    print(f"[PDF FORM FIELDS] total={len(keys)} sample_keys={sample}")
+    print(f"[PDF FORM FIELDS] total={len(keys)}")
+    print(f"[PDF FORM FIELDS] ALL KEYS:")
+    for i, key in enumerate(keys[:limit], 1):
+        value = form_values[key]
+        # Truncate long values for readability
+        val_display = value[:40] + ("..." if len(value) > 40 else "")
+        normalized_key = re.sub(r"[^a-z0-9]+", "", key.lower())
+        print(f"  {i:3d}. '{key}' (norm: '{normalized_key}') = '{val_display}'")
+    if len(keys) > limit:
+        print(f"  ... and {len(keys) - limit} more keys (not shown)")
+    print(f"[PDF FORM FIELDS] END")
 
 
 _TEMPLATE_LABEL_TOKENS = {
@@ -238,8 +275,14 @@ def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: di
     if _looks_like_template_label(character.get("background")):
         character["background"] = _get_form_value(form_values, "background") or character.get("background")
 
+    # Core stat fallbacks with detailed diagnostics
     if character.get("armor_class") is None:
-        character["armor_class"] = to_int(_get_form_value(form_values, "armor", "class") or _get_form_value(form_values, "ac"))
+        print("  [FALLBACK] Looking for ARMOR_CLASS...")
+        ac_value = (_get_form_value(form_values, "armor", "class", debug=True) 
+                    or _get_form_value(form_values, "ac", debug=True))
+        character["armor_class"] = to_int(ac_value)
+        print(f"  [FALLBACK] armor_class result: {character['armor_class']}")
+    
     if character.get("hit_points") is None:
         character["hit_points"] = to_int(_get_form_value(form_values, "hit", "point", "max") or _get_form_value(form_values, "max", "hp"))
     if character.get("current_hp") is None:
@@ -249,10 +292,19 @@ def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: di
         )
     if character.get("speed") is None:
         character["speed"] = to_int(_get_form_value(form_values, "speed"))
+    
     if character.get("proficiency_bonus") is None:
-        character["proficiency_bonus"] = to_int(_get_form_value(form_values, "proficiency"))
+        print("  [FALLBACK] Looking for PROFICIENCY_BONUS...")
+        prof_value = (_get_form_value(form_values, "prof", "bonus", debug=True) 
+                      or _get_form_value(form_values, "proficiency", debug=True))
+        character["proficiency_bonus"] = to_int(prof_value)
+        print(f"  [FALLBACK] proficiency_bonus result: {character['proficiency_bonus']}")
+    
     if character.get("initiative_bonus") is None:
-        character["initiative_bonus"] = to_int(_get_form_value(form_values, "initiative"))
+        print("  [FALLBACK] Looking for INITIATIVE_BONUS...")
+        init_value = _get_form_value(form_values, "init", debug=True)
+        character["initiative_bonus"] = to_int(init_value)
+        print(f"  [FALLBACK] initiative_bonus result: {character['initiative_bonus']}")
 
     if abilities:
         return
@@ -979,7 +1031,13 @@ def parse_core_from_first_page_lines(first_page_lines: list[str]) -> dict[str, i
 def parse_character_tables(pdf_path: Path) -> dict:
     pages = extract_text_by_page(pdf_path)
     form_values = extract_pdf_form_values(pdf_path)
+    
+    print("\n" + "="*80)
+    print("PDF PARSING START")
+    print("="*80)
     _debug_form_values(form_values)
+    print("="*80 + "\n")
+    
     full_text = "\n\n".join(pages)
     lines = normalize_lines(full_text)
     first_page_lines = normalize_lines(pages[0]) if pages else []
