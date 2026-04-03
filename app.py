@@ -1,5 +1,6 @@
 from gevent import monkey
 monkey.patch_all()
+import gevent
 
 from pathlib import Path
 from copy import deepcopy
@@ -29,7 +30,7 @@ CONTRACTS_DIR = Path("data") / "character_tidy"
 STATIC_DIR = Path("static")
 UPLOADS_DIR = Path("data") / "uploads"
 CHARACTER_MODELS_DIR = STATIC_DIR / "user_models"
-SERVER_BUILD_TAG = "combat-debug-2026-04-02b"
+SERVER_BUILD_TAG = "combat-debug-2026-04-02c"
 
 
 def _resolve_training_dummy_fallback_model_url() -> str:
@@ -1271,12 +1272,19 @@ def _resolve_enemy_attack_stats(enemy_actor: dict) -> tuple[int, int, int]:
     return attack_bonus, damage_die, damage_bonus
 
 
+# Seconds the client has to display an enemy action before the turn advances.
+_ENEMY_TURN_DISPLAY_DELAY_SEC = 1.5
+
+
 def _run_enemy_turn_resolution_until_player() -> tuple[list[dict], dict | None]:
-    events: list[dict] = []
+    """Resolve consecutive enemy turns, emitting each action immediately with a
+    display delay so the client can animate the sequence before the player turn
+    is announced.  Returns an empty events list because results are emitted
+    inline; callers should not re-emit them."""
     combat = world_state.get("combat", {})
     order = combat.get("order") or []
     if not order:
-        return events, None
+        return [], None
 
     turn_data = _build_combat_turn_payload()
     max_steps = len(order)
@@ -1286,6 +1294,7 @@ def _run_enemy_turn_resolution_until_player() -> tuple[list[dict], dict | None]:
         if current_type != "enemy":
             break
 
+        # Announce the enemy's turn so the client highlights it in the initiative list.
         socketio.emit("combat-turn", turn_data)
 
         enemy_actor = current if isinstance(current, dict) else {}
@@ -1306,27 +1315,31 @@ def _run_enemy_turn_resolution_until_player() -> tuple[list[dict], dict | None]:
                 current_hp = _safe_float(players[target_sid].get("hp", 100.0), 100.0)
                 players[target_sid]["hp"] = max(0.0, current_hp - float(damage))
 
-        events.append(
-            {
-                "attacker": str(enemy_actor.get("id") or "enemy"),
-                "actorType": "enemy",
-                "type": "attack",
-                "targetId": target_actor_id or None,
-                "hitRoll": hit_roll,
-                "attackBonus": attack_bonus,
-                "toHit": total_to_hit,
-                "targetAC": target_ac,
-                "hit": is_hit,
-                "damage": damage,
-            }
-        )
+        event = {
+            "attacker": str(enemy_actor.get("id") or "enemy"),
+            "actorType": "enemy",
+            "type": "attack",
+            "targetId": target_actor_id or None,
+            "hitRoll": hit_roll,
+            "attackBonus": attack_bonus,
+            "toHit": total_to_hit,
+            "targetAC": target_ac,
+            "hit": is_hit,
+            "damage": damage,
+        }
+        # Emit the attack result immediately, before advancing the turn, so the
+        # client sees it while the enemy is still the active actor.
+        socketio.emit("combat-action-result", event)
+
+        # Pause so the client can display the enemy action sequence.
+        gevent.sleep(_ENEMY_TURN_DISPLAY_DELAY_SEC)
 
         next_turn = _advance_server_turn()
         if next_turn is None:
-            return events, None
+            return [], None
         turn_data = next_turn
 
-    return events, turn_data
+    return [], turn_data
 
 
 @socketio.on("end-turn")
