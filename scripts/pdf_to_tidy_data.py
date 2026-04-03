@@ -183,6 +183,39 @@ def _debug_form_values(form_values: dict[str, str], limit: int = 200) -> None:
     print(f"[PDF FORM FIELDS] END")
 
 
+def _debug_ability_gaps(abilities: list[dict], form_values: dict[str, str]) -> None:
+    """Log missing abilities and show which form fields might provide them."""
+    expected = ("STR", "DEX", "CON", "INT", "WIS", "CHA")
+    present = {str(row.get("ability") or "").upper() for row in abilities}
+    missing = [ability for ability in expected if ability not in present]
+
+    print(f"[ABILITY DIAGNOSTIC] parsed_count={len(abilities)} present={sorted(present)} missing={missing}")
+    if not missing:
+        return
+
+    if not form_values:
+        print("[ABILITY DIAGNOSTIC] form_values empty; cannot probe missing abilities")
+        return
+
+    for ability in missing:
+        full = full_name(ability).lower()
+        print(f"  [ABILITY DIAGNOSTIC] probing {ability} ({full})")
+        score_probe = (
+            _get_form_value(form_values, ability.lower(), "score", debug=True)
+            or _get_form_value(form_values, full, "score", debug=True)
+            or _get_form_value(form_values, ability.lower(), debug=True)
+        )
+        mod_probe = (
+            _get_form_value(form_values, ability.lower(), "mod", debug=True)
+            or _get_form_value(form_values, full, "mod", debug=True)
+        )
+        print(
+            f"  [ABILITY DIAGNOSTIC] {ability} probes: "
+            f"score_raw={score_probe!r} score_int={to_int(score_probe)} "
+            f"mod_raw={mod_probe!r} mod_int={to_int(mod_probe)}"
+        )
+
+
 _TEMPLATE_LABEL_TOKENS = {
     "SPECIES",
     "CLASS",
@@ -305,6 +338,8 @@ def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: di
         init_value = _get_form_value(form_values, "init", debug=True)
         character["initiative_bonus"] = to_int(init_value)
         print(f"  [FALLBACK] initiative_bonus result: {character['initiative_bonus']}")
+
+    _debug_ability_gaps(abilities, form_values)
 
     if abilities:
         return
@@ -1087,8 +1122,11 @@ def parse_character_tables(pdf_path: Path) -> dict:
     }
 
     abilities = parse_ability_scores_from_lines(first_page_lines, character_id)
+    if abilities:
+        print(f"[ABILITY PARSE] source=first_page_lines count={len(abilities)} abilities={[row.get('ability') for row in abilities]}")
     if not abilities:
         abilities = parse_ability_scores(full_text, character_id)
+        print(f"[ABILITY PARSE] source=full_text count={len(abilities)} abilities={[row.get('ability') for row in abilities]}")
 
     apply_form_fallbacks(character, abilities, form_values)
 
