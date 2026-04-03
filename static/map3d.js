@@ -11711,6 +11711,10 @@ function canMoveTo(targetPos) {
 }
 
 function activateCombatCamera() {
+    // DM free-fly camera should remain in control even during combat.
+    if (modeManager.current === MODE.DM && isDmFreeCamera()) {
+        return;
+    }
     if (!camera || !playerRig) return;
     if (combatCameraActive) return;
 
@@ -11731,6 +11735,11 @@ function activateCombatCamera() {
 }
 
 function deactivateCombatCamera() {
+    // DM free-fly mode does not use player combat camera state.
+    if (modeManager.current === MODE.DM && isDmFreeCamera()) {
+        combatCameraActive = false;
+        return;
+    }
     if (!camera || !playerRig) return;
     if (!combatCameraActive) return;
 
@@ -11755,6 +11764,7 @@ function focusCameraOnAction(target, options = {}) {
 }
 
 function updateCombatCamera(delta) {
+    if (modeManager.current === MODE.DM && isDmFreeCamera()) return false;
     if (!combatCameraActive || currentGameMode !== GAME_MODE.COMBAT) return false;
 
     // Freeze camera motion while action review/confirm UI is open.
