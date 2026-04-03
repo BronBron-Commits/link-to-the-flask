@@ -14,7 +14,7 @@ from flask import Flask, request, jsonify, render_template, send_file, send_from
 from flask_socketio import SocketIO, emit
 from werkzeug.utils import secure_filename
 
-from scripts.pdf_to_tidy_data import parse_character_tables, write_outputs
+from scripts.pdf_to_tidy_data import parse_character_tables, write_outputs, build_master_character_record
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins='*', async_mode='gevent', 
@@ -1160,23 +1160,38 @@ def socket_dice_roll_event(data):
 
 def _advance_server_turn() -> dict | None:
     combat = world_state.setdefault("combat", {})
-    order = combat.get("order") or []
-    if not order:
-        return None
-    current = combat.get("turn")
-    current_index = int(current) if current is not None else -1
-    next_index = (current_index + 1) % len(order)
-    combat["turn"] = next_index
     combat_state = combat.setdefault("state", {})
+    order = combat.get("order") or []
+
+    if not order:
+        print("[TURN] ERROR: empty order", flush=True)
+        return None
+
+    # Keep compatibility with existing schema (`turn`) while exposing turnIndex in payload.
+    current = combat.get("turn")
+    idx = int(current) if current is not None else -1
     round_number = max(1, int(_safe_float(combat_state.get("roundNumber", 1))))
-    if next_index == 0 and current_index >= 0:
+
+    print("ORDER:", order, flush=True)
+    print("TURN INDEX:", idx, flush=True)
+    print(f"[TURN] BEFORE idx={idx}, order_len={len(order)}", flush=True)
+
+    idx += 1
+    if idx >= len(order):
+        idx = 0
         round_number += 1
-        combat_state["roundNumber"] = round_number
+
+    combat["turn"] = idx
+    combat_state["roundNumber"] = round_number
+
+    current_actor = order[idx]
+    print(f"[TURN] AFTER idx={idx}, actor={current_actor.get('id')}", flush=True)
+
     return {
-        "turnIndex": next_index,
+        "turnIndex": idx,
         "order": order,
         "roundNumber": round_number,
-        "currentActor": order[next_index] if next_index < len(order) else None,
+        "currentActor": current_actor,
     }
 
 
@@ -1712,11 +1727,13 @@ def import_pdf_api():
     CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
     tables = parse_character_tables(source_pdf_path)
     write_outputs(CONTRACTS_DIR, tables)
+    master_record = build_master_character_record(tables)
 
     return jsonify(
         ok=True,
         source_file=filename,
         character=tables.get("character", {}),
+        master=master_record,
         out_dir=str(CONTRACTS_DIR),
     )
 
