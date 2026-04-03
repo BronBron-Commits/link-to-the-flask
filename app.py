@@ -1352,70 +1352,44 @@ def _resolve_enemy_attack_stats(enemy_actor: dict) -> tuple[int, int, int]:
 _ENEMY_TURN_DISPLAY_DELAY_SEC = 1.5
 
 
-def _run_enemy_turn_resolution_until_player() -> tuple[list[dict], dict | None]:
-    """Resolve consecutive enemy turns, emitting each action immediately with a
-    display delay so the client can animate the sequence before the player turn
-    is announced.  Returns an empty events list because results are emitted
-    inline; callers should not re-emit them."""
-    combat = world_state.get("combat", {})
-    order = combat.get("order") or []
-    if not order:
-        return [], None
+def _handle_enemy_turn(enemy_actor: dict) -> dict:
+    """Resolve one server-authoritative enemy turn action."""
+    actor_id = str((enemy_actor or {}).get("id") or "enemy")
+    print(f"[ENEMY] Acting: {actor_id}", flush=True)
 
-    turn_data = _build_combat_turn_payload()
-    max_steps = len(order)
-    for _ in range(max_steps):
-        current = turn_data.get("currentActor") if isinstance(turn_data, dict) else None
-        current_type = str((current or {}).get("type") or "").strip().lower()
-        if current_type != "enemy":
-            break
+    target_sid = _choose_enemy_target_sid(enemy_actor or {})
+    target_actor_id = str(players.get(target_sid, {}).get("actorId") or "") if target_sid else ""
 
-        # Announce the enemy's turn so the client highlights it in the initiative list.
-        socketio.emit("combat-turn", turn_data)
+    attack_bonus, damage_die, damage_bonus = _resolve_enemy_attack_stats(enemy_actor or {})
+    hit_roll = _random.randint(1, 20)
+    total_to_hit = hit_roll + attack_bonus
 
-        enemy_actor = current if isinstance(current, dict) else {}
-        target_sid = _choose_enemy_target_sid(enemy_actor)
-        target_actor_id = str(players.get(target_sid, {}).get("actorId") or "") if target_sid else ""
+    target_ac = int(_safe_float(players.get(target_sid, {}).get("ac", 10), 10)) if target_sid else 10
+    is_hit = hit_roll == 20 or (hit_roll != 1 and total_to_hit >= target_ac)
 
-        attack_bonus, damage_die, damage_bonus = _resolve_enemy_attack_stats(enemy_actor)
-        hit_roll = _random.randint(1, 20)
-        total_to_hit = hit_roll + attack_bonus
+    damage = 0
+    if is_hit:
+        damage = max(0, _random.randint(1, damage_die) + damage_bonus)
+        if target_sid and isinstance(players.get(target_sid), dict):
+            current_hp = _safe_float(players[target_sid].get("hp", 100.0), 100.0)
+            players[target_sid]["hp"] = max(0.0, current_hp - float(damage))
 
-        target_ac = int(_safe_float(players.get(target_sid, {}).get("ac", 10), 10)) if target_sid else 10
-        is_hit = hit_roll == 20 or (hit_roll != 1 and total_to_hit >= target_ac)
+    event = {
+        "attacker": actor_id,
+        "actorType": "enemy",
+        "type": "attack",
+        "targetId": target_actor_id or None,
+        "hitRoll": hit_roll,
+        "attackBonus": attack_bonus,
+        "toHit": total_to_hit,
+        "targetAC": target_ac,
+        "hit": is_hit,
+        "damage": damage,
+    }
 
-        damage = 0
-        if is_hit:
-            damage = max(0, _random.randint(1, damage_die) + damage_bonus)
-            if target_sid and isinstance(players.get(target_sid), dict):
-                current_hp = _safe_float(players[target_sid].get("hp", 100.0), 100.0)
-                players[target_sid]["hp"] = max(0.0, current_hp - float(damage))
-
-        event = {
-            "attacker": str(enemy_actor.get("id") or "enemy"),
-            "actorType": "enemy",
-            "type": "attack",
-            "targetId": target_actor_id or None,
-            "hitRoll": hit_roll,
-            "attackBonus": attack_bonus,
-            "toHit": total_to_hit,
-            "targetAC": target_ac,
-            "hit": is_hit,
-            "damage": damage,
-        }
-        # Emit the attack result immediately, before advancing the turn, so the
-        # client sees it while the enemy is still the active actor.
-        socketio.emit("combat-action-result", event)
-
-        # Pause so the client can display the enemy action sequence.
-        gevent.sleep(_ENEMY_TURN_DISPLAY_DELAY_SEC)
-
-        next_turn = _advance_server_turn()
-        if next_turn is None:
-            return [], None
-        turn_data = next_turn
-
-    return [], turn_data
+    socketio.emit("combat-action-result", event)
+    gevent.sleep(_ENEMY_TURN_DISPLAY_DELAY_SEC)
+    return event
 
 
 @socketio.on("end-turn")
@@ -1467,15 +1441,13 @@ def socket_end_turn(data=None):
         print(f"[END-TURN] Current actor: {current_actor.get('id')} type={actor_type} role={role}")
 
         if actor_type == "enemy" and role not in {"dm", "dev"}:
-            print(f"[END-TURN] Is enemy turn, running enemy resolution")
+            print(f"[END-TURN] Is enemy turn, handling enemy action")
             with turn_lock:
-                enemy_events, turn_data = _run_enemy_turn_resolution_until_player()
+                _handle_enemy_turn(current_actor)
+                turn_data = _advance_server_turn()
             if turn_data is None:
-                print(f"[END-TURN] Enemy resolution returned None")
+                print(f"[END-TURN] Enemy handling returned None")
                 return _deny("enemy-resolution-failed")
-
-            for event in enemy_events:
-                socketio.emit("combat-action-result", event)
 
             print(f"[END-TURN] Emitting combat-turn after enemy: {turn_data}")
             socketio.emit("combat-turn", turn_data)
@@ -1491,17 +1463,17 @@ def socket_end_turn(data=None):
         print(f"[END-TURN] Advancing turn")
         with turn_lock:
             turn_data = _advance_server_turn()
-            enemy_events: list[dict] = []
             if turn_data is not None:
-                enemy_events, turn_data = _run_enemy_turn_resolution_until_player()
+                current = turn_data.get("currentActor") if isinstance(turn_data, dict) else None
+                current_type = str((current or {}).get("type") or "").strip().lower()
+                if current_type == "enemy":
+                    _handle_enemy_turn(current if isinstance(current, dict) else {})
+                    turn_data = _advance_server_turn()
         if turn_data is None:
             print(f"[END-TURN] turn_data is None after advance")
             return _deny("turn-advance-failed")
 
         print(f"[END-TURN] Emitting combat-turn: {turn_data}")
-
-        for event in enemy_events:
-            socketio.emit("combat-action-result", event)
 
         socketio.emit("combat-turn", turn_data)
         _broadcast_world_update(include_scene=False)
@@ -1529,14 +1501,14 @@ def socket_advance_combat_turn(data=None):
 
     with turn_lock:
         turn_data = _advance_server_turn()
-        enemy_events: list[dict] = []
         if turn_data is not None:
-            enemy_events, turn_data = _run_enemy_turn_resolution_until_player()
+            current = turn_data.get("currentActor") if isinstance(turn_data, dict) else None
+            current_type = str((current or {}).get("type") or "").strip().lower()
+            if current_type == "enemy":
+                _handle_enemy_turn(current if isinstance(current, dict) else {})
+                turn_data = _advance_server_turn()
     if turn_data is None:
         return
-
-    for event in enemy_events:
-        socketio.emit("combat-action-result", event)
 
     socketio.emit("combat-turn", turn_data)
     _broadcast_world_update(include_scene=False)
