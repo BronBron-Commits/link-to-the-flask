@@ -1,0 +1,1021 @@
+{
+  "schema_version": "1.0.0",
+  "source": {
+    "file_name": "dndbeyondexample.pdf",
+    "character_id": "09a12ac13c7448babafe679b29a9d547",
+    "extracted_at_utc": "2026-03-28T13:35:34.177920+00:00"
+  },
+  "identity": {
+    "character_name": "BronBron_the_Brutal's Character",
+    "player_name": "BronBron_the_Brutal",
+    "class_level": "Warlock 3",
+    "class_name": null,
+    "level": 3,
+    "species": "Elf",
+    "background": "Criminal",
+    "alignment": "Neutral Evil",
+    "experience": null,
+    "milestone": null
+  },
+  "core_stats": {
+    "armor_class": 10,
+    "initiative_bonus": 1,
+    "speed_ft": 30,
+    "proficiency_bonus": 2,
+    "ability_save_dc": null,
+    "heroic_inspiration": null,
+    "passive_perception": 12,
+    "passive_insight": 12,
+    "passive_investigation": 10,
+    "senses": [
+      {
+        "name": "Darkvision",
+        "range_ft": 60
+      }
+    ]
+  },
+  "hit_points": {
+    "max_hp": 18,
+    "current_hp": "--",
+    "temp_hp": null,
+    "hit_dice": "3d8",
+    "death_saves": {
+      "successes": null,
+      "failures": null
+    }
+  },
+  "abilities": {
+    "STR": {
+      "score": 14,
+      "modifier": 2,
+      "save_bonus": 2,
+      "save_proficient": false
+    },
+    "DEX": {
+      "score": 9,
+      "modifier": -1,
+      "save_bonus": -1,
+      "save_proficient": false
+    },
+    "CON": {
+      "score": 10,
+      "modifier": 0,
+      "save_bonus": 0,
+      "save_proficient": false
+    },
+    "INT": {
+      "score": 10,
+      "modifier": 0,
+      "save_bonus": 0,
+      "save_proficient": false
+    },
+    "WIS": {
+      "score": 15,
+      "modifier": 2,
+      "save_bonus": 4,
+      "save_proficient": true
+    },
+    "CHA": {
+      "score": 9,
+      "modifier": -1,
+      "save_bonus": 1,
+      "save_proficient": true
+    }
+  },
+  "saving_throws": [
+    {
+      "id": "save_001_str",
+      "ability": "STR",
+      "bonus": 2,
+      "proficient": false,
+      "roll": {
+        "formula": "1d20 + STR",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "save_002_dex",
+      "ability": "DEX",
+      "bonus": -1,
+      "proficient": false,
+      "roll": {
+        "formula": "1d20 + DEX",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "save_003_con",
+      "ability": "CON",
+      "bonus": 0,
+      "proficient": false,
+      "roll": {
+        "formula": "1d20 + CON",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "save_004_int",
+      "ability": "INT",
+      "bonus": 0,
+      "proficient": false,
+      "roll": {
+        "formula": "1d20 + INT",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "save_005_wis",
+      "ability": "WIS",
+      "bonus": 4,
+      "proficient": true,
+      "roll": {
+        "formula": "1d20 + WIS + proficiency",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "save_006_cha",
+      "ability": "CHA",
+      "bonus": 1,
+      "proficient": true,
+      "roll": {
+        "formula": "1d20 + CHA + proficiency",
+        "advantage": null,
+        "disadvantage": null
+      }
+    }
+  ],
+  "skills": [
+    {
+      "id": "skl_001_acrobatics",
+      "name": "Acrobatics",
+      "ability": "DEX",
+      "bonus": -1,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + DEX",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_002_animal_handling",
+      "name": "Animal Handling",
+      "ability": "WIS",
+      "bonus": 2,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + WIS",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_003_arcana",
+      "name": "Arcana",
+      "ability": "INT",
+      "bonus": 0,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + INT",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_004_athletics",
+      "name": "Athletics",
+      "ability": "STR",
+      "bonus": 2,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + STR",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_005_deception",
+      "name": "Deception",
+      "ability": "CHA",
+      "bonus": -1,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + CHA",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_006_history",
+      "name": "History",
+      "ability": "INT",
+      "bonus": 0,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + INT",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_007_insight",
+      "name": "Insight",
+      "ability": "WIS",
+      "bonus": 2,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + WIS",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_008_intimidation",
+      "name": "Intimidation",
+      "ability": "CHA",
+      "bonus": -1,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + CHA",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_009_investigation",
+      "name": "Investigation",
+      "ability": "INT",
+      "bonus": 0,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + INT",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_010_medicine",
+      "name": "Medicine",
+      "ability": "WIS",
+      "bonus": 2,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + WIS",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_011_nature",
+      "name": "Nature",
+      "ability": "INT",
+      "bonus": 0,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + INT",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_012_perception",
+      "name": "Perception",
+      "ability": "WIS",
+      "bonus": 2,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + WIS",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_013_performance",
+      "name": "Performance",
+      "ability": "CHA",
+      "bonus": -1,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + CHA",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_014_persuasion",
+      "name": "Persuasion",
+      "ability": "CHA",
+      "bonus": -1,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + CHA",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_015_religion",
+      "name": "Religion",
+      "ability": "INT",
+      "bonus": 0,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + INT",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_016_sleight_of_hand",
+      "name": "Sleight of Hand",
+      "ability": "DEX",
+      "bonus": 1,
+      "proficient": true,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + DEX + proficiency",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_017_stealth",
+      "name": "Stealth",
+      "ability": "DEX",
+      "bonus": 1,
+      "proficient": true,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + DEX + proficiency",
+        "advantage": null,
+        "disadvantage": null
+      }
+    },
+    {
+      "id": "skl_018_survival",
+      "name": "Survival",
+      "ability": "WIS",
+      "bonus": 2,
+      "proficient": false,
+      "expertise": false,
+      "roll": {
+        "formula": "1d20 + WIS",
+        "advantage": null,
+        "disadvantage": null
+      }
+    }
+  ],
+  "proficiencies": {
+    "armor": [
+      "Light Armor"
+    ],
+    "weapons": [
+      "Simple Weapons"
+    ],
+    "tools": [
+      "Thieves' Tools"
+    ],
+    "languages": [
+      "Common"
+    ],
+    "defenses": [
+      "Immunities - Magical Sleep",
+      "Advantage Made to avoid or end",
+      "the Charmed condition"
+    ]
+  },
+  "actions": {
+    "standard_actions": "Standard Actions Attack, Magic, Dash, Disengage, Dodge, Help, Hide, Ready, Search, Utilize, Opportunity Attack, Grapple, Shove, Improvise, Two-Weapon Fighting, Interact with an Object, Study, Influence",
+    "bonus_actions": [],
+    "reactions": [],
+    "movement": {
+      "walk_ft": 30,
+      "fly_ft": null,
+      "swim_ft": null,
+      "climb_ft": null,
+      "burrow_ft": null,
+      "can_dash": true,
+      "can_disengage": true,
+      "can_dodge": true,
+      "has_opportunity_attack": true
+    },
+    "multiattack": {
+      "count": 1,
+      "attack_names": [
+        "Dagger"
+      ]
+    },
+    "attacks": [
+      {
+        "id": "atk_001_dagger",
+        "name": "Dagger",
+        "hit_bonus": 4,
+        "damage": [
+          {
+            "roll": "1d4+2",
+            "type": "piercing"
+          }
+        ],
+        "properties": "Simple, Finesse, Light, Thrown, Nick, Range (20/60)",
+        "range": {
+          "type": "ranged",
+          "reach_ft": null,
+          "normal_ft": 20,
+          "long_ft": 60
+        },
+        "targeting": {
+          "mode": "single",
+          "target_side": "enemy",
+          "self_target": false,
+          "aoe": null
+        },
+        "roll": {
+          "formula": "1d20 + attack_bonus",
+          "advantage": null,
+          "disadvantage": null
+        }
+      },
+      {
+        "id": "atk_002_dagger",
+        "name": "Dagger",
+        "hit_bonus": 4,
+        "damage": [
+          {
+            "roll": "1d4+2",
+            "type": "piercing"
+          }
+        ],
+        "properties": "Simple, Finesse, Light, Thrown, Nick, Range (20/60)",
+        "range": {
+          "type": "ranged",
+          "reach_ft": null,
+          "normal_ft": 20,
+          "long_ft": 60
+        },
+        "targeting": {
+          "mode": "single",
+          "target_side": "enemy",
+          "self_target": false,
+          "aoe": null
+        },
+        "roll": {
+          "formula": "1d20 + attack_bonus",
+          "advantage": null,
+          "disadvantage": null
+        }
+      },
+      {
+        "id": "atk_003_sickle",
+        "name": "Sickle",
+        "hit_bonus": 4,
+        "damage": [
+          {
+            "roll": "1d4+2",
+            "type": "slashing"
+          }
+        ],
+        "properties": "Simple, Light, Nick",
+        "range": {
+          "type": "melee",
+          "reach_ft": 5,
+          "normal_ft": null,
+          "long_ft": null
+        },
+        "targeting": {
+          "mode": "single",
+          "target_side": "enemy",
+          "self_target": false,
+          "aoe": null
+        },
+        "roll": {
+          "formula": "1d20 + attack_bonus",
+          "advantage": null,
+          "disadvantage": null
+        }
+      },
+      {
+        "id": "atk_004_unarmed_strike",
+        "name": "Unarmed Strike",
+        "hit_bonus": 4,
+        "damage": [
+          {
+            "roll": "3",
+            "type": "bludgeoning"
+          }
+        ],
+        "properties": null,
+        "range": {
+          "type": "melee",
+          "reach_ft": 5,
+          "normal_ft": null,
+          "long_ft": null
+        },
+        "targeting": {
+          "mode": "single",
+          "target_side": "enemy",
+          "self_target": false,
+          "aoe": null
+        },
+        "roll": {
+          "formula": "1d20 + attack_bonus",
+          "advantage": null,
+          "disadvantage": null
+        }
+      }
+    ]
+  },
+  "features": [
+    {
+      "id": "feat_001_warlock_features",
+      "name": "=== WARLOCK FEATURES ==="
+    },
+    {
+      "id": "feat_002_core_warlock_traits_phb_2024_153",
+      "name": "* Core Warlock Traits \u2022 PHB-2024 153"
+    },
+    {
+      "id": "feat_003_eldritch_invocations_phb_2024_153",
+      "name": "* Eldritch Invocations \u2022 PHB-2024 153"
+    },
+    {
+      "id": "feat_004_pact_magic_phb_2024_153",
+      "name": "* Pact Magic \u2022 PHB-2024 153"
+    },
+    {
+      "id": "feat_005_magical_cunning_phb_2024_154",
+      "name": "* Magical Cunning \u2022 PHB-2024 154"
+    },
+    {
+      "id": "feat_006_warlock_subclass_phb_2024_154",
+      "name": "* Warlock Subclass \u2022 PHB-2024 154"
+    },
+    {
+      "id": "feat_007_elf_species_traits",
+      "name": "=== ELF SPECIES TRAITS ==="
+    },
+    {
+      "id": "feat_008_creature_type_phb_2024_190",
+      "name": "* Creature Type \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_009_size_phb_2024_190",
+      "name": "* Size \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_010_speed_phb_2024_190",
+      "name": "* Speed \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_011_darkvision_phb_2024_190",
+      "name": "* Darkvision \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_012_elven_lineage_phb_2024_190",
+      "name": "* Elven Lineage \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_013_elven_lineage_spells_phb_2024_189",
+      "name": "* Elven Lineage Spells \u2022 PHB-2024 189"
+    },
+    {
+      "id": "feat_014_fey_ancestry_phb_2024_190",
+      "name": "* Fey Ancestry \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_015_keen_senses_phb_2024_190",
+      "name": "* Keen Senses \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_016_trance_phb_2024_190",
+      "name": "* Trance \u2022 PHB-2024 190"
+    },
+    {
+      "id": "feat_017_feats",
+      "name": "=== FEATS ==="
+    },
+    {
+      "id": "feat_018_alert_phb_2024_200",
+      "name": "* Alert \u2022 PHB-2024 200"
+    },
+    {
+      "id": "feat_019_criminal_ability_score_improvements",
+      "name": "* Criminal Ability Score Improvements \u2022 PHB-2024 179"
+    }
+  ],
+  "spellcasting": {
+    "class": "Warlock",
+    "ability": "CHA",
+    "spell_save_dc": 9,
+    "spell_attack_bonus": 1,
+    "preparation_mode": null,
+    "slots": {
+      "1": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "2": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "3": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "4": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "5": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "6": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "7": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "8": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      },
+      "9": {
+        "max": null,
+        "used": 0,
+        "remaining": null
+      }
+    },
+    "spells": [],
+    "notes": null
+  },
+  "inventory": {
+    "currency": {
+      "cp": 0,
+      "sp": 0,
+      "ep": 0,
+      "gp": 15,
+      "pp": 0
+    },
+    "capacity": {
+      "weight_carried": "44 lb.",
+      "encumbered": "210 lb.",
+      "push_drag_lift": "420 lb."
+    },
+    "items": [
+      {
+        "id": "itm_001_leather",
+        "name": "Leather",
+        "quantity": 1,
+        "weight": "10 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.leather"
+      },
+      {
+        "id": "itm_002_dagger",
+        "name": "Dagger",
+        "quantity": 1,
+        "weight": "1 lb.",
+        "equipped": true,
+        "linked_attack": "Dagger",
+        "category": null,
+        "asset_key": "item.dagger"
+      },
+      {
+        "id": "itm_003_dagger",
+        "name": "Dagger",
+        "quantity": 1,
+        "weight": "1 lb.",
+        "equipped": true,
+        "linked_attack": "Dagger",
+        "category": null,
+        "asset_key": "item.dagger"
+      },
+      {
+        "id": "itm_004_sickle",
+        "name": "Sickle",
+        "quantity": 1,
+        "weight": "2 lb.",
+        "equipped": true,
+        "linked_attack": "Sickle",
+        "category": null,
+        "asset_key": "item.sickle"
+      },
+      {
+        "id": "itm_005_backpack",
+        "name": "Backpack",
+        "quantity": 1,
+        "weight": "5 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.backpack"
+      },
+      {
+        "id": "itm_006_book",
+        "name": "Book",
+        "quantity": 1,
+        "weight": "5 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.book"
+      },
+      {
+        "id": "itm_007_orb",
+        "name": "Orb",
+        "quantity": 1,
+        "weight": "3 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.orb"
+      },
+      {
+        "id": "itm_008_oil",
+        "name": "Oil",
+        "quantity": 10,
+        "weight": "10 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.oil"
+      },
+      {
+        "id": "itm_009_parchment",
+        "name": "Parchment",
+        "quantity": 10,
+        "weight": "--",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.parchment"
+      },
+      {
+        "id": "itm_010_tinderbox",
+        "name": "Tinderbox",
+        "quantity": 1,
+        "weight": "1 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.tinderbox"
+      },
+      {
+        "id": "itm_011_book",
+        "name": "Book",
+        "quantity": 1,
+        "weight": "5 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.book"
+      },
+      {
+        "id": "itm_012_lamp",
+        "name": "Lamp",
+        "quantity": 1,
+        "weight": "1 lb.",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.lamp"
+      },
+      {
+        "id": "itm_013_ink_pen",
+        "name": "Ink Pen",
+        "quantity": 1,
+        "weight": "--",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.ink_pen"
+      },
+      {
+        "id": "itm_014_ink",
+        "name": "Ink",
+        "quantity": 1,
+        "weight": "--",
+        "equipped": false,
+        "linked_attack": null,
+        "category": null,
+        "asset_key": "item.ink"
+      }
+    ],
+    "attuned_magic_items": []
+  },
+  "roleplay": {
+    "gender": null,
+    "weight": null,
+    "size": "Medium",
+    "hair": null,
+    "skin": null,
+    "age": null,
+    "height": null,
+    "eyes": null,
+    "faith": null,
+    "personality_traits": null,
+    "ideals": null,
+    "bonds": null,
+    "flaws": null,
+    "appearance": null,
+    "allies_organizations": null,
+    "backstory": null,
+    "additional_notes": null
+  },
+  "conditions": {
+    "active_conditions": [],
+    "concentration": {
+      "active": false,
+      "spell": null,
+      "dc": null
+    },
+    "exhaustion_level": 0,
+    "active_effects": []
+  },
+  "feature_uses": [
+    {
+      "id": "fuse_001_magical_cunning_phb_2024_154",
+      "feature_name": "Magical Cunning \u2022 PHB-2024 154",
+      "max_uses": 1,
+      "uses_spent": 0,
+      "uses_remaining": 1,
+      "recharge": "Long Rest"
+    }
+  ],
+  "equipment": {
+    "equipped_item_ids": [
+      "itm_002_dagger",
+      "itm_003_dagger",
+      "itm_004_sickle"
+    ],
+    "equipped_armor": null,
+    "equipped_weapons": [
+      "Dagger",
+      "Dagger",
+      "Sickle"
+    ],
+    "ac_sources": []
+  },
+  "damage_modifiers": {
+    "resistances": [],
+    "vulnerabilities": [],
+    "immunities": [
+      "Immunities - Magical Sleep"
+    ]
+  },
+  "advantage_state": {
+    "attack": false,
+    "ability_checks": [],
+    "saving_throws": [],
+    "vs_targets": []
+  },
+  "rest_state": {
+    "short_rests_taken": 0,
+    "long_rest_available": true,
+    "hit_dice_remaining": "3d8"
+  },
+  "encumbrance_state": {
+    "level": "none",
+    "speed_penalty": 0,
+    "disadvantage_on": []
+  },
+  "asset_manifest_refs": {
+    "entity_asset_key": "character.elf.warlock",
+    "inventory_asset_keys": [
+      {
+        "item_id": "itm_001_leather",
+        "asset_key": "item.leather"
+      },
+      {
+        "item_id": "itm_002_dagger",
+        "asset_key": "item.dagger"
+      },
+      {
+        "item_id": "itm_003_dagger",
+        "asset_key": "item.dagger"
+      },
+      {
+        "item_id": "itm_004_sickle",
+        "asset_key": "item.sickle"
+      },
+      {
+        "item_id": "itm_005_backpack",
+        "asset_key": "item.backpack"
+      },
+      {
+        "item_id": "itm_006_book",
+        "asset_key": "item.book"
+      },
+      {
+        "item_id": "itm_007_orb",
+        "asset_key": "item.orb"
+      },
+      {
+        "item_id": "itm_008_oil",
+        "asset_key": "item.oil"
+      },
+      {
+        "item_id": "itm_009_parchment",
+        "asset_key": "item.parchment"
+      },
+      {
+        "item_id": "itm_010_tinderbox",
+        "asset_key": "item.tinderbox"
+      },
+      {
+        "item_id": "itm_011_book",
+        "asset_key": "item.book"
+      },
+      {
+        "item_id": "itm_012_lamp",
+        "asset_key": "item.lamp"
+      },
+      {
+        "item_id": "itm_013_ink_pen",
+        "asset_key": "item.ink_pen"
+      },
+      {
+        "item_id": "itm_014_ink",
+        "asset_key": "item.ink"
+      }
+    ],
+    "spell_asset_keys": []
+  },
+  "spawn_markers": {
+    "preferred_marker_id": "spawn_player",
+    "fallback_position": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "fallback_rotation": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    }
+  },
+  "render_registry_binding": {
+    "entity_id": "09a12ac13c7448babafe679b29a9d547",
+    "render_instance_id": null,
+    "attachments": [
+      {
+        "item_id": "itm_002_dagger",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      },
+      {
+        "item_id": "itm_003_dagger",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      },
+      {
+        "item_id": "itm_004_sickle",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      }
+    ],
+    "last_sync_tick": 0
+  },
+  "combat_state": {
+    "in_combat": false,
+    "round": 0,
+    "turn_index": null,
+    "initiative_order": [],
+    "active_combatant_id": null,
+    "global_advantage": false,
+    "global_disadvantage": false
+  }
+}
