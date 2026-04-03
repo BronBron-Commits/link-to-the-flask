@@ -6125,6 +6125,21 @@ window.addEventListener('dblclick', (event) => {
     const my = -((event.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera({ x: mx, y: my }, getActiveViewCamera());
 
+    // DM Priority: double-click to possess any actor (player or training dummy).
+    if (isGodModeActive()) {
+        const allActors = [
+            playerState,
+            ...trainingDummies.filter((d) => d && d.parent && (d.userData?.hp || 0) > 0)
+        ];
+        const actorHit = allActors.length > 0 ? raycaster.intersectObjects(allActors, false)[0] : null;
+        if (actorHit && actorHit.object) {
+            if (requestPossessActor(actorHit.object)) {
+                event.preventDefault();
+                return;
+            }
+        }
+    }
+
     // Priority 1: double-click enemy => immediately auto move+attack (no extra prompt).
     if (hasModePermission('player.combatInput')) {
         const activeTargetables = trainingDummies.filter((dummy) => (
