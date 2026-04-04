@@ -315,12 +315,12 @@ def build_world_payload(include_scene: bool = True) -> dict:
                 "name": str(entity.get("name") or actor_id),
                 "position": entity.get("position", {"x": 0, "y": 0, "z": 0}),
                 "rotationY": float(entity.get("rotationY", 0)),
-                "hp": gs.safe_float(entity.get("hp", 50.0), 50.0),
-                "maxHp": gs.safe_float(entity.get("maxHp", 50.0), 50.0),
-                "ac": int(gs.safe_float(entity.get("ac", 12), 12)),
-                "attackBonus": int(gs.safe_float(entity.get("attackBonus", 4), 4)),
-                "damageRoll": int(gs.safe_float(entity.get("damageRoll", 6), 6)),
-                "damageBonus": int(gs.safe_float(entity.get("damageBonus", 0), 0)),
+                "hp": safe_float(entity.get("hp", 50.0), 50.0),
+                "maxHp": safe_float(entity.get("maxHp", 50.0), 50.0),
+                "ac": int(safe_float(entity.get("ac", 12), 12)),
+                "attackBonus": int(safe_float(entity.get("attackBonus", 4), 4)),
+                "damageRoll": int(safe_float(entity.get("damageRoll", 6), 6)),
+                "damageBonus": int(safe_float(entity.get("damageBonus", 0), 0)),
             })
     payload = {
         "serverBuild": SERVER_BUILD_TAG,
