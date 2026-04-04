@@ -11526,7 +11526,7 @@ function updateCombatUI() {
         ? 'TURN COMPLETE' 
         : (combatState.player.actionUsed ? 'USED' : 'READY');
     
-    const showEndTurnButton = currentGameMode === GAME_MODE.COMBAT;
+    const showEndTurnButton = false;
     const canEndTurnNow = currentGameMode === GAME_MODE.COMBAT && currentTurnPhase === TURN_PHASE.PLAYER;
     
     // Determine button state
@@ -14400,6 +14400,10 @@ function showActionUI(show) {
     const bar = document.getElementById('action-bar');
     if (!bar) return;
     if (modeManager.current === MODE.DM) {
+        bar.style.display = 'none';
+        return;
+    }
+    if (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER') {
         bar.style.display = 'none';
         return;
     }
@@ -18145,6 +18149,11 @@ function updateActionMenu() {
         hideEndTurnPrompt();
         return;
     }
+
+    // Use world interactions only in player combat (no persistent bottom button bar).
+    setActionMenuVisible(false);
+    hideEndTurnPrompt();
+    return;
     
     setActionMenuVisible(true);
     
@@ -19916,11 +19925,7 @@ function animate(nowMs) {
     // Update end-turn prompt visibility in real-time
     if (simulationOwner && currentGameMode === GAME_MODE.COMBAT && currentTurnPhase === TURN_PHASE.PLAYER) {
         syncTurnExhaustionState();
-        if (!turnEndRequired && shouldShowEndTurnPrompt()) {
-            showEndTurnPrompt();
-        } else {
-            hideEndTurnPrompt();
-        }
+        hideEndTurnPrompt();
     } else {
         hideEndTurnPrompt();
     }
