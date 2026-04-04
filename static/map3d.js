@@ -781,8 +781,14 @@ function hydrateWorld(payload) {
     if (shouldBeInCombat) {
         ensureCombatEnvironmentPresentation();
     }
-    if (!shouldBeInCombat) {
-        forceLeaveCombatPresentation('world-sync');
+    if (!shouldBeInCombat && currentGameMode === GAME_MODE.COMBAT) {
+        currentGameMode = GAME_MODE.FREE;
+        currentTurnPhase = TURN_PHASE.IDLE;
+        combatState.phase = 'TRANSITION';
+        setCombatLock(false);
+        setCombatTimelineBusy(false);
+        clearCombatMoveTiles();
+        deactivateCombatCamera();
     }
     updateSceneVisibilityForCombatState(shouldBeInCombat);
 
@@ -11925,51 +11931,6 @@ function tryEnterCombat(target, options = {}) {
     combatState.turnQueue = [];
     combatState.turnOrder = [playerState, target.userData];
     combatState.currentTurnIndex = 0;
-function forceLeaveCombatPresentation(reason = 'sync') {
-    combatTimeline.length = 0;
-    resetCombatActionHistory();
-    clearTurnEndState();
-    resetCombatPresentationState();
-
-    currentGameMode = GAME_MODE.FREE;
-    currentTurnPhase = TURN_PHASE.IDLE;
-    combatState.inCombat = false;
-    combatState.phase = 'TRANSITION';
-    combatState.turnQueue = [];
-    combatState.turnOrder = [];
-    combatState.currentTurnIndex = 0;
-    combatState.turnIndex = 0;
-    combatState.roundNumber = 0;
-
-    setCombatLock(false);
-    setCombatTimelineBusy(false);
-    pendingAction = null;
-    resetCombatInteraction();
-    clearCombatMoveTiles();
-    deactivateCombatCamera();
-
-    if (combatRing && combatRing.parent) {
-        scene.remove(combatRing);
-    }
-    combatRing = null;
-    if (combatGrid && combatGrid.parent) {
-        scene.remove(combatGrid);
-    }
-    combatGrid = null;
-
-    combatInitiatorSid = null;
-    combatInitiatorActorId = null;
-    spectatorCombat = false;
-
-    syncSkyboxWithGameMode();
-    syncCombatMusicToGameMode();
-    showActionUI(false);
-    updateActionMenu();
-    updateCombatUI();
-    updateDmControlPanel();
-
-    console.info(`[COMBAT] forced exit presentation (${reason})`);
-}
     combatState.turnIndex = 0;
     combatState.roundNumber = 1;
     resetLocalTurnResources();
@@ -12000,7 +11961,19 @@ function forceLeaveCombatPresentation(reason = 'sync') {
             playerState.position.x + behind.x,
             playerState.position.y + behind.y,
             playerState.position.z + behind.z
-            forceLeaveCombatPresentation('combat-state');
+        );
+        camera.lookAt(
+            playerState.position.x,
+            playerState.position.y + COMBAT_CAMERA_LOOK_Y_OFFSET,
+            playerState.position.z
+        );
+    }
+
+    // Reposition DM setpiece to the far side of the battlefield, facing the player,
+    // then drop it in from above.
+    if (dmWorldSetpiece) {
+        // Save original world transform so we can restore it after combat.
+        dmWorldSetpiece.userData._restPos = dmWorldSetpiece.position.clone();
         dmWorldSetpiece.userData._restRot = { y: dmWorldSetpiece.rotation.y };
 
         // Direction from player toward enemy gives us the "far side".
@@ -12013,41 +11986,27 @@ function forceLeaveCombatPresentation(reason = 'sync') {
         const dist = combatRadius + 12;
         const landX = combatCenter.x + fwd.x * dist;
         const landZ = combatCenter.z + fwd.z * dist;
-        forceLeaveCombatPresentation('combat-reset');
+        const landY = playerState.position.y + 5;   // center of screen ~5 above the floor
+
+        // Rotate to face back toward the player / camera.
+        const faceYaw = Math.atan2(
+            playerState.position.x - landX,
+            playerState.position.z - landZ
+        );
+        dmWorldSetpiece.rotation.set(0, faceYaw, 0);
 
         // Start high above, animate down.
         const dropFrom = landY + 35;
         dmWorldSetpiece.position.set(landX, dropFrom, landZ);
-            const localActorId = String(getLocalCombatActorId() || '').trim();
-            const socketSid = String((socket && socket.id) || '').trim();
-            const localSid = String(localPlayerId || '').trim();
-            const normalizedTargetId = targetId.trim();
-            const targetIsLocal = !!(
-                normalizedTargetId && (
-                    normalizedTargetId === localActorId ||
-                    normalizedTargetId === socketSid ||
-                    normalizedTargetId === localSid
-                )
-            );
-            const connectedPlayers = getConnectedCombatPlayerEntries();
-            const isSoloCombat = connectedPlayers.length <= 1;
-            const shouldApplyLocalDamage = isHit && damage > 0 && (targetIsLocal || (!normalizedTargetId && isSoloCombat));
-
         const duration = 800;
-            const targetLabel = targetIsLocal
-                ? 'you'
-                : (normalizedTargetId ? (getCombatActorLabelById(normalizedTargetId) || normalizedTargetId) : 'target');
-            const logText = isHit
-                ? `${attacker} hits ${targetLabel} for ${damage} dmg ${rollDetail}`
-                : `${attacker} miss ${rollDetail}`;
-            const floatText = isHit
-                ? `${attacker} hits ${targetLabel} — ${damage} DMG`
-                : `${attacker} miss`;
+        const start = performance.now();
+        const slide = () => {
+            const t = Math.min(1, (performance.now() - start) / duration);
+            const eased = 1 - Math.pow(1 - t, 3);
+            dmWorldSetpiece.position.y = dropFrom + (landY - dropFrom) * eased;
+            if (t < 1) requestAnimationFrame(slide);
         };
         requestAnimationFrame(slide);
-            if (shouldApplyLocalDamage) {
-                applyPlayerDamage(damage, attacker);
-            }
     }
 
     announceCombatStart();
