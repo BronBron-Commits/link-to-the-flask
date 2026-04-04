@@ -805,6 +805,53 @@ function hydrateWorld(payload) {
             });
         }
     }
+
+    // Sync training dummies with backend's authoritative enemies list
+    if (Array.isArray(payload.enemies)) {
+        const existingById = new Map(trainingDummies
+            .filter((d) => d && d.userData?.actorId)
+            .map((dummy) => [String(dummy.userData.actorId), dummy]));
+        const authoritativeIds = new Set(payload.enemies
+            .filter((e) => e && e.actorId)
+            .map((enemy) => String(enemy.actorId)));
+        // Remove dummies not in backend list
+        for (const dummy of [...trainingDummies]) {
+            const dummyActorId = dummy.userData?.actorId;
+            if (!dummyActorId || !authoritativeIds.has(String(dummyActorId))) {
+                removeTrainingDummy(dummy);
+            }
+        }
+        // Sync dummies with backend state
+        for (const enemyState of payload.enemies) {
+            const actorId = String(enemyState.actorId || '').trim();
+            if (!actorId) continue;
+            let dummy = existingById.get(actorId);
+            if (!dummy || !dummy.parent) {
+                dummy = spawnTrainingDummy(
+                    enemyState.position?.x || 0,
+                    enemyState.position?.y || 0,
+                    enemyState.position?.z || 0,
+                    enemyState.name || 'Training Dummy'
+                );
+            }
+            // Sync with authoritative state
+            dummy.userData.actorId = actorId;
+            dummy.userData.networkId = enemyState.networkId || actorId;
+            dummy.userData.name = enemyState.name || 'Training Dummy';
+            dummy.position.set(
+                enemyState.position?.x || 0,
+                (enemyState.position?.y || 0) + TRAINING_DUMMY_Y_OFFSET,
+                enemyState.position?.z || 0,
+            );
+            dummy.rotation.y = Number(enemyState.rotationY) || 0;
+            dummy.userData.hp = Number(enemyState.hp) || 0;
+            dummy.userData.maxHp = Number(enemyState.maxHp) || 50;
+            dummy.userData.ac = Number(enemyState.ac) || 12;
+            dummy.userData.attackBonus = Number(enemyState.attackBonus) || 4;
+            dummy.userData.damageRoll = Number(enemyState.damageRoll) || TRAINING_DUMMY_DAMAGE;
+            dummy.userData.damageBonus = Number(enemyState.damageBonus) || 0;
+        }
+    }
 }
 
 // ── Network debug helpers (disabled) ─────────────────────────────────────
@@ -9482,16 +9529,28 @@ function applyCombatState(snapshot) {
     updatePlayerHealthHud();
 
     const enemySnapshots = Array.isArray(snapshot.enemies) ? snapshot.enemies : [];
-    const existingById = new Map(trainingDummies.map((dummy) => [dummy.userData?.actorId || dummy.userData?.name || '', dummy]));
-    const snapshotNames = new Set(enemySnapshots.map((enemy) => enemy.name));
+    // Use backend's authoritative actor IDs as key (no fallback to counter)
+    const existingById = new Map(trainingDummies
+        .filter((d) => d && d.userData?.actorId)
+        .map((dummy) => [String(dummy.userData.actorId), dummy]));
+    const snapshotIds = new Set(enemySnapshots
+        .filter((e) => e && e.actorId)
+        .map((enemy) => String(enemy.actorId)));
+    // Remove dummies not in snapshot
     for (const dummy of [...trainingDummies]) {
-        const dummyName = dummy.userData?.name || '';
-        if (!snapshotNames.has(dummyName)) {
+        const dummyActorId = dummy.userData?.actorId;
+        if (!dummyActorId || !snapshotIds.has(String(dummyActorId))) {
             removeTrainingDummy(dummy);
         }
     }
+    // Sync/create dummies from authoritative snapshot
     for (const enemyState of enemySnapshots) {
-        let dummy = existingById.get(enemyState.actorId || enemyState.name);
+        const actorId = String(enemyState.actorId || '').trim();
+        if (!actorId) {
+            console.warn('[COMBAT] Skipping enemy snapshot without actorId:', enemyState);
+            continue;
+        }
+        let dummy = existingById.get(actorId);
         if (!dummy || !dummy.parent) {
             dummy = spawnTrainingDummy(
                 enemyState.position?.x || 0,
@@ -9500,7 +9559,9 @@ function applyCombatState(snapshot) {
                 enemyState.name || 'Training Dummy'
             );
         }
-        dummy.userData.actorId = enemyState.actorId || dummy.userData.actorId || `enemy-${combatActorIdCounter++}`;
+        // Authoritative actor ID from backend
+        dummy.userData.actorId = actorId;
+        dummy.userData.networkId = enemyState.networkId || actorId;
         dummy.position.set(
             enemyState.position?.x || 0,
             (enemyState.position?.y || 0) + TRAINING_DUMMY_Y_OFFSET,

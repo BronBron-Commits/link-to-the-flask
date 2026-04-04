@@ -296,10 +296,37 @@ def build_lobby_state() -> dict:
 # --- World payload builder ---
 
 def build_world_payload(include_scene: bool = True) -> dict:
+    # Filter entities to extract authoritative enemies list for frontend
+    entities = world_state.get("entities", {})
+    enemies_list = []
+    if isinstance(entities, dict):
+        for eid, entity in entities.items():
+            if not isinstance(entity, dict):
+                continue
+            if not is_enemy(entity):
+                continue
+            # Ensure actor_id is authoritative entity ID
+            actor_id = str(entity.get("networkId") or eid or "").strip()
+            if not actor_id:
+                continue
+            enemies_list.append({
+                "actorId": actor_id,
+                "networkId": actor_id,
+                "name": str(entity.get("name") or actor_id),
+                "position": entity.get("position", {"x": 0, "y": 0, "z": 0}),
+                "rotationY": float(entity.get("rotationY", 0)),
+                "hp": gs.safe_float(entity.get("hp", 50.0), 50.0),
+                "maxHp": gs.safe_float(entity.get("maxHp", 50.0), 50.0),
+                "ac": int(gs.safe_float(entity.get("ac", 12), 12)),
+                "attackBonus": int(gs.safe_float(entity.get("attackBonus", 4), 4)),
+                "damageRoll": int(gs.safe_float(entity.get("damageRoll", 6), 6)),
+                "damageBonus": int(gs.safe_float(entity.get("damageBonus", 0), 0)),
+            })
     payload = {
         "serverBuild": SERVER_BUILD_TAG,
         "players": deepcopy(players),
-        "entities": deepcopy(world_state.get("entities", {})),
+        "entities": deepcopy(entities),
+        "enemies": enemies_list,  # Authoritative list for frontend
         "mode": str(world_state.get("mode", "exploration")),
         "combat": deepcopy(world_state.get("combat", {"turn": None, "order": [], "state": {}})),
         "session": {

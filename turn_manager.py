@@ -99,8 +99,10 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     timeline_id = f"enemy-turn-{actor_id}-{start_ms}"
 
     target = gs.players[target_sid]
-    target_actor_id = str(target.get("networkId") or target.get("actorId") or "")
+    # Use networkId as canonical player actor_id (consistent with entityId for enemies)
+    target_actor_id = str(target.get("networkId") or target.get("actorId") or target_sid or "")
     player_pos = target.get("position") if isinstance(target.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
+    print(f"[ENEMY] target actor_id={target_actor_id}", flush=True)
 
     entities = gs.world_state.setdefault("entities", {})
     enemy = entities.setdefault(actor_id, {
@@ -145,8 +147,9 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     atk_bonus = int(gs.safe_float(entity_data.get("attackBonus", 4), 4))
     dmg_die = max(1, int(gs.safe_float(entity_data.get("damageRoll", 6), 6)))
     dmg_bonus = int(gs.safe_float(entity_data.get("damageBonus", 0), 0))
+    dmg_notation = f"1d{dmg_die}+{dmg_bonus}" if dmg_bonus > 0 else f"1d{dmg_die}"
 
-    print(f"[ENEMY] {actor_id} in range, attacking target {target_actor_id}: AB={atk_bonus} DMG={dmg_die}d+{dmg_bonus}", flush=True)
+    print(f"[ENEMY] {actor_id} in range, attacking target {target_actor_id}: AB={atk_bonus} DMG={dmg_notation}", flush=True)
     hit_roll = random.randint(1, 20)
     total = hit_roll + atk_bonus
     target_ac = int(gs.safe_float(target.get("ac", 10), 10))
