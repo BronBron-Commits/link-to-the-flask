@@ -7028,6 +7028,11 @@ function turnPhaseToCombatPhase(phase) {
     return 'PLAYER';
 }
 
+function isPlayerInputTurn() {
+    if (currentGameMode !== GAME_MODE.COMBAT) return false;
+    return combatState.phase === 'PLAYER' || currentTurnPhase === TURN_PHASE.PLAYER;
+}
+
 function cloneJsonSafe(value) {
     return JSON.parse(JSON.stringify(value));
 }
@@ -9571,7 +9576,7 @@ function applyCombatState(snapshot) {
             Number(restoredUi.hoveredMoveWorldPos.z) || 0,
         );
     }
-    if (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER') {
+    if (isPlayerInputTurn()) {
         rebuildCombatMoveTiles();
         syncTurnExhaustionState();
     }
@@ -9898,7 +9903,7 @@ function canPlayerMove() {
         }
     }
     if (currentGameMode === GAME_MODE.FREE) return true;
-    return combatState.phase === 'PLAYER' && !isInputLockedForCombat('MOVE') && combatState.player.movementRemaining > 0;
+    return isPlayerInputTurn() && !isInputLockedForCombat('MOVE') && combatState.player.movementRemaining > 0;
 }
 
 function canAttack() {
@@ -11234,12 +11239,14 @@ function clearCombatMoveTiles() {
 }
 
 function rebuildCombatMoveTiles() {
-    if (!isSimulationOwner()) {
+    const canUseCombatMoveInput = hasModePermission('player.combatInput')
+        || (modeManager.current === MODE.DM && getControlledActor() === playerState);
+    if (!canUseCombatMoveInput) {
         clearCombatMoveTiles();
         return;
     }
 
-    if (currentGameMode !== GAME_MODE.COMBAT || combatState.phase !== 'PLAYER') {
+    if (!isPlayerInputTurn()) {
         clearCombatMoveTiles();
         return;
     }
@@ -13991,7 +13998,7 @@ function startPlayerTurn() {
     logCombatEvent('🎯 Your turn started - plan your attack!', 'system');
     // Defer tile generation one frame to avoid click-to-combat hitch.
     window.requestAnimationFrame(() => {
-        if (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER') {
+        if (isPlayerInputTurn()) {
             rebuildCombatMoveTiles();
         }
     });
@@ -19815,7 +19822,7 @@ function animate(nowMs) {
 
         const shouldShowMoveZone =
             currentGameMode === GAME_MODE.COMBAT &&
-            (combatState.phase === 'PLAYER' || currentAction === 'move' || !!moveZoneDisc || !!movementCursor);
+            (isPlayerInputTurn() || currentAction === 'move' || !!moveZoneDisc || !!movementCursor);
 
         const movementPreview = shouldShowMoveZone
             ? {
