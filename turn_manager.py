@@ -82,9 +82,18 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     print(f"[ENEMY TURN START] {actor_id}", flush=True)
 
     target_sid = _choose_enemy_target(enemy_actor)
+    print(f"[ENEMY] target selection for {actor_id}: target_sid={target_sid}", flush=True)
     if not target_sid or not isinstance(gs.players.get(target_sid), dict):
-        print(f"[ENEMY] no valid target for {actor_id}", flush=True)
-        return {"attacker": actor_id, "type": "none", "reason": "no-target"}
+        print(f"[ENEMY] no valid target for {actor_id} — looking for fallback", flush=True)
+        # Fallback: find ANY player
+        for sid, player in gs.players.items():
+            if isinstance(player, dict) and gs.normalize_role(player.get("role")) == "player":
+                target_sid = sid
+                print(f"[ENEMY] fallback target selected: {sid}", flush=True)
+                break
+        if not target_sid or not isinstance(gs.players.get(target_sid), dict):
+            print(f"[ENEMY] still no valid target for {actor_id} after fallback", flush=True)
+            return {"attacker": actor_id, "type": "none", "reason": "no-target"}
 
     start_ms = int(time.time() * 1000)
     timeline_id = f"enemy-turn-{actor_id}-{start_ms}"
@@ -112,12 +121,14 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     new_x = ex + (dx / dist) * step
     new_z = ez + (dz / dist) * step
     enemy["position"] = {"x": new_x, "y": ey, "z": new_z}
+    print(f"[ENEMY] {actor_id} moving toward {target_sid}: dist={dist:.1f}, step={step:.1f} to ({new_x:.1f}, {new_z:.1f})", flush=True)
     socketio.emit("entity-move", {"id": actor_id, "position": enemy["position"]})
     gevent.sleep(0.5)
 
     # Step 2: only attack if now in melee range.
     remaining = ((px - new_x) ** 2 + (pz - new_z) ** 2) ** 0.5
     if remaining >= 6.0:
+        print(f"[ENEMY] {actor_id} out of range ({remaining:.1f} ft), ending turn after move", flush=True)
         socketio.emit("combat-action-record", {
             "record": {
                 "type": "enemy-move", "actorId": actor_id,
@@ -126,7 +137,6 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
             },
             "startTimeMs": start_ms, "timelineId": timeline_id,
         })
-        print(f"[ENEMY] {actor_id} moved but still out of range ({remaining:.1f} ft)", flush=True)
         print(f"[ENEMY TURN END] {actor_id}", flush=True)
         return {"attacker": actor_id, "type": "move", "hit": False, "damage": 0}
 
@@ -136,15 +146,18 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     dmg_die = max(1, int(gs.safe_float(entity_data.get("damageRoll", 6), 6)))
     dmg_bonus = int(gs.safe_float(entity_data.get("damageBonus", 0), 0))
 
+    print(f"[ENEMY] {actor_id} in range, attacking target {target_actor_id}: AB={atk_bonus} DMG={dmg_die}d+{dmg_bonus}", flush=True)
     hit_roll = random.randint(1, 20)
     total = hit_roll + atk_bonus
     target_ac = int(gs.safe_float(target.get("ac", 10), 10))
     is_hit = hit_roll == 20 or (hit_roll != 1 and total >= target_ac)
     damage = max(0, random.randint(1, dmg_die) + dmg_bonus) if is_hit else 0
 
+    print(f"[ENEMY] {actor_id} roll={hit_roll} vs AC={target_ac}: total={total} hit={is_hit} damage={damage}", flush=True)
     if is_hit:
         current_hp = gs.safe_float(target.get("hp", 100.0), 100.0)
         target["hp"] = max(0.0, current_hp - float(damage))
+        print(f"[ENEMY] {actor_id} HIT! target HP: {current_hp:.1f} -> {target['hp']:.1f}", flush=True)
 
     event = {
         "attacker": actor_id, "actorType": "enemy", "type": "attack",
@@ -185,11 +198,18 @@ def start_combat(
         combat_state["targetId"] = target_id
     gs.world_state["combat"] = {"turn": 0, "order": order, "state": combat_state}
 
+    # Log all entities available at combat start
+    entities = gs.world_state.get("entities", {})
+    print(f"[COMBAT START] combat_entities={list(entities.keys())}", flush=True)
+    print(f"[COMBAT START] turn_order={[e.get('id') for e in order]}", flush=True)
+    print(f"[COMBAT START] target_id={target_id}", flush=True)
+
     if target_id:
-        entities = gs.world_state.get("entities", {})
         if isinstance(entities, dict) and isinstance(entities.get(target_id), dict):
+            print(f"[COMBAT] target {target_id} found in entities", flush=True)
             gs.ensure_enemy_registered(target_id)
         else:
+            print(f"[COMBAT] target_id NOT in entities: {target_id}", flush=True)
             print(f"[COMBAT] ignoring unknown target_id at start: {target_id}", flush=True)
 
     socketio.emit("combat-state", {
