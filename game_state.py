@@ -18,6 +18,31 @@ from uuid import uuid4
 SERVER_BUILD_TAG = "combat-restructure-2026-04-03"
 TRAINING_DUMMY_FALLBACK_MODEL_URL = "/static/untitled.glb"
 
+# Difficulty tier stat templates for training dummies and enemies
+ENTITY_STAT_TEMPLATES = {
+    "training-dummy": {
+        "hp": 30,
+        "ac": 8,
+        "attackBonus": 1,
+        "damageRoll": 3,
+        "damageBonus": 0,
+    },
+    "player-dummy": {
+        "hp": 40,
+        "ac": 12,
+        "attackBonus": 2,
+        "damageRoll": 6,
+        "damageBonus": 1,
+    },
+    "elite-dummy": {
+        "hp": 60,
+        "ac": 14,
+        "attackBonus": 4,
+        "damageRoll": 8,
+        "damageBonus": 2,
+    },
+}
+
 CONTRACTS_DIR = Path("data") / "character_tidy"
 STATIC_DIR = Path("static")
 UPLOADS_DIR = Path("data") / "uploads"
@@ -205,16 +230,22 @@ def sid_for_actor(actor_id: str) -> Optional[str]:
 def register_entity(entity_type: str, position: dict, name: Optional[str] = None) -> str:
     """Spawn a new entity into world_state and return its actor_id."""
     normalized = str(entity_type or "training-dummy").strip().lower()
-    if normalized not in {"training-dummy", "player-dummy", "elite-dummy"}:
+    if normalized not in ENTITY_STAT_TEMPLATES:
         normalized = "training-dummy"
+    
     actor_id = uuid4().hex
     display_name = str(name or "").strip() or {
         "player-dummy": "Dummy Player",
         "elite-dummy": "Elite Dummy",
     }.get(normalized, "Training Dummy")
+    
     px = safe_float((position or {}).get("x", 0.0))
     py = safe_float((position or {}).get("y", 0.0))
     pz = safe_float((position or {}).get("z", 0.0))
+    
+    # Get stat template for this entity type
+    template = ENTITY_STAT_TEMPLATES.get(normalized, ENTITY_STAT_TEMPLATES["training-dummy"])
+    
     entities = world_state.setdefault("entities", {})
     entities[actor_id] = {
         "id": actor_id,
@@ -222,10 +253,14 @@ def register_entity(entity_type: str, position: dict, name: Optional[str] = None
         "type": normalized,
         "name": display_name,
         "position": {"x": px, "y": py, "z": pz},
-        "attackBonus": 4,
-        "damageRoll": 6,
-        "damageBonus": 0,
+        "hp": template["hp"],
+        "maxHp": template["hp"],
+        "ac": template["ac"],
+        "attackBonus": template["attackBonus"],
+        "damageRoll": template["damageRoll"],
+        "damageBonus": template["damageBonus"],
     }
+    print(f"[ENTITY] spawned {normalized} {actor_id}: AC={template['ac']} AB={template['attackBonus']} HP={template['hp']}", flush=True)
     return actor_id
 
 
@@ -239,19 +274,28 @@ def ensure_enemy_registered(actor_id: str, name: Optional[str] = None) -> bool:
         world_state["entities"] = {}
         entities = world_state["entities"]
     entity = entities.get(eid)
+    template = ENTITY_STAT_TEMPLATES["training-dummy"]
     if not isinstance(entity, dict):
         entities[eid] = {
             "id": eid, "networkId": eid, "type": "training-dummy",
             "name": str(name or eid),
-            "attackBonus": 4, "damageRoll": 6, "damageBonus": 0,
+            "hp": template["hp"],
+            "maxHp": template["hp"],
+            "ac": template["ac"],
+            "attackBonus": template["attackBonus"],
+            "damageRoll": template["damageRoll"],
+            "damageBonus": template["damageBonus"],
         }
     else:
         entity.setdefault("networkId", eid)
         entity.setdefault("type", "training-dummy")
         entity.setdefault("name", str(name or eid))
-        entity.setdefault("attackBonus", 4)
-        entity.setdefault("damageRoll", 6)
-        entity.setdefault("damageBonus", 0)
+        entity.setdefault("hp", template["hp"])
+        entity.setdefault("maxHp", template["hp"])
+        entity.setdefault("ac", template["ac"])
+        entity.setdefault("attackBonus", template["attackBonus"])
+        entity.setdefault("damageRoll", template["damageRoll"])
+        entity.setdefault("damageBonus", template["damageBonus"])
     order = world_state.get("combat", {}).get("order")
     if not isinstance(order, list):
         return False
@@ -259,6 +303,32 @@ def ensure_enemy_registered(actor_id: str, name: Optional[str] = None) -> bool:
         return True
     order.append({"id": eid, "type": "enemy", "name": str(entities[eid].get("name") or name or eid)})
     return True
+
+
+def validate_player_stats(player_data: dict) -> dict:
+    """Validate and clamp player stats from importer to reasonable ranges."""
+    # For level 3, stats should be in these ranges
+    hp = safe_float(player_data.get("hp", 20.0), 20.0)
+    ac = safe_float(player_data.get("ac", 14.0), 14.0)
+    attack_bonus = safe_float(player_data.get("attackBonus", 4.0), 4.0)
+    
+    # Clamp to level-appropriate ranges
+    hp = max(10.0, min(40.0, hp))  # Level 3: ~10-40 HP
+    ac = max(8.0, min(20.0, ac))   # AC: 8-20 is reasonable
+    attack_bonus = max(0.0, min(10.0, attack_bonus))  # AB: 0-10
+    
+    # Log if any were adjusted
+    if (hp != safe_float(player_data.get("hp", 20.0), 20.0) or
+        ac != safe_float(player_data.get("ac", 14.0), 14.0) or
+        attack_bonus != safe_float(player_data.get("attackBonus", 4.0), 4.0)):
+        print(f"[IMPORT] stats clamped: HP {player_data.get('hp')}→{hp}, AC {player_data.get('ac')}→{ac}, AB {player_data.get('attackBonus')}→{attack_bonus}", flush=True)
+    else:
+        print(f"[IMPORT] validated: HP={hp}, AC={ac}, AB={attack_bonus}", flush=True)
+    
+    player_data["hp"] = hp
+    player_data["ac"] = ac
+    player_data["attackBonus"] = attack_bonus
+    return player_data
 
 
 # --- Lobby builder ---

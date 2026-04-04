@@ -180,18 +180,36 @@ def socket_player_character_stats(data):
     max_hp = coerce_int("maxHp")
     init_bonus = coerce_int("initiativeBonus")
     speed_ft = coerce_int("speedFt")
+    
+    # Validate stats before accepting
+    player_stats = {}
     if ac is not None:
-        entry["ac"] = ac
+        player_stats["ac"] = ac
     if max_hp is not None:
-        entry["max_hp"] = max_hp
-        if "hp" not in entry:
-            entry["hp"] = float(max_hp)
+        player_stats["hp"] = float(max_hp)
     if init_bonus is not None:
-        entry["initiative_bonus"] = init_bonus
+        player_stats["initiativeBonus"] = init_bonus
     if speed_ft is not None:
-        entry["speed_ft"] = speed_ft
+        player_stats["speedFt"] = speed_ft
+    
+    # Validate and clamp
+    validated = gs.validate_player_stats(player_stats)
+    
+    # Apply validated stats
+    if "ac" in validated:
+        entry["ac"] = validated["ac"]
+    if "hp" in validated:
+        entry["max_hp"] = validated["hp"]
+        if "hp" not in entry:
+            entry["hp"] = float(validated["hp"])
+    if "initiativeBonus" in validated:
+        entry["initiative_bonus"] = validated["initiativeBonus"]
+    if "speedFt" in validated:
+        entry["speed_ft"] = validated["speedFt"]
+    
     gs.save_resume_snapshot(sid)
-    emit("player-character-stats-ack", {"ok": True, "ac": ac, "maxHp": max_hp})
+    print(f"[PLAYER] {sid[:6]} stats loaded: AC={entry.get('ac')}, HP={entry.get('max_hp')}", flush=True)
+    emit("player-character-stats-ack", {"ok": True, "ac": entry.get("ac"), "maxHp": entry.get("max_hp")})
 
 
 @socketio.on("scene-update")
