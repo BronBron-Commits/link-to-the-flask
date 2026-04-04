@@ -13301,11 +13301,12 @@ function showAutoMoveAttackPrompt(target, preview) {
 
     ui.innerHTML = `
         <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Target Reachable This Turn</div>
-        <div style="font-size:15px;font-weight:700;margin-bottom:10px;">Distance: ${dist.toFixed(1)} ft</div>
-        <div style="opacity:0.82;margin-bottom:12px;">Auto move cost: ${preview.costFeet} ft • ${preview.remainingFeet} ft left after move</div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <button id="confirmAttack" style="padding:8px 12px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">AUTO MOVE + ATTACK</button>
-            <button id="cancelAttack" style="padding:8px 12px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;">MOVE MANUALLY</button>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Distance: ${dist.toFixed(1)} ft</div>
+        <div style="opacity:0.82;margin-bottom:10px;">Auto move cost: ${preview.costFeet} ft • ${preview.remainingFeet} ft left after move</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            <button id="confirmAttack" style="padding:8px 14px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">⚔ AUTO MOVE + MELEE</button>
+            <button id="arcaneInPlaceBtn" style="padding:8px 14px;background:#4c1d95;border:1px solid #7c3aed;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">✦ ARCANE ATTACK</button>
+            <button id="cancelAttack" style="padding:8px 14px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;">↑ MOVE MANUALLY</button>
         </div>
     `;
     ui.style.display = 'block';
@@ -13325,11 +13326,20 @@ function showAutoMoveAttackPrompt(target, preview) {
     combatInteraction.awaitingConfirm = true;
 
     const confirmBtn = document.getElementById('confirmAttack');
+    const arcaneInPlaceBtn = document.getElementById('arcaneInPlaceBtn');
     const cancelBtn = document.getElementById('cancelAttack');
 
     if (confirmBtn) {
         confirmBtn.onclick = () => {
             confirmAction();
+        };
+    }
+
+    if (arcaneInPlaceBtn) {
+        arcaneInPlaceBtn.onclick = () => {
+            hideCombatConfirmUI();
+            combatInteraction.awaitingConfirm = false;
+            rangedAttack(target);
         };
     }
 
@@ -13348,14 +13358,15 @@ function showMoveOrAttackPrompt(target) {
     const ui = ensureCombatConfirmUI();
     const dist = getEffectiveCombatDistanceFeet(playerState, target);
     const preview = getAttackPreview(playerState, target, 'melee');
-    
+
     ui.innerHTML = `
-        <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Ready to Attack</div>
-        <div style="font-size:15px;font-weight:700;margin-bottom:10px;">Distance: ${dist.toFixed(1)} ft</div>
-        <div style="opacity:0.82;margin-bottom:12px;">Hit: ${preview.hitChancePct}% | Dmg: ${preview.damageMin}-${preview.damageMax}</div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <button id="confirmAttack" style="padding:8px 12px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">ATTACK NOW</button>
-            <button id="cancelAttack" style="padding:8px 12px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;">MOVE FIRST</button>
+        <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Choose Attack</div>
+        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Distance: ${dist.toFixed(1)} ft</div>
+        <div style="opacity:0.82;margin-bottom:10px;">Melee — Hit: ${preview.hitChancePct}% | Dmg: ${preview.damageMin}-${preview.damageMax}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            <button id="meleeAttackBtn" style="padding:8px 14px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">⚔ MELEE ATTACK</button>
+            <button id="arcaneAttackBtn" style="padding:8px 14px;background:#4c1d95;border:1px solid #7c3aed;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">✦ ARCANE ATTACK</button>
+            <button id="moveFirstBtn" style="padding:8px 14px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;">↑ MOVE FIRST</button>
         </div>
     `;
     ui.style.display = 'block';
@@ -13366,23 +13377,31 @@ function showMoveOrAttackPrompt(target) {
     combatInteraction.action = 'move-or-attack-choice';
     combatInteraction.awaitingConfirm = true;
 
-    const confirmBtn = document.getElementById('confirmAttack');
-    const cancelBtn = document.getElementById('cancelAttack');
-    
-    if (confirmBtn) {
-        confirmBtn.onclick = () => {
+    const meleeBtn = document.getElementById('meleeAttackBtn');
+    const arcaneBtn = document.getElementById('arcaneAttackBtn');
+    const moveBtn = document.getElementById('moveFirstBtn');
+
+    if (meleeBtn) {
+        meleeBtn.onclick = () => {
             hideCombatConfirmUI();
             combatInteraction.awaitingConfirm = false;
             selectAttackTarget(target);
         };
     }
-    
-    if (cancelBtn) {
-        cancelBtn.onclick = () => {
+
+    if (arcaneBtn) {
+        arcaneBtn.onclick = () => {
+            hideCombatConfirmUI();
+            combatInteraction.awaitingConfirm = false;
+            rangedAttack(target);
+        };
+    }
+
+    if (moveBtn) {
+        moveBtn.onclick = () => {
             hideCombatConfirmUI();
             combatInteraction.awaitingConfirm = false;
             currentAction = 'move';
-            // Show movement UI to let player move closer
             showMovementTilesForApproach(target);
         };
     }
@@ -18137,8 +18156,6 @@ function updateActionMenu() {
     }
     
     const isMove = currentAction === 'move';
-    const isAttack = currentAction === 'attack';
-    const isAbility = currentAction === 'ability';
     const actionButtonsDisabled = (turnEndRequired || combatState.lock)
         ? 'opacity: 0.45; cursor: not-allowed;'
         : '';
@@ -18148,8 +18165,6 @@ function updateActionMenu() {
     
     actionMenuEl.innerHTML = `
         <button class="action-btn ${isMove ? 'active' : ''}" data-action="move" style="padding: 8px 12px; background: ${isMove ? '#4f46e5' : '#38404f'}; border: 1px solid ${isMove ? '#818cf8' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: pointer; ${actionButtonsDisabled}">Move</button>
-        <button class="action-btn ${isAttack ? 'active' : ''}" data-action="attack" style="padding: 8px 12px; background: ${isAttack ? '#dc2626' : '#38404f'}; border: 1px solid ${isAttack ? '#f87171' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: pointer; ${actionButtonsDisabled}">Attack</button>
-        <button class="action-btn ${isAbility ? 'active' : ''}" data-action="ability" style="padding: 8px 12px; background: ${isAbility ? '#7c3aed' : '#38404f'}; border: 1px solid ${isAbility ? '#a78bfa' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: pointer; ${actionButtonsDisabled}">Ability</button>
         <button class="action-btn end-turn" data-action="end-turn" style="${endTurnButtonStyle}">${turnEndRequired ? 'End Turn Required' : 'End Turn'}</button>
         ${combatInteraction.awaitingConfirm ? '<button class="confirm-btn" style="padding: 8px 12px; background: #16a34a; border: 1px solid #22c55e; color: #fff; border-radius: 4px; cursor: pointer; font-weight: bold;">CONFIRM</button>' : ''}
         ${combatInteraction.awaitingConfirm ? '<button class="cancel-btn" style="padding: 8px 12px; background: #7f1d1d; border: 1px solid #dc2626; color: #fff; border-radius: 4px; cursor: pointer;">Cancel</button>' : ''}
