@@ -19939,6 +19939,13 @@ function animate(nowMs) {
         hideEndTurnPrompt();
     }
 
+    // Maintain movement cursor every frame during player input turn
+    if (isPlayerInputTurn() && canPlayerMove()) {
+        if (!moveZoneDisc || !moveZoneDisc.parent) {
+            rebuildCombatMoveTiles();
+        }
+    }
+
     // Spread burst allocation over frames to avoid single-frame hitches.
     processQueuedCombatParticleBursts();
 
