@@ -6010,7 +6010,8 @@ function handleGodSelect(payload = {}) {
         }
 
         if (!clickedTarget && clickedOnMovezone && currentGameMode === GAME_MODE.COMBAT) {
-            if (currentAction === 'move' || (!currentAction && currentTurnPhase === TURN_PHASE.PLAYER)) {
+            const isPlayerInputTurn = (combatState.phase === 'PLAYER' || currentTurnPhase === TURN_PHASE.PLAYER);
+            if (currentAction === 'move' || (!currentAction && isPlayerInputTurn)) {
                 selectMoveDestination(clickedOnMovezone);
             }
             return;
@@ -6173,7 +6174,8 @@ window.addEventListener('dblclick', (event) => {
 
     // Priority 2: movement reticle double-click => pick + confirm move.
     if (!moveZoneDisc) return;
-    if (!(currentAction === 'move' || !currentAction && currentTurnPhase === TURN_PHASE.PLAYER)) return;
+    const isPlayerInputTurn = (combatState.phase === 'PLAYER' || currentTurnPhase === TURN_PHASE.PLAYER);
+    if (!(currentAction === 'move' || (!currentAction && isPlayerInputTurn))) return;
 
     const hit = raycaster.intersectObject(moveZoneDisc, false)[0];
     if (!hit || !hit.point) return;
