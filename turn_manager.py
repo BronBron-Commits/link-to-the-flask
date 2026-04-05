@@ -14,6 +14,7 @@ from flask_socketio import emit
 
 from extensions import socketio
 import game_state as gs
+import reaction_system
 from state_sync import broadcast_world
 
 
@@ -116,16 +117,98 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     px = gs.safe_float(player_pos.get("x"))
     pz = gs.safe_float(player_pos.get("z"))
 
-    # Step 1: move toward the player.
+    # Step 1: decide movement tactic.
     dx, dz = px - ex, pz - ez
     dist = max(0.001, (dx * dx + dz * dz) ** 0.5)
-    step = min(5.0, dist)
-    new_x = ex + (dx / dist) * step
-    new_z = ez + (dz / dist) * step
+    enemy_hp = gs.safe_float(enemy.get("hp", enemy.get("maxHp", 1)), 1)
+    enemy_max_hp = max(1.0, gs.safe_float(enemy.get("maxHp", enemy_hp), enemy_hp))
+    low_hp = (enemy_hp / enemy_max_hp) <= 0.35
+
+    # Threat detection: any player in melee range can provoke reaction.
+    threatened = False
+    closest_player_pos = None
+    closest_player_dist = 1e9
+    for _, p in gs.players.items():
+        if not isinstance(p, dict):
+            continue
+        if gs.normalize_role(p.get("role")) != "player":
+            continue
+        if gs.safe_float(p.get("hp", p.get("max_hp", 0)), 0) <= 0:
+            continue
+        ppos = p.get("position") if isinstance(p.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
+        pd = ((gs.safe_float(ppos.get("x", 0.0)) - ex) ** 2 + (gs.safe_float(ppos.get("z", 0.0)) - ez) ** 2) ** 0.5
+        if pd <= 5.0:
+            threatened = True
+        if pd < closest_player_dist:
+            closest_player_dist = pd
+            closest_player_pos = ppos
+
+    is_disengage_move = False
+    used_dash = False
+    if low_hp and threatened:
+        # Retreat behavior: disengage if possible, otherwise dash away (can provoke).
+        can_disengage = bool(enemy.get("canDisengage", True))
+        is_disengage_move = can_disengage
+        used_dash = not can_disengage
+        retreat_step = 10.0 if used_dash else 5.0
+        if closest_player_pos is not None:
+            rx = ex - gs.safe_float(closest_player_pos.get("x", 0.0))
+            rz = ez - gs.safe_float(closest_player_pos.get("z", 0.0))
+            rdist = max(0.001, (rx * rx + rz * rz) ** 0.5)
+            new_x = ex + (rx / rdist) * retreat_step
+            new_z = ez + (rz / rdist) * retreat_step
+        else:
+            new_x = ex
+            new_z = ez + retreat_step
+        action_label = "DISENGAGE" if is_disengage_move else "DASH"
+        print(f"[ENEMY] {actor_id} low HP retreat using {action_label}", flush=True)
+    else:
+        # Default behavior: close distance; use dash if very far.
+        used_dash = dist > 12.0
+        max_step = 10.0 if used_dash else 5.0
+        step = min(max_step, dist)
+        new_x = ex + (dx / dist) * step
+        new_z = ez + (dz / dist) * step
+
+    start_pos = {"x": ex, "y": ey, "z": ez}
     enemy["position"] = {"x": new_x, "y": ey, "z": new_z}
-    print(f"[ENEMY] {actor_id} moving toward {target_sid}: dist={dist:.1f}, step={step:.1f} to ({new_x:.1f}, {new_z:.1f})", flush=True)
+    print(f"[ENEMY] {actor_id} moved to ({new_x:.1f}, {new_z:.1f})", flush=True)
     socketio.emit("entity-move", {"id": actor_id, "position": enemy["position"]})
+
+    # Trigger player reactions if enemy leaves melee range without disengage.
+    reactions = reaction_system.trigger_reactions("leave_melee_range", {
+        "moverActorId": actor_id,
+        "moverActorType": "enemy",
+        "startPos": start_pos,
+        "endPos": enemy["position"],
+        "isDisengage": is_disengage_move,
+    })
     gevent.sleep(0.5)
+
+    if low_hp and threatened:
+        socketio.emit("combat-action-record", {
+            "record": {
+                "type": "enemy-retreat",
+                "actorId": actor_id,
+                "targetId": target_actor_id or None,
+                "attackType": "melee",
+                "result": "RETREAT",
+                "damage": 0,
+                "disengage": is_disengage_move,
+                "dash": used_dash,
+                "reactionsTriggered": len(reactions),
+            },
+            "startTimeMs": start_ms,
+            "timelineId": timeline_id,
+        })
+        print(f"[ENEMY TURN END] {actor_id} retreat", flush=True)
+        return {
+            "attacker": actor_id,
+            "type": "retreat",
+            "disengage": is_disengage_move,
+            "dash": used_dash,
+            "reactionCount": len(reactions),
+        }
 
     # Step 2: only attack if now in melee range.
     remaining = ((px - new_x) ** 2 + (pz - new_z) ** 2) ** 0.5

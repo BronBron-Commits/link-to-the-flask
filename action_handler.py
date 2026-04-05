@@ -11,8 +11,49 @@ from flask_socketio import emit
 
 from extensions import socketio
 import game_state as gs
+import reaction_system
 from turn_manager import advance_and_resolve
 from state_sync import broadcast_world, broadcast_lobby
+
+
+def _actor_position(actor_id: str, actor_type: str, sid: str | None = None) -> dict:
+    if actor_type == "player":
+        entry = gs.players.get(sid or "") if sid else None
+        if not isinstance(entry, dict):
+            resolved = gs.sid_for_actor(actor_id)
+            entry = gs.players.get(resolved) if resolved else None
+        if isinstance(entry, dict) and isinstance(entry.get("position"), dict):
+            p = entry["position"]
+            return {
+                "x": gs.safe_float(p.get("x", 0.0)),
+                "y": gs.safe_float(p.get("y", 0.0)),
+                "z": gs.safe_float(p.get("z", 0.0)),
+            }
+        return {"x": 0.0, "y": 0.0, "z": 0.0}
+
+    entities = gs.world_state.get("entities", {})
+    row = entities.get(actor_id) if isinstance(entities, dict) else None
+    if isinstance(row, dict) and isinstance(row.get("position"), dict):
+        p = row["position"]
+        return {
+            "x": gs.safe_float(p.get("x", 0.0)),
+            "y": gs.safe_float(p.get("y", 0.0)),
+            "z": gs.safe_float(p.get("z", 0.0)),
+        }
+    return {"x": 0.0, "y": 0.0, "z": 0.0}
+
+
+def _distance_2d(a: dict, b: dict) -> float:
+    dx = gs.safe_float(a.get("x", 0.0)) - gs.safe_float(b.get("x", 0.0))
+    dz = gs.safe_float(a.get("z", 0.0)) - gs.safe_float(b.get("z", 0.0))
+    return (dx * dx + dz * dz) ** 0.5
+
+
+def _movement_budget_for(action_type: str, entry: dict) -> float:
+    base = max(5.0, gs.safe_float(entry.get("speed_ft", 30.0), 30.0))
+    if action_type == "dash":
+        return base * 2.0
+    return base
 
 
 # ---------------------------------------------------------------------------
@@ -89,6 +130,19 @@ def handle_end_turn(sid: str, data: dict) -> dict:
 
 def handle_combat_action(sid: str, data: dict) -> None:
     """Validate and apply a player combat action to the server state."""
+    if sid not in gs.players:
+        emit("combat-action-denied", {"reason": "player-not-registered"})
+        return
+
+    payload = data if isinstance(data, dict) else {}
+    action_id = str(payload.get("id") or "").strip()
+    if action_id and gs.is_duplicate_combat_action(sid, action_id):
+        emit("combat-action-denied", {"reason": "duplicate-action", "id": action_id})
+        return
+    if not gs.consume_combat_rate_token(sid):
+        emit("combat-action-denied", {"reason": "rate-limited"})
+        return
+
     combat = gs.world_state.get("combat", {})
     if not combat.get("state", {}).get("inCombat"):
         emit("combat-action-denied", {"reason": "not-in-combat"})
@@ -105,11 +159,14 @@ def handle_combat_action(sid: str, data: dict) -> None:
         emit("combat-action-denied", {"reason": "not-your-turn"})
         return
 
-    _ALLOWED = {"attack", "move", "dodge", "dash", "help", "hide", "ready", "disengage"}
-    action_type = str(data.get("type") or "").strip().lower()
+    _ALLOWED = {"attack", "move", "dodge", "dash", "help", "hide", "ready", "disengage", "use-object"}
+    action_type = str(payload.get("type") or "").strip().lower().replace("_", "-").replace(" ", "-")
     if action_type not in _ALLOWED:
         emit("combat-action-denied", {"reason": "unknown-action"})
         return
+
+    if action_id:
+        gs.mark_combat_action_seen(sid, action_id)
 
     current = order[idx]
     result: dict = {
@@ -119,7 +176,7 @@ def handle_combat_action(sid: str, data: dict) -> None:
     }
 
     if action_type == "attack":
-        target_id = str(data.get("targetId") or "").strip()
+        target_id = str(payload.get("targetId") or "").strip()
         if not target_id:
             emit("combat-action-denied", {"reason": "missing-target"})
             return
@@ -127,13 +184,338 @@ def handle_combat_action(sid: str, data: dict) -> None:
         if not isinstance(entities, dict) or not isinstance(entities.get(target_id), dict):
             emit("combat-action-denied", {"reason": "unknown-target"})
             return
+        attacker_entry = gs.players.get(sid) if isinstance(gs.players.get(sid), dict) else {}
+        weapon = gs.resolve_equipped_weapon(attacker_entry)
+        atk_bonus = int(gs.safe_float(weapon.get("attackBonus", 0), 0))
+        dmg_roll = max(1, int(gs.safe_float(weapon.get("damageRoll", 3), 3)))
+        dmg_bonus = int(gs.safe_float(weapon.get("damageBonus", 0), 0))
+        target_entity = entities[target_id]
+        target_ac = int(gs.safe_float(target_entity.get("ac", 10), 10))
+
+        _ = reaction_system.trigger_reactions("attack_declared", {
+            "attackerActorId": str(current.get("id") or ""),
+            "attackerActorType": str(current.get("type") or "player"),
+            "targetId": target_id,
+        })
+
+        hit_roll = random.randint(1, 20)
+        total = hit_roll + atk_bonus
+        is_hit = hit_roll == 20 or (hit_roll != 1 and total >= target_ac)
+        damage = max(0, random.randint(1, dmg_roll) + dmg_bonus) if is_hit else 0
+
+        if is_hit:
+            hp_before = gs.safe_float(target_entity.get("hp", target_entity.get("maxHp", 1)), 1)
+            hp_after = max(0.0, hp_before - float(damage))
+            target_entity["hp"] = hp_after
+
         result.update({
             "targetId": target_id,
-            "hitRoll": random.randint(1, 20),
-            "damage": random.randint(1, 8),
+            "hitRoll": hit_roll,
+            "attackBonus": atk_bonus,
+            "toHit": total,
+            "targetAC": target_ac,
+            "hit": is_hit,
+            "damage": damage,
+            "weapon": {
+                "itemId": weapon.get("itemId"),
+                "name": weapon.get("name"),
+                "damageRoll": dmg_roll,
+                "damageBonus": dmg_bonus,
+                "damageType": weapon.get("damageType"),
+            },
+        })
+
+    elif action_type in {"move", "dash", "disengage"}:
+        player_entry = gs.players.get(sid) if isinstance(gs.players.get(sid), dict) else None
+        if not isinstance(player_entry, dict):
+            emit("combat-action-denied", {"reason": "player-not-registered"})
+            return
+
+        old_pos = _actor_position(str(current.get("id") or ""), "player", sid=sid)
+        desired_pos = payload.get("position") if isinstance(payload.get("position"), dict) else old_pos
+        new_pos = {
+            "x": gs.safe_float(desired_pos.get("x", old_pos["x"]), old_pos["x"]),
+            "y": gs.safe_float(desired_pos.get("y", old_pos["y"]), old_pos["y"]),
+            "z": gs.safe_float(desired_pos.get("z", old_pos["z"]), old_pos["z"]),
+        }
+
+        budget = _movement_budget_for(action_type, player_entry)
+        requested = _distance_2d(old_pos, new_pos)
+        if requested > budget:
+            emit("combat-action-denied", {"reason": "move-too-far", "requested": requested, "budget": budget})
+            return
+
+        player_entry["position"] = new_pos
+        socketio.emit("entity-move", {"id": str(current.get("id") or ""), "position": new_pos})
+
+        reactions = reaction_system.trigger_reactions("leave_melee_range", {
+            "moverActorId": str(current.get("id") or ""),
+            "moverActorType": "player",
+            "moverSid": sid,
+            "startPos": old_pos,
+            "endPos": new_pos,
+            "isDisengage": (action_type == "disengage"),
+        })
+        result.update({
+            "positionBefore": old_pos,
+            "positionAfter": new_pos,
+            "movementFt": round(requested, 3),
+            "movementBudgetFt": budget,
+            "reactionCount": len(reactions),
+        })
+
+    elif action_type == "use-object":
+        entry = gs.players.get(sid)
+        if not isinstance(entry, dict):
+            emit("combat-action-denied", {"reason": "player-not-registered"})
+            return
+
+        instance_id = str(payload.get("instanceId") or payload.get("itemInstanceId") or "").strip()
+        if not instance_id:
+            emit("combat-action-denied", {"reason": "missing-item"})
+            return
+
+        idx_item, item = _find_inventory_item(entry, instance_id)
+        if item is None or idx_item is None:
+            emit("combat-action-denied", {"reason": "item-not-found"})
+            return
+
+        item_id = str(item.get("itemId") or "")
+        definition = gs.resolve_item_def(item_id)
+        item_type = str(definition.get("type") or "").strip().lower()
+        if item_type != "consumable":
+            emit("combat-action-denied", {"reason": "item-not-usable", "itemId": item_id})
+            return
+
+        heal_flat = int(gs.safe_float(definition.get("healFlat", 0), 0))
+        hp_before = gs.safe_float(entry.get("hp", entry.get("max_hp", 1)), 1)
+        max_hp = gs.safe_float(entry.get("max_hp", hp_before), hp_before)
+        hp_after = min(max_hp, hp_before + max(0, heal_flat))
+        healed = max(0.0, hp_after - hp_before)
+        entry["hp"] = hp_after
+
+        qty_before = int(gs.safe_float(item.get("qty", 1), 1))
+        qty_after = max(0, qty_before - 1)
+        inventory = entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []}
+        items = inventory.get("items") if isinstance(inventory.get("items"), list) else []
+        if qty_after <= 0:
+            items.pop(idx_item)
+        else:
+            item["qty"] = qty_after
+
+        gs.save_resume_snapshot(sid)
+        _emit_inventory_update(sid, entry, "use-object", {"instanceId": instance_id, "itemId": item_id, "qty": qty_after})
+        result.update({
+            "itemId": item_id,
+            "instanceId": instance_id,
+            "healed": healed,
+            "hpBefore": hp_before,
+            "hpAfter": hp_after,
+            "qtyBefore": qty_before,
+            "qtyAfter": qty_after,
         })
 
     socketio.emit("combat-action-result", result)
+    broadcast_world(include_scene=False)
+
+
+# ---------------------------------------------------------------------------
+# Inventory actions (server-authoritative)
+# ---------------------------------------------------------------------------
+
+def _find_inventory_item(entry: dict, instance_id: str) -> tuple[int, dict] | tuple[None, None]:
+    inventory = entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {}
+    items = inventory.get("items") if isinstance(inventory.get("items"), list) else []
+    for idx, row in enumerate(items):
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("instanceId") or "").strip() == instance_id:
+            return idx, row
+    return None, None
+
+
+def _emit_inventory_error(sid: str, reason: str) -> None:
+    emit("inventory-error", {"reason": reason}, to=sid)
+
+
+def _emit_inventory_update(sid: str, entry: dict, action: str, item: dict | None = None) -> None:
+    payload = {
+        "sid": sid,
+        "action": action,
+        "inventory": entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []},
+        "equippedWeapon": entry.get("equipped_weapon"),
+    }
+    if isinstance(item, dict):
+        payload["item"] = item
+    socketio.emit("inventory-updated", payload)
+
+
+def handle_inventory_equip_item(sid: str, data: dict) -> None:
+    entry = gs.players.get(sid)
+    if not isinstance(entry, dict):
+        _emit_inventory_error(sid, "player-not-registered")
+        return
+
+    instance_id = str(data.get("instanceId") or "").strip()
+    if not instance_id:
+        _emit_inventory_error(sid, "missing-instance-id")
+        return
+
+    _, row = _find_inventory_item(entry, instance_id)
+    if row is None:
+        _emit_inventory_error(sid, "item-not-found")
+        return
+
+    definition = gs.resolve_item_def(str(row.get("itemId") or ""))
+    slot = str(row.get("slot") or definition.get("slot") or "").strip() or None
+    inventory = entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []}
+    items = inventory.get("items") if isinstance(inventory.get("items"), list) else []
+
+    if slot:
+        for candidate in items:
+            if not isinstance(candidate, dict):
+                continue
+            if str(candidate.get("instanceId") or "") == instance_id:
+                continue
+            if str(candidate.get("slot") or "").strip() == slot:
+                candidate["equipped"] = False
+
+    row["equipped"] = True
+    if slot:
+        row["slot"] = slot
+
+    gs.apply_equipped_weapon_stats(entry)
+    gs.save_resume_snapshot(sid)
+    _emit_inventory_update(sid, entry, "equip-item", row)
+    broadcast_world(include_scene=False)
+
+
+def handle_inventory_unequip_item(sid: str, data: dict) -> None:
+    entry = gs.players.get(sid)
+    if not isinstance(entry, dict):
+        _emit_inventory_error(sid, "player-not-registered")
+        return
+
+    instance_id = str(data.get("instanceId") or "").strip()
+    if not instance_id:
+        _emit_inventory_error(sid, "missing-instance-id")
+        return
+
+    _, row = _find_inventory_item(entry, instance_id)
+    if row is None:
+        _emit_inventory_error(sid, "item-not-found")
+        return
+
+    row["equipped"] = False
+    gs.apply_equipped_weapon_stats(entry)
+    gs.save_resume_snapshot(sid)
+    _emit_inventory_update(sid, entry, "unequip-item", row)
+    broadcast_world(include_scene=False)
+
+
+def handle_inventory_use_item(sid: str, data: dict) -> None:
+    entry = gs.players.get(sid)
+    if not isinstance(entry, dict):
+        _emit_inventory_error(sid, "player-not-registered")
+        return
+
+    instance_id = str(data.get("instanceId") or "").strip()
+    if not instance_id:
+        _emit_inventory_error(sid, "missing-instance-id")
+        return
+
+    idx, row = _find_inventory_item(entry, instance_id)
+    if row is None or idx is None:
+        _emit_inventory_error(sid, "item-not-found")
+        return
+
+    definition = gs.resolve_item_def(str(row.get("itemId") or ""))
+    if str(definition.get("type") or "") != "consumable":
+        _emit_inventory_error(sid, "item-not-usable")
+        return
+
+    qty = int(gs.safe_float(row.get("qty", 0), 0))
+    if qty <= 0:
+        _emit_inventory_error(sid, "item-empty")
+        return
+
+    healed = 0
+    if str(definition.get("id") or "") == "health_potion":
+        heal_flat = int(gs.safe_float(definition.get("healFlat", 10), 10))
+        hp_now = gs.safe_float(entry.get("hp", entry.get("max_hp", 0)), 0)
+        hp_cap = gs.safe_float(entry.get("max_hp", hp_now), hp_now)
+        entry["hp"] = min(hp_cap, hp_now + heal_flat)
+        healed = int(entry["hp"] - hp_now)
+
+    row["qty"] = qty - 1
+    inventory = entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []}
+    items = inventory.get("items") if isinstance(inventory.get("items"), list) else []
+    if row.get("qty", 0) <= 0:
+        items.pop(idx)
+
+    gs.apply_equipped_weapon_stats(entry)
+    gs.save_resume_snapshot(sid)
+    _emit_inventory_update(sid, entry, "use-item", {"instanceId": instance_id, "healed": healed})
+    broadcast_world(include_scene=False)
+
+
+def handle_inventory_loot_item(sid: str, data: dict) -> None:
+    role = gs.normalize_role(gs.client_roles.get(sid, "player"))
+    if role not in {"dm", "dev"}:
+        _emit_inventory_error(sid, "requires-dm-or-dev")
+        return
+
+    payload = data if isinstance(data, dict) else {}
+    target_sid = str(payload.get("targetSid") or "").strip()
+    if target_sid not in gs.players:
+        _emit_inventory_error(sid, "target-player-not-found")
+        return
+
+    target = gs.players[target_sid]
+    if not isinstance(target, dict):
+        _emit_inventory_error(sid, "target-player-invalid")
+        return
+
+    item_id = str(payload.get("itemId") or "").strip().lower()
+    item_id = "_".join(part for part in "".join(ch if ch.isalnum() else "_" for ch in item_id).split("_") if part)
+    if not item_id:
+        _emit_inventory_error(sid, "missing-item-id")
+        return
+
+    qty = int(gs.safe_float(payload.get("qty", 1), 1))
+    qty = max(1, qty)
+
+    inventory = target.get("inventory") if isinstance(target.get("inventory"), dict) else {"items": [], "capacity": None, "weight": 0}
+    items = inventory.setdefault("items", [])
+    if not isinstance(items, list):
+        items = []
+        inventory["items"] = items
+
+    # Stack if possible.
+    stacked = False
+    definition = gs.resolve_item_def(item_id)
+    stackable = bool(definition.get("stackable", True))
+    if stackable:
+        for row in items:
+            if not isinstance(row, dict):
+                continue
+            if str(row.get("itemId") or "") == item_id:
+                row["qty"] = int(gs.safe_float(row.get("qty", 0), 0)) + qty
+                stacked = True
+                break
+
+    if not stacked:
+        items.append({
+            "instanceId": f"inv_{len(items) + 1:03d}_{item_id}",
+            "itemId": item_id,
+            "qty": qty,
+            "equipped": False,
+        })
+
+    target["inventory"] = gs.normalize_inventory_contract(inventory)
+    gs.apply_equipped_weapon_stats(target)
+    gs.save_resume_snapshot(target_sid)
+    _emit_inventory_update(target_sid, target, "loot-item", {"itemId": item_id, "qty": qty})
     broadcast_world(include_scene=False)
 
 
