@@ -591,6 +591,66 @@ def extract_spells_from_pages(pages: list[str], character_id: str) -> list[dict]
         "CHA",
     }
 
+    known_class_names = {
+        "Artificer",
+        "Barbarian",
+        "Bard",
+        "Cleric",
+        "Druid",
+        "Fighter",
+        "Monk",
+        "Paladin",
+        "Ranger",
+        "Rogue",
+        "Sorcerer",
+        "Warlock",
+        "Wizard",
+    }
+
+    known_spell_metadata_labels = {
+        "Fighting Style",
+    }
+
+    def normalize_spell_name(line: str) -> str | None:
+        candidate = line.strip()
+        if not candidate:
+            return None
+
+        prepared_match = re.match(r"^[OP]\s+(.+)$", candidate)
+        if prepared_match:
+            candidate = prepared_match.group(1).strip()
+
+        if candidate in known_class_names:
+            return None
+        if candidate in known_spell_metadata_labels:
+            return None
+        if candidate.startswith("===") or candidate.endswith("==="):
+            return None
+        if re.fullmatch(r"\(.*\)", candidate):
+            return None
+        if re.fullmatch(r"\d+\s+Slots\s+.*", candidate, flags=re.IGNORECASE):
+            return None
+        if candidate == "--":
+            return None
+        if candidate.endswith(" --"):
+            return None
+        if re.fullmatch(r"\d+(?:BA|A|R|M|H)", candidate, flags=re.IGNORECASE):
+            return None
+        if candidate in {"Self", "Touch", "Instantaneous"}:
+            return None
+        if re.fullmatch(r"\d+\s*(?:ft\.|feet|foot)", candidate, flags=re.IGNORECASE):
+            return None
+        if re.fullmatch(r"(?:Concentration,\s*up to\s*)?\d+\s+(?:minute|minutes|hour|hours|day|days)", candidate, flags=re.IGNORECASE):
+            return None
+        if re.fullmatch(r"[VSM,\s]+", candidate, flags=re.IGNORECASE):
+            return None
+        if re.match(r"^[A-Z]{2,}-?\d{2,}", candidate):
+            return None
+        if not re.search(r"[A-Za-z]", candidate):
+            return None
+
+        return candidate
+
     for page_text in pages:
         page_lines = normalize_lines(page_text)
         if "PREP SPELL NAME" not in page_lines and "SPELLS" not in page_lines:
@@ -617,14 +677,15 @@ def extract_spells_from_pages(pages: list[str], character_id: str) -> list[dict]
                 continue
 
             # Keep only lines that look like spell names or spell row text.
-            if not re.search(r"[A-Za-z]", line):
+            normalized_name = normalize_spell_name(line)
+            if normalized_name is None:
                 continue
 
             spell_rows.append(
                 {
                     "character_id": character_id,
                     "spell_order": order,
-                    "spell_text": line,
+                    "spell_text": normalized_name,
                 }
             )
             order += 1
@@ -787,7 +848,11 @@ def parse_saves_and_skills(first_page_lines: list[str], abilities: list[dict]) -
     }
 
 
-def apply_form_fallbacks_to_saves_and_skills(parsed: dict, form_values: dict[str, str]) -> None:
+def apply_form_fallbacks_to_saves_and_skills(
+    parsed: dict,
+    form_values: dict[str, str],
+    abilities: list[dict] | None = None,
+) -> None:
     if not form_values:
         return
 
@@ -800,6 +865,25 @@ def apply_form_fallbacks_to_saves_and_skills(parsed: dict, form_values: dict[str
         "CHA": "charisma",
     }
 
+    skill_aliases = {
+        "Animal Handling": [("animal",), ("animal", "handling")],
+        "Sleight of Hand": [("sleightofhand",), ("sleight", "hand")],
+    }
+
+    ability_mod_by_key = {
+        row.get("ability"): row.get("modifier")
+        for row in (abilities or [])
+        if row.get("ability")
+    }
+
+    def find_first_numeric_form_value(*fragment_sets: tuple[str, ...]) -> int | None:
+        for fragments in fragment_sets:
+            value = _get_form_value(form_values, *fragments)
+            parsed_value = to_int(value)
+            if parsed_value is not None:
+                return parsed_value
+        return None
+
     for row in parsed.get("saving_throws", []):
         if row.get("bonus") is not None:
             continue
@@ -807,12 +891,13 @@ def apply_form_fallbacks_to_saves_and_skills(parsed: dict, form_values: dict[str
         if not ability:
             continue
         full = save_name_by_ability.get(ability, "")
-        value = (
-            _get_form_value(form_values, full, "saving", "throw")
-            or _get_form_value(form_values, ability.lower(), "save")
-            or _get_form_value(form_values, full, "save")
+        parsed_bonus = find_first_numeric_form_value(
+            (full, "saving", "throw"),
+            (ability.lower(), "save"),
+            (full, "save"),
+            ("st", full),
+            ("st", ability.lower()),
         )
-        parsed_bonus = to_int(value)
         if parsed_bonus is not None:
             row["bonus"] = parsed_bonus
 
@@ -821,12 +906,32 @@ def apply_form_fallbacks_to_saves_and_skills(parsed: dict, form_values: dict[str
             continue
         name = str(row.get("name") or "").lower()
         words = [w for w in re.split(r"\s+", name) if w and w not in {"of", "and"}]
-        value = _get_form_value(form_values, *words) if words else None
-        if value is None and words:
-            value = _get_form_value(form_values, words[0], "skill")
-        parsed_bonus = to_int(value)
+        fragment_sets: list[tuple[str, ...]] = []
+        if words:
+            fragment_sets.append(tuple(words))
+        fragment_sets.extend(skill_aliases.get(str(row.get("name") or ""), []))
+        if words:
+            fragment_sets.append((words[0], "skill"))
+
+        parsed_bonus = find_first_numeric_form_value(*fragment_sets)
         if parsed_bonus is not None:
             row["bonus"] = parsed_bonus
+
+    for row in parsed.get("saving_throws", []):
+        bonus = row.get("bonus")
+        ability = row.get("ability")
+        mod = ability_mod_by_key.get(ability)
+        if bonus is not None and mod is not None:
+            row["proficient"] = bonus > mod
+
+    for row in parsed.get("skills", []):
+        bonus = row.get("bonus")
+        ability = row.get("ability")
+        mod = ability_mod_by_key.get(ability)
+        if bonus is not None and mod is not None:
+            row["proficient"] = bonus > mod
+            if row.get("expertise") is None:
+                row["expertise"] = False
 
 
 def select_feature_lines_from_pages(pages: list[str]) -> list[str]:
@@ -854,7 +959,6 @@ def select_inventory_lines_from_pages(pages: list[str]) -> list[str]:
             continue
         lines.extend(page_lines)
     return lines
-
 
 def parse_inventory_summary_and_roleplay(pages: list[str]) -> dict:
     currency = {"cp": None, "sp": None, "ep": None, "gp": None, "pp": None}
@@ -1152,7 +1256,7 @@ def parse_character_tables(pdf_path: Path) -> dict:
         character["current_hp"] = character.get("hit_points")
 
     saves_and_skills = parse_saves_and_skills(first_page_lines, abilities)
-    apply_form_fallbacks_to_saves_and_skills(saves_and_skills, form_values)
+    apply_form_fallbacks_to_saves_and_skills(saves_and_skills, form_values, abilities)
     inventory_roleplay = parse_inventory_summary_and_roleplay(pages)
     spell_meta = parse_spellcasting_metadata(pages)
 
@@ -1802,6 +1906,398 @@ def split_static_runtime(master_record: dict) -> tuple[dict, dict]:
     return static_record, runtime_record
 
 
+def _parse_signed_int(value: str | int | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    m = re.search(r"[+-]?\d+", str(value).strip())
+    return int(m.group(0)) if m else None
+
+
+def _parse_weight_lb(value: str | int | None) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    m = re.search(r"\d+", str(value))
+    return int(m.group(0)) if m else None
+
+
+def _normalize_attack_damage_entry(entry: dict) -> dict:
+    roll = str(entry.get("roll") or "").strip()
+    damage_type = entry.get("type")
+
+    if re.fullmatch(r"[+-]?\d+", roll):
+        return {
+            "flat": int(roll),
+            "dice": None,
+            "formula": roll,
+            "type": damage_type,
+        }
+
+    return {
+        "flat": None,
+        "dice": roll or None,
+        "formula": roll or None,
+        "type": damage_type,
+    }
+
+
+def _to_number(value, default: int = 0) -> int:
+    parsed = _parse_signed_int(value)
+    return parsed if parsed is not None else default
+
+
+def _infer_feature_rule_id(feature_name: str) -> str | None:
+    name = feature_name.lower()
+    if "divine smite" in name:
+        return "divine_smite"
+    if "lay on hands" in name:
+        return "lay_on_hands"
+    if "spellcasting" in name:
+        return "spell_casting"
+    if "channel divinity" in name:
+        return "channel_divinity"
+    return None
+
+
+def _build_feature_uses_lookup(feature_uses: list[dict]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for item in feature_uses:
+        name = str(item.get("feature_name") or "").strip()
+        if not name:
+            continue
+        max_uses = item.get("max_uses")
+        recharge = str(item.get("recharge") or "").strip()
+        if max_uses is None or not recharge:
+            continue
+        uses_value = f"{max_uses}/{('LR' if recharge.lower().startswith('long') else 'SR')}"
+        out[slugify(name)] = uses_value
+    return out
+
+
+def _infer_inventory_slot(item_name: str) -> str | None:
+    name = item_name.lower()
+    if "shield" in name:
+        return "off_hand"
+    if any(token in name for token in ("sword", "axe", "mace", "hammer", "javelin", "dagger", "bow", "staff")):
+        return "main_hand"
+    if any(token in name for token in ("mail", "armor", "robe", "plate", "leather")):
+        return "armor"
+    return None
+
+
+def _build_inventory_contract(master_record: dict) -> dict:
+    inventory = master_record.get("inventory", {})
+    equipment = master_record.get("equipment", {})
+
+    capacity = inventory.get("capacity", {})
+    carried_weight = _parse_weight_lb(capacity.get("weight_carried"))
+    max_capacity = _parse_weight_lb(capacity.get("encumbered"))
+
+    equipped_item_ids = set(equipment.get("equipped_item_ids") or [])
+    items_out = []
+    for idx, item in enumerate(inventory.get("items", []), 1):
+        item_name = str(item.get("name") or "").strip() or "Unknown Item"
+        item_id = slugify(item_name)
+        quantity = _to_number(item.get("quantity"), default=1)
+
+        is_equipped = bool(item.get("equipped")) or (item.get("id") in equipped_item_ids)
+        slot = _infer_inventory_slot(item_name) if is_equipped else None
+
+        row = {
+            "instanceId": f"inv_{idx:03d}",
+            "itemId": item_id,
+            "qty": quantity,
+            "equipped": is_equipped,
+        }
+        if slot:
+            row["slot"] = slot
+
+        items_out.append(row)
+
+    # Ensure at least one weapon-like item is equipped so combat can resolve a default weapon.
+    if not any(i.get("equipped") and i.get("slot") == "main_hand" for i in items_out):
+        for row in items_out:
+            if _infer_inventory_slot(row.get("itemId", "")) == "main_hand":
+                row["equipped"] = True
+                row["slot"] = "main_hand"
+                break
+
+    out = {"items": items_out}
+    if max_capacity is not None:
+        out["capacity"] = max_capacity
+    if carried_weight is not None:
+        out["weight"] = carried_weight
+    return out
+
+
+def _normalize_feature_row(feature: dict) -> dict:
+    text = str(feature.get("name") or "").strip()
+    if text.startswith("* "):
+        text = text[2:].strip()
+
+    is_section = text.startswith("===") and text.endswith("===")
+    if is_section:
+        clean_name = text.strip("=").strip()
+        return {
+            "id": feature.get("id"),
+            "name": clean_name,
+            "type": "section",
+            "raw": str(feature.get("name") or ""),
+        }
+
+    clean_name = text.split(" • ", 1)[0].strip() if " • " in text else text
+    return {
+        "id": feature.get("id"),
+        "name": clean_name,
+        "type": "feature",
+        "raw": str(feature.get("name") or ""),
+    }
+
+
+def build_engine_entity(master_record: dict) -> dict:
+    source = master_record.get("source", {})
+    identity = master_record.get("identity", {})
+    core = master_record.get("core_stats", {})
+    abilities = master_record.get("abilities", {})
+    saving_throws = master_record.get("saving_throws", [])
+    skills = master_record.get("skills", [])
+    actions = master_record.get("actions", {})
+    inventory = master_record.get("inventory", {})
+    spellcasting = master_record.get("spellcasting", {})
+    features = master_record.get("features", [])
+
+    stats = {
+        "str": _to_number((abilities.get("STR") or {}).get("score"), default=10),
+        "dex": _to_number((abilities.get("DEX") or {}).get("score"), default=10),
+        "con": _to_number((abilities.get("CON") or {}).get("score"), default=10),
+        "int": _to_number((abilities.get("INT") or {}).get("score"), default=10),
+        "wis": _to_number((abilities.get("WIS") or {}).get("score"), default=10),
+        "cha": _to_number((abilities.get("CHA") or {}).get("score"), default=10),
+    }
+
+    skill_map = {
+        slugify(str(row.get("name") or "skill")): {
+            "value": _to_number(row.get("bonus"), default=0),
+            "proficient": bool(row.get("proficient")),
+        }
+        for row in skills
+    }
+
+    attack_list = []
+    for attack in actions.get("attacks", []):
+        parsed_damage = [_normalize_attack_damage_entry(d) for d in attack.get("damage", [])]
+        primary_damage = parsed_damage[0] if parsed_damage else {"dice": None, "flat": None, "type": None}
+        attack_list.append(
+            {
+                "name": attack.get("name"),
+                "attackBonus": _to_number(attack.get("hit_bonus"), default=0),
+                "damage": {
+                    "dice": primary_damage.get("dice"),
+                    "flat": primary_damage.get("flat"),
+                    "type": primary_damage.get("type"),
+                },
+            }
+        )
+
+    inventory_contract = _build_inventory_contract(master_record)
+
+    seen_spells: set[str] = set()
+    normalized_spells = []
+    for spell in spellcasting.get("spells", []):
+        dedupe_key = "|".join(
+            [
+                str(spell.get("name") or "").strip().lower(),
+                str(spell.get("level") or ""),
+                str(spell.get("casting_time") or ""),
+                str(spell.get("range") or ""),
+                str(spell.get("duration") or ""),
+            ]
+        )
+        if dedupe_key in seen_spells:
+            continue
+        seen_spells.add(dedupe_key)
+
+        normalized_spells.append(
+            {
+                "name": spell.get("name"),
+                "range": spell.get("range"),
+                "duration": spell.get("duration"),
+                "castingTime": spell.get("casting_time"),
+                "prepared": bool(spell.get("prepared")) if spell.get("prepared") is not None else False,
+            }
+        )
+
+    normalized_features = [_normalize_feature_row(feature) for feature in features]
+    feature_uses_lookup = _build_feature_uses_lookup(master_record.get("feature_uses", []))
+    normalized_features_out = []
+    for feature in normalized_features:
+        feature_name = str(feature.get("name") or "").strip()
+        if not feature_name:
+            continue
+        row = {
+            "name": feature_name,
+            "type": feature.get("type"),
+        }
+        uses_value = feature_uses_lookup.get(slugify(feature_name))
+        if uses_value:
+            row["uses"] = uses_value
+        rule_id = _infer_feature_rule_id(feature_name)
+        if rule_id:
+            row["ruleId"] = rule_id
+        normalized_features_out.append(row)
+
+    hit_points = master_record.get("hit_points", {})
+    current_hp = _parse_signed_int(hit_points.get("current_hp"))
+    max_hp = _parse_signed_int(hit_points.get("max_hp"))
+    hp_value = current_hp if current_hp is not None else (max_hp if max_hp is not None else 0)
+
+    return {
+        "id": str(source.get("character_id") or ""),
+        "name": str(identity.get("character_name") or "Unknown"),
+        "combat": {
+            "hp": hp_value,
+            "maxHp": max_hp if max_hp is not None else hp_value,
+            "ac": _to_number(core.get("armor_class"), default=10),
+            "initiative": _to_number(core.get("initiative_bonus"), default=0),
+            "speed": _to_number(core.get("speed_ft"), default=30),
+        },
+        "stats": stats,
+        "skills": skill_map,
+        "inventory": inventory_contract,
+        "weapons": attack_list,
+        "spells": normalized_spells,
+        "features": normalized_features_out,
+    }
+
+
+def validate_engine_entity_contract(entity: dict) -> None:
+    errors: list[str] = []
+
+    def is_number(value) -> bool:
+        return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+    if not isinstance(entity, dict):
+        raise ValueError("engine_entity contract must be an object")
+
+    for key in ("id", "name", "combat", "stats", "inventory"):
+        if key not in entity:
+            errors.append(f"missing required field: {key}")
+
+    if not isinstance(entity.get("id"), str):
+        errors.append("id must be a string")
+    if not isinstance(entity.get("name"), str):
+        errors.append("name must be a string")
+
+    combat = entity.get("combat")
+    if not isinstance(combat, dict):
+        errors.append("combat must be an object")
+    else:
+        for key in ("hp", "maxHp", "ac", "initiative", "speed"):
+            if key not in combat:
+                errors.append(f"combat.{key} is required")
+            elif not is_number(combat[key]):
+                errors.append(f"combat.{key} must be a number")
+
+    stats = entity.get("stats")
+    if not isinstance(stats, dict):
+        errors.append("stats must be an object")
+    else:
+        for key in ("str", "dex", "con", "int", "wis", "cha"):
+            if key not in stats:
+                errors.append(f"stats.{key} is required")
+            elif not is_number(stats[key]):
+                errors.append(f"stats.{key} must be a number")
+
+    skills = entity.get("skills")
+    if skills is not None:
+        if not isinstance(skills, dict):
+            errors.append("skills must be an object")
+        else:
+            for key, row in skills.items():
+                if not isinstance(row, dict):
+                    errors.append(f"skills.{key} must be an object")
+                    continue
+                if not is_number(row.get("value")):
+                    errors.append(f"skills.{key}.value must be a number")
+                prof = row.get("proficient")
+                if prof is not None and not isinstance(prof, bool):
+                    errors.append(f"skills.{key}.proficient must be a boolean")
+
+    inventory = entity.get("inventory")
+    if inventory is not None:
+        if not isinstance(inventory, dict):
+            errors.append("inventory must be an object")
+        else:
+            if "capacity" in inventory and not is_number(inventory.get("capacity")):
+                errors.append("inventory.capacity must be a number")
+            if "weight" in inventory and not is_number(inventory.get("weight")):
+                errors.append("inventory.weight must be a number")
+            items = inventory.get("items")
+            if not isinstance(items, list):
+                errors.append("inventory.items must be an array")
+            else:
+                for i, row in enumerate(items):
+                    if not isinstance(row, dict):
+                        errors.append(f"inventory.items[{i}] must be an object")
+                        continue
+                    if not isinstance(row.get("instanceId"), str):
+                        errors.append(f"inventory.items[{i}].instanceId must be a string")
+                    if not isinstance(row.get("itemId"), str):
+                        errors.append(f"inventory.items[{i}].itemId must be a string")
+                    if not is_number(row.get("qty")):
+                        errors.append(f"inventory.items[{i}].qty must be a number")
+                    equipped = row.get("equipped")
+                    if equipped is not None and not isinstance(equipped, bool):
+                        errors.append(f"inventory.items[{i}].equipped must be a boolean")
+                    slot = row.get("slot")
+                    if slot is not None and not isinstance(slot, str):
+                        errors.append(f"inventory.items[{i}].slot must be a string")
+
+    weapons = entity.get("weapons")
+    if weapons is not None:
+        if not isinstance(weapons, list):
+            errors.append("weapons must be an array")
+        else:
+            for i, row in enumerate(weapons):
+                if not isinstance(row, dict):
+                    errors.append(f"weapons[{i}] must be an object")
+                    continue
+                if not isinstance(row.get("name"), str):
+                    errors.append(f"weapons[{i}].name must be a string")
+                if not is_number(row.get("attackBonus")):
+                    errors.append(f"weapons[{i}].attackBonus must be a number")
+
+    spells = entity.get("spells")
+    if spells is not None:
+        if not isinstance(spells, list):
+            errors.append("spells must be an array")
+        else:
+            for i, row in enumerate(spells):
+                if not isinstance(row, dict):
+                    errors.append(f"spells[{i}] must be an object")
+                    continue
+                if not isinstance(row.get("name"), str):
+                    errors.append(f"spells[{i}].name must be a string")
+
+    features = entity.get("features")
+    if features is not None:
+        if not isinstance(features, list):
+            errors.append("features must be an array")
+        else:
+            for i, row in enumerate(features):
+                if not isinstance(row, dict):
+                    errors.append(f"features[{i}] must be an object")
+                    continue
+                if not isinstance(row.get("name"), str):
+                    errors.append(f"features[{i}].name must be a string")
+
+    if errors:
+        raise ValueError("Invalid engine_entity contract: " + "; ".join(errors))
+
+
 def write_outputs(out_dir: Path, tables: dict) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1832,8 +2328,14 @@ def write_outputs(out_dir: Path, tables: dict) -> None:
     )
 
     master_record = build_master_character_record(tables)
+    engine_entity = build_engine_entity(master_record)
+    validate_engine_entity_contract(engine_entity)
     (out_dir / "character_master.json").write_text(
         json.dumps(master_record, indent=2),
+        encoding="utf-8",
+    )
+    (out_dir / "engine_entity.json").write_text(
+        json.dumps(engine_entity, indent=2),
         encoding="utf-8",
     )
 
@@ -1860,6 +2362,10 @@ def write_outputs(out_dir: Path, tables: dict) -> None:
     )
     (static_dir / "character_master.json").write_text(
         json.dumps(master_record, indent=2),
+        encoding="utf-8",
+    )
+    (static_dir / "engine_entity.json").write_text(
+        json.dumps(engine_entity, indent=2),
         encoding="utf-8",
     )
 

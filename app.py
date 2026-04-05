@@ -35,7 +35,15 @@ import routes  # noqa: F401
 # Module-level handlers.
 from connection_manager import on_connect, on_disconnect
 from turn_manager import advance_and_resolve, start_combat, end_combat
-from action_handler import handle_end_turn, handle_combat_action, handle_dm_command
+from action_handler import (
+    handle_end_turn,
+    handle_combat_action,
+    handle_dm_command,
+    handle_inventory_equip_item,
+    handle_inventory_unequip_item,
+    handle_inventory_use_item,
+    handle_inventory_loot_item,
+)
 from state_sync import broadcast_world, broadcast_lobby, emit_combat_turn_to
 
 
@@ -206,10 +214,27 @@ def socket_player_character_stats(data):
         entry["initiative_bonus"] = validated["initiativeBonus"]
     if "speedFt" in validated:
         entry["speed_ft"] = validated["speedFt"]
+
+    # Hydrate inventory contract for this player (prefer explicit payload, else latest engine contract).
+    inventory_payload = data.get("inventory") if isinstance(data.get("inventory"), dict) else None
+    if inventory_payload is not None:
+        gs.set_player_inventory(sid, inventory_payload)
+    elif not isinstance(entry.get("inventory"), dict):
+        engine_entity = gs.load_engine_entity_contract()
+        if isinstance(engine_entity, dict):
+            gs.apply_inventory_from_engine_entity(sid, engine_entity)
+    else:
+        gs.apply_equipped_weapon_stats(entry)
     
     gs.save_resume_snapshot(sid)
     print(f"[PLAYER] {sid[:6]} stats loaded: AC={entry.get('ac')}, HP={entry.get('max_hp')}", flush=True)
-    emit("player-character-stats-ack", {"ok": True, "ac": entry.get("ac"), "maxHp": entry.get("max_hp")})
+    emit("player-character-stats-ack", {
+        "ok": True,
+        "ac": entry.get("ac"),
+        "maxHp": entry.get("max_hp"),
+        "inventory": entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []},
+        "equippedWeapon": entry.get("equipped_weapon"),
+    })
 
 
 @socketio.on("scene-update")
@@ -374,6 +399,38 @@ def socket_dm_command(data):
         import traceback
         print(f"[ERROR] dm-command: {exc}", flush=True)
         traceback.print_exc()
+
+
+@socketio.on("equip-item")
+def socket_inventory_equip_item(data):
+    sid = request.sid
+    if sid not in gs.players or not isinstance(data, dict):
+        return
+    handle_inventory_equip_item(sid, data)
+
+
+@socketio.on("unequip-item")
+def socket_inventory_unequip_item(data):
+    sid = request.sid
+    if sid not in gs.players or not isinstance(data, dict):
+        return
+    handle_inventory_unequip_item(sid, data)
+
+
+@socketio.on("use-item")
+def socket_inventory_use_item(data):
+    sid = request.sid
+    if sid not in gs.players or not isinstance(data, dict):
+        return
+    handle_inventory_use_item(sid, data)
+
+
+@socketio.on("loot-item")
+def socket_inventory_loot_item(data):
+    sid = request.sid
+    if sid not in gs.players or not isinstance(data, dict):
+        return
+    handle_inventory_loot_item(sid, data)
 
 
 @socketio.on("combat-action-record")

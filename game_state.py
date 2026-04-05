@@ -5,7 +5,10 @@ All mutable game state lives here. No SocketIO, no Flask, no I/O side-effects.
 Every other module imports from here and mutates state through the helpers below.
 """
 from copy import deepcopy
+import hashlib
+import json
 from pathlib import Path
+import re
 from threading import Lock
 from time import perf_counter
 from typing import Optional
@@ -47,10 +50,60 @@ CONTRACTS_DIR = Path("data") / "character_tidy"
 STATIC_DIR = Path("static")
 UPLOADS_DIR = Path("data") / "uploads"
 CHARACTER_MODELS_DIR = STATIC_DIR / "user_models"
+ENGINE_ENTITY_CONTRACT_NAME = "engine_entity.json"
+
+DEFAULT_ITEM_DB: dict[str, dict] = {
+    "unarmed_strike": {
+        "id": "unarmed_strike",
+        "name": "Unarmed Strike",
+        "type": "weapon",
+        "slot": "main_hand",
+        "attackBonus": 0,
+        "damageRoll": 3,
+        "damageBonus": 0,
+        "damageType": "bludgeoning",
+    },
+    "longsword": {
+        "id": "longsword",
+        "name": "Longsword",
+        "type": "weapon",
+        "slot": "main_hand",
+        "attackBonus": 0,
+        "damageRoll": 8,
+        "damageBonus": 0,
+        "damageType": "slashing",
+    },
+    "javelin": {
+        "id": "javelin",
+        "name": "Javelin",
+        "type": "weapon",
+        "slot": "main_hand",
+        "attackBonus": 0,
+        "damageRoll": 6,
+        "damageBonus": 0,
+        "damageType": "piercing",
+    },
+    "shield": {
+        "id": "shield",
+        "name": "Shield",
+        "type": "armor",
+        "slot": "off_hand",
+        "acBonus": 2,
+    },
+    "health_potion": {
+        "id": "health_potion",
+        "name": "Health Potion",
+        "type": "consumable",
+        "healFlat": 10,
+    },
+}
 
 LOBBY_ROLE_CAPACITY: dict[str, int] = {"player": 4, "dm": 1, "dev": 1}
 PLAYER_UPDATE_MIN_INTERVAL_SEC = 1.0 / 20.0   # 20 Hz cap per client
 RESUME_SESSION_TTL_SEC = 300.0
+COMBAT_ACTION_DEDUPE_TTL_SEC = 15.0
+COMBAT_ACTION_RATE_WINDOW_SEC = 1.0
+COMBAT_ACTION_RATE_MAX = 20
 
 # ---------------------------------------------------------------------------
 # Mutable state — the server's official record of the game
@@ -70,6 +123,12 @@ player_update_last_seen: dict[str, float] = {}
 
 # resume_key → snapshot dict
 resume_sessions: dict[str, dict] = {}
+
+# sid -> {action_id -> seen_at_perf_counter}
+recent_combat_action_ids: dict[str, dict[str, float]] = {}
+
+# sid -> {windowStart: float, count: int}
+combat_action_rate_window: dict[str, dict] = {}
 
 game_session_state: str = "in_game"
 
@@ -111,6 +170,281 @@ def safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def _to_jsonable_state(value):
+    if isinstance(value, dict):
+        return {str(k): _to_jsonable_state(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_jsonable_state(v) for v in value]
+    if isinstance(value, tuple):
+        return [_to_jsonable_state(v) for v in value]
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    return str(value)
+
+
+def serialize_state(state: dict) -> str:
+    payload = _to_jsonable_state(state if isinstance(state, dict) else {})
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+
+def deserialize_state(serialized: str) -> dict:
+    try:
+        parsed = json.loads(str(serialized or "{}"))
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def hash_state(state: dict) -> str:
+    canonical = serialize_state(state)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _sanitize_action_id(value) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    return raw[:128]
+
+
+def _cleanup_recent_combat_actions(now: Optional[float] = None) -> None:
+    t = now if now is not None else perf_counter()
+    for sid in list(recent_combat_action_ids.keys()):
+        bucket = recent_combat_action_ids.get(sid)
+        if not isinstance(bucket, dict):
+            recent_combat_action_ids.pop(sid, None)
+            continue
+        for action_id, seen_at in list(bucket.items()):
+            if (t - float(seen_at)) > COMBAT_ACTION_DEDUPE_TTL_SEC:
+                bucket.pop(action_id, None)
+        if not bucket:
+            recent_combat_action_ids.pop(sid, None)
+
+
+def is_duplicate_combat_action(sid: str, action_id) -> bool:
+    aid = _sanitize_action_id(action_id)
+    if not aid:
+        return False
+    _cleanup_recent_combat_actions()
+    return aid in (recent_combat_action_ids.get(sid) or {})
+
+
+def mark_combat_action_seen(sid: str, action_id, now: Optional[float] = None) -> None:
+    aid = _sanitize_action_id(action_id)
+    if not aid:
+        return
+    t = now if now is not None else perf_counter()
+    _cleanup_recent_combat_actions(now=t)
+    bucket = recent_combat_action_ids.setdefault(sid, {})
+    bucket[aid] = t
+
+
+def consume_combat_rate_token(sid: str, now: Optional[float] = None) -> bool:
+    t = now if now is not None else perf_counter()
+    window = combat_action_rate_window.get(sid)
+    if not isinstance(window, dict):
+        combat_action_rate_window[sid] = {"windowStart": t, "count": 1}
+        return True
+
+    start = float(window.get("windowStart", t))
+    count = int(safe_float(window.get("count", 0), 0))
+    if (t - start) >= COMBAT_ACTION_RATE_WINDOW_SEC:
+        combat_action_rate_window[sid] = {"windowStart": t, "count": 1}
+        return True
+
+    if count >= COMBAT_ACTION_RATE_MAX:
+        return False
+
+    window["count"] = count + 1
+    return True
+
+
+def _slugify_token(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+
+
+def _parse_signed_int(value) -> Optional[int]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    m = re.search(r"[+-]?\d+", str(value))
+    return int(m.group(0)) if m else None
+
+
+def _parse_damage_roll(value) -> tuple[int, int]:
+    text = str(value or "").strip().lower()
+    m = re.match(r"^\s*\d+d(\d+)([+-]\d+)?\s*$", text)
+    if m:
+        sides = max(1, int(m.group(1)))
+        bonus = int(m.group(2) or "0")
+        return sides, bonus
+    n = _parse_signed_int(value)
+    if n is None:
+        return 3, 0
+    return max(1, n), 0
+
+
+def resolve_contract(filename: str) -> Optional[Path]:
+    for candidate in (CONTRACTS_DIR / filename, STATIC_DIR / filename):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def load_engine_entity_contract() -> Optional[dict]:
+    contract_path = resolve_contract(ENGINE_ENTITY_CONTRACT_NAME)
+    if not contract_path:
+        return None
+    try:
+        parsed = json.loads(contract_path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def resolve_item_def(item_id: str) -> dict:
+    key = _slugify_token(item_id)
+    return deepcopy(DEFAULT_ITEM_DB.get(key, {
+        "id": key or "unknown_item",
+        "name": str(item_id or "Unknown Item"),
+        "type": "misc",
+    }))
+
+
+def normalize_inventory_contract(raw_inventory) -> dict:
+    if not isinstance(raw_inventory, dict):
+        return {"items": [], "capacity": None, "weight": 0}
+
+    items_raw = raw_inventory.get("items") if isinstance(raw_inventory.get("items"), list) else []
+    out_items: list[dict] = []
+    for idx, row in enumerate(items_raw, 1):
+        if not isinstance(row, dict):
+            continue
+        item_id = _slugify_token(str(row.get("itemId") or "").strip())
+        if not item_id:
+            continue
+        qty = _parse_signed_int(row.get("qty"))
+        if qty is None:
+            qty = 1
+        qty = max(0, qty)
+        inst = {
+            "instanceId": str(row.get("instanceId") or f"inv_{idx:03d}"),
+            "itemId": item_id,
+            "qty": qty,
+            "equipped": bool(row.get("equipped", False)),
+        }
+        if row.get("slot") is not None:
+            inst["slot"] = str(row.get("slot") or "").strip() or None
+        out_items.append(inst)
+
+    capacity = _parse_signed_int(raw_inventory.get("capacity"))
+    weight = _parse_signed_int(raw_inventory.get("weight"))
+    if weight is None:
+        # Derive weight from known item weights if possible.
+        total_weight = 0
+        for item in out_items:
+            definition = resolve_item_def(item.get("itemId") or "")
+            unit_w = _parse_signed_int(definition.get("weight")) or 0
+            total_weight += unit_w * max(0, int(item.get("qty") or 0))
+        weight = total_weight
+
+    return {
+        "items": out_items,
+        "capacity": capacity,
+        "weight": max(0, weight or 0),
+    }
+
+
+def resolve_equipped_weapon(entry: dict) -> dict:
+    inventory = entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []}
+    items = inventory.get("items") if isinstance(inventory.get("items"), list) else []
+
+    equipped = None
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        if not bool(item.get("equipped")):
+            continue
+        definition = resolve_item_def(str(item.get("itemId") or ""))
+        if definition.get("type") == "weapon":
+            equipped = {"instance": item, "definition": definition}
+            break
+
+    if equipped is None:
+        # Auto-fallback: first weapon in inventory, else unarmed.
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            definition = resolve_item_def(str(item.get("itemId") or ""))
+            if definition.get("type") == "weapon":
+                item["equipped"] = True
+                item.setdefault("slot", definition.get("slot") or "main_hand")
+                equipped = {"instance": item, "definition": definition}
+                break
+
+    if equipped is None:
+        unarmed = resolve_item_def("unarmed_strike")
+        return {
+            "itemId": "unarmed_strike",
+            "name": unarmed.get("name", "Unarmed Strike"),
+            "attackBonus": int(_parse_signed_int(unarmed.get("attackBonus")) or 0),
+            "damageRoll": int(_parse_signed_int(unarmed.get("damageRoll")) or 3),
+            "damageBonus": int(_parse_signed_int(unarmed.get("damageBonus")) or 0),
+            "damageType": str(unarmed.get("damageType") or "bludgeoning"),
+            "source": "default",
+        }
+
+    definition = equipped["definition"]
+    dmg_roll, dmg_bonus_from_dice = _parse_damage_roll(definition.get("damage"))
+    fallback_roll = _parse_signed_int(definition.get("damageRoll"))
+    dmg_bonus = _parse_signed_int(definition.get("damageBonus"))
+
+    return {
+        "itemId": str(definition.get("id") or equipped["instance"].get("itemId") or "weapon"),
+        "name": str(definition.get("name") or equipped["instance"].get("itemId") or "Weapon"),
+        "attackBonus": int(_parse_signed_int(definition.get("attackBonus")) or 0),
+        "damageRoll": int(fallback_roll if fallback_roll is not None else dmg_roll),
+        "damageBonus": int(dmg_bonus if dmg_bonus is not None else dmg_bonus_from_dice),
+        "damageType": str(definition.get("damageType") or "physical"),
+        "source": "inventory",
+        "instanceId": str(equipped["instance"].get("instanceId") or ""),
+    }
+
+
+def apply_equipped_weapon_stats(entry: dict) -> None:
+    if not isinstance(entry, dict):
+        return
+    weapon = resolve_equipped_weapon(entry)
+    entry["equipped_weapon"] = weapon
+    # combat uses these canonical fields already for enemies/players.
+    entry["attackBonus"] = int(weapon.get("attackBonus") or 0)
+    entry["damageRoll"] = max(1, int(weapon.get("damageRoll") or 3))
+    entry["damageBonus"] = int(weapon.get("damageBonus") or 0)
+
+
+def set_player_inventory(sid: str, raw_inventory) -> bool:
+    entry = players.get(sid)
+    if not isinstance(entry, dict):
+        return False
+    normalized = normalize_inventory_contract(raw_inventory)
+    entry["inventory"] = normalized
+    apply_equipped_weapon_stats(entry)
+    save_resume_snapshot(sid)
+    return True
+
+
+def apply_inventory_from_engine_entity(sid: str, engine_entity: dict) -> bool:
+    if not isinstance(engine_entity, dict):
+        return False
+    inventory = engine_entity.get("inventory")
+    if not isinstance(inventory, dict):
+        return False
+    return set_player_inventory(sid, inventory)
 
 
 # --- Player slot management ---
@@ -566,6 +900,11 @@ def save_resume_snapshot(sid: str, now: Optional[float] = None) -> None:
         "hp": entry.get("hp"),
         "initiative_bonus": entry.get("initiative_bonus"),
         "speed_ft": entry.get("speed_ft"),
+        "inventory": deepcopy(entry.get("inventory")) if isinstance(entry.get("inventory"), dict) else None,
+        "equipped_weapon": deepcopy(entry.get("equipped_weapon")) if isinstance(entry.get("equipped_weapon"), dict) else None,
+        "attackBonus": entry.get("attackBonus"),
+        "damageRoll": entry.get("damageRoll"),
+        "damageBonus": entry.get("damageBonus"),
         "expiresAt": t + RESUME_SESSION_TTL_SEC,
         "lastSeen": t,
     }

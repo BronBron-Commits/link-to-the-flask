@@ -1273,10 +1273,36 @@ function registerSocketHandlers() {
             const floatText = isHit
                 ? `${attacker} hits ${targetLabel} — ${damage} DMG`
                 : `${attacker} miss`;
-            logCombatEvent(logText, isHit ? 'miss' : 'hit');
+            logCombatEvent(logText, isHit ? 'hit' : 'miss');
             showFloatingText(floatText, isHit ? '#ff8a8a' : '#8dd694', true);
             if (shouldApplyLocalDamage) {
                 applyPlayerDamage(damage, attacker);
+            }
+            return;
+        }
+
+        if (actorType === 'player') {
+            const atkBonus = Number(packet.attackBonus) || 0;
+            const rollDetail = `(${hitRoll}+${atkBonus}=${toHit} vs AC ${targetAC})`;
+            const targetLabel = targetId ? (getCombatActorLabelById(targetId) || targetId) : 'target';
+            const logText = isHit
+                ? `${attacker} hits ${targetLabel} for ${damage} dmg ${rollDetail}`
+                : `${attacker} miss ${rollDetail}`;
+            logCombatEvent(logText, isHit ? 'hit' : 'miss');
+
+            const targetActor = targetId ? findCombatActorById(targetId) : null;
+            if (targetActor && targetActor.position) {
+                const rollLabel = 'ATTACK ROLL';
+                spawnVisualDice(Math.max(1, hitRoll), 20, targetActor, rollLabel);
+                if (isHit) {
+                    showFloatingText(`-${damage}`, '#ff6b6b', true, { anchorObject: targetActor });
+                    triggerEnemyFlinch(targetActor);
+                    spawnImpactBurst(targetActor.position, 0x00ff66, 20);
+                    playCombatSfxCue('melee-hit');
+                } else {
+                    showFloatingText('MISS', '#ff8a8a', true, { anchorObject: targetActor });
+                    playCombatSfxCue('miss');
+                }
             }
         }
     });
@@ -1475,21 +1501,12 @@ let engineEntityContractModuleReady = false;
 
 async function ensureEngineEntityContractModule() {
     if (engineEntityContractModuleReady) return;
-    try {
-        const mod = await import('/static/utils/engineEntityContract.js');
-        ITEM_DB = mod.ITEM_DB || {};
-        equipItem = typeof mod.equipItem === 'function' ? mod.equipItem : (() => false);
-        useItem = typeof mod.useItem === 'function' ? mod.useItem : (() => false);
-        loadEngineEntityFromUrls = typeof mod.loadEngineEntityFromUrls === 'function' ? mod.loadEngineEntityFromUrls : null;
-        engineEntityContractModuleReady = true;
-    } catch (err) {
-        console.warn('[ENGINE] engineEntityContract.js unavailable; using fallback contract loader.', err);
-        ITEM_DB = {};
-        equipItem = () => false;
-        useItem = () => false;
-        loadEngineEntityFromUrls = null;
-        engineEntityContractModuleReady = true;
-    }
+    // Avoid network 404 noise by defaulting to JSON contract fallback.
+    ITEM_DB = {};
+    equipItem = () => false;
+    useItem = () => false;
+    loadEngineEntityFromUrls = null;
+    engineEntityContractModuleReady = true;
 }
 // Selection logic: only selected object gets a green BoxHelper
 let selectedObject = null;
@@ -13435,8 +13452,8 @@ function showAttackPreviewUI() {
     console.log('SHOWING CONFIRM UI', preview);
     ui.innerHTML = `
         <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Attack Preview</div>
-        <div style="font-size:17px;font-weight:700;margin-bottom:10px;">Hit Chance: ${preview.hitChancePct}%</div>
-        <div style="opacity:0.82;margin-bottom:12px;">Target AC ${preview.targetAC} • Damage on hit ${preview.damageMin}-${preview.damageMax} • ${combatInteraction.target?.userData?.name || 'Target'}</div>
+        <div style="font-size:17px;font-weight:700;margin-bottom:10px;">Ready to attack</div>
+        <div style="opacity:0.82;margin-bottom:12px;">Server resolves roll and damage • ${combatInteraction.target?.userData?.name || 'Target'}</div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button id="confirmAttack" style="padding:8px 12px;background:#16a34a;border:1px solid #22c55e;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">CONFIRM</button>
             <button id="cancelAttack" style="padding:8px 12px;background:#7f1d1d;border:1px solid #dc2626;color:#fff;border-radius:6px;cursor:pointer;">CANCEL</button>
@@ -13447,7 +13464,7 @@ function showAttackPreviewUI() {
     ui.style.opacity = '1';
     positionCombatConfirmUI();
 
-    showFloatingText(`Attack queued: ${preview.hitChancePct}% hit chance • Dmg ${preview.damageMin}-${preview.damageMax}`, '#ffeb3b', true);
+    showFloatingText('Attack queued', '#ffeb3b', true);
 
     const confirmBtn = document.getElementById('confirmAttack');
     const cancelBtn = document.getElementById('cancelAttack');
@@ -13612,12 +13629,12 @@ function showMoveOrAttackPrompt(target) {
     releasePointerLockIfActive();
     const ui = ensureCombatConfirmUI();
     const dist = getEffectiveCombatDistanceFeet(playerState, target);
-    const preview = getAttackPreview(playerState, target, 'melee');
+    const preview = { damageMin: '-', damageMax: '-' };
 
     ui.innerHTML = `
         <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Choose Attack</div>
         <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Distance: ${dist.toFixed(1)} ft</div>
-        <div style="opacity:0.82;margin-bottom:10px;">Melee — Hit: ${preview.hitChancePct}% | Dmg: ${preview.damageMin}-${preview.damageMax}</div>
+        <div style="opacity:0.82;margin-bottom:10px;">Melee — resolved by server authority</div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
             <button id="meleeAttackBtn" style="padding:8px 14px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">⚔ MELEE ATTACK</button>
             <button id="arcaneAttackBtn" style="padding:8px 14px;background:#4c1d95;border:1px solid #7c3aed;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">✦ ARCANE ATTACK</button>
@@ -13796,8 +13813,8 @@ function selectMoveDestination(worldPos) {
 
 // ── Preview and Execution Functions ──
 function showAttackPreview(target) {
-    const preview = getAttackPreview(playerState, target, 'melee');
-    showFloatingText(`Hit chance ${preview.hitChancePct}% | Dmg ${preview.damageMin}-${preview.damageMax}`, '#ffeb3b');
+    void target;
+    showFloatingText('Attack ready', '#ffeb3b');
     
     // Highlight target in yellow
     if (target.material && target.material.color) {
@@ -13838,153 +13855,35 @@ function executeAttack(target) {
 
     if (!canTarget(playerState, target, DND_RANGES.melee, true)) {
         console.info('Out of range or no line of sight');
-        const resolution = resolveAttack(playerState, target, 'melee');
-        displayAttackResult(resolution, target, true);
-        tryUseAction();
-        syncTurnExhaustionState();
+        showFloatingText('Out of range', '#ff8a8a', true);
         cancelAction();
         return;
     }
 
-    const actionSnapshotBefore = createCombatSnapshot('action-before-melee');
-
-    // Execute the attack with dice roll
-    const resolution = resolveAttack(playerState, target, 'melee');
-    
-    // Mark the timeline busy before spending the action so end-turn gating waits for the roll sequence.
-    setCombatTimelineBusy(true);
-    setCombatLock(true);
-
-    // Mark action as used and sequence the presentation over time.
-    if (!tryUseAction()) {
-        setCombatTimelineBusy(false);
-        setCombatLock(false);
-        showFloatingText('Action already used', '#ff8a8a');
+    if (!socket || !socket.connected) {
+        showFloatingText('No server connection', '#ff8a8a', true);
+        cancelAction();
         return;
     }
-    syncTurnExhaustionState();
 
-    (async () => {
-        const sequenceStart = performance.now();
-        const startFov = camera ? camera.fov : 58;
-        try {
-            setCombatMessageLock(true);
-            beginDiceCinematic(8200);
+    const targetId = String(getCombatActorId(target) || '').trim();
+    if (!targetId) {
+        showFloatingText('Invalid target', '#ff8a8a', true);
+        cancelAction();
+        return;
+    }
 
-            // 1) Windup
-            focusCameraOnAction(playerState, { strength: 1.45, durationMs: 1300 });
-            await tweenCameraFov(43, 220);
-            showFloatingText('CHARGE UP', '#ffd166', true, { anchorObject: playerRig });
-            await delay(MELEE_TIMELINE_MS.windup);
+    const actionId = `client_attack_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    socket.emit('combat-action', {
+        id: actionId,
+        type: 'attack',
+        targetId,
+        attackType: 'melee',
+    });
 
-            if (!target || !target.parent || !target.userData || !target.userData.isTargetable) {
-                cancelAction();
-                return;
-            }
-
-            // 2) Show roll
-            triggerSharedDiceRoll({
-                sides: 20,
-                label: 'ATTACK',
-                mod: resolution.attackBonus,
-                raw: resolution.roll,
-                total: resolution.total,
-            });
-            spawnVisualDice(resolution.roll, 20, target, 'ATTACK ROLL');
-            showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: target });
-            await delay(MELEE_TIMELINE_MS.rollHold);
-
-            // 3) Impact → breathe → freeze → reveal
-            focusCameraOnAction(target, { strength: 1.85, durationMs: 1350 });
-            triggerLocalHammerAttackSwing();
-            await delay(250);         // impact breathes
-            await hitStop(120);       // FREEZE FRAME
-
-            // 4) Result callout (outcome first, math in log)
-            displayAttackResult(resolution, target, true);
-            await delay(MELEE_TIMELINE_MS.resultHold);
-
-            // 5) Damage application
-            if (resolution.hit) {
-                const damage = resolution.totalDamage;
-                target.userData.hp = Math.max(0, (target.userData.hp || 0) - damage);
-                
-                // Mark dummy as recently damaged to prevent world-sync from overwriting HP
-                const targetActorId = getCombatActorId(target);
-                if (targetActorId) {
-                    recentlyDamagedDummies.set(targetActorId, Date.now());
-                }
-
-                triggerSharedDiceRoll({
-                    sides: resolution.attackType === 'melee' ? 8 : 6,
-                    label: resolution.attackType === 'melee' ? 'D8 DAMAGE' : 'D6 DAMAGE',
-                    mod: resolution.damageBonus,
-                    raw: resolution.damageRoll,
-                    total: resolution.totalDamage,
-                });
-                spawnVisualDice(resolution.damageRoll, resolution.attackType === 'melee' ? 8 : 6, target, 'DAMAGE');
-
-                showFloatingText(`-${damage}`, '#ff6b6b', true, { anchorObject: target });
-                console.info(`Hit! ${target.userData.name || 'Target'} HP: ${target.userData.hp}`);
-                logCombatEvent(`Melee hit ${target.userData.name || 'target'} for ${damage} (HP ${target.userData.hp})`, 'hit');
-
-                triggerEnemyFlinch(target);
-                spawnImpactBurst(target.position, 0x00ff00, 24);
-                triggerCombatFlash('#00ff00', 0.12, 300);
-                shakeScreen(0.22, 420);
-                playCombatSfxCue('melee-hit');
-                await delay(MELEE_TIMELINE_MS.damageHold);
-
-                if (target.userData.hp <= 0) {
-                    if (activeRangeCircle && activeRangeCircle.parent) {
-                        activeRangeCircle.parent.remove(activeRangeCircle);
-                        activeRangeCircle = null;
-                    }
-                    await playKillSequence(target);
-                    removeTrainingDummy(target);
-                    if (selectedCombatTarget === target) setSelectedCombatTarget(null);
-                    exitCombatIfNoTargets();
-                }
-            } else {
-                spawnImpactBurst(target.position, 0xff7878, 12);
-                triggerCombatFlash('#ff3333', 0.08, 240);
-                shakeScreen(0.06, 150);
-                playCombatSfxCue('miss');
-                logCombatEvent(`Melee miss on ${target.userData.name || 'target'}`, 'miss');
-                await delay(MELEE_TIMELINE_MS.damageHold);
-            }
-        } finally {
-            const elapsedMs = performance.now() - sequenceStart;
-            if (elapsedMs < COMBAT_PRESENTATION_MIN_MS) {
-                await delay(COMBAT_PRESENTATION_MIN_MS - elapsedMs);
-            }
-            await tweenCameraFov(startFov, 320);
-            setCombatMessageLock(false);
-            setCombatTimelineBusy(false);
-            if (!turnEndRequired && combatState.phase === 'PLAYER') {
-                setCombatLock(false);
-            }
-            cancelAction();
-            endDiceCinematic();
-            checkTurnEndRequired();
-            const actionSnapshotAfter = createCombatSnapshot('action-after-melee');
-            if (actionSnapshotBefore && actionSnapshotAfter) {
-                recordCombatAction({
-                    type: 'attack',
-                    attackType: 'melee',
-                    actorId: getLocalCombatActorId(),
-                    targetId: getCombatActorId(target),
-                    resolution,
-                    result: resolution.hit ? 'hit' : 'miss',
-                    damage: resolution.totalDamage,
-                    targetDefeated: !!(target?.userData && target.userData.hp <= 0),
-                    timestamp: Date.now(),
-                    snapshotBefore: actionSnapshotBefore,
-                    snapshotAfter: actionSnapshotAfter,
-                });
-            }
-        }
-    })();
+    showFloatingText('Attack sent to server', '#8dd694', true, { anchorObject: target });
+    logCombatEvent(`Attack intent sent (${target.userData.name || targetId})`, 'system');
+    cancelAction();
 }
 
 function displayAttackResult(resolution, target, forceMessage = false) {
@@ -14033,57 +13932,7 @@ function displayAttackResult(resolution, target, forceMessage = false) {
 }
 
 function attackTarget(target) {
-    if (!target || !target.userData || !target.userData.isTargetable) return;
-    if (isInputLockedForCombat('ACTION')) return;
-    if (!canAttack()) {
-        console.info('No action available. End turn to refresh action.');
-        showFloatingText('Action already used', '#ff8a8a');
-        logCombatEvent('Melee failed: no action left', 'miss');
-        return;
-    }
-
-    if (!canTarget(playerState, target, DND_RANGES.melee, true)) {
-        console.info('Out of range or no line of sight');
-        showFloatingText('MISS', '#ff8a8a');
-        spawnImpactBurst(target.position, 0xff7878, 12);
-        triggerCombatFlash('#ff3333', 0.08, 180);
-        shakeScreen(0.08, 120);  // Slight shake on miss
-        playCombatSfxCue('miss');
-        logCombatEvent(`Melee miss on ${target.userData.name || 'target'}`, 'miss');
-        return;
-    }
-
-    if (!tryUseAction()) {
-        showFloatingText('Action already used', '#ff8a8a');
-        return;
-    }
-    syncTurnExhaustionState();
-    triggerLocalHammerAttackSwing();
-    focusCameraOnAction(target);
-    showFloatingText('CRITICAL STRIKE', '#ffd166', false, { anchorObject: target });
-    triggerEnemyFlinch(target);
-    spawnImpactBurst(target.position, 0xffd166, 34);
-    triggerCombatFlash('#ffd166', 0.14, 280);
-    shakeScreen(0.45, 500);
-    playCombatSfxCue('melee-hit');
-    target.userData.hp = Math.max(0, (target.userData.hp || 0) - 10);
-    logCombatEvent(`Melee hit ${target.userData.name || 'target'} for 10 (HP ${target.userData.hp})`, 'hit');
-
-    const originalScale = target.scale.clone();
-    target.scale.set(originalScale.x * 1.2, originalScale.y * 1.2, originalScale.z * 1.2);
-    setTimeout(() => { if (target.parent) target.scale.copy(originalScale); }, 100);
-
-    if (target.userData.hp <= 0) {
-        if (activeRangeCircle && activeRangeCircle.parent) {
-            activeRangeCircle.parent.remove(activeRangeCircle);
-            activeRangeCircle = null;
-        }
-        playKillSequence(target).then(() => {
-            removeTrainingDummy(target);
-            if (selectedCombatTarget === target) setSelectedCombatTarget(null);
-            exitCombatIfNoTargets();
-        });
-    }
+    executeAttack(target);
 }
 
 function rangedAttack(target) {
@@ -14112,110 +13961,27 @@ function rangedAttack(target) {
         return;
     }
 
-    const actionSnapshotBefore = createCombatSnapshot('action-before-ranged');
-    const resolution = resolveAttack(playerState, target, 'ranged');
-
-    setCombatTimelineBusy(true);
-    setCombatLock(true);
-
-    if (!tryUseAction()) {
-        setCombatTimelineBusy(false);
-        setCombatLock(false);
-        showFloatingText('Action already used', '#ff8a8a');
+    if (!socket || !socket.connected) {
+        showFloatingText('No server connection', '#ff8a8a', true);
         return;
     }
-    syncTurnExhaustionState();
 
-    (async () => {
-        const sequenceStart = performance.now();
-        const startFov = camera ? camera.fov : 58;
-        try {
-            setCombatMessageLock(true);
-            beginDiceCinematic(8000);
+    const targetId = String(getCombatActorId(target) || '').trim();
+    if (!targetId) {
+        showFloatingText('Invalid target', '#ff8a8a', true);
+        return;
+    }
 
-            // 1) Windup/channel
-            focusCameraOnAction(playerState, { strength: 1.35, durationMs: 1250 });
-            await tweenCameraFov(44, 220);
-            showFloatingText('CHANNELING', '#66ccff', true, { anchorObject: playerRig });
-            await delay(RANGED_TIMELINE_MS.windup);
+    const actionId = `client_attack_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    socket.emit('combat-action', {
+        id: actionId,
+        type: 'attack',
+        targetId,
+        attackType: 'ranged',
+    });
 
-            if (!target || !target.parent || !target.userData || !target.userData.isTargetable) {
-                return;
-            }
-
-            // 2) Launch / roll beat
-            focusOutcomeText('ARCANE SHOT', '#66ccff', 1400);
-            showFloatingText('ARCANE SHOT', '#66ccff', true, { anchorObject: target });
-            const shot = createTargetingLine(
-                playerState.position.clone(),
-                target.position.clone(),
-                0x66ccff,
-                1,
-                { alwaysOnTop: true, opacity: 0.98 }
-            );
-            scene.add(shot);
-            await delay(RANGED_TIMELINE_MS.launchHold);
-            if (shot.parent) shot.parent.remove(shot);
-
-            // 3) Impact → breathe → freeze → reveal
-            focusCameraOnAction(target, { strength: 1.75, durationMs: 1300 });
-            triggerEnemyFlinch(target);
-            spawnImpactBurst(target.position, 0x66ccff, 26);
-            triggerCombatFlash('#66ccff', 0.12, 320);
-            shakeScreen(0.18, 360);
-            playCombatSfxCue('ranged-hit');
-            await delay(250);         // impact breathes
-            await hitStop(120);       // FREEZE FRAME
-
-            // 4) Outcome (big moment)
-            focusOutcomeText('HIT', '#00ff00', 1500);
-            showFloatingText('HIT', '#00ff00', true, { anchorObject: target });
-            await delay(RANGED_TIMELINE_MS.resultHold);
-
-            // 5) Damage
-            target.userData.hp = Math.max(0, (target.userData.hp || 0) - 6);
-            showFloatingText('-6', '#ff6b6b', true, { anchorObject: target });
-            console.info(`Ranged hit! ${target.userData.name || 'Target'} HP: ${target.userData.hp}`);
-            logCombatEvent(`Ranged hit ${target.userData.name || 'target'} for 6 (HP ${target.userData.hp})`, 'hit');
-            await delay(RANGED_TIMELINE_MS.damageHold);
-
-            if (target.userData.hp <= 0) {
-                await playKillSequence(target);
-                removeTrainingDummy(target);
-                if (selectedCombatTarget === target) setSelectedCombatTarget(null);
-                exitCombatIfNoTargets();
-            }
-        } finally {
-            const elapsedMs = performance.now() - sequenceStart;
-            if (elapsedMs < COMBAT_PRESENTATION_MIN_MS) {
-                await delay(COMBAT_PRESENTATION_MIN_MS - elapsedMs);
-            }
-            await tweenCameraFov(startFov, 320);
-            setCombatMessageLock(false);
-            setCombatTimelineBusy(false);
-            if (!turnEndRequired && combatState.phase === 'PLAYER') {
-                setCombatLock(false);
-            }
-            endDiceCinematic();
-            checkTurnEndRequired();
-            const actionSnapshotAfter = createCombatSnapshot('action-after-ranged');
-            if (actionSnapshotBefore && actionSnapshotAfter) {
-                recordCombatAction({
-                    type: 'attack',
-                    attackType: 'ranged',
-                    actorId: getLocalCombatActorId(),
-                    targetId: getCombatActorId(target),
-                    resolution,
-                    result: resolution.hit ? 'hit' : 'miss',
-                    damage: resolution.totalDamage,
-                    targetDefeated: !!(target?.userData && target.userData.hp <= 0),
-                    timestamp: Date.now(),
-                    snapshotBefore: actionSnapshotBefore,
-                    snapshotAfter: actionSnapshotAfter,
-                });
-            }
-        }
-    })();
+    showFloatingText('Ranged attack sent to server', '#8dd694', true, { anchorObject: target });
+    logCombatEvent(`Ranged intent sent (${target.userData.name || targetId})`, 'system');
 }
 
 function resetLocalTurnResources() {

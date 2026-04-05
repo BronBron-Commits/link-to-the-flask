@@ -99,6 +99,70 @@ The app will be available at `http://localhost:5000`.
 
 Navigate to `/map3d` to enter the 3D world.
 
+### Parser tests
+
+The PDF parser can be tested independently from the game runtime and rendering engine:
+
+```bash
+python -m unittest discover -s tests -p "test_*.py"
+```
+
+These tests use synthetic page text and mocked PDF extraction so you can verify things like currency totals, inventory rows, and skill parsing without booting Flask or the 3D client.
+
+### Parser GUI (Windows)
+
+For quick manual parser checks, run the local desktop GUI:
+
+```bash
+python scripts/pdf_parser_gui.py
+```
+
+The GUI lets you:
+- pick a PDF file from disk
+- choose an output folder
+- run parsing without opening the full app
+- see parser logs and a compact JSON summary
+- auto-open the output folder after completion
+
+Parser output now includes `engine_entity.json`, a runtime-first contract for direct game-engine ingestion.
+
+The contract is validated during parser output generation (fail-fast on invalid shape) and has a strict JSON Schema at:
+- `static/engine_entity.schema.json` (browser fetch path)
+- `schemas/engine_entity_schema.json` (repo schema reference)
+
+Runtime validation and ingestion helpers are in:
+- `static/utils/engineEntityContract.js`
+
+That module provides:
+- `validateEntity(entity)`
+- `loadEntity(data)`
+- `loadEngineEntityFromUrls(urls)`
+- feature rule binding via `FEATURE_RULES` + `bindFeatures()`
+
+Inventory is now a first-class engine contract section:
+- `inventory.capacity` + `inventory.weight`
+- `inventory.items[]` item instances with `instanceId`, `itemId`, `qty`, `equipped`, `slot`
+
+Runtime item definitions and hooks are provided in `static/utils/engineEntityContract.js` via:
+- `ITEM_DB` (item registry)
+- `equipItem(entity, instanceId)`
+- `useItem(entity, instanceId)`
+
+### Simulation Test GUI (Windows)
+
+For fast offline simulation test runs, use the desktop test runner:
+
+```bash
+python scripts/simulation_test_gui.py
+```
+
+The GUI supports:
+- simulation-focused scope (`test_multiplayer_system.py`)
+- full suite scope (`test_*.py`)
+- custom unittest pattern scope
+- live output log streaming and pass/fail summary
+- stop/cancel for long runs
+
 ---
 
 ## Roles

@@ -78,6 +78,14 @@ def on_connect(payload=None) -> None:
             fallback = "dev" if gs.can_assign_role("dev", sid=sid) else "player"
             gs.apply_role(sid, fallback)
 
+        # Ensure player entities start with authoritative inventory contract.
+        if gs.normalize_role(gs.client_roles.get(sid, "player")) == "player":
+            existing_entry = gs.players.get(sid)
+            if isinstance(existing_entry, dict) and not isinstance(existing_entry.get("inventory"), dict):
+                engine_entity = gs.load_engine_entity_contract()
+                if isinstance(engine_entity, dict):
+                    gs.apply_inventory_from_engine_entity(sid, engine_entity)
+
         # --- Restore snapshot fields onto the player entry ---
         if snapshot:
             entry = gs.players.get(sid)
@@ -105,6 +113,13 @@ def on_connect(payload=None) -> None:
                     entry["hp"] = gs.safe_float(snapshot["hp"])
                 elif entry.get("max_hp") is not None:
                     entry["hp"] = float(entry["max_hp"])
+                if isinstance(snapshot.get("inventory"), dict):
+                    entry["inventory"] = snapshot.get("inventory")
+                if isinstance(snapshot.get("equipped_weapon"), dict):
+                    entry["equipped_weapon"] = snapshot.get("equipped_weapon")
+                for key in ("attackBonus", "damageRoll", "damageBonus"):
+                    if snapshot.get(key) is not None:
+                        entry[key] = snapshot.get(key)
             gs.save_resume_snapshot(sid)
 
         # --- Deliver initial state to this client ---
