@@ -844,7 +844,18 @@ function hydrateWorld(payload) {
                 enemyState.position?.z || 0,
             );
             dummy.rotation.y = Number(enemyState.rotationY) || 0;
-            dummy.userData.hp = Number(enemyState.hp) || 0;
+            
+            // Only sync HP if dummy wasn't recently damaged locally (within 1000ms)
+            const now = Date.now();
+            const lastDamagedTime = recentlyDamagedDummies.get(actorId);
+            if (!lastDamagedTime || (now - lastDamagedTime) > 1000) {
+                dummy.userData.hp = Number(enemyState.hp) || 0;
+            }
+            // Clean up old damage entries
+            if (lastDamagedTime && (now - lastDamagedTime) > 1000) {
+                recentlyDamagedDummies.delete(actorId);
+            }
+            
             dummy.userData.maxHp = Number(enemyState.maxHp) || 50;
             dummy.userData.ac = Number(enemyState.ac) || 12;
             dummy.userData.attackBonus = Number(enemyState.attackBonus) || 4;
@@ -7068,6 +7079,9 @@ let lastCombatAction = null;
 let combatReplayActive = false;
 let dmOverride = null;
 let combatActorIdCounter = 1;
+
+// Track recently-damaged dummies to prevent world-sync from overwriting local HP updates
+const recentlyDamagedDummies = new Map(); // actorId -> timestamp (ms)
 
 function turnPhaseToCombatPhase(phase) {
     if (phase === TURN_PHASE.ENEMY) return 'ENEMY';
@@ -13723,6 +13737,12 @@ function executeAttack(target) {
             if (resolution.hit) {
                 const damage = resolution.totalDamage;
                 target.userData.hp = Math.max(0, (target.userData.hp || 0) - damage);
+                
+                // Mark dummy as recently damaged to prevent world-sync from overwriting HP
+                const targetActorId = getCombatActorId(target);
+                if (targetActorId) {
+                    recentlyDamagedDummies.set(targetActorId, Date.now());
+                }
 
                 triggerSharedDiceRoll({
                     sides: resolution.attackType === 'melee' ? 8 : 6,
