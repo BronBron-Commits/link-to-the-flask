@@ -166,7 +166,11 @@ def socket_player_update(data):
         entry.pop("movementPreview", None)
     gs.save_resume_snapshot(sid)
     emit("player-update", entry, broadcast=True, include_self=False)
-    broadcast_world(include_scene=False)
+    # During combat, player positions are covered by the player-update broadcast above.
+    # Skip the full world broadcast to prevent stale exploration-mode world-updates
+    # from racing with the combat-state event and incorrectly evicting clients from combat.
+    if not gs.world_state.get("combat", {}).get("state", {}).get("inCombat"):
+        broadcast_world(include_scene=False)
 
 
 @socketio.on("player-character-stats")

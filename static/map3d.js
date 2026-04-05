@@ -793,8 +793,12 @@ function hydrateWorld(payload) {
     if (shouldBeInCombat) {
         ensureCombatEnvironmentPresentation();
     } else if (wasInCombat || currentGameMode === GAME_MODE.COMBAT) {
-        // Prevent world-update spam from repeatedly forcing exit while already out of combat.
-        forceLeaveCombatPresentation('world-sync');
+        // Only exit combat when the server explicitly signals exploration mode.
+        // Guard against stale world-updates (queued before combat started) arriving
+        // after a combat-state { active: true } and incorrectly evicting the client.
+        if (modeFromWorld === GAME_MODE.FREE) {
+            forceLeaveCombatPresentation('world-sync');
+        }
     }
     updateSceneVisibilityForCombatState(shouldBeInCombat);
 
