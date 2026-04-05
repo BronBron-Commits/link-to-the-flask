@@ -12453,6 +12453,32 @@ function forceLeaveCombatPresentation(reason = 'sync') {
     updateCombatUI();
     updateDmControlPanel();
 
+    // Slide DM setpiece + hands back up and restore original world transform.
+    if (dmWorldSetpiece && !dmWorldSetpiece.userData._slideExitPending) {
+        dmWorldSetpiece.userData._slideExitPending = true;
+        const restPos = dmWorldSetpiece.userData._restPos;
+        const restRotY = dmWorldSetpiece.userData._restRot && dmWorldSetpiece.userData._restRot.y;
+        const startY = dmWorldSetpiece.position.y;
+        const exitY = startY + 35;
+        const duration = 700;
+        const start = performance.now();
+        const slide = () => {
+            const t = Math.min(1, (performance.now() - start) / duration);
+            const eased = t * t;
+            dmWorldSetpiece.position.y = startY + (exitY - startY) * eased;
+            if (t < 1) {
+                requestAnimationFrame(slide);
+            } else {
+                dmWorldSetpiece.userData._slideExitPending = false;
+                if (restPos) {
+                    dmWorldSetpiece.position.copy(restPos);
+                    if (restRotY !== undefined) dmWorldSetpiece.rotation.y = restRotY;
+                }
+            }
+        };
+        requestAnimationFrame(slide);
+    }
+
     console.info(`[COMBAT] forced exit presentation (${reason})`);
 }
 
@@ -12674,6 +12700,7 @@ function tryEnterCombat(target, options = {}) {
     // then drop it in from above.
     if (dmWorldSetpiece) {
         // Save original world transform so we can restore it after combat.
+        dmWorldSetpiece.userData._slideExitPending = false;
         dmWorldSetpiece.userData._restPos = dmWorldSetpiece.position.clone();
         dmWorldSetpiece.userData._restRot = { y: dmWorldSetpiece.rotation.y };
 
