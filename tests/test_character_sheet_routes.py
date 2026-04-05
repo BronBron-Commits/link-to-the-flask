@@ -89,6 +89,33 @@ class CharacterSheetRoutesTests(unittest.TestCase):
         data = res.get_json()
         self.assertFalse(data["ok"])
 
+    def test_player_info_api_returns_full_hp_out_of_combat(self) -> None:
+        master_path = self.contracts_dir / "character_master.json"
+        master_path.write_text(
+            """
+{
+  "identity": {"character_name": "Astrid", "class_level": "Cleric", "species": "Elf", "background": "Tavern"},
+  "core_stats": {"armor_class": 10, "speed_ft": 30, "proficiency_bonus": 2, "initiative_bonus": 1},
+  "hit_points": {"max_hp": 22, "current_hp": 3}
+}
+""".strip(),
+            encoding="utf-8",
+        )
+
+        original_combat = routes.gs.world_state.get("combat", {})
+        routes.gs.world_state["combat"] = {"state": {"inCombat": False}}
+        try:
+            with patch("routes._resolve_contract", return_value=master_path):
+                res = self.client.get("/api/player-info")
+        finally:
+            routes.gs.world_state["combat"] = original_combat
+
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+        self.assertTrue(data["ok"])
+        self.assertEqual(data["summary"]["max_hp"], 22)
+        self.assertEqual(data["summary"]["current_hp"], 22)
+
 
 if __name__ == "__main__":
     unittest.main()

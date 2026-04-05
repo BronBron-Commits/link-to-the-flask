@@ -1,5 +1,5 @@
 {
-  "character_id": "aa139844248b4a5698976c24b352c7b6",
+  "character_id": "b2fc3bd0ec2046d29b2a660eb1a4f71d",
   "hit_points": {
     "max_hp": 25,
     "current_hp": 25,
@@ -73,7 +73,7 @@
     "global_disadvantage": false
   },
   "render_registry_binding": {
-    "entity_id": "aa139844248b4a5698976c24b352c7b6",
+    "entity_id": "b2fc3bd0ec2046d29b2a660eb1a4f71d",
     "render_instance_id": null,
     "attachments": [],
     "last_sync_tick": 0

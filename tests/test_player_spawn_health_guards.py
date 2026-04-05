@@ -111,6 +111,18 @@ class PlayerSpawnHealthFrontendTests(unittest.TestCase):
         self.assertIn("} else if (nextCurrentHp !== null) {", self.source)
         self.assertIn("playerState.hp = nextCurrentHp;", self.source)
 
+    def test_stats_ack_resets_hp_to_max_out_of_combat(self) -> None:
+        # The ack handler must check inCombatNow and always set hp=maxHp when not in combat.
+        self.assertIn(
+            "if (!inCombatNow || !Number.isFinite(Number(playerState.hp)) || Number(playerState.hp) > playerState.maxHp)",
+            self.source,
+        )
+
+    def test_safe_spawn_reset_restores_full_hp(self) -> None:
+        idx = self.source.index("function resetPlayerToSafeSpawn()")
+        spawn_block = self.source[idx:idx + 500]
+        self.assertIn("playerState.hp = playerState.maxHp;", spawn_block)
+
 
 if __name__ == '__main__':
     unittest.main()

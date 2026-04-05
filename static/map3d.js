@@ -807,6 +807,9 @@ function hydrateWorld(payload) {
             upsertPlayerAvatar(player);
         });
 
+        // Eliminate local echo avatars after each authoritative player snapshot.
+        purgeLocalEchoAvatars();
+
         if (scene.userData && scene.userData.playerAvatars) {
             const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
             Object.keys(scene.userData.playerAvatars).forEach((id) => {
@@ -907,6 +910,7 @@ function registerSocketHandlers() {
         }, 100);
         void bootstrapPlayerCombatProfile(true);
         updateClientRuntimeModeFromAuthority();
+        purgeLocalEchoAvatars();
     });
 
     socket.on('connect_error', (err) => {
@@ -939,6 +943,7 @@ function registerSocketHandlers() {
             localPlayerId = data.id;
             netLog(`assigned player-id=${data.id}`);
             updateClientRuntimeModeFromAuthority();
+            purgeLocalEchoAvatars();
         }
     });
 
@@ -946,7 +951,8 @@ function registerSocketHandlers() {
         if (!packet || typeof packet !== 'object') return;
         if (Number.isFinite(Number(packet.maxHp))) {
             playerState.maxHp = Number(packet.maxHp);
-            if (!Number.isFinite(Number(playerState.hp)) || Number(playerState.hp) > playerState.maxHp) {
+            const inCombatNow = currentGameMode === GAME_MODE.COMBAT || combatState.inCombat;
+            if (!inCombatNow || !Number.isFinite(Number(playerState.hp)) || Number(playerState.hp) > playerState.maxHp) {
                 playerState.hp = playerState.maxHp;
             }
         }
@@ -1291,6 +1297,56 @@ function registerSocketHandlers() {
         const reason = String((packet && packet.reason) || 'received');
         console.log('[COMBAT] end-turn accepted by server:', reason);
         uxSetIntentStatus('endTurn', 'acked', 'accepted');
+    });
+
+    socket.on('combat-action-preview', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        const requestId = String(packet.requestId || '').trim();
+        const expectedRequestId = String(combatInteraction.previewRequestId || '').trim();
+        if (!requestId || !expectedRequestId || requestId !== expectedRequestId) return;
+        if (String(combatInteraction.action || '') !== 'attack') return;
+
+        const preview = packet.preview && typeof packet.preview === 'object' ? packet.preview : null;
+        if (!preview) {
+            setCombatUiPhase(COMBAT_UI_PHASE.IDLE);
+            resetCombatInteraction();
+            showFloatingText('Attack preview unavailable', '#ff8a8a', true);
+            updateActionMenu();
+            return;
+        }
+
+        combatInteraction.preview = {
+            source: 'server',
+            requestId,
+            attackBonus: Number(preview.attackBonus) || 0,
+            targetAC: Number(preview.targetAC) || 0,
+            hitChance: Number(preview.hitChance) || 0,
+            hitChancePct: Number(preview.hitChancePct) || 0,
+            damageMin: Number(preview.damageMin) || 0,
+            damageMax: Number(preview.damageMax) || 0,
+            weapon: preview.weapon && typeof preview.weapon === 'object' ? preview.weapon : null,
+            valid: true,
+        };
+        combatInteraction.awaitingConfirm = true;
+        setCombatUiPhase(COMBAT_UI_PHASE.CONFIRM_READY, { action: 'attack', requestId });
+
+        if (uxTelemetry.enabled && uxTelemetry.marks.confirmUiStartAt > 0) {
+            uxRecordSample(uxTelemetry.samples.confirmUiMs, performance.now() - uxTelemetry.marks.confirmUiStartAt);
+            uxTelemetry.marks.confirmUiStartAt = 0;
+        }
+        updateActionMenu();
+    });
+
+    socket.on('combat-preview-denied', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        const requestId = String(packet.requestId || '').trim();
+        const expectedRequestId = String(combatInteraction.previewRequestId || '').trim();
+        if (requestId && expectedRequestId && requestId !== expectedRequestId) return;
+
+        const reason = String(packet.reason || 'preview-denied');
+        showFloatingText(`Preview denied: ${reason}`, '#ff8a8a', true);
+        resetCombatInteraction();
+        updateActionMenu();
     });
 
     socket.on('combat-action-result', (packet) => {
@@ -5360,6 +5416,67 @@ function resolveAssetPathByKey(assetKey) {
     return visualAssetCatalog[assetKey] || null;
 }
 
+function getLocalSidIdentitySet() {
+    const ids = new Set();
+    const socketSid = String((socket && socket.id) || '').trim();
+    const cachedSid = String(localPlayerId || '').trim();
+    if (socketSid) ids.add(socketSid);
+    if (cachedSid) ids.add(cachedSid);
+    return ids;
+}
+
+function getLocalActorIdentitySet() {
+    const ids = new Set();
+    const localActor = String(localPlayerCombatActorId || '').trim();
+    if (localActor && localActor !== 'player') {
+        ids.add(localActor);
+    }
+    return ids;
+}
+
+function isLocalPlayerPayload(player) {
+    if (!player || typeof player !== 'object') return false;
+
+    const sidCandidates = getLocalSidIdentitySet();
+    const sid = String(player.id || '').trim();
+    if (sid && sidCandidates.has(sid)) return true;
+
+    const actorCandidates = getLocalActorIdentitySet();
+    if (!actorCandidates.size) return false;
+
+    const actorId = String(player.networkId || player.actorId || '').trim();
+    return !!(actorId && actorCandidates.has(actorId));
+}
+
+function purgeLocalEchoAvatars() {
+    if (!scene || !scene.userData || !scene.userData.playerAvatars) return;
+
+    const avatarEntries = Object.entries(scene.userData.playerAvatars);
+    for (const [playerId, avatarRoot] of avatarEntries) {
+        const candidate = {
+            id: playerId,
+            networkId: avatarRoot && avatarRoot.userData ? avatarRoot.userData.networkId : null,
+            actorId: avatarRoot && avatarRoot.userData ? avatarRoot.userData.actorId : null,
+        };
+        if (isLocalPlayerPayload(candidate)) {
+            removePlayerAvatar(playerId);
+        }
+    }
+
+    if (!scene.userData.playerAvatarStates) return;
+    Object.keys(scene.userData.playerAvatarStates).forEach((playerId) => {
+        const state = scene.userData.playerAvatarStates[playerId];
+        const candidate = {
+            id: playerId,
+            networkId: state && typeof state === 'object' ? state.networkId : null,
+            actorId: state && typeof state === 'object' ? state.actorId : null,
+        };
+        if (isLocalPlayerPayload(candidate)) {
+            delete scene.userData.playerAvatarStates[playerId];
+        }
+    });
+}
+
 async function loadFirstJson(urls) {
     for (const url of urls) {
         try {
@@ -5482,7 +5599,7 @@ function upsertPlayerAvatar(player) {
 
     const mode = modeManager.current;
     const effectiveLocalId = (socket && socket.id) ? socket.id : localPlayerId;
-    const isLocalPlayer = !!(effectiveLocalId && player.id === effectiveLocalId);
+    const isLocalPlayer = isLocalPlayerPayload(player);
 
     if (isLocalPlayer) {
         localPlayerCombatActorId = String(player.networkId || player.actorId || player.id || localPlayerCombatActorId || '').trim() || localPlayerCombatActorId;
@@ -7800,14 +7917,33 @@ let pendingAction = null; // 'melee' | 'ranged' | null
 
 // ── Combat Interaction State ──
 let currentAction = null;       // 'move' | 'attack' | 'ability' | null
+const COMBAT_UI_PHASE = {
+    IDLE: 'idle',
+    TARGETING: 'targeting',
+    PREVIEW_PENDING: 'preview-pending',
+    CONFIRM_READY: 'confirm-ready',
+    RESOLVING: 'resolving',
+};
+const combatUiLifecycle = {
+    phase: COMBAT_UI_PHASE.IDLE,
+    requestId: null,
+    action: null,
+};
 const combatInteraction = {
     action: null,
     target: null,
     preview: null,
     autoApproachPreview: null,
     awaitingConfirm: false,
+    previewRequestId: null,
 };
 let confirmUI = null;
+
+function setCombatUiPhase(phase, details = {}) {
+    combatUiLifecycle.phase = String(phase || COMBAT_UI_PHASE.IDLE);
+    combatUiLifecycle.action = details.action || combatInteraction.action || null;
+    combatUiLifecycle.requestId = details.requestId || null;
+}
 
 const combatState = {
     // Authoritative turn state.
@@ -13987,16 +14123,21 @@ function isCombatReviewUiOpen() {
 
 function resetCombatInteraction(options = {}) {
     const preserveAction = !!options.preserveAction;
+    const keepPhase = !!options.keepPhase;
     restoreCombatInteractionTargetVisual();
     combatInteraction.target = null;
     combatInteraction.preview = null;
     combatInteraction.autoApproachPreview = null;
     combatInteraction.awaitingConfirm = false;
+    combatInteraction.previewRequestId = null;
     combatInteraction.moveAndAttackTarget = null;
     if (!preserveAction) {
         combatInteraction.action = null;
         currentAction = null;
         ffxMenuState.openSub = null;
+    }
+    if (!keepPhase) {
+        setCombatUiPhase(COMBAT_UI_PHASE.IDLE);
     }
     hideCombatConfirmUI();
 }
@@ -14234,6 +14375,7 @@ function initiateAutoApproachToTarget(target, preparedPreview = null) {
         remainingFeet: previewData.remainingFeet,
     };
     combatInteraction.awaitingConfirm = true;
+    setCombatUiPhase(COMBAT_UI_PHASE.CONFIRM_READY, { action: 'move-and-attack' });
 
     updateActionMenu();
     showMoveConfirmUI();
@@ -14243,6 +14385,7 @@ function showMovementTilesForApproach(target) {
     // Enable movement mode to let player pick an approach position
     combatInteraction.action = 'move-to-approach';
     combatInteraction.moveAndAttackTarget = target;
+    setCombatUiPhase(COMBAT_UI_PHASE.TARGETING, { action: 'move-to-approach' });
     
     // Show movement range UI
     rebuildCombatMoveTiles();
@@ -14258,13 +14401,25 @@ function selectAttackTarget(target) {
         showFloatingText('Attack unavailable', '#ff8a8a', true);
         return false;
     }
+    if (!socket || !socket.connected) {
+        showFloatingText('No server connection', '#ff8a8a', true);
+        return false;
+    }
+
+    const targetId = String(getCombatActorId(target) || '').trim();
+    if (!targetId) {
+        showFloatingText('Invalid target', '#ff8a8a', true);
+        return false;
+    }
 
     resetCombatInteraction({ preserveAction: true });
     combatInteraction.action = 'attack';
     currentAction = 'attack';
     combatInteraction.target = target;
-    combatInteraction.preview = getAttackPreview(playerState, target, 'melee');
-    combatInteraction.awaitingConfirm = true;
+    const previewRequestId = `preview_attack_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    combatInteraction.previewRequestId = previewRequestId;
+    setCombatUiPhase(COMBAT_UI_PHASE.PREVIEW_PENDING, { action: 'attack', requestId: previewRequestId });
+
     uxTelemetry.marks.confirmUiStartAt = performance.now();
 
     if (target.material && target.material.emissive) {
@@ -14276,13 +14431,16 @@ function selectAttackTarget(target) {
     }
     attachTargetSelectionRing(target);
 
+    socket.emit('combat-action-preview', {
+        requestId: previewRequestId,
+        type: 'attack',
+        attackType: 'melee',
+        targetId,
+    });
+
     setSelectedCombatTarget(target);
     updateActionMenu();
     showAttackPreviewUI();
-    if (uxTelemetry.enabled && uxTelemetry.marks.confirmUiStartAt > 0) {
-        uxRecordSample(uxTelemetry.samples.confirmUiMs, performance.now() - uxTelemetry.marks.confirmUiStartAt);
-        uxTelemetry.marks.confirmUiStartAt = 0;
-    }
     return true;
 }
 
@@ -14351,6 +14509,7 @@ function selectMoveDestination(worldPos) {
     };
     combatInteraction.awaitingConfirm = true;
     uxTelemetry.marks.confirmUiStartAt = performance.now();
+    setCombatUiPhase(COMBAT_UI_PHASE.CONFIRM_READY, { action: movementAction });
 
     updateActionMenu();
     showMoveConfirmUI();
@@ -14434,7 +14593,9 @@ function executeAttack(target) {
 
     showFloatingText('Attack sent to server', '#8dd694', true, { anchorObject: target });
     logCombatEvent(`Attack intent sent (${target.userData.name || targetId})`, 'system');
-    cancelAction();
+    setCombatUiPhase(COMBAT_UI_PHASE.RESOLVING, { action: 'attack' });
+    resetCombatInteraction({ keepPhase: true });
+    updateActionMenu();
 }
 
 function displayAttackResult(resolution, target, forceMessage = false) {
@@ -15419,10 +15580,12 @@ function updateAllPlayerHeadHealthBars() {
     const avatars = scene.userData && scene.userData.playerAvatars ? scene.userData.playerAvatars : null;
     const activeRemoteKeys = new Set();
     if (avatars) {
-        const ownId = (socket && socket.id) ? socket.id : localPlayerId;
+        const ownSids = getLocalSidIdentitySet();
+        const ownActorIds = getLocalActorIdentitySet();
         for (const [playerId, avatarRoot] of Object.entries(avatars)) {
             // Skip the local player's own avatar — already rendered as 'local-player'.
-            if (ownId && playerId === ownId) continue;
+            const avatarActorId = String(avatarRoot?.userData?.networkId || avatarRoot?.userData?.actorId || '').trim();
+            if ((playerId && ownSids.has(playerId)) || (avatarActorId && ownActorIds.has(avatarActorId))) continue;
             const key = `remote-${playerId}`;
             activeRemoteKeys.add(key);
             if (!avatarRoot || !avatarRoot.parent || !avatarRoot.visible) {
@@ -16990,7 +17153,9 @@ function resetPlayerToSafeSpawn() {
         localPlayerAvatarRoot.position.y = LOCAL_AVATAR_BASE_Y;
         localPlayerAvatarRoot.rotation.x = 0;
     }
+    playerState.hp = playerState.maxHp;
     syncPlayerRigFromState();
+    updatePlayerHealthHud();
     logFloorDebugInfo('spawn-reset');
 }
 
@@ -18865,27 +19030,38 @@ function updateActionMenu() {
     const isItemsSubOpen    = openSub === 'items';
     const actionsRowActive  = isActionsSubOpen || isMoveActive || isDashActive || isDisengageActive;
 
-    // — Confirm bar —
+    // — Confirm bar / lifecycle bar —
     const awaiting = combatInteraction.awaitingConfirm;
+    const previewPending = combatUiLifecycle.phase === COMBAT_UI_PHASE.PREVIEW_PENDING;
     let confirmDesc = '';
     if (awaiting) {
         const preview = combatInteraction.preview;
         const costFt  = preview ? Math.round(Number(preview.costFeet) || 0) : 0;
         if (combatInteraction.action === 'attack' || combatInteraction.action === 'auto-move-attack-choice') {
-            confirmDesc = 'Strike target';
+            const sourceTag = preview && preview.source === 'server' ? 'server' : 'local';
+            const damageMin = Math.max(0, Number(preview?.damageMin) || 0);
+            const damageMax = Math.max(0, Number(preview?.damageMax) || 0);
+            if (sourceTag === 'server' && damageMax > 0) {
+                confirmDesc = `Strike target (${damageMin}-${damageMax} dmg, authoritative)`;
+            } else {
+                confirmDesc = 'Strike target';
+            }
         } else if (costFt > 0) {
             confirmDesc = `Move ${costFt}ft`;
         } else {
             confirmDesc = String(combatInteraction.action || '').replace(/-/g, ' ');
         }
     }
-    const confirmBarHtml = awaiting
-        ? `<div class="ffx-confirm-bar">
+    let confirmBarHtml = '';
+    if (previewPending) {
+        confirmBarHtml = `<div class="ffx-confirm-bar"><span class="ffx-confirm-desc">Syncing server preview...</span><button class="ffx-confirm-btn ffx-confirm-cancel" data-ffx-confirm="cancel">✕&nbsp;Cancel</button></div>`;
+    } else if (awaiting) {
+        confirmBarHtml = `<div class="ffx-confirm-bar">
             <button class="ffx-confirm-btn ffx-confirm-ok" data-ffx-confirm="ok">✓&nbsp;Confirm</button>
             <span class="ffx-confirm-desc">${confirmDesc}</span>
             <button class="ffx-confirm-btn ffx-confirm-cancel" data-ffx-confirm="cancel">✕&nbsp;Cancel</button>
-           </div>`
-        : '';
+           </div>`;
+    }
 
     // — Resource header —
     const actionPip = `<span class="ffx-res-pip" style="background:${actionUsed ? '#334a57' : '#38bdf8'};box-shadow:0 0 5px ${actionUsed ? 'transparent' : '#38bdf8'};"></span>`;
@@ -18977,6 +19153,9 @@ function setCurrentAction(action) {
     resetCombatInteraction();
     currentAction = action;
     combatInteraction.action = action;
+    if (action) {
+        setCombatUiPhase(COMBAT_UI_PHASE.TARGETING, { action });
+    }
     if (isMovementSelectionAction(action) && isPlayerInputTurn()) {
         rebuildCombatMoveTiles();
         hideMoveDestPreview();
@@ -19052,7 +19231,8 @@ function confirmAction() {
                 z: Number(targetPos.z) || 0,
             },
         });
-        resetCombatInteraction();
+        setCombatUiPhase(COMBAT_UI_PHASE.RESOLVING, { action: actionType });
+        resetCombatInteraction({ keepPhase: true });
     } else if (combatInteraction.action === 'attack') {
         if (uxTelemetry.enabled) uxTelemetry.marks.attackSentAt = performance.now();
         uxSetIntentStatus('attack', 'sent', 'attack');

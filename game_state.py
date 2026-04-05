@@ -315,11 +315,12 @@ def roll_dice_formula(value, fallback: int = 0, rng: Optional[random.Random] = N
 
 def normalize_movement_capabilities(raw_caps) -> dict:
     raw = raw_caps if isinstance(raw_caps, dict) else {}
+    # Default to enabled for core tactical actions so players always retain baseline agency.
     return {
-        "can_dash": bool(raw.get("can_dash", raw.get("canDash", False))),
-        "can_disengage": bool(raw.get("can_disengage", raw.get("canDisengage", False))),
-        "can_dodge": bool(raw.get("can_dodge", raw.get("canDodge", False))),
-        "has_opportunity_attack": bool(raw.get("has_opportunity_attack", raw.get("hasOpportunityAttack", False))),
+        "can_dash": bool(raw.get("can_dash", raw.get("canDash", True))),
+        "can_disengage": bool(raw.get("can_disengage", raw.get("canDisengage", True))),
+        "can_dodge": bool(raw.get("can_dodge", raw.get("canDodge", True))),
+        "has_opportunity_attack": bool(raw.get("has_opportunity_attack", raw.get("hasOpportunityAttack", True))),
     }
 
 

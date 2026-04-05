@@ -213,7 +213,7 @@ function applyImportedCharacter(data) {
     const m = data.master;
     const hp = m.hit_points ?? {};
     const maxHp = hp.max_hp ?? null;
-    const currentHp = hp.current_hp ?? maxHp;
+    const currentHp = maxHp;
     document.dispatchEvent(new CustomEvent('hud:refresh', {
       detail: {
         summary: {

@@ -113,6 +113,48 @@ class MultiplayerSystemTests(unittest.TestCase):
         self.assertEqual(weapon["itemId"], "unarmed_strike")
         self.assertEqual(weapon["damageRoll"], 3)
 
+    def test_normalize_movement_capabilities_defaults_to_enabled(self) -> None:
+        caps = gs.normalize_movement_capabilities(None)
+        self.assertTrue(caps["can_dash"])
+        self.assertTrue(caps["can_disengage"])
+        self.assertTrue(caps["can_dodge"])
+
+    @patch("action_handler.emit")
+    def test_handle_combat_action_preview_emits_authoritative_attack_preview(self, emit_mock) -> None:
+        sid = "p1"
+        gs.players[sid] = {
+            "id": sid,
+            "actorId": "player_1",
+            "role": "player",
+            "inventory": {
+                "items": [
+                    {"instanceId": "inv_001", "itemId": "longsword", "qty": 1, "equipped": True}
+                ]
+            },
+        }
+        gs.client_roles[sid] = "player"
+        gs.world_state["combat"] = {
+            "turn": 0,
+            "order": [{"id": "player_1", "type": "player", "ownerSid": sid}],
+            "state": {"inCombat": True},
+        }
+        gs.world_state["entities"] = {
+            "enemy_1": {"id": "enemy_1", "ac": 10, "hp": 20, "maxHp": 20}
+        }
+
+        action_handler.handle_combat_action_preview(sid, {"requestId": "preview_1", "type": "attack", "targetId": "enemy_1"})
+
+        emit_mock.assert_called_once()
+        event_name, payload = emit_mock.call_args.args[:2]
+        self.assertEqual(event_name, "combat-action-preview")
+        self.assertEqual(payload["requestId"], "preview_1")
+        self.assertEqual(payload["targetId"], "enemy_1")
+        self.assertEqual(payload["type"], "attack")
+        self.assertIn("preview", payload)
+        self.assertGreaterEqual(payload["preview"]["hitChancePct"], 0)
+        self.assertGreater(payload["preview"]["damageMax"], 0)
+        self.assertEqual(emit_mock.call_args.kwargs.get("to"), sid)
+
     @patch("action_handler.broadcast_world")
     @patch("action_handler.socketio.emit")
     @patch("action_handler.emit")

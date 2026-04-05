@@ -304,10 +304,13 @@ def player_info_api():
     core = master.get("core_stats", {})
     hp = master.get("hit_points", {})
     max_hp = hp.get("max_hp")
+    in_combat = bool(gs.world_state.get("combat", {}).get("state", {}).get("inCombat"))
     try:
-        current_hp = int(hp.get("current_hp"))
+        parsed_current_hp = int(hp.get("current_hp"))
     except (TypeError, ValueError):
-        current_hp = max_hp
+        parsed_current_hp = max_hp
+    # New/initial character loads should start at full health unless combat is active.
+    current_hp = parsed_current_hp if in_combat else max_hp
     return jsonify(
         ok=True,
         summary={

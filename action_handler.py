@@ -130,6 +130,84 @@ def handle_end_turn(sid: str, data: dict) -> dict:
 # Combat actions
 # ---------------------------------------------------------------------------
 
+def handle_combat_action_preview(sid: str, data: dict) -> None:
+    """Build a server-authoritative action preview payload for the requesting player."""
+    if sid not in gs.players:
+        emit("combat-preview-denied", {"reason": "player-not-registered"}, to=sid)
+        return
+
+    payload = data if isinstance(data, dict) else {}
+    action_type = str(payload.get("type") or "").strip().lower().replace("_", "-").replace(" ", "-")
+    request_id = str(payload.get("requestId") or "").strip()
+    if action_type != "attack":
+        emit("combat-preview-denied", {"reason": "unsupported-preview", "type": action_type, "requestId": request_id or None}, to=sid)
+        return
+
+    combat = gs.world_state.get("combat", {})
+    if not combat.get("state", {}).get("inCombat"):
+        emit("combat-preview-denied", {"reason": "not-in-combat", "requestId": request_id or None}, to=sid)
+        return
+
+    order = combat.get("order") or []
+    idx = int(combat.get("turn") if combat.get("turn") is not None else 0)
+    if not order or not (0 <= idx < len(order)):
+        emit("combat-preview-denied", {"reason": "no-active-turn", "requestId": request_id or None}, to=sid)
+        return
+
+    role = gs.normalize_role(gs.client_roles.get(sid, "player"))
+    if role not in {"dm", "dev"} and not gs.is_players_turn(sid):
+        emit("combat-preview-denied", {"reason": "not-your-turn", "requestId": request_id or None}, to=sid)
+        return
+
+    target_id = str(payload.get("targetId") or "").strip()
+    if not target_id:
+        emit("combat-preview-denied", {"reason": "missing-target", "requestId": request_id or None}, to=sid)
+        return
+
+    entities = gs.world_state.get("entities", {})
+    target_entity = entities.get(target_id) if isinstance(entities, dict) else None
+    if not isinstance(target_entity, dict):
+        emit("combat-preview-denied", {"reason": "unknown-target", "requestId": request_id or None}, to=sid)
+        return
+
+    attacker_entry = gs.players.get(sid) if isinstance(gs.players.get(sid), dict) else {}
+    weapon = gs.resolve_equipped_weapon(attacker_entry)
+    attack_bonus = int(gs.safe_float(weapon.get("attackBonus", 0), 0))
+    damage_roll = max(1, int(gs.safe_float(weapon.get("damageRoll", 3), 3)))
+    damage_bonus = int(gs.safe_float(weapon.get("damageBonus", 0), 0))
+    target_ac = int(gs.safe_float(target_entity.get("ac", 10), 10))
+
+    # Deterministic combat preview from authoritative server stats.
+    success_count = 0
+    for roll in range(1, 21):
+        if roll == 1:
+            continue
+        if roll == 20 or (roll + attack_bonus) >= target_ac:
+            success_count += 1
+
+    hit_chance = success_count / 20.0
+    emit("combat-action-preview", {
+        "requestId": request_id or None,
+        "type": "attack",
+        "targetId": target_id,
+        "preview": {
+            "attackBonus": attack_bonus,
+            "targetAC": target_ac,
+            "hitChance": hit_chance,
+            "hitChancePct": int(round(hit_chance * 100.0)),
+            "damageMin": max(0, 1 + damage_bonus),
+            "damageMax": max(0, damage_roll + damage_bonus),
+            "weapon": {
+                "itemId": weapon.get("itemId"),
+                "name": weapon.get("name"),
+                "damageRoll": damage_roll,
+                "damageBonus": damage_bonus,
+                "damageType": weapon.get("damageType"),
+            },
+        },
+    }, to=sid)
+
+
 def handle_combat_action(sid: str, data: dict) -> None:
     """Validate and apply a player combat action to the server state."""
     if sid not in gs.players:

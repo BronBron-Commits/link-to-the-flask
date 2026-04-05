@@ -29,6 +29,17 @@ class FrontendMultiplayerClientParityTests(unittest.TestCase):
         self.assertIn('combatSyncPlayer?.maxHp ?? combatSyncPlayer?.max_hp', self.source)
         self.assertIn('combatSyncPlayer?.hp ?? combatSyncPlayer?.currentHp ?? combatSyncPlayer?.current_hp', self.source)
 
+    def test_local_avatar_ownership_helpers_exist(self) -> None:
+        self.assertIn('function isLocalPlayerPayload(player)', self.source)
+        self.assertIn('function purgeLocalEchoAvatars()', self.source)
+        self.assertIn('const ownActorIds = getLocalActorIdentitySet();', self.source)
+
+
+    def test_attack_preview_is_requested_from_server(self) -> None:
+        self.assertIn("socket.emit('combat-action-preview'", self.source)
+        self.assertIn("socket.on('combat-action-preview'", self.source)
+        self.assertNotIn("combatInteraction.preview = getAttackPreview(playerState, target, 'melee');", self.source)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -38,6 +38,7 @@ from turn_manager import advance_and_resolve, start_combat, end_combat
 from action_handler import (
     handle_end_turn,
     handle_combat_action,
+    handle_combat_action_preview,
     handle_dm_command,
     handle_inventory_equip_item,
     handle_inventory_unequip_item,
@@ -53,7 +54,7 @@ import routes  # noqa: F401
 # Module-level handlers.
 from connection_manager import on_connect, on_disconnect
 from turn_manager import advance_and_resolve, start_combat, end_combat
-from action_handler import handle_end_turn, handle_combat_action, handle_dm_command
+from action_handler import handle_end_turn, handle_combat_action, handle_combat_action_preview, handle_dm_command
 from state_sync import broadcast_world, broadcast_lobby, emit_combat_turn_to
 
 # ---------------------------------------------------------------------------
@@ -223,6 +224,9 @@ def socket_player_character_stats(data):
         entry["speed_ft"] = validated["speedFt"]
     if isinstance(movement_caps, dict):
         gs.set_player_movement_capabilities(entry, movement_caps)
+    else:
+        # Keep baseline tactical actions enabled even when capability payload is omitted.
+        gs.set_player_movement_capabilities(entry, {})
 
     # Hydrate inventory contract for this player (prefer explicit payload, else latest engine contract).
     inventory_payload = data.get("inventory") if isinstance(data.get("inventory"), dict) else None
@@ -399,6 +403,12 @@ def socket_combat_end(data=None):
 def socket_combat_action(data):
     if request.sid in gs.players and isinstance(data, dict):
         handle_combat_action(request.sid, data)
+
+
+@socketio.on("combat-action-preview")
+def socket_combat_action_preview(data):
+    if request.sid in gs.players and isinstance(data, dict):
+        handle_combat_action_preview(request.sid, data)
 
 
 @socketio.on("dm-command")
