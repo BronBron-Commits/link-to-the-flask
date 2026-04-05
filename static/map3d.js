@@ -17774,6 +17774,8 @@ function applySkyboxTheme(theme) {
     const nextTexture = nextTheme === 'night' ? nightSkyTexture : daySkyTexture;
     if (!nextTexture) return false;
 
+    // Always enforce visibility regardless of whether the theme changed,
+    // so a stale combat-black mesh never lingers after the theme was reset.
     mesh.visible = true;
     if (blackSky) blackSky.visible = false;
 
@@ -17843,7 +17845,8 @@ skyboxTextureLoader.load(
         const skyMesh = new GroundedSkybox(softTexture, 15, 500);
         scene.add(skyMesh);
         window.skyMesh = skyMesh;
-        activeSkyboxTheme = 'day';
+        // Do NOT pre-set activeSkyboxTheme here — let syncSkyboxWithGameMode/applySkyboxTheme
+        // set it so the early-return guard in applySkyboxTheme doesn't skip visibility updates.
         syncSkyboxWithGameMode();
 
         skyboxTextureLoader.load(

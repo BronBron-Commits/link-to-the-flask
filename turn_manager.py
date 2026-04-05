@@ -40,6 +40,8 @@ def evaluate_combat_end() -> str | None:
         eid for eid, entity in (entities.items() if isinstance(entities, dict) else [])
         if gs.is_enemy(entity) and not gs.is_enemy_downed(entity)
     ]
+    print(f"[COMBAT-EVAL] players_alive={players_alive}", flush=True)
+    print(f"[COMBAT-EVAL] enemies_alive={enemies_alive}", flush=True)
 
     if not players_alive:
         return "players_defeated"
@@ -53,6 +55,8 @@ def conclude_combat_if_needed(initiator_sid: str | None = None) -> str | None:
     result = evaluate_combat_end()
     if not result:
         return None
+
+    print(f"[COMBAT-END] conclude_combat_if_needed firing: result={result} initiator={initiator_sid}", flush=True)
 
     combat = gs.world_state.get("combat", {})
     state = combat.get("state", {}) if isinstance(combat, dict) else {}
