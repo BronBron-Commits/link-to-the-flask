@@ -1169,6 +1169,7 @@ function registerSocketHandlers() {
             round: packet && packet.roundNumber,
         });
         if (!packet || typeof packet !== 'object') return;
+        const wasEndTurnPending = endTurnPending;
         endTurnPending = false;
         if (endTurnWatchdog) {
             clearTimeout(endTurnWatchdog);
@@ -1198,6 +1199,9 @@ function registerSocketHandlers() {
         if (uxTelemetry.enabled && uxTelemetry.marks.endTurnSentAt > 0) {
             uxRecordSample(uxTelemetry.samples.endTurnRttMs, performance.now() - uxTelemetry.marks.endTurnSentAt);
             uxTelemetry.marks.endTurnSentAt = 0;
+        }
+        if (wasEndTurnPending) {
+            uxSetIntentStatus('endTurn', 'resolved', 'turn-advanced');
         }
         updateCombatUI();
         updateDmControlPanel();
@@ -1232,6 +1236,9 @@ function registerSocketHandlers() {
             clearTimeout(endTurnWatchdog);
             endTurnWatchdog = null;
         }
+        uxSetIntentStatus('attack', 'idle');
+        uxSetIntentStatus('move', 'idle');
+        uxSetIntentStatus('endTurn', 'idle');
         forceLeaveCombatPresentation('combat-reset');
     });
 
@@ -1242,6 +1249,9 @@ function registerSocketHandlers() {
             clearTimeout(endTurnWatchdog);
             endTurnWatchdog = null;
         }
+        uxSetIntentStatus('attack', 'idle');
+        uxSetIntentStatus('move', 'idle');
+        uxSetIntentStatus('endTurn', 'idle');
 
         const result = String(packet.result || '').trim();
         const rounds = Math.max(1, Number(packet.rounds) || 1);
@@ -1266,6 +1276,7 @@ function registerSocketHandlers() {
         }
         const reason = String((packet && packet.reason) || 'unknown');
         console.warn('[COMBAT] end-turn denied by server:', reason);
+        uxSetIntentStatus('endTurn', 'failed', 'denied');
     });
 
     socket.on('combat-error', (packet) => {
@@ -1276,11 +1287,15 @@ function registerSocketHandlers() {
         }
         const reason = String((packet && packet.reason) || 'unknown');
         console.warn('[COMBAT] combat-error from server:', reason, packet);
+        uxSetIntentStatus('attack', 'failed', 'error');
+        uxSetIntentStatus('move', 'failed', 'error');
+        uxSetIntentStatus('endTurn', 'failed', 'error');
     });
 
     socket.on('end-turn-accepted', (packet) => {
         const reason = String((packet && packet.reason) || 'received');
         console.log('[COMBAT] end-turn accepted by server:', reason);
+        uxSetIntentStatus('endTurn', 'acked', 'accepted');
     });
 
     socket.on('combat-action-result', (packet) => {
@@ -1329,10 +1344,12 @@ function registerSocketHandlers() {
                 const verb = actionType === 'dash' ? 'Dash' : (actionType === 'disengage' ? 'Disengage' : 'Move');
                 showFloatingText(`${verb} ${Math.round(movementFt)} ft`, '#8dd694', true, { anchorObject: playerRig });
                 logCombatEvent(`${verb} ${Math.round(movementFt)} ft`, 'system');
+                uxSetIntentStatus('move', 'resolved', actionType);
             } else if (actionType === 'dodge') {
                 tryUseAction();
                 showFloatingText('DODGE ACTIVE', '#8dd694', true, { anchorObject: playerRig });
                 logCombatEvent('You take the Dodge action', 'system');
+                uxSetIntentStatus('move', 'resolved', 'dodge');
             } else if (actionType === 'use-object') {
                 tryUseAction();
                 if (Number.isFinite(Number(packet.hpAfter))) {
@@ -1398,6 +1415,7 @@ function registerSocketHandlers() {
                 uxRecordSample(uxTelemetry.samples.attackRttMs, performance.now() - uxTelemetry.marks.attackSentAt);
                 uxTelemetry.marks.attackSentAt = 0;
             }
+            uxSetIntentStatus('attack', 'resolved', isHit ? 'hit' : 'miss');
             tryUseAction();
             const atkBonus = Number(packet.attackBonus) || 0;
             const rollDetail = `(${hitRoll}+${atkBonus}=${toHit} vs AC ${targetAC})`;
@@ -2654,6 +2672,12 @@ const uxTelemetry = {
     macroRunning: false,
 };
 
+const uxIntentState = {
+    attack: { state: 'idle', since: 0, note: '' },
+    move: { state: 'idle', since: 0, note: '' },
+    endTurn: { state: 'idle', since: 0, note: '' },
+};
+
 const consoleCommands = Object.create(null);
 const consoleEventBus = createEventBus();
 let consoleRootEl = null;
@@ -3227,6 +3251,57 @@ function uxFormatStats(label, values) {
     const s = uxStats(values);
     if (s.n <= 0) return `${label}: n=0`;
     return `${label}: n=${s.n} avg=${s.avg.toFixed(1)}ms p50=${s.p50.toFixed(1)}ms p95=${s.p95.toFixed(1)}ms`;
+}
+
+function uxSetIntentStatus(kind, state, note = '') {
+    if (!uxIntentState[kind]) return;
+    uxIntentState[kind].state = String(state || 'idle');
+    uxIntentState[kind].since = performance.now();
+    uxIntentState[kind].note = String(note || '');
+    updateActionMenu();
+}
+
+function uxIntentBadgeHtml(kind) {
+    const status = uxIntentState[kind];
+    if (!status || status.state === 'idle') return '';
+    const ageMs = Math.max(0, performance.now() - (Number(status.since) || 0));
+    if ((status.state === 'resolved' || status.state === 'failed' || status.state === 'canceled') && ageMs > 2600) {
+        uxIntentState[kind].state = 'idle';
+        return '';
+    }
+    const stateClass = `ffx-intent-${status.state}`;
+    const text = status.note ? `${status.state}:${status.note}` : status.state;
+    return `<span class="ffx-intent-badge ${stateClass}">${text}</span>`;
+}
+
+function uxComputeFeelScore() {
+    const attack = uxStats(uxTelemetry.samples.attackRttMs);
+    const move = uxStats(uxTelemetry.samples.moveRttMs);
+    const endTurn = uxStats(uxTelemetry.samples.endTurnRttMs);
+    const confirmUi = uxStats(uxTelemetry.samples.confirmUiMs);
+    const p95 = (s) => (s && Number.isFinite(s.p95) ? s.p95 : null);
+    let score = 100;
+
+    const penalties = [
+        { value: p95(confirmUi), target: 90, scale: 0.08 },
+        { value: p95(attack), target: 450, scale: 0.03 },
+        { value: p95(move), target: 500, scale: 0.03 },
+        { value: p95(endTurn), target: 700, scale: 0.03 },
+    ];
+    penalties.forEach((entry) => {
+        if (!Number.isFinite(entry.value)) return;
+        const overflow = Math.max(0, entry.value - entry.target);
+        score -= overflow * entry.scale;
+    });
+
+    score -= (uxTelemetry.counters.timeouts || 0) * 6;
+    const cancelRate = (uxTelemetry.counters.confirms + uxTelemetry.counters.cancels) > 0
+        ? (uxTelemetry.counters.cancels / (uxTelemetry.counters.confirms + uxTelemetry.counters.cancels))
+        : 0;
+    if (cancelRate > 0.35) {
+        score -= (cancelRate - 0.35) * 40;
+    }
+    return Math.max(0, Math.min(100, score));
 }
 
 async function uxWaitFor(predicate, timeoutMs = 3000, pollMs = 40) {
@@ -4045,6 +4120,7 @@ function registerDefaultConsoleCommands() {
             appendConsoleHistory(uxFormatStats('attack-rtt', uxTelemetry.samples.attackRttMs), 'ok');
             appendConsoleHistory(uxFormatStats('move-rtt', uxTelemetry.samples.moveRttMs), 'ok');
             appendConsoleHistory(uxFormatStats('endturn-rtt', uxTelemetry.samples.endTurnRttMs), 'ok');
+            appendConsoleHistory(`feel-score: ${uxComputeFeelScore().toFixed(1)} / 100`, 'ok');
             appendConsoleHistory(`counters: confirms=${uxTelemetry.counters.confirms} cancels=${uxTelemetry.counters.cancels} timeouts=${uxTelemetry.counters.timeouts} macroRuns=${uxTelemetry.counters.macroRuns}`, 'ok');
         },
     });
@@ -14234,6 +14310,7 @@ function selectMoveDestination(worldPos) {
     resetCombatInteraction({ preserveAction: true });
     combatInteraction.action = movementAction;
     currentAction = movementAction;
+    uxSetIntentStatus('move', 'armed', movementAction);
     combatInteraction.target = destPos;      // store world pos directly
     combatInteraction.preview = {
         destX,
@@ -14318,6 +14395,7 @@ function executeAttack(target) {
     }
 
     const actionId = `client_attack_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+    uxSetIntentStatus('attack', 'sent', 'attack');
     socket.emit('combat-action', {
         id: actionId,
         type: 'attack',
@@ -14489,6 +14567,7 @@ function endTurn() {
     endTurnWatchdog = setTimeout(() => {
         if (!endTurnPending) return;
         endTurnPending = false;
+        uxSetIntentStatus('endTurn', 'failed', 'timeout');
         console.warn('[END-TURN] watchdog timeout: no server response; pending cleared');
         showFloatingText('Turn sync timeout, retrying allowed', '#ffd166', true);
     }, 3500);
@@ -14503,6 +14582,7 @@ function endTurn() {
 
     console.log('[END-TURN] emitting once');
     if (uxTelemetry.enabled) uxTelemetry.marks.endTurnSentAt = performance.now();
+    uxSetIntentStatus('endTurn', 'sent', 'end-turn');
     socket.emit('end-turn', { clientTs: Date.now() }, (ack) => {
         console.log('[END-TURN] server ack:', ack);
         if (!ack || ack.ok === true) {
@@ -14515,6 +14595,7 @@ function endTurn() {
         }
         const reason = String(ack.reason || 'unknown');
         console.warn('[END-TURN] ack reported failure:', reason);
+        uxSetIntentStatus('endTurn', 'failed', reason);
     });
 }
 
@@ -18600,6 +18681,13 @@ updateCombatUI();
     .ffx-arrow { width:13px; flex-shrink:0; color:#38bdf8; font-size:10px; }
     .ffx-label { flex:1; font-size:14px; font-weight:500; letter-spacing:0.02em; white-space:nowrap; }
     .ffx-detail { color:#507a92; font-size:12px; white-space:nowrap; padding-left:8px; }
+    .ffx-intent-badge { margin-left:8px; padding:1px 7px; border-radius:999px; font-size:10px; letter-spacing:0.03em; text-transform:uppercase; border:1px solid rgba(148,163,184,0.45); color:#cbd5e1; background:rgba(30,41,59,0.65); }
+    .ffx-intent-armed { border-color:rgba(56,189,248,0.7); color:#7dd3fc; background:rgba(3,105,161,0.28); }
+    .ffx-intent-sent { border-color:rgba(251,191,36,0.75); color:#fde68a; background:rgba(146,64,14,0.32); }
+    .ffx-intent-acked { border-color:rgba(52,211,153,0.75); color:#a7f3d0; background:rgba(6,95,70,0.32); }
+    .ffx-intent-resolved { border-color:rgba(74,222,128,0.72); color:#bbf7d0; background:rgba(20,83,45,0.32); }
+    .ffx-intent-failed { border-color:rgba(248,113,113,0.75); color:#fecaca; background:rgba(127,29,29,0.36); }
+    .ffx-intent-canceled { border-color:rgba(148,163,184,0.65); color:#cbd5e1; background:rgba(51,65,85,0.38); }
     .ffx-badge { background:rgb(22,58,90); border:1px solid rgba(56,189,248,0.38); color:#7ecfff; font-size:11px; border-radius:10px; padding:1px 6px; margin-left:6px; }
     .ffx-divider { height:1px; margin:2px 0; background:rgb(18,40,66); }
     .ffx-sub-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
@@ -18646,6 +18734,7 @@ function _ffxHandleTopClick(topId) {
     if (topId !== 'end-turn' && isInputLockedForCombat('ACTION')) return;
     if (topId === 'attack') {
         ffxMenuState.openSub = null;
+        uxSetIntentStatus('attack', 'armed', 'target');
         setCurrentAction('attack');
     } else if (topId === 'actions') {
         ffxMenuState.openSub = ffxMenuState.openSub === 'actions' ? null : 'actions';
@@ -18655,6 +18744,7 @@ function _ffxHandleTopClick(topId) {
         updateActionMenu();
     } else if (topId === 'end-turn') {
         ffxMenuState.openSub = null;
+        uxSetIntentStatus('endTurn', 'armed', 'queued');
         turnEndRequired ? confirmEndTurn() : endTurn();
     }
 }
@@ -18664,6 +18754,7 @@ function _ffxHandleSubClick(pane, subId, instanceId) {
         if (subId === 'dodge') {
             if (!socket || !socket.connected) return;
             ffxMenuState.openSub = null;
+            uxSetIntentStatus('move', 'sent', 'dodge');
             socket.emit('combat-action', {
                 id: `client_dodge_${Date.now()}_${Math.floor(Math.random() * 1e5)}`,
                 type: 'dodge',
@@ -18672,6 +18763,7 @@ function _ffxHandleSubClick(pane, subId, instanceId) {
             updateActionMenu();
         } else {
             if (isInputLockedForCombat('ACTION')) return;
+            uxSetIntentStatus('move', 'armed', subId);
             setCurrentAction(subId);
             if (subId === 'dash') showFloatingText('Dash — choose a destination', '#8dd694', true);
             else if (subId === 'disengage') showFloatingText('Disengage — choose a safe route', '#8dd694', true);
@@ -18763,6 +18855,9 @@ function updateActionMenu() {
     const bonusPip  = `<span class="ffx-res-pip" style="background:${bonusUsed ? '#334a57' : '#fbbf24'};box-shadow:0 0 5px ${bonusUsed ? 'transparent' : '#fbbf2488'};"></span>`;
     const movePipBar = `<div style="width:40px;height:4px;background:rgba(56,189,248,0.15);border-radius:2px;overflow:hidden;margin-left:3px;display:inline-block;vertical-align:middle;">
         <div style="height:100%;width:${movePct}%;background:${moveColor};border-radius:2px;transition:width 0.3s;"></div></div>`;
+    const attackBadge = uxIntentBadgeHtml('attack');
+    const moveBadge = uxIntentBadgeHtml('move');
+    const endTurnBadge = uxIntentBadgeHtml('endTurn');
 
     // — Subcolumn HTML —
     let subColHtml = '';
@@ -18798,11 +18893,13 @@ function updateActionMenu() {
           <div class="ffx-row${isAttackActive ? ' ffx-row-active' : ''}${!canAttack ? ' ffx-row-disabled' : ''}" data-action-top="attack">
             <span class="ffx-arrow">${isAttackActive ? '►' : ''}</span>
             <span class="ffx-label">Attack</span>
+                        ${attackBadge}
             <span class="ffx-detail">${weaponName}</span>
           </div>
           <div class="ffx-row${actionsRowActive ? ' ffx-row-active' : ''}" data-action-top="actions">
             <span class="ffx-arrow">${actionsRowActive ? '►' : ''}</span>
             <span class="ffx-label">Actions</span>
+                        ${moveBadge}
             <span class="ffx-detail" style="color:#38bdf8;">▸</span>
           </div>
           <div class="ffx-row${isItemsSubOpen ? ' ffx-row-active' : ''}${!hasItems && consumables.length === 0 ? ' ffx-row-disabled' : ''}" data-action-top="items">
@@ -18816,6 +18913,7 @@ function updateActionMenu() {
                style="color:${endTurnUrgent ? '#fca5a5' : '#60a5d0'};">
             <span class="ffx-arrow">${endTurnUrgent ? '!' : ''}</span>
             <span class="ffx-label">${endTurnUrgent ? 'End Turn !' : 'End Turn'}</span>
+                        ${endTurnBadge}
           </div>
           ${confirmBarHtml}
         </div>${subColHtml ? `<div class="ffx-sub">${subColHtml}</div>` : ''}`;
@@ -18907,6 +19005,7 @@ function confirmAction() {
         const actionType = combatInteraction.action === 'move-to-approach' ? 'move' : combatInteraction.action;
         const targetPos = combatInteraction.target;
         if (uxTelemetry.enabled) uxTelemetry.marks.moveSentAt = performance.now();
+        uxSetIntentStatus('move', 'sent', actionType);
         socket.emit('combat-action', {
             id: `client_${actionType}_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
             type: actionType,
@@ -18919,6 +19018,7 @@ function confirmAction() {
         resetCombatInteraction();
     } else if (combatInteraction.action === 'attack') {
         if (uxTelemetry.enabled) uxTelemetry.marks.attackSentAt = performance.now();
+        uxSetIntentStatus('attack', 'sent', 'attack');
         playConfirmAttackSnap();
         executeAttack(combatInteraction.target);
     }
@@ -18928,7 +19028,13 @@ function confirmAction() {
 
 function cancelAction() {
     if (isInputLockedForCombat('ACTION')) return;
+    const canceledAction = combatInteraction.action;
     resetCombatInteraction();
+    if (canceledAction === 'attack') {
+        uxSetIntentStatus('attack', 'canceled', 'cancel');
+    } else if (canceledAction === 'move' || canceledAction === 'dash' || canceledAction === 'disengage' || canceledAction === 'move-to-approach') {
+        uxSetIntentStatus('move', 'canceled', 'cancel');
+    }
     if (uxTelemetry.enabled) uxTelemetry.counters.cancels += 1;
     updateActionMenu();
 }
