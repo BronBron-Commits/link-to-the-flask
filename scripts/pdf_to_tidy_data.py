@@ -584,6 +584,75 @@ def extract_inventory_triplets(lines: list[str]) -> list[str]:
     return out
 
 
+def extract_inventory_triplets_from_form_values(form_values: dict[str, str]) -> list[str]:
+    if not form_values:
+        return []
+
+    normalized: dict[str, str] = {}
+    for key, value in form_values.items():
+        norm = re.sub(r"[^a-z0-9]+", "", str(key).lower())
+        if norm:
+            normalized[norm] = str(value).strip()
+
+    blocked_names = {
+        "NAME",
+        "QTY",
+        "WEIGHT",
+        "WEIGHT CARRIED",
+        "ENCUMBERED",
+        "PUSH/DRAG/LIFT",
+        "ATTUNED MAGIC ITEMS",
+        "NAME QTY WEIGHT",
+        "NAME QTY WEIGHT NAME QTY WEIGHT",
+        "ATTUNED MAGIC ITEMS QTY WEIGHT",
+    }
+
+    indexes: set[int] = set()
+    for norm_key in normalized:
+        m = re.fullmatch(r"eqname(\d+)", norm_key)
+        if m:
+            indexes.add(int(m.group(1)))
+
+    out: list[str] = []
+    for idx in sorted(indexes):
+        name = normalized.get(f"eqname{idx}", "").strip()
+        if not name:
+            continue
+        if name.upper() in blocked_names:
+            continue
+
+        qty_val = to_int(normalized.get(f"eqqty{idx}"))
+        qty = qty_val if qty_val is not None else 1
+        weight = normalized.get(f"eqweight{idx}", "--").strip() or "--"
+
+        out.append(f"{name} | qty={qty} | weight={weight}")
+
+    return out
+
+
+def synthesize_inventory_triplets(pages: list[str], form_values: dict[str, str]) -> list[str]:
+    full_text_lines = normalize_lines("\n\n".join(pages))
+    inventory_scope_lines = select_inventory_lines_from_pages(pages)
+
+    text_triplets = extract_inventory_triplets(inventory_scope_lines or full_text_lines)
+    form_triplets = extract_inventory_triplets_from_form_values(form_values)
+
+    # Prefer the denser source, then merge the other source to avoid dropping rows.
+    primary = form_triplets if len(form_triplets) >= len(text_triplets) else text_triplets
+    secondary = text_triplets if primary is form_triplets else form_triplets
+
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in primary + secondary:
+        key = re.sub(r"\s+", " ", item.strip().lower())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        merged.append(item)
+
+    return merged
+
+
 def extract_spells_from_pages(pages: list[str], character_id: str) -> list[dict]:
     spell_rows: list[dict] = []
     order = 1
@@ -1319,18 +1388,8 @@ def parse_character_tables(pdf_path: Path) -> dict:
         for i, value in enumerate(feature_lines)
     ]
 
-    inventory_lines = extract_section(
-        inventory_scope_lines or lines,
-        start_keywords=("Equipment",),
-        stop_keywords=("Attacks", "Spells", "Features"),
-    )
-    inventory_triplets = extract_inventory_triplets(inventory_scope_lines or lines)
-    if inventory_triplets:
-        inventory_lines = inventory_triplets
-
-    inventory_lines_cleaned = clean_section_lines(inventory_lines, identity)
-    if inventory_lines_cleaned:
-        inventory_lines = inventory_lines_cleaned
+    inventory_triplets = synthesize_inventory_triplets(pages, form_values)
+    inventory_lines = list(inventory_triplets)
     inventory = [
         {
             "character_id": character_id,

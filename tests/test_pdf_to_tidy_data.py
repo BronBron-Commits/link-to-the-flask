@@ -158,6 +158,46 @@ class ExtractInventoryTripletsNoiseTests(unittest.TestCase):
         self.assertEqual(result, ["Longsword | qty=1 | weight=3 lb."])
 
 
+class ExtractInventoryTripletsFromFormValuesTests(unittest.TestCase):
+    def test_extract_inventory_triplets_from_form_values_reads_eq_fields(self) -> None:
+        form_values = {
+            "Eq Name0": "Leather",
+            "Eq Qty0": "1",
+            "Eq Weight0": "10 lb.",
+            "Eq Name1": "Dagger",
+            "Eq Qty1": "2",
+            "Eq Weight1": "1 lb.",
+            "Eq Name2": "Backpack",
+            "Eq Qty2": "1",
+            "Eq Weight2": "5 lb.",
+        }
+
+        result = pdf_to_tidy_data.extract_inventory_triplets_from_form_values(form_values)
+
+        self.assertEqual(
+            result,
+            [
+                "Leather | qty=1 | weight=10 lb.",
+                "Dagger | qty=2 | weight=1 lb.",
+                "Backpack | qty=1 | weight=5 lb.",
+            ],
+        )
+
+    def test_extract_inventory_triplets_from_form_values_skips_header_names(self) -> None:
+        form_values = {
+            "Eq Name0": "WEIGHT CARRIED",
+            "Eq Qty0": "1",
+            "Eq Weight0": "--",
+            "Eq Name1": "Rope, hempen (50 feet)",
+            "Eq Qty1": "1",
+            "Eq Weight1": "10 lb.",
+        }
+
+        result = pdf_to_tidy_data.extract_inventory_triplets_from_form_values(form_values)
+
+        self.assertEqual(result, ["Rope, hempen (50 feet) | qty=1 | weight=10 lb."])
+
+
 class ParseSavesAndSkillsTests(unittest.TestCase):
     def test_parse_saves_and_skills_returns_all_rows_with_proficiency_flags(self) -> None:
         abilities = [
@@ -556,6 +596,49 @@ class BuildEngineEntityTests(unittest.TestCase):
         self.assertEqual(engine_entity["features"][0]["type"], "section")
         self.assertEqual(engine_entity["features"][1]["name"], "Divine Smite")
         self.assertEqual(engine_entity["features"][1]["ruleId"], "divine_smite")
+
+
+class SynthesizedFullInventoryPdfTests(unittest.TestCase):
+    def test_synthesized_inventory_matches_parsed_inventory_for_all_static_pdfs(self) -> None:
+        pdf_paths = sorted(Path("static").glob("*.pdf"))
+        if not pdf_paths:
+            self.skipTest("No PDFs found under static/")
+
+        for pdf_path in pdf_paths:
+            with self.subTest(pdf=pdf_path.name):
+                form_values = pdf_to_tidy_data.extract_pdf_form_values(pdf_path)
+                pages = pdf_to_tidy_data.extract_text_by_page(pdf_path)
+                synthesized = pdf_to_tidy_data.synthesize_inventory_triplets(pages, form_values)
+
+                tables = pdf_to_tidy_data.parse_character_tables(pdf_path)
+                parsed_inventory = [row["item_text"] for row in tables["inventory_items"]]
+
+                self.assertEqual(parsed_inventory, synthesized)
+
+    def test_synthesized_inventory_rows_are_de_noised_for_all_static_pdfs(self) -> None:
+        blocked_fragments = (
+            "WEIGHT CARRIED",
+            "ENCUMBERED",
+            "PUSH/DRAG/LIFT",
+            "NAME QTY WEIGHT",
+            "ATTUNED MAGIC ITEMS",
+        )
+
+        pdf_paths = sorted(Path("static").glob("*.pdf"))
+        if not pdf_paths:
+            self.skipTest("No PDFs found under static/")
+
+        for pdf_path in pdf_paths:
+            with self.subTest(pdf=pdf_path.name):
+                form_values = pdf_to_tidy_data.extract_pdf_form_values(pdf_path)
+                pages = pdf_to_tidy_data.extract_text_by_page(pdf_path)
+                synthesized = pdf_to_tidy_data.synthesize_inventory_triplets(pages, form_values)
+
+                for row in synthesized:
+                    upper = row.upper()
+                    for blocked in blocked_fragments:
+                        self.assertNotIn(blocked, upper)
+                    self.assertRegex(row, r"\| qty=\d+ \| weight=(?:\d+\s*lb\.|--)")
 
 
 if __name__ == "__main__":
