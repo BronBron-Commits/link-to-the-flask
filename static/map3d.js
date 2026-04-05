@@ -14616,9 +14616,11 @@ async function runEnemyTurn(enemyActor = null) {
 }
 
 function showActionUI(show) {
-    if (modeManager.current === MODE.DM) { setActionMenuVisible(false); return; }
-    if (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER') { setActionMenuVisible(false); return; }
-    setActionMenuVisible(show);
+    const shouldShow = !!show
+        && modeManager.current !== MODE.DM
+        && currentGameMode === GAME_MODE.COMBAT
+        && combatState.phase === 'PLAYER';
+    setActionMenuVisible(shouldShow);
 }
 
 function summarizeCombatActionForTimeline(actionRecord, index, total) {
@@ -18587,6 +18589,10 @@ function setCurrentAction(action) {
     resetCombatInteraction();
     currentAction = action;
     combatInteraction.action = action;
+    if (isMovementSelectionAction(action) && isPlayerInputTurn()) {
+        rebuildCombatMoveTiles();
+        hideMoveDestPreview();
+    }
     updateActionMenu();
 }
 
