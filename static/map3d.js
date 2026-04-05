@@ -1195,6 +1195,10 @@ function registerSocketHandlers() {
         if (currentGameMode === GAME_MODE.COMBAT && currentActor) {
             dispatchCombatTurnActor(currentActor);
         }
+        if (uxTelemetry.enabled && uxTelemetry.marks.endTurnSentAt > 0) {
+            uxRecordSample(uxTelemetry.samples.endTurnRttMs, performance.now() - uxTelemetry.marks.endTurnSentAt);
+            uxTelemetry.marks.endTurnSentAt = 0;
+        }
         updateCombatUI();
         updateDmControlPanel();
     });
@@ -1297,6 +1301,10 @@ function registerSocketHandlers() {
         const isLocalPlayerActor = !!localActorId && String(attacker || '').trim() === localActorId;
 
         if (actorType === 'player' && isLocalPlayerActor && actionType && actionType !== 'attack') {
+            if (uxTelemetry.enabled && uxTelemetry.marks.moveSentAt > 0) {
+                uxRecordSample(uxTelemetry.samples.moveRttMs, performance.now() - uxTelemetry.marks.moveSentAt);
+                uxTelemetry.marks.moveSentAt = 0;
+            }
             if (actionType === 'move' || actionType === 'dash' || actionType === 'disengage') {
                 const after = packet.positionAfter && typeof packet.positionAfter === 'object' ? packet.positionAfter : null;
                 const movementFt = Math.max(0, Number(packet.movementFt) || 0);
@@ -1385,6 +1393,10 @@ function registerSocketHandlers() {
         if (actorType === 'player') {
             if (!isLocalPlayerActor) {
                 return;
+            }
+            if (uxTelemetry.enabled && uxTelemetry.marks.attackSentAt > 0) {
+                uxRecordSample(uxTelemetry.samples.attackRttMs, performance.now() - uxTelemetry.marks.attackSentAt);
+                uxTelemetry.marks.attackSentAt = 0;
             }
             tryUseAction();
             const atkBonus = Number(packet.attackBonus) || 0;
@@ -2618,6 +2630,30 @@ const consoleState = {
     suggestionIndex: 0,
 };
 
+const uxTelemetry = {
+    enabled: false,
+    sessionStartedAt: 0,
+    samples: {
+        confirmUiMs: [],
+        attackRttMs: [],
+        moveRttMs: [],
+        endTurnRttMs: [],
+    },
+    counters: {
+        confirms: 0,
+        cancels: 0,
+        timeouts: 0,
+        macroRuns: 0,
+    },
+    marks: {
+        confirmUiStartAt: 0,
+        attackSentAt: 0,
+        moveSentAt: 0,
+        endTurnSentAt: 0,
+    },
+    macroRunning: false,
+};
+
 const consoleCommands = Object.create(null);
 const consoleEventBus = createEventBus();
 let consoleRootEl = null;
@@ -3133,6 +3169,128 @@ function parseConsoleScalar(raw) {
     const numeric = Number(text);
     if (Number.isFinite(numeric)) return numeric;
     return text;
+}
+
+function uxResetTelemetry() {
+    uxTelemetry.samples.confirmUiMs.length = 0;
+    uxTelemetry.samples.attackRttMs.length = 0;
+    uxTelemetry.samples.moveRttMs.length = 0;
+    uxTelemetry.samples.endTurnRttMs.length = 0;
+    uxTelemetry.counters.confirms = 0;
+    uxTelemetry.counters.cancels = 0;
+    uxTelemetry.counters.timeouts = 0;
+    uxTelemetry.marks.confirmUiStartAt = 0;
+    uxTelemetry.marks.attackSentAt = 0;
+    uxTelemetry.marks.moveSentAt = 0;
+    uxTelemetry.marks.endTurnSentAt = 0;
+}
+
+function uxStartTelemetry() {
+    uxResetTelemetry();
+    uxTelemetry.enabled = true;
+    uxTelemetry.sessionStartedAt = Date.now();
+}
+
+function uxStopTelemetry() {
+    uxTelemetry.enabled = false;
+}
+
+function uxRecordSample(bucket, value) {
+    if (!uxTelemetry.enabled) return;
+    if (!bucket || !Array.isArray(bucket)) return;
+    const n = Number(value);
+    if (!Number.isFinite(n) || n < 0) return;
+    bucket.push(n);
+}
+
+function uxPercentile(values, p) {
+    if (!Array.isArray(values) || values.length === 0) return null;
+    const sorted = values.slice().sort((a, b) => a - b);
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.floor((p / 100) * (sorted.length - 1))));
+    return sorted[idx];
+}
+
+function uxStats(values) {
+    if (!Array.isArray(values) || values.length === 0) {
+        return { n: 0, avg: null, p50: null, p95: null };
+    }
+    const sum = values.reduce((acc, v) => acc + v, 0);
+    return {
+        n: values.length,
+        avg: sum / values.length,
+        p50: uxPercentile(values, 50),
+        p95: uxPercentile(values, 95),
+    };
+}
+
+function uxFormatStats(label, values) {
+    const s = uxStats(values);
+    if (s.n <= 0) return `${label}: n=0`;
+    return `${label}: n=${s.n} avg=${s.avg.toFixed(1)}ms p50=${s.p50.toFixed(1)}ms p95=${s.p95.toFixed(1)}ms`;
+}
+
+async function uxWaitFor(predicate, timeoutMs = 3000, pollMs = 40) {
+    const started = performance.now();
+    while ((performance.now() - started) < timeoutMs) {
+        if (predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, pollMs));
+    }
+    return false;
+}
+
+async function runUxMacro(cycles = 3) {
+    if (uxTelemetry.macroRunning) {
+        appendConsoleHistory('UX macro already running', 'error');
+        return;
+    }
+    uxTelemetry.macroRunning = true;
+    uxTelemetry.counters.macroRuns += 1;
+    appendConsoleHistory(`UX macro start: ${cycles} cycle(s)`, 'ok');
+
+    try {
+        for (let i = 0; i < cycles; i++) {
+            if (currentGameMode !== GAME_MODE.COMBAT || combatState.phase !== 'PLAYER') {
+                appendConsoleHistory(`UX macro halted at cycle ${i + 1}: not in player combat turn`, 'error');
+                break;
+            }
+
+            const targets = trainingDummies.filter((dummy) => (
+                dummy && dummy.parent && (dummy.userData?.hp || 0) > 0
+            ));
+            if (targets.length <= 0) {
+                appendConsoleHistory(`UX macro halted at cycle ${i + 1}: no live targets`, 'error');
+                break;
+            }
+
+            const target = targets.sort((a, b) => getEdgeDistanceFeet(playerState, a) - getEdgeDistanceFeet(playerState, b))[0];
+            setSelectedCombatTarget(target);
+            selectMoveAndAttackAction(target);
+
+            const gotConfirm = await uxWaitFor(() => !!combatInteraction.awaitingConfirm, 1200, 30);
+            if (!gotConfirm) {
+                uxTelemetry.counters.timeouts += 1;
+                appendConsoleHistory(`UX macro cycle ${i + 1}: confirm did not appear`, 'error');
+                break;
+            }
+
+            confirmAction();
+            await new Promise((resolve) => setTimeout(resolve, 260));
+            endTurn();
+
+            const backToPlayer = await uxWaitFor(() => (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER'), 10000, 60);
+            if (!backToPlayer) {
+                uxTelemetry.counters.timeouts += 1;
+                appendConsoleHistory(`UX macro cycle ${i + 1}: timed out waiting for next player turn`, 'error');
+                break;
+            }
+
+            appendConsoleHistory(`UX macro cycle ${i + 1}/${cycles} complete`, 'ok');
+            await new Promise((resolve) => setTimeout(resolve, 120));
+        }
+    } finally {
+        uxTelemetry.macroRunning = false;
+        appendConsoleHistory('UX macro done', 'ok');
+    }
 }
 
 function registerDefaultConsoleCommands() {
@@ -3850,6 +4008,44 @@ function registerDefaultConsoleCommands() {
                 return;
             }
             appendConsoleHistory('Usage: autostep <on|off|toggle|status>', 'error');
+        },
+    });
+
+    registerConsoleCommand('ux', {
+        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
+        usage: 'ux <start|stop|report|reset|macro> [cycles]',
+        description: 'Measure interaction feel with telemetry and optional scripted macro cycles',
+        execute: (_ctx, args) => {
+            const op = String(args[0] || 'report').toLowerCase();
+            if (op === 'start') {
+                uxStartTelemetry();
+                appendConsoleHistory('UX telemetry started', 'ok');
+                return;
+            }
+            if (op === 'stop') {
+                uxStopTelemetry();
+                appendConsoleHistory('UX telemetry stopped', 'ok');
+                return;
+            }
+            if (op === 'reset') {
+                uxResetTelemetry();
+                appendConsoleHistory('UX telemetry reset', 'ok');
+                return;
+            }
+            if (op === 'macro') {
+                const cycles = Math.max(1, Math.min(12, Number.parseInt(args[1], 10) || 3));
+                void runUxMacro(cycles);
+                return;
+            }
+            const since = uxTelemetry.sessionStartedAt
+                ? new Date(uxTelemetry.sessionStartedAt).toLocaleTimeString()
+                : 'n/a';
+            appendConsoleHistory(`UX report (started=${since}, enabled=${uxTelemetry.enabled ? 'yes' : 'no'})`, 'ok');
+            appendConsoleHistory(uxFormatStats('confirm-ui', uxTelemetry.samples.confirmUiMs), 'ok');
+            appendConsoleHistory(uxFormatStats('attack-rtt', uxTelemetry.samples.attackRttMs), 'ok');
+            appendConsoleHistory(uxFormatStats('move-rtt', uxTelemetry.samples.moveRttMs), 'ok');
+            appendConsoleHistory(uxFormatStats('endturn-rtt', uxTelemetry.samples.endTurnRttMs), 'ok');
+            appendConsoleHistory(`counters: confirms=${uxTelemetry.counters.confirms} cancels=${uxTelemetry.counters.cancels} timeouts=${uxTelemetry.counters.timeouts} macroRuns=${uxTelemetry.counters.macroRuns}`, 'ok');
         },
     });
 }
@@ -13964,6 +14160,7 @@ function selectAttackTarget(target) {
     combatInteraction.target = target;
     combatInteraction.preview = getAttackPreview(playerState, target, 'melee');
     combatInteraction.awaitingConfirm = true;
+    uxTelemetry.marks.confirmUiStartAt = performance.now();
 
     if (target.material && target.material.emissive) {
         target.userData.previewOriginalEmissive = target.material.emissive.getHex();
@@ -13977,6 +14174,10 @@ function selectAttackTarget(target) {
     setSelectedCombatTarget(target);
     updateActionMenu();
     showAttackPreviewUI();
+    if (uxTelemetry.enabled && uxTelemetry.marks.confirmUiStartAt > 0) {
+        uxRecordSample(uxTelemetry.samples.confirmUiMs, performance.now() - uxTelemetry.marks.confirmUiStartAt);
+        uxTelemetry.marks.confirmUiStartAt = 0;
+    }
     return true;
 }
 
@@ -14043,9 +14244,14 @@ function selectMoveDestination(worldPos) {
         movementBudgetFt,
     };
     combatInteraction.awaitingConfirm = true;
+    uxTelemetry.marks.confirmUiStartAt = performance.now();
 
     updateActionMenu();
     showMoveConfirmUI();
+    if (uxTelemetry.enabled && uxTelemetry.marks.confirmUiStartAt > 0) {
+        uxRecordSample(uxTelemetry.samples.confirmUiMs, performance.now() - uxTelemetry.marks.confirmUiStartAt);
+        uxTelemetry.marks.confirmUiStartAt = 0;
+    }
     return true;
 }
 
@@ -14296,6 +14502,7 @@ function endTurn() {
     showActionUI(false);
 
     console.log('[END-TURN] emitting once');
+    if (uxTelemetry.enabled) uxTelemetry.marks.endTurnSentAt = performance.now();
     socket.emit('end-turn', { clientTs: Date.now() }, (ack) => {
         console.log('[END-TURN] server ack:', ack);
         if (!ack || ack.ok === true) {
@@ -18699,6 +18906,7 @@ function confirmAction() {
         }
         const actionType = combatInteraction.action === 'move-to-approach' ? 'move' : combatInteraction.action;
         const targetPos = combatInteraction.target;
+        if (uxTelemetry.enabled) uxTelemetry.marks.moveSentAt = performance.now();
         socket.emit('combat-action', {
             id: `client_${actionType}_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
             type: actionType,
@@ -18710,15 +18918,18 @@ function confirmAction() {
         });
         resetCombatInteraction();
     } else if (combatInteraction.action === 'attack') {
+        if (uxTelemetry.enabled) uxTelemetry.marks.attackSentAt = performance.now();
         playConfirmAttackSnap();
         executeAttack(combatInteraction.target);
     }
+    if (uxTelemetry.enabled) uxTelemetry.counters.confirms += 1;
     updateActionMenu();
 }
 
 function cancelAction() {
     if (isInputLockedForCombat('ACTION')) return;
     resetCombatInteraction();
+    if (uxTelemetry.enabled) uxTelemetry.counters.cancels += 1;
     updateActionMenu();
 }
 
