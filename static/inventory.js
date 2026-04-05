@@ -240,6 +240,32 @@
     return parseFloat(str) || 0;
   }
 
+  function sanitizeInventoryItems(items) {
+    const blocked = new Set([
+      'WEIGHT CARRIED',
+      'ENCUMBERED',
+      'PUSH/DRAG/LIFT',
+      'NAME QTY WEIGHT NAME QTY WEIGHT',
+      'NAME QTY WEIGHT',
+      'ATTUNED MAGIC ITEMS QTY WEIGHT',
+      'ATTUNED MAGIC ITEMS',
+      'NAME',
+      'QTY',
+      'WEIGHT',
+    ]);
+
+    const toName = (item) => String(item?.name || item?.itemId || '').trim();
+
+    return (items || []).filter((item) => {
+      const name = toName(item);
+      if (!name) return false;
+      const upper = name.toUpperCase();
+      if (blocked.has(upper)) return false;
+      if (upper.includes('QTY WEIGHT')) return false;
+      return true;
+    });
+  }
+
   function render(inventory) {
     if (!inventory) return;
     cachedInventory = inventory;
@@ -266,7 +292,7 @@
 
     // items
     const listEl = document.getElementById('inv-list');
-    const items = inventory.items || [];
+    const items = sanitizeInventoryItems(inventory.items || []);
     // remove old rows (keep header)
     listEl.querySelectorAll('.inv-item').forEach(el => el.remove());
     const emptyEl = document.getElementById('inv-empty');
@@ -281,7 +307,7 @@
       const row = document.createElement('div');
       row.className = 'inv-item';
       row.innerHTML = `
-        <span class="inv-item-name" title="${item.name}">${item.name}</span>
+        <span class="inv-item-name" title="${item.name || item.itemId || 'Unknown Item'}">${item.name || item.itemId || 'Unknown Item'}</span>
         <span class="inv-item-qty">${item.quantity ?? 1}</span>
         <span class="inv-item-wt">${item.weight || '—'}</span>
         <span class="inv-item-equip">${item.equipped

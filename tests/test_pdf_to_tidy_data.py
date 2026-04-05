@@ -131,6 +131,32 @@ class ExtractInventoryTripletsNoiseTests(unittest.TestCase):
             ],
         )
 
+    def test_extract_inventory_triplets_skips_capacity_and_composite_headers(self) -> None:
+        lines = [
+            "WEIGHT CARRIED",
+            "1",
+            "--",
+            "ENCUMBERED",
+            "1",
+            "--",
+            "PUSH/DRAG/LIFT",
+            "1",
+            "--",
+            "NAME QTY WEIGHT NAME QTY WEIGHT",
+            "1",
+            "--",
+            "ATTUNED MAGIC ITEMS QTY WEIGHT",
+            "1",
+            "--",
+            "Longsword",
+            "1",
+            "3 lb.",
+        ]
+
+        result = pdf_to_tidy_data.extract_inventory_triplets(lines)
+
+        self.assertEqual(result, ["Longsword | qty=1 | weight=3 lb."])
+
 
 class ParseSavesAndSkillsTests(unittest.TestCase):
     def test_parse_saves_and_skills_returns_all_rows_with_proficiency_flags(self) -> None:

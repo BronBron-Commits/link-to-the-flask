@@ -547,6 +547,15 @@ def extract_feature_lines_from_markers(lines: list[str]) -> list[str]:
 def extract_inventory_triplets(lines: list[str]) -> list[str]:
     out: list[str] = []
     currency_labels = {"CP", "SP", "EP", "GP", "PP"}
+    blocked_inventory_labels = {
+        "WEIGHT CARRIED",
+        "ENCUMBERED",
+        "PUSH/DRAG/LIFT",
+        "ATTUNED MAGIC ITEMS",
+        "ATTUNED MAGIC ITEMS QTY WEIGHT",
+        "NAME QTY WEIGHT NAME QTY WEIGHT",
+        "NAME QTY WEIGHT",
+    }
     for i in range(len(lines) - 2):
         name = lines[i]
         qty = lines[i + 1]
@@ -558,6 +567,10 @@ def extract_inventory_triplets(lines: list[str]) -> list[str]:
         if name in {"NAME", "QTY", "WEIGHT", "ATTUNED MAGIC ITEMS"}:
             continue
         if name.upper() in currency_labels:
+            continue
+        if name.upper() in blocked_inventory_labels:
+            continue
+        if "QTY WEIGHT" in name.upper():
             continue
         if any(token in name.upper() for token in _SECTION_NOISE_SUBSTRINGS):
             continue
