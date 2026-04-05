@@ -49,15 +49,34 @@ const serverEntityNetworkIds = new Set();
 
 const CLIENT_RESUME_STORAGE_KEY = 'map3d_resume_key_v1';
 
+function getResumeKeyStorage() {
+    try {
+        if (typeof window !== 'undefined' && window.sessionStorage) {
+            return window.sessionStorage;
+        }
+    } catch (_err) {
+        return null;
+    }
+    return null;
+}
+
 function getOrCreateClientResumeKey() {
     const fallback = `anon-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    const storage = getResumeKeyStorage();
     try {
-        const existing = String(localStorage.getItem(CLIENT_RESUME_STORAGE_KEY) || '').trim();
+        const existing = String(storage?.getItem(CLIENT_RESUME_STORAGE_KEY) || '').trim();
         if (existing) return existing;
         const generated = (window.crypto && typeof window.crypto.randomUUID === 'function')
             ? window.crypto.randomUUID()
             : fallback;
-        localStorage.setItem(CLIENT_RESUME_STORAGE_KEY, generated);
+        storage?.setItem(CLIENT_RESUME_STORAGE_KEY, generated);
+        try {
+            // Old builds used localStorage, which is shared across tabs and caused
+            // new tabs to impersonate an existing client session.
+            window.localStorage?.removeItem(CLIENT_RESUME_STORAGE_KEY);
+        } catch (_storageCleanupErr) {
+            // Best-effort cleanup only.
+        }
         return generated;
     } catch (_err) {
         return fallback;
