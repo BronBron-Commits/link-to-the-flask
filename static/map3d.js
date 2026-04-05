@@ -1868,6 +1868,7 @@ let inspectorMenu = null;
 let inspectorTab = null;
 let actionMenuEl = null;
 let ffxMenuState = { openSub: null };
+let dmWorldSetpiece = null;
 let diceCinematicOverlay = null;
 let diceCinematicTimer = null;
 let diceCinematicActive = false;
@@ -12455,28 +12456,25 @@ function forceLeaveCombatPresentation(reason = 'sync') {
     updateDmControlPanel();
 
     // Slide DM setpiece + hands back up and restore original world transform.
-    // Guard with typeof: this function can fire from a socket event before
-    // dmWorldSetpiece (a const) is initialised further down the file.
-    const _flapSetpiece = typeof dmWorldSetpiece !== 'undefined' ? dmWorldSetpiece : null;
-    if (_flapSetpiece && !_flapSetpiece.userData._slideExitPending) {
-        _flapSetpiece.userData._slideExitPending = true;
-        const restPos = _flapSetpiece.userData._restPos;
-        const restRotY = _flapSetpiece.userData._restRot && _flapSetpiece.userData._restRot.y;
-        const startY = _flapSetpiece.position.y;
+    if (dmWorldSetpiece && !dmWorldSetpiece.userData._slideExitPending) {
+        dmWorldSetpiece.userData._slideExitPending = true;
+        const restPos = dmWorldSetpiece.userData._restPos;
+        const restRotY = dmWorldSetpiece.userData._restRot && dmWorldSetpiece.userData._restRot.y;
+        const startY = dmWorldSetpiece.position.y;
         const exitY = startY + 35;
         const duration = 700;
         const start = performance.now();
         const slide = () => {
             const t = Math.min(1, (performance.now() - start) / duration);
             const eased = t * t;
-            _flapSetpiece.position.y = startY + (exitY - startY) * eased;
+            dmWorldSetpiece.position.y = startY + (exitY - startY) * eased;
             if (t < 1) {
                 requestAnimationFrame(slide);
             } else {
-                _flapSetpiece.userData._slideExitPending = false;
+                dmWorldSetpiece.userData._slideExitPending = false;
                 if (restPos) {
-                    _flapSetpiece.position.copy(restPos);
-                    if (restRotY !== undefined) _flapSetpiece.rotation.y = restRotY;
+                    dmWorldSetpiece.position.copy(restPos);
+                    if (restRotY !== undefined) dmWorldSetpiece.rotation.y = restRotY;
                 }
             }
         };
@@ -17700,7 +17698,7 @@ losWall.userData.blockLOS = true;
 losWall.userData.name = 'LOS Wall';
 scene.add(losWall);
 
-const dmWorldSetpiece = createWorldDmSetpiece();
+dmWorldSetpiece = createWorldDmSetpiece();
 dmWorldSetpiece.position.set(19, 36.5, 44);
 dmWorldSetpiece.rotation.y = Math.PI;
 scene.add(dmWorldSetpiece);
