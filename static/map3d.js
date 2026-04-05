@@ -1083,14 +1083,9 @@ function registerSocketHandlers() {
             appendConsoleHistory('Combat request rejected by DM', 'error');
             return;
         }
-
-        const target = targetId ? findCombatActorById(targetId) : null;
-        if (target) {
-            tryEnterCombat(target, {
-                bypassDmApproval: true,
-                skipNetworkEmit: true,
-            });
-        }
+        // Server is authoritative for combat mode and presentation. Wait for
+        // broadcast world/combat events instead of switching locally.
+        appendConsoleHistory('Combat request approved. Waiting for server state...', 'ok');
         pendingCombatStartRequest = null;
     });
 
@@ -12982,6 +12977,14 @@ function tryEnterCombat(target, options = {}) {
         return false;
     }
 
+    const serverAuthoritative = !!(socket && socket.connected);
+    if (serverAuthoritative && modeManager.current !== MODE.DM) {
+        // Connected player clients should hydrate combat presentation from
+        // server broadcasts to keep all clients in lockstep (skybox/UI included).
+        appendConsoleHistory('Combat start requested. Waiting for server sync...', 'ok');
+        return false;
+    }
+
     console.info('Entering combat...');
     hideCombatOutcomeOverlay();
     combatTimeline.length = 0;
@@ -13096,6 +13099,11 @@ function tryEnterCombat(target, options = {}) {
 }
 
 function exitCombatIfNoTargets() {
+    if (socket && socket.connected && modeManager.current !== MODE.DM) {
+        // Remote player clients should not end combat locally; wait for server
+        // world/combat state updates to drive presentation transitions.
+        return;
+    }
     if (trainingDummies.length > 0) return;
     combatTimeline.length = 0;
     resetCombatActionHistory();
