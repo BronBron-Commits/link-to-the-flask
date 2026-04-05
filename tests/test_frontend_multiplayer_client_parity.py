@@ -23,6 +23,12 @@ class FrontendMultiplayerClientParityTests(unittest.TestCase):
         self.assertNotIn('&& isPrimaryClient()', self.source)
         self.assertNotIn('isPrimaryClient()\n        ? qualityCap', self.source)
 
+    def test_player_hp_parsing_supports_snake_case_payloads(self) -> None:
+        self.assertIn('player.maxHp ?? player.max_hp', self.source)
+        self.assertIn('player.hp ?? player.currentHp ?? player.current_hp', self.source)
+        self.assertIn('combatSyncPlayer?.maxHp ?? combatSyncPlayer?.max_hp', self.source)
+        self.assertIn('combatSyncPlayer?.hp ?? combatSyncPlayer?.currentHp ?? combatSyncPlayer?.current_hp', self.source)
+
 
 if __name__ == '__main__':
     unittest.main()

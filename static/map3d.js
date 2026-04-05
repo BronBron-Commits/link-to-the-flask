@@ -5620,11 +5620,16 @@ function upsertPlayerAvatar(player) {
     avatarRoot.userData.networkId = String(player.networkId || player.actorId || player.id || avatarRoot.userData.networkId || '').trim() || player.id;
     avatarRoot.userData.actorId = String(player.actorId || player.networkId || player.id || avatarRoot.userData.actorId || '').trim() || player.id;
     avatarRoot.userData.playerLabel = String(player.actorId || player.id || avatarRoot.userData.playerLabel || 'Player');
-    if (Number.isFinite(Number(player.combatSync?.player?.hp))) {
-        avatarRoot.userData.hp = Math.max(0, Number(player.combatSync.player.hp));
+    const combatSyncPlayer = player.combatSync && typeof player.combatSync.player === 'object'
+        ? player.combatSync.player
+        : null;
+    const combatSyncHp = Number(combatSyncPlayer?.hp ?? combatSyncPlayer?.currentHp ?? combatSyncPlayer?.current_hp);
+    if (Number.isFinite(combatSyncHp)) {
+        avatarRoot.userData.hp = Math.max(0, combatSyncHp);
     }
-    if (Number.isFinite(Number(player.combatSync?.player?.maxHp))) {
-        avatarRoot.userData.maxHp = Math.max(1, Number(player.combatSync.player.maxHp));
+    const combatSyncMaxHp = Number(combatSyncPlayer?.maxHp ?? combatSyncPlayer?.max_hp);
+    if (Number.isFinite(combatSyncMaxHp)) {
+        avatarRoot.userData.maxHp = Math.max(1, combatSyncMaxHp);
     }
     
     // Update position if available
@@ -5637,13 +5642,18 @@ function upsertPlayerAvatar(player) {
     }
 
     if (!avatarRoot.userData) avatarRoot.userData = {};
-    if (Number.isFinite(Number(player.maxHp))) {
-        avatarRoot.userData.maxHp = Math.max(1, Number(player.maxHp));
+    const playerMaxHp = Number(player.maxHp ?? player.max_hp);
+    if (Number.isFinite(playerMaxHp)) {
+        avatarRoot.userData.maxHp = Math.max(1, playerMaxHp);
     } else if (!Number.isFinite(Number(avatarRoot.userData.maxHp))) {
-        avatarRoot.userData.maxHp = 100;
+        const fallbackHpForMax = Number(player.hp ?? player.currentHp ?? player.current_hp);
+        avatarRoot.userData.maxHp = Number.isFinite(fallbackHpForMax) && fallbackHpForMax > 0
+            ? Math.max(1, fallbackHpForMax)
+            : 100;
     }
-    if (Number.isFinite(Number(player.hp))) {
-        avatarRoot.userData.hp = Math.max(0, Math.min(avatarRoot.userData.maxHp, Number(player.hp)));
+    const playerHp = Number(player.hp ?? player.currentHp ?? player.current_hp);
+    if (Number.isFinite(playerHp)) {
+        avatarRoot.userData.hp = Math.max(0, Math.min(avatarRoot.userData.maxHp, playerHp));
     } else if (!Number.isFinite(Number(avatarRoot.userData.hp))) {
         avatarRoot.userData.hp = avatarRoot.userData.maxHp;
     }
@@ -7530,8 +7540,10 @@ function syncLocalPlayerProfile(profile) {
     const summary = profile.summary && typeof profile.summary === 'object' ? profile.summary : {};
     const master = profile.master && typeof profile.master === 'object' ? profile.master : null;
     const inCombatNow = currentGameMode === GAME_MODE.COMBAT || combatState.inCombat;
-    const nextMaxHp = Number.isFinite(Number(summary.max_hp)) ? Number(summary.max_hp) : null;
-    const nextCurrentHp = Number.isFinite(Number(summary.current_hp)) ? Number(summary.current_hp) : null;
+    const summaryMaxHpRaw = summary.max_hp ?? summary.maxHp ?? summary.hit_points;
+    const summaryCurrentHpRaw = summary.current_hp ?? summary.currentHp ?? summary.hit_points;
+    const nextMaxHp = Number.isFinite(Number(summaryMaxHpRaw)) ? Number(summaryMaxHpRaw) : null;
+    const nextCurrentHp = Number.isFinite(Number(summaryCurrentHpRaw)) ? Number(summaryCurrentHpRaw) : null;
 
     if (nextMaxHp !== null) {
         playerState.maxHp = nextMaxHp;
@@ -7572,9 +7584,10 @@ async function bootstrapPlayerCombatProfile(force = false) {
             if (socket && socket.connected) {
                 const summary = payload.summary && typeof payload.summary === 'object' ? payload.summary : {};
                 const master = payload.master && typeof payload.master === 'object' ? payload.master : {};
+                const summaryMaxHp = summary.max_hp ?? summary.maxHp ?? summary.hit_points ?? null;
                 socket.emit('player-character-stats', {
                     ac: summary.armor_class ?? null,
-                    maxHp: summary.max_hp ?? null,
+                    maxHp: summaryMaxHp,
                     initiativeBonus: summary.initiative_bonus ?? null,
                     speedFt: summary.speed_ft ?? null,
                     movementCapabilities: deriveMovementCapabilitiesFromMaster(master),
