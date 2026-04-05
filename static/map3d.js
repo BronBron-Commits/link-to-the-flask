@@ -1473,8 +1473,32 @@ import '/static/inventory.js';
 import { GLTFLoader } from '/static/GLTFLoader.js';
 import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from '/static/avatar_rig_runtime.js';
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
-import { ITEM_DB, equipItem, useItem, loadEngineEntityFromUrls } from '/static/utils/engineEntityContract.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
+
+let ITEM_DB = {};
+let equipItem = () => false;
+let useItem = () => false;
+let loadEngineEntityFromUrls = null;
+let engineEntityContractModuleReady = false;
+
+async function ensureEngineEntityContractModule() {
+    if (engineEntityContractModuleReady) return;
+    try {
+        const mod = await import('/static/utils/engineEntityContract.js');
+        ITEM_DB = mod.ITEM_DB || {};
+        equipItem = typeof mod.equipItem === 'function' ? mod.equipItem : (() => false);
+        useItem = typeof mod.useItem === 'function' ? mod.useItem : (() => false);
+        loadEngineEntityFromUrls = typeof mod.loadEngineEntityFromUrls === 'function' ? mod.loadEngineEntityFromUrls : null;
+        engineEntityContractModuleReady = true;
+    } catch (err) {
+        console.warn('[ENGINE] engineEntityContract.js unavailable; using fallback contract loader.', err);
+        ITEM_DB = {};
+        equipItem = () => false;
+        useItem = () => false;
+        loadEngineEntityFromUrls = null;
+        engineEntityContractModuleReady = true;
+    }
+}
 // Selection logic: only selected object gets a green BoxHelper
 let selectedObject = null;
 let selectionBoxHelper = null;
@@ -4913,7 +4937,22 @@ async function initDataDrivenLayer(staticWorldRoot) {
         return;
     }
 
-    const engineContract = await loadEngineEntityFromUrls([
+    await ensureEngineEntityContractModule();
+
+    const fallbackLoadEngineEntityFromUrls = async (urls) => {
+        const entity = await loadFirstJson(urls);
+        if (!entity || typeof entity !== 'object') {
+            throw new Error('Engine entity contract not found in fallback loader');
+        }
+        return {
+            entity,
+            sourceUrl: 'fallback-json',
+        };
+    };
+
+    const loadContract = loadEngineEntityFromUrls || fallbackLoadEngineEntityFromUrls;
+
+    const engineContract = await loadContract([
         '/data/character_tidy/engine_entity.json',
         '/engine_entity.json',
         '/static/engine_entity.json',

@@ -116,11 +116,12 @@ async function ensureFireplaceMusicSetup() {
 
 async function startFireplaceMusic() {
   if (fireplaceMusicStarted) return;
-  const ok = await ensureFireplaceMusicSetup();
-  if (!ok || !window.Tone) return;
-
+  if (!window.Tone) return;
   const Tone = window.Tone;
   await Tone.start();
+
+  const ok = await ensureFireplaceMusicSetup();
+  if (!ok) return;
 
   if (Tone.Transport.state !== 'started') {
     Tone.Transport.stop();
