@@ -15290,7 +15290,10 @@ function updateAllPlayerHeadHealthBars() {
     const avatars = scene.userData && scene.userData.playerAvatars ? scene.userData.playerAvatars : null;
     const activeRemoteKeys = new Set();
     if (avatars) {
+        const ownId = (socket && socket.id) ? socket.id : localPlayerId;
         for (const [playerId, avatarRoot] of Object.entries(avatars)) {
+            // Skip the local player's own avatar — already rendered as 'local-player'.
+            if (ownId && playerId === ownId) continue;
             const key = `remote-${playerId}`;
             activeRemoteKeys.add(key);
             if (!avatarRoot || !avatarRoot.parent || !avatarRoot.visible) {
