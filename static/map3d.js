@@ -18333,25 +18333,25 @@ updateCombatUI();
     const s = document.createElement('style');
     s.id = 'ffx-menu-style';
     s.textContent = `
-    #action-menu { font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; }
+    #action-menu { font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; opacity:1; }
     .ffx-main { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.45); border-radius:10px 0 0 10px; min-width:215px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9),inset 0 1px 0 rgba(56,189,248,0.18); }
     .ffx-main-solo { border-radius:10px; }
     .ffx-sub { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.35); border-left:none; border-radius:0 10px 10px 0; min-width:190px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); }
     .ffx-header { display:flex; gap:8px; align-items:center; padding:7px 14px 6px; border-bottom:1px solid rgba(56,189,248,0.18); background:rgb(0,20,50); color:#7ecfff; font-size:11.5px; font-weight:600; letter-spacing:0.04em; }
     .ffx-res-pip { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; vertical-align:middle; }
     .ffx-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
-    .ffx-row:hover:not(.ffx-row-disabled) { background:rgba(14,64,112,0.5); border-left-color:rgba(56,189,248,0.45); }
-    .ffx-row.ffx-row-active { background:rgba(14,64,112,0.82); border-left-color:#38bdf8; color:#e8f8ff; }
+    .ffx-row:hover:not(.ffx-row-disabled) { background:rgb(14,64,112); border-left-color:rgba(56,189,248,0.45); }
+    .ffx-row.ffx-row-active { background:rgb(14,64,112); border-left-color:#38bdf8; color:#e8f8ff; }
     .ffx-row.ffx-row-disabled { color:#334a57; cursor:not-allowed; }
     .ffx-row.ffx-row-urgent { border-left-color:#ef4444 !important; color:#fca5a5 !important; }
     .ffx-arrow { width:13px; flex-shrink:0; color:#38bdf8; font-size:10px; }
     .ffx-label { flex:1; font-size:14px; font-weight:500; letter-spacing:0.02em; white-space:nowrap; }
     .ffx-detail { color:#507a92; font-size:12px; white-space:nowrap; padding-left:8px; }
-    .ffx-badge { background:rgba(56,189,248,0.18); border:1px solid rgba(56,189,248,0.38); color:#7ecfff; font-size:11px; border-radius:10px; padding:1px 6px; margin-left:6px; }
-    .ffx-divider { height:1px; margin:2px 0; background:rgba(56,189,248,0.1); }
+    .ffx-badge { background:rgb(22,58,90); border:1px solid rgba(56,189,248,0.38); color:#7ecfff; font-size:11px; border-radius:10px; padding:1px 6px; margin-left:6px; }
+    .ffx-divider { height:1px; margin:2px 0; background:rgb(18,40,66); }
     .ffx-sub-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
-    .ffx-sub-row:hover:not(.ffx-sub-disabled) { background:rgba(14,64,112,0.5); border-left-color:rgba(56,189,248,0.45); }
-    .ffx-sub-row.ffx-sub-active { background:rgba(14,64,112,0.82); border-left-color:#38bdf8; color:#e8f8ff; }
+    .ffx-sub-row:hover:not(.ffx-sub-disabled) { background:rgb(14,64,112); border-left-color:rgba(56,189,248,0.45); }
+    .ffx-sub-row.ffx-sub-active { background:rgb(14,64,112); border-left-color:#38bdf8; color:#e8f8ff; }
     .ffx-sub-row.ffx-sub-disabled { color:#334a57; cursor:not-allowed; }
     .ffx-confirm-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgb(0,10,24); border-top:1px solid rgba(56,189,248,0.28); }
     .ffx-confirm-btn { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; border:1px solid; transition:background 0.1s; background:none; }
@@ -18366,7 +18366,7 @@ updateCombatUI();
 
 actionMenuEl = document.createElement('div');
 actionMenuEl.id = 'action-menu';
-actionMenuEl.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:2300;pointer-events:auto;visibility:hidden;user-select:none;display:flex;align-items:flex-end;';
+actionMenuEl.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:2300;pointer-events:auto;visibility:hidden;user-select:none;display:flex;align-items:flex-end;';
 document.body.appendChild(actionMenuEl);
 
 function setActionMenuVisible(visible) {
