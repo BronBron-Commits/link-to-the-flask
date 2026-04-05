@@ -12455,25 +12455,28 @@ function forceLeaveCombatPresentation(reason = 'sync') {
     updateDmControlPanel();
 
     // Slide DM setpiece + hands back up and restore original world transform.
-    if (dmWorldSetpiece && !dmWorldSetpiece.userData._slideExitPending) {
-        dmWorldSetpiece.userData._slideExitPending = true;
-        const restPos = dmWorldSetpiece.userData._restPos;
-        const restRotY = dmWorldSetpiece.userData._restRot && dmWorldSetpiece.userData._restRot.y;
-        const startY = dmWorldSetpiece.position.y;
+    // Guard with typeof: this function can fire from a socket event before
+    // dmWorldSetpiece (a const) is initialised further down the file.
+    const _flapSetpiece = typeof dmWorldSetpiece !== 'undefined' ? dmWorldSetpiece : null;
+    if (_flapSetpiece && !_flapSetpiece.userData._slideExitPending) {
+        _flapSetpiece.userData._slideExitPending = true;
+        const restPos = _flapSetpiece.userData._restPos;
+        const restRotY = _flapSetpiece.userData._restRot && _flapSetpiece.userData._restRot.y;
+        const startY = _flapSetpiece.position.y;
         const exitY = startY + 35;
         const duration = 700;
         const start = performance.now();
         const slide = () => {
             const t = Math.min(1, (performance.now() - start) / duration);
             const eased = t * t;
-            dmWorldSetpiece.position.y = startY + (exitY - startY) * eased;
+            _flapSetpiece.position.y = startY + (exitY - startY) * eased;
             if (t < 1) {
                 requestAnimationFrame(slide);
             } else {
-                dmWorldSetpiece.userData._slideExitPending = false;
+                _flapSetpiece.userData._slideExitPending = false;
                 if (restPos) {
-                    dmWorldSetpiece.position.copy(restPos);
-                    if (restRotY !== undefined) dmWorldSetpiece.rotation.y = restRotY;
+                    _flapSetpiece.position.copy(restPos);
+                    if (restRotY !== undefined) _flapSetpiece.rotation.y = restRotY;
                 }
             }
         };
