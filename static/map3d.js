@@ -1639,6 +1639,7 @@ let combatAudioUnlocked = false;
 let confirmAttackSnapAudio = null;
 let battleMusicAudio = null;
 let mainThemeAudio = null;
+let docksMusicAudio = null;
 let legacyLoopMusicMode = 'unknown';
 const COMBAT_SFX_ENABLED = true;
 const COMBAT_MUSIC_ENABLED = false;
@@ -4402,7 +4403,9 @@ function finishLoadingOverlay(message = 'Ready') {
             if (loadingOverlayRoot && loadingOverlayRoot.parentElement) {
                 loadingOverlayRoot.parentElement.removeChild(loadingOverlayRoot);
             }
-            // Keep main theme running into free roam after loading completes.
+            // Fade out loading screen track and transition to docks ambient.
+            stopMainTheme();
+            startDocksTheme();
             loadingOverlayRoot = null;
             loadingOverlayLog = null;
             loadingOverlayStatus = null;
@@ -4420,12 +4423,17 @@ function finishLoadingOverlay(message = 'Ready') {
 }
 
 function startMainTheme() {
+    // maintheme.wav is the loading screen track only — plays once, then docks.wav takes over.
     try {
         if (!mainThemeAudio) {
             mainThemeAudio = new Audio('/static/maintheme.wav');
-            mainThemeAudio.loop = true;
+            mainThemeAudio.loop = false;  // Loading screen only — does not loop
             mainThemeAudio.volume = 0;
             mainThemeAudio.preload = 'auto';
+            // When maintheme ends naturally, transition to docks ambient
+            mainThemeAudio.addEventListener('ended', () => {
+                startDocksTheme();
+            }, { once: true });
         }
         const playPromise = mainThemeAudio.play();
         if (playPromise && typeof playPromise.then === 'function') {
@@ -4443,6 +4451,59 @@ function startMainTheme() {
                 // Autoplay blocked — will play on next user gesture
             });
         }
+    } catch (_err) {
+        // Ignore audio errors
+    }
+}
+
+function startDocksTheme() {
+    // Ambient exploration music — loops continuously after loading screen.
+    try {
+        if (!docksMusicAudio) {
+            docksMusicAudio = new Audio('/static/docks.wav');
+            docksMusicAudio.loop = true;
+            docksMusicAudio.volume = 0;
+            docksMusicAudio.preload = 'auto';
+        }
+        const playPromise = docksMusicAudio.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+            playPromise.then(() => {
+                const targetVol = 0.45;
+                const steps = 30;
+                const stepMs = 60;
+                let step = 0;
+                const fadeIn = setInterval(() => {
+                    step += 1;
+                    docksMusicAudio.volume = Math.min(targetVol, (step / steps) * targetVol);
+                    if (step >= steps) clearInterval(fadeIn);
+                }, stepMs);
+            }).catch(() => {
+                // Autoplay blocked
+            });
+        }
+    } catch (_err) {
+        // Ignore audio errors
+    }
+}
+
+function stopDocksTheme() {
+    if (!docksMusicAudio) return;
+    try {
+        const audio = docksMusicAudio;
+        const steps = 30;
+        const stepMs = 50;
+        const startVol = audio.volume;
+        let step = 0;
+        const fadeOut = setInterval(() => {
+            step += 1;
+            audio.volume = Math.max(0, startVol * (1 - step / steps));
+            if (step >= steps) {
+                clearInterval(fadeOut);
+                audio.pause();
+                audio.currentTime = 0;
+                audio.volume = 0;
+            }
+        }, stepMs);
     } catch (_err) {
         // Ignore audio errors
     }
@@ -10519,11 +10580,12 @@ function syncCombatMusicToGameMode() {
     if (legacyLoopMusicMode !== desiredLegacyMode) {
         legacyLoopMusicMode = desiredLegacyMode;
         if (desiredLegacyMode === 'combat') {
+            stopDocksTheme();
             stopMainTheme();
             startBattleMusic();
         } else {
             stopBattleMusic();
-            startMainTheme();
+            startDocksTheme();
         }
     }
     updateCombatMusicTheme(true);
