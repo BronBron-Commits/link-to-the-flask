@@ -771,17 +771,29 @@ function hydrateWorld(payload) {
         applySceneState(sceneState);
     }
 
-    // Authoritative combat mode source is payload.mode only.
+    // Combat authority: prefer payload.mode, but fall back to payload.combat.state.inCombat
+    // for backward compatibility and transitional snapshots.
     const modeRaw = String(payload.mode || '').toLowerCase();
     const modeFromWorld = modeRaw === 'combat' ? GAME_MODE.COMBAT : (modeRaw === 'exploration' ? GAME_MODE.FREE : null);
+    const combatFromPayload = (payload.combat && typeof payload.combat === 'object') ? payload.combat : null;
+    const combatStateFromPayload = combatFromPayload && typeof combatFromPayload.state === 'object'
+        ? combatFromPayload.state
+        : null;
+    const inCombatFlag = !!(combatStateFromPayload && combatStateFromPayload.inCombat === true);
+
     const shouldBeInCombat = modeFromWorld === GAME_MODE.COMBAT
         ? true
-        : (modeFromWorld === GAME_MODE.FREE ? false : !!combatState.inCombat);
+        : (modeFromWorld === GAME_MODE.FREE
+            ? (inCombatFlag ? true : false)
+            : (inCombatFlag ? true : !!combatState.inCombat));
+
+    const wasInCombat = !!combatState.inCombat;
     combatState.inCombat = shouldBeInCombat;
+
     if (shouldBeInCombat) {
         ensureCombatEnvironmentPresentation();
-    }
-    if (!shouldBeInCombat) {
+    } else if (wasInCombat || currentGameMode === GAME_MODE.COMBAT) {
+        // Prevent world-update spam from repeatedly forcing exit while already out of combat.
         forceLeaveCombatPresentation('world-sync');
     }
     updateSceneVisibilityForCombatState(shouldBeInCombat);
@@ -1277,6 +1289,29 @@ function registerSocketHandlers() {
         }
     });
 
+    socket.on('inventory-updated', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        const packetSid = String(packet.sid || '').trim();
+        const socketSid = String((socket && socket.id) || '').trim();
+        const localSid = String(localPlayerId || '').trim();
+        const appliesToLocal = !!packetSid && (packetSid === socketSid || packetSid === localSid);
+        if (!appliesToLocal) return;
+
+        if (!window.loadedEngineEntity || typeof window.loadedEngineEntity !== 'object') return;
+        if (packet.inventory && typeof packet.inventory === 'object') {
+            window.loadedEngineEntity.inventory = structuredClone(packet.inventory);
+        }
+        if (packet.equippedWeapon && typeof packet.equippedWeapon === 'object') {
+            window.loadedEngineEntity.combat = window.loadedEngineEntity.combat || {};
+            window.loadedEngineEntity.combat.weapon = structuredClone(packet.equippedWeapon);
+        }
+    });
+
+    socket.on('inventory-error', (packet) => {
+        const reason = String((packet && packet.reason) || 'unknown');
+        appendConsoleHistory(`[INV] inventory action denied: ${reason}`, 'error');
+    });
+
     socket.on('combat-turn-sync-denied', () => {
         // Server is authoritative — sync attempts are silently ignored; incoming combat-turn drives state.
         console.warn('[COMBAT] combat-turn-sync rejected: server-authoritative mode active');
@@ -1438,6 +1473,7 @@ import '/static/inventory.js';
 import { GLTFLoader } from '/static/GLTFLoader.js';
 import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from '/static/avatar_rig_runtime.js';
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
+import { ITEM_DB, equipItem, useItem, loadEngineEntityFromUrls } from '/static/utils/engineEntityContract.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
 // Selection logic: only selected object gets a green BoxHelper
 let selectedObject = null;
@@ -4876,6 +4912,48 @@ async function initDataDrivenLayer(staticWorldRoot) {
     if (!ENABLE_DATA_DRIVEN_ENTITY_SPAWN) {
         return;
     }
+
+    const engineContract = await loadEngineEntityFromUrls([
+        '/data/character_tidy/engine_entity.json',
+        '/engine_entity.json',
+        '/static/engine_entity.json',
+    ]);
+    window.loadedEngineEntity = engineContract.entity;
+    window.inventorySystem = {
+        itemDb: ITEM_DB,
+        equipItem: (instanceId) => {
+            if (socket) {
+                socket.emit('equip-item', { instanceId });
+                return true;
+            }
+            return equipItem(window.loadedEngineEntity, instanceId);
+        },
+        unequipItem: (instanceId) => {
+            if (socket) {
+                socket.emit('unequip-item', { instanceId });
+                return true;
+            }
+            if (!window.loadedEngineEntity || !window.loadedEngineEntity.inventory) return false;
+            const items = Array.isArray(window.loadedEngineEntity.inventory.items) ? window.loadedEngineEntity.inventory.items : [];
+            const item = items.find((row) => row && row.instanceId === instanceId);
+            if (!item) return false;
+            item.equipped = false;
+            return true;
+        },
+        useItem: (instanceId) => {
+            if (socket) {
+                socket.emit('use-item', { instanceId });
+                return true;
+            }
+            return useItem(window.loadedEngineEntity, instanceId);
+        },
+        lootItem: (targetSid, itemId, qty = 1) => {
+            if (!socket) return false;
+            socket.emit('loot-item', { targetSid, itemId, qty });
+            return true;
+        },
+    };
+    console.log(`Engine entity contract loaded + validated (${engineContract.sourceUrl})`);
 
     const templateRecord = await loadFirstJson([
         '/data/character_tidy/character_template.json',
