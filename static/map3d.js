@@ -13115,8 +13115,11 @@ function tryEnterCombat(target, options = {}) {
 
     const serverAuthoritative = !!(socket && socket.connected);
     if (serverAuthoritative && modeManager.current !== MODE.DM) {
-        // Connected player clients should hydrate combat presentation from
-        // server broadcasts to keep all clients in lockstep (skybox/UI included).
+        // Delegate to the server — it will broadcast combat-state to all clients
+        // which drives the local presentation in lockstep.
+        if (socket) {
+            socket.emit('combat-start', { targetId: getCombatActorId(target) });
+        }
         appendConsoleHistory('Combat start requested. Waiting for server sync...', 'ok');
         return false;
     }
