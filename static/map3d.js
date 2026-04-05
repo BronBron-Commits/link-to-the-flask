@@ -2156,17 +2156,21 @@ function hasModePermission(permissionKey, mode = modeManager.current) {
     return allowed.includes(mode);
 }
 
+function isDmLikeMode(mode = modeManager.current) {
+    return mode === MODE.DM || mode === MODE.DEV;
+}
+
 function isDmObserverMode() {
     return modeManager.current === MODE.DM && dmAuthorityLayer === DM_AUTHORITY_LAYER.OBSERVER;
 }
 
 // True whenever the DM camera is under free-fly control (not possessing an actor).
 function isDmFreeCamera() {
-    return modeManager.current === MODE.DM && !getControlledActor();
+    return isDmLikeMode() && !getControlledActor();
 }
 
 function hasDmPossessionControl() {
-    return modeManager.current === MODE.DM && !!getControlledActor();
+    return isDmLikeMode() && !!getControlledActor();
 }
 
 function canUseStandardMovementControls() {
@@ -4175,9 +4179,10 @@ function applyRuntimeMode(mode) {
         return;
     }
 
-    const allowPlayerControl = mode === MODE.PLAYER || mode === MODE.DM;
+    const allowPlayerControl = mode === MODE.PLAYER || isDmLikeMode(mode);
     const inPlayerMode = mode === MODE.PLAYER;
     const inDmMode = mode === MODE.DM;
+    const inDmLikeMode = isDmLikeMode(mode);
 
     if (!allowPlayerControl || inDmMode) {
         resetTransientInputState();
@@ -4227,7 +4232,7 @@ function applyRuntimeMode(mode) {
         setDmAutoStepEnabled(false);
     }
 
-    if (mode === MODE.DM && !getControlledActor()) {
+    if (inDmLikeMode && !getControlledActor()) {
         releasePointerLockIfActive();
         startLocalSimulation();
         dmAuthorityLayer = DM_AUTHORITY_LAYER.SIMULATOR;
@@ -9880,7 +9885,7 @@ function getControlledActor() {
 }
 
 function getActiveInputActor() {
-    if (modeManager.current !== MODE.DM) return playerState;
+    if (!isDmLikeMode()) return playerState;
     return getControlledActor() || playerState;
 }
 
@@ -9933,7 +9938,7 @@ function releasePossession() {
     const hadControl = !!getControlledActor();
     controlledActor = null;
     controlledActorId = null;
-    if (modeManager.current === MODE.DM) {
+    if (isDmLikeMode()) {
         attachCameraToPlayerRigView();
         activeCamera = dmCamera || camera;
     }
@@ -12582,7 +12587,7 @@ function canMoveTo(targetPos) {
 
 function activateCombatCamera() {
     // DM free-fly camera should remain in control even during combat.
-    if (modeManager.current === MODE.DM && isDmFreeCamera()) {
+    if (isDmFreeCamera()) {
         return;
     }
     if (!camera || !playerRig) return;
@@ -12606,7 +12611,7 @@ function activateCombatCamera() {
 
 function deactivateCombatCamera() {
     // DM free-fly mode does not use player combat camera state.
-    if (modeManager.current === MODE.DM && isDmFreeCamera()) {
+    if (isDmFreeCamera()) {
         combatCameraActive = false;
         return;
     }
@@ -12634,7 +12639,7 @@ function focusCameraOnAction(target, options = {}) {
 }
 
 function updateCombatCamera(delta) {
-    if (modeManager.current === MODE.DM && isDmFreeCamera()) return false;
+    if (isDmFreeCamera()) return false;
     if (!combatCameraActive || currentGameMode !== GAME_MODE.COMBAT) return false;
 
     // Freeze camera motion while action review/confirm UI is open.
@@ -19101,7 +19106,7 @@ canvas.addEventListener('click', (event) => {
     }
     if (isInputLockedForCombat('ACTION')) return;
     if (isDmObserverMode()) return;
-    if (modeManager.current === MODE.DM) return;
+    if (isDmLikeMode()) return;
     unlockCombatAudio();
     if (!combatCameraActive) {
         canvas.requestPointerLock();
@@ -19254,7 +19259,7 @@ document.addEventListener('keydown', (event) => {
     const isPlayerInputMode = canUseStandardMovementControls();
 
     if (!isPlayerInputMode) {
-        if (modeManager.current === MODE.DM && !event.repeat && (event.code === 'Digit4' || event.code === 'Numpad4')) {
+        if (isDmLikeMode() && !event.repeat && (event.code === 'Digit4' || event.code === 'Numpad4')) {
             dmInsetEnabled = !dmInsetEnabled;
             const msg = `DM inset view: ${dmInsetEnabled ? 'ON' : 'OFF'} (4)`;
             showFloatingText(msg, '#9ec9ff', true);
@@ -19358,7 +19363,7 @@ document.addEventListener('keydown', (event) => {
     }
 
     if (event.code === 'Escape' && !event.repeat) {
-        if (modeManager.current === MODE.DM && getControlledActor()) {
+        if (hasDmPossessionControl()) {
             releasePossession();
             showFloatingText('POSSESSION RELEASED', '#9ec9ff', true);
             event.preventDefault();
@@ -19744,7 +19749,7 @@ function updateFlyControls(delta) {
 
     // Keep the active controlled body facing in the heading controlled by mouse/turn input.
     const controlled = getControlledActor();
-    if (modeManager.current === MODE.DM && controlled && controlled !== playerState) {
+    if (isDmLikeMode() && controlled && controlled !== playerState) {
         controlled.rotation.y = yaw;
         if (playerRig) playerRig.rotation.y = yaw;
     } else if (playerRig) {
@@ -19835,7 +19840,7 @@ function updateFlyControls(delta) {
     const activeInputActor = getActiveInputActor();
 
     // DM free camera has no physical presence — suppress player movement only when unpossessed.
-    if (modeManager.current === MODE.DM && !hasDmPossessionControl() && activeInputActor === playerState) {
+    if (isDmLikeMode() && !hasDmPossessionControl() && activeInputActor === playerState) {
         playerState.velocity.set(0, 0, 0);
         moveX = 0;
         moveZ = 0;
@@ -19846,7 +19851,7 @@ function updateFlyControls(delta) {
     playerState.position.y += playerState.velocity.y * fixedDelta;
 
     // Possession is input-rerouted: DM input drives the possessed actor entity.
-    if (modeManager.current === MODE.DM && activeInputActor && activeInputActor !== playerState) {
+    if (isDmLikeMode() && activeInputActor && activeInputActor !== playerState) {
         playerState.velocity.set(0, 0, 0);
         playerState.position.copy(playerRig.position);
 
