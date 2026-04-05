@@ -231,10 +231,33 @@ def handle_combat_action(sid: str, data: dict) -> None:
             "targetState": str(target_entity.get("state") or "active"),
         })
 
+    elif action_type == "dodge":
+        entry = gs.players.get(sid)
+        if not isinstance(entry, dict):
+            emit("combat-action-denied", {"reason": "player-not-registered"})
+            return
+        if not gs.player_has_movement_capability(entry, "can_dodge"):
+            emit("combat-action-denied", {"reason": "action-unavailable", "type": action_type})
+            return
+
+        gs.set_player_dodge_active(entry, True)
+        gs.save_resume_snapshot(sid)
+        result.update({
+            "dodgeActive": True,
+            "message": "Dodge active until your next turn",
+        })
+
     elif action_type in {"move", "dash", "disengage"}:
         player_entry = gs.players.get(sid) if isinstance(gs.players.get(sid), dict) else None
         if not isinstance(player_entry, dict):
             emit("combat-action-denied", {"reason": "player-not-registered"})
+            return
+        required_capability = {
+            "dash": "can_dash",
+            "disengage": "can_disengage",
+        }.get(action_type)
+        if required_capability and not gs.player_has_movement_capability(player_entry, required_capability):
+            emit("combat-action-denied", {"reason": "action-unavailable", "type": action_type})
             return
 
         old_pos = _actor_position(str(current.get("id") or ""), "player", sid=sid)
@@ -293,10 +316,12 @@ def handle_combat_action(sid: str, data: dict) -> None:
             emit("combat-action-denied", {"reason": "item-not-usable", "itemId": item_id})
             return
 
+        heal_formula = definition.get("healDice")
         heal_flat = int(gs.safe_float(definition.get("healFlat", 0), 0))
+        heal_amount = max(0, gs.roll_dice_formula(heal_formula, fallback=heal_flat))
         hp_before = gs.safe_float(entry.get("hp", entry.get("max_hp", 1)), 1)
         max_hp = gs.safe_float(entry.get("max_hp", hp_before), hp_before)
-        hp_after = min(max_hp, hp_before + max(0, heal_flat))
+        hp_after = min(max_hp, hp_before + heal_amount)
         healed = max(0.0, hp_after - hp_before)
         entry["hp"] = hp_after
 
@@ -314,6 +339,7 @@ def handle_combat_action(sid: str, data: dict) -> None:
         result.update({
             "itemId": item_id,
             "instanceId": instance_id,
+            "healFormula": heal_formula,
             "healed": healed,
             "hpBefore": hp_before,
             "hpAfter": hp_after,

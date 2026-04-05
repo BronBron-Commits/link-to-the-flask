@@ -8,6 +8,7 @@ from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
+import random
 import re
 from threading import Lock
 from time import perf_counter
@@ -94,7 +95,8 @@ DEFAULT_ITEM_DB: dict[str, dict] = {
         "id": "health_potion",
         "name": "Health Potion",
         "type": "consumable",
-        "healFlat": 10,
+        "healDice": "2d4+2",
+        "healFlat": 7,
     },
 }
 
@@ -287,6 +289,66 @@ def _parse_damage_roll(value) -> tuple[int, int]:
     if n is None:
         return 3, 0
     return max(1, n), 0
+
+
+def roll_dice_formula(value, fallback: int = 0, rng: Optional[random.Random] = None) -> int:
+    text = str(value or "").strip().lower()
+    match = re.match(r"^\s*(\d+)d(\d+)([+-]\d+)?\s*$", text)
+    if not match:
+        parsed = _parse_signed_int(value)
+        if parsed is None:
+            return int(fallback)
+        return int(parsed)
+
+    count = max(1, int(match.group(1)))
+    sides = max(1, int(match.group(2)))
+    bonus = int(match.group(3) or "0")
+    roller = rng if rng is not None else random
+    total = 0
+    for _ in range(count):
+        total += int(roller.randint(1, sides))
+    return total + bonus
+
+
+def normalize_movement_capabilities(raw_caps) -> dict:
+    raw = raw_caps if isinstance(raw_caps, dict) else {}
+    return {
+        "can_dash": bool(raw.get("can_dash", raw.get("canDash", False))),
+        "can_disengage": bool(raw.get("can_disengage", raw.get("canDisengage", False))),
+        "can_dodge": bool(raw.get("can_dodge", raw.get("canDodge", False))),
+        "has_opportunity_attack": bool(raw.get("has_opportunity_attack", raw.get("hasOpportunityAttack", False))),
+    }
+
+
+def set_player_movement_capabilities(entry: dict, raw_caps) -> dict:
+    normalized = normalize_movement_capabilities(raw_caps)
+    if isinstance(entry, dict):
+        entry["movement_capabilities"] = normalized
+    return normalized
+
+
+def player_has_movement_capability(entry: dict, capability: str, default: bool = True) -> bool:
+    if not isinstance(entry, dict):
+        return default
+    caps = entry.get("movement_capabilities")
+    if not isinstance(caps, dict):
+        return default
+    return bool(caps.get(capability, default))
+
+
+def set_player_dodge_active(entry: dict, active: bool) -> None:
+    if not isinstance(entry, dict):
+        return
+    defense = entry.get("combat_defense") if isinstance(entry.get("combat_defense"), dict) else {}
+    defense["dodgeActive"] = bool(active)
+    entry["combat_defense"] = defense
+
+
+def is_player_dodge_active(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    defense = entry.get("combat_defense") if isinstance(entry.get("combat_defense"), dict) else {}
+    return bool(defense.get("dodgeActive", False))
 
 
 def resolve_contract(filename: str) -> Optional[Path]:
@@ -986,6 +1048,7 @@ def save_resume_snapshot(sid: str, now: Optional[float] = None) -> None:
         "hp": entry.get("hp"),
         "initiative_bonus": entry.get("initiative_bonus"),
         "speed_ft": entry.get("speed_ft"),
+        "movement_capabilities": deepcopy(entry.get("movement_capabilities")) if isinstance(entry.get("movement_capabilities"), dict) else None,
         "inventory": deepcopy(entry.get("inventory")) if isinstance(entry.get("inventory"), dict) else None,
         "equipped_weapon": deepcopy(entry.get("equipped_weapon")) if isinstance(entry.get("equipped_weapon"), dict) else None,
         "attackBonus": entry.get("attackBonus"),

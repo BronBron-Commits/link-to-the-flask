@@ -188,6 +188,7 @@ def socket_player_character_stats(data):
     max_hp = coerce_int("maxHp")
     init_bonus = coerce_int("initiativeBonus")
     speed_ft = coerce_int("speedFt")
+    movement_caps = data.get("movementCapabilities") if isinstance(data.get("movementCapabilities"), dict) else data.get("movement_capabilities")
     
     # Validate stats before accepting
     player_stats = {}
@@ -214,6 +215,8 @@ def socket_player_character_stats(data):
         entry["initiative_bonus"] = validated["initiativeBonus"]
     if "speedFt" in validated:
         entry["speed_ft"] = validated["speedFt"]
+    if isinstance(movement_caps, dict):
+        gs.set_player_movement_capabilities(entry, movement_caps)
 
     # Hydrate inventory contract for this player (prefer explicit payload, else latest engine contract).
     inventory_payload = data.get("inventory") if isinstance(data.get("inventory"), dict) else None
@@ -232,6 +235,7 @@ def socket_player_character_stats(data):
         "ok": True,
         "ac": entry.get("ac"),
         "maxHp": entry.get("max_hp"),
+        "movementCapabilities": entry.get("movement_capabilities") if isinstance(entry.get("movement_capabilities"), dict) else None,
         "inventory": entry.get("inventory") if isinstance(entry.get("inventory"), dict) else {"items": []},
         "equippedWeapon": entry.get("equipped_weapon"),
     })

@@ -89,6 +89,10 @@ def _advance_turn() -> dict | None:
     combat["turn"] = idx
     state["roundNumber"] = rnd
     actor = order[idx]
+    if isinstance(actor, dict) and str(actor.get("type") or "").strip().lower() == "player":
+        owner_sid = str(actor.get("ownerSid") or "").strip() or gs.sid_for_actor(str(actor.get("id") or ""))
+        if owner_sid and isinstance(gs.players.get(owner_sid), dict):
+            gs.set_player_dodge_active(gs.players[owner_sid], False)
     print(f"[TURN] idx={idx}/{len(order)-1} actor={actor.get('id')} round={rnd}", flush=True)
     return {
         "turnIndex": idx,
@@ -292,9 +296,12 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     dmg_notation = f"1d{dmg_die}+{dmg_bonus}" if dmg_bonus > 0 else f"1d{dmg_die}"
 
     print(f"[ENEMY] {actor_id} in range, attacking target {target_actor_id}: AB={atk_bonus} DMG={dmg_notation}", flush=True)
-    hit_roll = random.randint(1, 20)
-    total = hit_roll + atk_bonus
     target_ac = int(gs.safe_float(target.get("ac", 10), 10))
+    dodge_active = gs.is_player_dodge_active(target)
+    first_roll = random.randint(1, 20)
+    second_roll = random.randint(1, 20) if dodge_active else None
+    hit_roll = min(first_roll, second_roll) if second_roll is not None else first_roll
+    total = hit_roll + atk_bonus
     is_hit = hit_roll == 20 or (hit_roll != 1 and total >= target_ac)
     damage = max(0, random.randint(1, dmg_die) + dmg_bonus) if is_hit else 0
 
@@ -311,6 +318,8 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
         "targetId": target_actor_id or None,
         "hitRoll": hit_roll, "attackBonus": atk_bonus, "toHit": total,
         "targetAC": target_ac, "hit": is_hit, "damage": damage,
+        "dodgeDisadvantage": dodge_active,
+        "hitRolls": [first_roll, second_roll] if second_roll is not None else [first_roll],
         "targetHp": gs.safe_float(target.get("hp", 0.0), 0.0),
         "targetState": str(target.get("state") or "active"),
     }

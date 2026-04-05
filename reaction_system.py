@@ -100,7 +100,10 @@ def _resolve_reaction_attack(reactor: dict, mover: dict) -> dict:
         dmg_die = max(1, int(gs.safe_float(enemy.get("damageRoll", 4), 4)))
         dmg_bonus = int(gs.safe_float(enemy.get("damageBonus", 0), 0))
 
-    hit_roll = random.randint(1, 20)
+    dodge_active = mover_type == "player" and gs.is_player_dodge_active(target_entry)
+    first_roll = random.randint(1, 20)
+    second_roll = random.randint(1, 20) if dodge_active else None
+    hit_roll = min(first_roll, second_roll) if second_roll is not None else first_roll
     total = hit_roll + atk_bonus
     is_hit = hit_roll == 20 or (hit_roll != 1 and total >= target_ac)
     damage = max(0, random.randint(1, dmg_die) + dmg_bonus) if is_hit else 0
@@ -126,9 +129,11 @@ def _resolve_reaction_attack(reactor: dict, mover: dict) -> dict:
         "targetType": mover_type,
         "reactorSid": sid,
         "hitRoll": hit_roll,
+        "hitRolls": [first_roll, second_roll] if second_roll is not None else [first_roll],
         "attackBonus": atk_bonus,
         "toHit": total,
         "targetAC": target_ac,
+        "dodgeDisadvantage": dodge_active,
         "hit": is_hit,
         "damage": damage,
     }
@@ -165,6 +170,8 @@ def _handle_leave_melee_range(ctx: dict) -> list[dict]:
     else:
         for sid, player in gs.players.items():
             if not _is_player_alive(player):
+                continue
+            if not gs.player_has_movement_capability(player, "has_opportunity_attack"):
                 continue
             actor_id = str(player.get("actorId") or player.get("networkId") or "").strip()
             if not actor_id:

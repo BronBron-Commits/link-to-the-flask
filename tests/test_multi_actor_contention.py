@@ -1,7 +1,11 @@
 import random
 import unittest
+from unittest import mock
 
+import action_handler
 import combat_harness
+import game_state as gs
+import turn_manager
 
 
 class MultiActorContentionTests(unittest.TestCase):
@@ -359,6 +363,80 @@ class MultiActorContentionTests(unittest.TestCase):
         reaction_events = [e for e in events if isinstance(e, dict) and str(e.get("channel") or "") == "combat-reaction-result"]
         self.assertGreaterEqual(len(reaction_events), 1)
         self.assertTrue(any(str((e.get("payload") or {}).get("actorType") or "") == "player" for e in reaction_events))
+
+    def test_enemy_leave_melee_skips_player_without_opportunity_attack(self) -> None:
+        initial = {
+            "players": {
+                "p1": {
+                    "id": "p1",
+                    "actorId": "player_1",
+                    "role": "player",
+                    "hp": 30.0,
+                    "max_hp": 30.0,
+                    "ac": 14,
+                    "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+                    "movement_capabilities": {"has_opportunity_attack": False},
+                    "inventory": {"items": [{"instanceId": "p1_ls", "itemId": "longsword", "qty": 1, "equipped": True}]},
+                }
+            },
+            "client_roles": {"p1": "player"},
+            "world_state": {
+                "players": {},
+                "entities": {
+                    "enemy_1": {
+                        "id": "enemy_1",
+                        "networkId": "enemy_1",
+                        "type": "enemy",
+                        "name": "Runner",
+                        "position": {"x": 4.0, "y": 0.0, "z": 0.0},
+                        "hp": 2.0,
+                        "maxHp": 20.0,
+                        "ac": 10,
+                        "attackBonus": 2,
+                        "damageRoll": 4,
+                        "damageBonus": 0,
+                        "canDisengage": False,
+                    }
+                },
+                "mode": "combat",
+                "combat": {
+                    "turn": 0,
+                    "order": [{"id": "enemy_1", "type": "enemy"}, {"id": "player_1", "type": "player", "ownerSid": "p1"}],
+                    "state": {"inCombat": True, "roundNumber": 1},
+                },
+                "scene": {"objects": []},
+            },
+        }
+
+        def _provider(state: dict, actor: dict, rng: random.Random, step: int) -> dict:
+            _ = (state, actor, rng, step)
+            return {"id": "noop", "type": "dodge"}
+
+        result = combat_harness.run_combat(initial, _provider, seed=7, max_steps=1)
+        step0 = result.get("timeline", [])[0]
+        events = step0.get("events") if isinstance(step0, dict) and isinstance(step0.get("events"), list) else []
+        reaction_events = [e for e in events if isinstance(e, dict) and str(e.get("channel") or "") == "combat-reaction-result"]
+        self.assertEqual(len(reaction_events), 0)
+
+    def test_dodge_imposes_enemy_disadvantage(self) -> None:
+        initial = self._reaction_initial_state()
+        initial["world_state"]["entities"]["enemy_1"]["attackBonus"] = 3
+        initial["world_state"]["entities"]["enemy_1"]["damageRoll"] = 6
+        initial["world_state"]["combat"]["turn"] = 0
+
+        combat_harness._reset_runtime_state(initial)
+        action_handler.handle_combat_action("p1", {"id": "dodge_0", "type": "dodge"})
+
+        enemy_actor = gs.world_state["combat"]["order"][1]
+        with mock.patch("turn_manager.random.randint", side_effect=[18, 6]):
+            result = turn_manager.run_enemy_turn(enemy_actor)
+
+        player_entry = gs.players["p1"]
+        self.assertTrue(gs.is_player_dodge_active(player_entry))
+        self.assertTrue(bool(result.get("dodgeDisadvantage")))
+        self.assertEqual(result.get("hitRoll"), 6)
+        self.assertFalse(bool(result.get("hit")))
+        self.assertEqual(float(player_entry.get("hp", 0.0)), 36.0)
 
     def test_use_object_consumes_potion_and_heals(self) -> None:
         initial = self._initial_state()

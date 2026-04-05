@@ -905,6 +905,7 @@ function registerSocketHandlers() {
                 registerRoleWithServer();
             }
         }, 100);
+        void bootstrapPlayerCombatProfile(true);
         updateClientRuntimeModeFromAuthority();
     });
 
@@ -939,6 +940,23 @@ function registerSocketHandlers() {
             netLog(`assigned player-id=${data.id}`);
             updateClientRuntimeModeFromAuthority();
         }
+    });
+
+    socket.on('player-character-stats-ack', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        if (Number.isFinite(Number(packet.maxHp))) {
+            playerState.maxHp = Number(packet.maxHp);
+            if (!Number.isFinite(Number(playerState.hp)) || Number(playerState.hp) > playerState.maxHp) {
+                playerState.hp = playerState.maxHp;
+            }
+        }
+        if (packet.movementCapabilities && typeof packet.movementCapabilities === 'object') {
+            applyPlayerMovementCapabilities(packet.movementCapabilities);
+        }
+        if (window.loadedEngineEntity && typeof window.loadedEngineEntity === 'object' && packet.inventory && typeof packet.inventory === 'object') {
+            window.loadedEngineEntity.inventory = structuredClone(packet.inventory);
+        }
+        updatePlayerHealthHud();
     });
 
     socket.on('world-init', (world) => {
@@ -1265,6 +1283,7 @@ function registerSocketHandlers() {
         if (!packet || typeof packet !== 'object') return;
         const attacker = String(packet.attacker || 'Unknown');
         const actorType = String(packet.actorType || 'unknown');
+        const actionType = String(packet.type || '').trim().toLowerCase();
         const isHit = Boolean(packet.hit);
         const damage = Number(packet.damage) || 0;
         const targetId = String(packet.targetId || '');
@@ -1274,11 +1293,58 @@ function registerSocketHandlers() {
         const hitRoll = Number(packet.hitRoll) || 0;
         const toHit = Number(packet.toHit) || 0;
         const targetAC = Number(packet.targetAC) || 0;
+        const localActorId = String(getLocalCombatActorId() || '').trim();
+        const isLocalPlayerActor = !!localActorId && String(attacker || '').trim() === localActorId;
+
+        if (actorType === 'player' && isLocalPlayerActor && actionType && actionType !== 'attack') {
+            if (actionType === 'move' || actionType === 'dash' || actionType === 'disengage') {
+                const after = packet.positionAfter && typeof packet.positionAfter === 'object' ? packet.positionAfter : null;
+                const movementFt = Math.max(0, Number(packet.movementFt) || 0);
+                if (after) {
+                    playerState.prevPosition.copy(playerState.position);
+                    playerState.position.set(Number(after.x) || 0, Number(after.y) || playerState.position.y, Number(after.z) || 0);
+                    syncPlayerRigFromState();
+                }
+                if (actionType === 'dash') {
+                    combatState.player.movementRemaining = Math.max(
+                        Number(combatState.player.movementRemaining) || 0,
+                        Number(packet.movementBudgetFt) || getPlayerBaseSpeedFt() * 2
+                    );
+                    tryUseAction();
+                } else if (actionType === 'disengage') {
+                    tryUseAction();
+                }
+                if (movementFt > 0) {
+                    tryMove(movementFt);
+                }
+                syncTurnExhaustionState();
+                const verb = actionType === 'dash' ? 'Dash' : (actionType === 'disengage' ? 'Disengage' : 'Move');
+                showFloatingText(`${verb} ${Math.round(movementFt)} ft`, '#8dd694', true, { anchorObject: playerRig });
+                logCombatEvent(`${verb} ${Math.round(movementFt)} ft`, 'system');
+            } else if (actionType === 'dodge') {
+                tryUseAction();
+                showFloatingText('DODGE ACTIVE', '#8dd694', true, { anchorObject: playerRig });
+                logCombatEvent('You take the Dodge action', 'system');
+            } else if (actionType === 'use-object') {
+                tryUseAction();
+                if (Number.isFinite(Number(packet.hpAfter))) {
+                    playerState.hp = Number(packet.hpAfter);
+                    updatePlayerHealthHud();
+                }
+                const healed = Math.max(0, Number(packet.healed) || 0);
+                const itemLabel = String(packet.itemId || 'item').replace(/_/g, ' ');
+                showFloatingText(`Use Item +${Math.round(healed)} HP`, '#8dd694', true, { anchorObject: playerRig });
+                logCombatEvent(`Use Item: ${itemLabel} restores ${Math.round(healed)} HP`, 'system');
+            }
+            cancelAction();
+            updateActionMenu();
+            updateCombatUI();
+            return;
+        }
 
         if (actorType === 'enemy') {
             const atkBonus = Number(packet.attackBonus) || 0;
             const rollDetail = `(${hitRoll}+${atkBonus}=${toHit} vs AC ${targetAC})`;
-            const localActorId = String(getLocalCombatActorId() || '').trim();
             const socketSid = String((socket && socket.id) || '').trim();
             const localSid = String(localPlayerId || '').trim();
             const normalizedTargetId = targetId.trim();
@@ -1301,6 +1367,9 @@ function registerSocketHandlers() {
                 : `${attacker} miss`;
             logCombatEvent(logText, isHit ? 'hit' : 'miss');
             showFloatingText(floatText, isHit ? '#ff8a8a' : '#8dd694', true);
+            if (packet.dodgeDisadvantage) {
+                logCombatEvent(`${attacker} attacks with disadvantage`, 'system');
+            }
             if (targetIsLocal && hasAuthoritativeTargetHp) {
                 playerState.hp = Math.max(0, targetHp);
                 updatePlayerHealthHud();
@@ -1314,6 +1383,10 @@ function registerSocketHandlers() {
         }
 
         if (actorType === 'player') {
+            if (!isLocalPlayerActor) {
+                return;
+            }
+            tryUseAction();
             const atkBonus = Number(packet.attackBonus) || 0;
             const rollDetail = `(${hitRoll}+${atkBonus}=${toHit} vs AC ${targetAC})`;
             const targetLabel = targetId ? (getCombatActorLabelById(targetId) || targetId) : 'target';
@@ -5042,6 +5115,7 @@ async function initDataDrivenLayer(staticWorldRoot) {
             return true;
         },
     };
+    void bootstrapPlayerCombatProfile(true);
     console.log(`Engine entity contract loaded + validated (${engineContract.sourceUrl})`);
 
     const templateRecord = await loadFirstJson([
@@ -6297,7 +6371,7 @@ function handleGodSelect(payload = {}) {
 
         if (!clickedTarget && clickedOnMovezone && currentGameMode === GAME_MODE.COMBAT) {
             const isPlayerInputTurn = (combatState.phase === 'PLAYER' || currentTurnPhase === TURN_PHASE.PLAYER);
-            if (currentAction === 'move' || (!currentAction && isPlayerInputTurn)) {
+            if (isMovementSelectionAction(currentAction) || (!currentAction && isPlayerInputTurn)) {
                 selectMoveDestination(clickedOnMovezone);
             }
             return;
@@ -6461,7 +6535,7 @@ window.addEventListener('dblclick', (event) => {
     // Priority 2: movement reticle double-click => pick + confirm move.
     if (!moveZoneDisc) return;
     const isPlayerInputTurn = (combatState.phase === 'PLAYER' || currentTurnPhase === TURN_PHASE.PLAYER);
-    if (!(currentAction === 'move' || (!currentAction && isPlayerInputTurn))) return;
+    if (!(isMovementSelectionAction(currentAction) || (!currentAction && isPlayerInputTurn))) return;
 
     const hit = raycaster.intersectObject(moveZoneDisc, false)[0];
     if (!hit || !hit.point) return;
@@ -6471,7 +6545,7 @@ window.addEventListener('dblclick', (event) => {
     // If a move choice is already open for this snapped tile, confirm it directly.
     if (
         combatInteraction.awaitingConfirm &&
-        (combatInteraction.action === 'move' || combatInteraction.action === 'move-to-approach' || combatInteraction.action === 'move-and-attack') &&
+        (isMovementSelectionAction(combatInteraction.action) || combatInteraction.action === 'move-to-approach' || combatInteraction.action === 'move-and-attack') &&
         combatInteraction.preview &&
         combatInteraction.preview.valid &&
         Math.abs((combatInteraction.preview.destX || 0) - snapped.x) < 0.01 &&
@@ -7060,7 +7134,132 @@ const playerState = {
     radius: 0.4,              // collider radius in Three.js units (matches capsule.radius)
     hp: 100,
     maxHp: 100,
+    speedFt: 30,
 };
+
+const playerCombatCapabilities = {
+    can_dash: true,
+    can_disengage: true,
+    can_dodge: true,
+    has_opportunity_attack: true,
+};
+
+let playerProfileBootstrapPromise = null;
+
+function applyPlayerMovementCapabilities(rawCapabilities) {
+    const raw = rawCapabilities && typeof rawCapabilities === 'object' ? rawCapabilities : {};
+    playerCombatCapabilities.can_dash = !!(raw.can_dash ?? raw.canDash ?? playerCombatCapabilities.can_dash);
+    playerCombatCapabilities.can_disengage = !!(raw.can_disengage ?? raw.canDisengage ?? playerCombatCapabilities.can_disengage);
+    playerCombatCapabilities.can_dodge = !!(raw.can_dodge ?? raw.canDodge ?? playerCombatCapabilities.can_dodge);
+    playerCombatCapabilities.has_opportunity_attack = !!(raw.has_opportunity_attack ?? raw.hasOpportunityAttack ?? playerCombatCapabilities.has_opportunity_attack);
+    updateActionMenu();
+}
+
+function deriveMovementCapabilitiesFromMaster(master) {
+    return master && master.actions && master.actions.movement && typeof master.actions.movement === 'object'
+        ? master.actions.movement
+        : null;
+}
+
+function syncLoadedInventoryFromMaster(master) {
+    if (!master || typeof master !== 'object') return;
+    if (!window.loadedEngineEntity || typeof window.loadedEngineEntity !== 'object') return;
+    if (master.inventory && typeof master.inventory === 'object') {
+        window.loadedEngineEntity.inventory = structuredClone(master.inventory);
+    }
+}
+
+function getPlayerBaseSpeedFt() {
+    const speed = Number(playerState.speedFt) || Number(window.loadedEngineEntity?.combat?.speed) || 30;
+    return Math.max(5, speed);
+}
+
+function isMovementSelectionAction(action) {
+    return action === 'move' || action === 'dash' || action === 'disengage';
+}
+
+function getMovementBudgetForAction(action) {
+    if (action === 'dash') {
+        return Math.max(Number(combatState.player.movementRemaining) || 0, getPlayerBaseSpeedFt() * 2);
+    }
+    return Math.max(0, Number(combatState.player.movementRemaining) || 0);
+}
+
+function getCombatConsumableItems() {
+    const items = Array.isArray(window.loadedEngineEntity?.inventory?.items)
+        ? window.loadedEngineEntity.inventory.items
+        : [];
+    return items.filter((row) => {
+        if (!row || Number(row.qty) <= 0) return false;
+        const itemId = String(row.itemId || '').trim().toLowerCase();
+        const definition = window.inventorySystem?.itemDb?.[itemId];
+        return definition && definition.type === 'consumable';
+    });
+}
+
+function getPrimaryCombatConsumable() {
+    const consumables = getCombatConsumableItems();
+    return consumables.find((row) => String(row.itemId || '').trim().toLowerCase() === 'health_potion') || consumables[0] || null;
+}
+
+function syncLocalPlayerProfile(profile) {
+    if (!profile || typeof profile !== 'object') return;
+    const summary = profile.summary && typeof profile.summary === 'object' ? profile.summary : {};
+    const master = profile.master && typeof profile.master === 'object' ? profile.master : null;
+
+    if (Number.isFinite(Number(summary.max_hp))) {
+        playerState.maxHp = Number(summary.max_hp);
+    }
+    if (Number.isFinite(Number(summary.current_hp))) {
+        playerState.hp = Number(summary.current_hp);
+    } else if (Number.isFinite(Number(summary.max_hp)) && !Number.isFinite(Number(playerState.hp))) {
+        playerState.hp = Number(summary.max_hp);
+    }
+    if (Number.isFinite(Number(summary.speed_ft))) {
+        playerState.speedFt = Math.max(5, Number(summary.speed_ft));
+    }
+    updatePlayerHealthHud();
+
+    if (master) {
+        const movementCaps = deriveMovementCapabilitiesFromMaster(master);
+        if (movementCaps) {
+            applyPlayerMovementCapabilities(movementCaps);
+        }
+        syncLoadedInventoryFromMaster(master);
+    }
+}
+
+async function bootstrapPlayerCombatProfile(force = false) {
+    if (!force && playerProfileBootstrapPromise) {
+        return playerProfileBootstrapPromise;
+    }
+    playerProfileBootstrapPromise = (async () => {
+        try {
+            const response = await fetch('/api/player-info');
+            const payload = await response.json();
+            if (!response.ok || !payload || !payload.ok) return null;
+
+            syncLocalPlayerProfile(payload);
+
+            if (socket && socket.connected) {
+                const summary = payload.summary && typeof payload.summary === 'object' ? payload.summary : {};
+                const master = payload.master && typeof payload.master === 'object' ? payload.master : {};
+                socket.emit('player-character-stats', {
+                    ac: summary.armor_class ?? null,
+                    maxHp: summary.max_hp ?? null,
+                    initiativeBonus: summary.initiative_bonus ?? null,
+                    speedFt: summary.speed_ft ?? null,
+                    movementCapabilities: deriveMovementCapabilitiesFromMaster(master),
+                    inventory: master.inventory ?? null,
+                });
+            }
+            return payload;
+        } catch (_err) {
+            return null;
+        }
+    })();
+    return playerProfileBootstrapPromise;
+}
 
 function parseHudHpText() {
     const hpTextEl = document.getElementById('hud-hp-text');
@@ -13672,15 +13871,19 @@ function showMoveConfirmUI() {
     releasePointerLockIfActive();
     const ui = ensureCombatConfirmUI();
     const preview = combatInteraction.preview;
-    const destFtX = Math.round(unitsToFeet(preview.destX));
-    const destFtZ = Math.round(unitsToFeet(preview.destZ));
     const isMoveAndAttack = combatInteraction.action === 'move-and-attack';
-    const titleText = isMoveAndAttack ? 'Move Then Attack' : 'Move Destination';
-    const confirmText = isMoveAndAttack ? 'MOVE + ATTACK' : 'MOVE HERE';
+    const isDash = combatInteraction.action === 'dash';
+    const isDisengage = combatInteraction.action === 'disengage';
+    const titleText = isMoveAndAttack
+        ? 'Move Then Attack'
+        : (isDash ? 'Dash Destination' : (isDisengage ? 'Disengage Route' : 'Move Destination'));
+    const confirmText = isMoveAndAttack
+        ? 'MOVE + ATTACK'
+        : (isDash ? 'DASH HERE' : (isDisengage ? 'DISENGAGE HERE' : 'MOVE HERE'));
     ui.innerHTML = `
         <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">${titleText}</div>
         <div style="font-size:17px;font-weight:700;margin-bottom:10px;">${preview.costFeet} ft &mdash; ${preview.valid ? '<span style="color:#7dffb2">IN RANGE</span>' : '<span style="color:#ff7070">TOO FAR</span>'}</div>
-        <div style="opacity:0.82;margin-bottom:12px;">${preview.remainingFeet} ft remaining after move</div>
+        <div style="opacity:0.82;margin-bottom:12px;">${preview.remainingFeet} ft remaining after move${isDash ? ' • action spent to gain full dash range' : (isDisengage ? ' • no opportunity attacks on this move' : '')}</div>
         <div style="display:flex;gap:10px;justify-content:flex-end;">
             <button id="confirmAttack" style="padding:8px 12px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">${confirmText}</button>
             <button id="cancelAttack" style="padding:8px 12px;background:#7f1d1d;border:1px solid #dc2626;color:#fff;border-radius:6px;cursor:pointer;">CANCEL</button>
@@ -13964,8 +14167,11 @@ function selectMoveDestination(worldPos) {
         return false;
     }
 
+    const movementAction = isMovementSelectionAction(currentAction) ? currentAction : 'move';
+    const movementBudgetFt = getMovementBudgetForAction(movementAction);
+
     // Clamp destination inside movement radius
-    const radiusUnits = feetToUnits(combatState.player.movementRemaining);
+    const radiusUnits = feetToUnits(movementBudgetFt);
     const dx = destX - playerState.position.x;
     const dz = destZ - playerState.position.z;
     const dist = Math.sqrt(dx * dx + dz * dz);
@@ -13976,7 +14182,7 @@ function selectMoveDestination(worldPos) {
 
     const destPos = new THREE.Vector3(destX, playerState.position.y, destZ);
     const costFeet = getMoveCostFeet(playerState.position, destPos);
-    const valid = costFeet > 0 && costFeet <= combatState.player.movementRemaining && canMoveTo(destPos);
+    const valid = costFeet > 0 && costFeet <= movementBudgetFt && canMoveTo(destPos);
     
     // Fail fast if destination leaves combat arena
     if (currentGameMode === GAME_MODE.COMBAT && !canMoveTo(destPos)) {
@@ -13985,15 +14191,16 @@ function selectMoveDestination(worldPos) {
     }
 
     resetCombatInteraction({ preserveAction: true });
-    combatInteraction.action = 'move';
-    currentAction = 'move';
+    combatInteraction.action = movementAction;
+    currentAction = movementAction;
     combatInteraction.target = destPos;      // store world pos directly
     combatInteraction.preview = {
         destX,
         destZ,
         costFeet,
         valid,
-        remainingFeet: Math.max(0, Math.round(combatState.player.movementRemaining - costFeet)),
+        remainingFeet: Math.max(0, Math.round(movementBudgetFt - costFeet)),
+        movementBudgetFt,
     };
     combatInteraction.awaitingConfirm = true;
 
@@ -14179,7 +14386,7 @@ function resetLocalTurnResources() {
     pendingTurnEndRequired = false;
     combatState.player.actionUsed = false;
     combatState.player.bonusUsed = false;
-    combatState.player.movementRemaining = 30;
+    combatState.player.movementRemaining = getPlayerBaseSpeedFt();
     combatState.player.hasActed = false;
     playerState.reactionAvailable = true;
     syncCombatPlayerToLegacyState();
@@ -18367,11 +18574,6 @@ function updateActionMenu() {
         hideEndTurnPrompt();
         return;
     }
-
-    // Use world interactions only in player combat (no persistent bottom button bar).
-    setActionMenuVisible(false);
-    hideEndTurnPrompt();
-    return;
     
     setActionMenuVisible(true);
     
@@ -18383,6 +18585,16 @@ function updateActionMenu() {
     }
     
     const isMove = currentAction === 'move';
+    const isDash = currentAction === 'dash';
+    const isDisengage = currentAction === 'disengage';
+    const dodgeDisabled = !playerCombatCapabilities.can_dodge || combatState.player.actionUsed || turnEndRequired || combatState.lock;
+    const dashDisabled = !playerCombatCapabilities.can_dash || combatState.player.actionUsed || turnEndRequired || combatState.lock;
+    const disengageDisabled = !playerCombatCapabilities.can_disengage || combatState.player.actionUsed || turnEndRequired || combatState.lock;
+    const primaryConsumable = getPrimaryCombatConsumable();
+    const useItemDisabled = !primaryConsumable || combatState.player.actionUsed || turnEndRequired || combatState.lock;
+    const useItemLabel = primaryConsumable
+        ? `Use Item (${String(primaryConsumable.itemId || 'item').replace(/_/g, ' ')} x${Math.max(0, Number(primaryConsumable.qty) || 0)})`
+        : 'Use Item';
     const actionButtonsDisabled = (turnEndRequired || combatState.lock)
         ? 'opacity: 0.45; cursor: not-allowed;'
         : '';
@@ -18392,6 +18604,10 @@ function updateActionMenu() {
     
     actionMenuEl.innerHTML = `
         <button class="action-btn ${isMove ? 'active' : ''}" data-action="move" style="padding: 8px 12px; background: ${isMove ? '#4f46e5' : '#38404f'}; border: 1px solid ${isMove ? '#818cf8' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: pointer; ${actionButtonsDisabled}">Move</button>
+        <button class="action-btn ${isDash ? 'active' : ''}" data-action="dash" ${dashDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: ${isDash ? '#0f766e' : '#38404f'}; border: 1px solid ${isDash ? '#5eead4' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: ${dashDisabled ? 'not-allowed' : 'pointer'}; ${dashDisabled ? 'opacity: 0.45;' : ''}">Dash</button>
+        <button class="action-btn ${isDisengage ? 'active' : ''}" data-action="disengage" ${disengageDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: ${isDisengage ? '#7c2d12' : '#38404f'}; border: 1px solid ${isDisengage ? '#fb923c' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: ${disengageDisabled ? 'not-allowed' : 'pointer'}; ${disengageDisabled ? 'opacity: 0.45;' : ''}">Disengage</button>
+        <button class="action-btn" data-action="dodge" ${dodgeDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: #38404f; border: 1px solid #555; color: #eef2ff; border-radius: 4px; cursor: ${dodgeDisabled ? 'not-allowed' : 'pointer'}; ${dodgeDisabled ? 'opacity: 0.45;' : ''}">Dodge</button>
+        <button class="action-btn" data-action="use-object" ${useItemDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: #38404f; border: 1px solid #555; color: #eef2ff; border-radius: 4px; cursor: ${useItemDisabled ? 'not-allowed' : 'pointer'}; ${useItemDisabled ? 'opacity: 0.45;' : ''}">${useItemLabel}</button>
         <button class="action-btn end-turn" data-action="end-turn" style="${endTurnButtonStyle}">${turnEndRequired ? 'End Turn Required' : 'End Turn'}</button>
         ${combatInteraction.awaitingConfirm ? '<button class="confirm-btn" style="padding: 8px 12px; background: #16a34a; border: 1px solid #22c55e; color: #fff; border-radius: 4px; cursor: pointer; font-weight: bold;">CONFIRM</button>' : ''}
         ${combatInteraction.awaitingConfirm ? '<button class="cancel-btn" style="padding: 8px 12px; background: #7f1d1d; border: 1px solid #dc2626; color: #fff; border-radius: 4px; cursor: pointer;">Cancel</button>' : ''}
@@ -18408,9 +18624,28 @@ function updateActionMenu() {
                 } else {
                     endTurn();
                 }
+            } else if (action === 'dodge') {
+                if (!socket || !socket.connected) return;
+                socket.emit('combat-action', {
+                    id: `client_${action}_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+                    type: 'dodge',
+                });
+            } else if (action === 'use-object') {
+                const consumable = getPrimaryCombatConsumable();
+                if (!consumable || !socket || !socket.connected) return;
+                socket.emit('combat-action', {
+                    id: `client_use_object_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+                    type: 'use-object',
+                    instanceId: consumable.instanceId,
+                });
             } else {
                 if (isInputLockedForCombat('ACTION')) return;
                 setCurrentAction(action);
+                if (action === 'dash') {
+                    showFloatingText('Dash selected - choose a destination', '#8dd694', true);
+                } else if (action === 'disengage') {
+                    showFloatingText('Disengage selected - choose a safe route', '#8dd694', true);
+                }
             }
         });
     });
@@ -18486,13 +18721,26 @@ function confirmAction() {
             queuePostMoveAttack(targetForAttack, 'melee');
         }
         resetCombatInteraction();
-    } else if (combatInteraction.action === 'move' || combatInteraction.action === 'move-to-approach') {
+    } else if (combatInteraction.action === 'move' || combatInteraction.action === 'dash' || combatInteraction.action === 'disengage' || combatInteraction.action === 'move-to-approach') {
         if (!combatInteraction.preview || !combatInteraction.preview.valid) {
             showFloatingText('Invalid move', '#ff8a8a', true);
             return;
         }
-        // target is now a world-space Vector3
-        executeMoveTo(combatInteraction.target, combatInteraction.preview.costFeet);
+        if (!socket || !socket.connected) {
+            showFloatingText('No server connection', '#ff8a8a', true);
+            return;
+        }
+        const actionType = combatInteraction.action === 'move-to-approach' ? 'move' : combatInteraction.action;
+        const targetPos = combatInteraction.target;
+        socket.emit('combat-action', {
+            id: `client_${actionType}_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+            type: actionType,
+            position: {
+                x: Number(targetPos.x) || 0,
+                y: Number(targetPos.y) || 0,
+                z: Number(targetPos.z) || 0,
+            },
+        });
         resetCombatInteraction();
     } else if (combatInteraction.action === 'attack') {
         playConfirmAttackSnap();
