@@ -546,6 +546,7 @@ def extract_feature_lines_from_markers(lines: list[str]) -> list[str]:
 
 def extract_inventory_triplets(lines: list[str]) -> list[str]:
     out: list[str] = []
+    currency_labels = {"CP", "SP", "EP", "GP", "PP"}
     for i in range(len(lines) - 2):
         name = lines[i]
         qty = lines[i + 1]
@@ -555,6 +556,8 @@ def extract_inventory_triplets(lines: list[str]) -> list[str]:
         if not re.fullmatch(r"(?:\d+\s*lb\.|--)", weight, flags=re.IGNORECASE):
             continue
         if name in {"NAME", "QTY", "WEIGHT", "ATTUNED MAGIC ITEMS"}:
+            continue
+        if name.upper() in currency_labels:
             continue
         if any(token in name.upper() for token in _SECTION_NOISE_SUBSTRINGS):
             continue
@@ -987,8 +990,27 @@ def parse_inventory_summary_and_roleplay(pages: list[str]) -> dict:
     for page_text in pages:
         lines = normalize_lines(page_text)
         if "EQUIPMENT" in lines and "WEIGHT CARRIED" in lines:
+            # Preferred path: parse explicit currency labels if present.
+            labeled_currency: dict[str, int] = {}
+            for i, line in enumerate(lines):
+                upper = line.upper()
+                if upper in {"CP", "SP", "EP", "GP", "PP"} and i + 1 < len(lines):
+                    next_value = to_int(lines[i + 1])
+                    if next_value is not None:
+                        labeled_currency[upper.lower()] = next_value
+                    continue
+
+                inline_match = re.fullmatch(r"(CP|SP|EP|GP|PP)\s*[:\-]?\s*(\d+)", upper)
+                if inline_match:
+                    labeled_currency[inline_match.group(1).lower()] = int(inline_match.group(2))
+
+            if labeled_currency:
+                for key in ("cp", "sp", "ep", "gp", "pp"):
+                    if key in labeled_currency:
+                        currency[key] = labeled_currency[key]
+
             ints = [int(line) for line in lines if re.fullmatch(r"\d+", line)]
-            if len(ints) >= 5:
+            if len(ints) >= 5 and all(currency[key] is None for key in ("cp", "sp", "ep", "gp", "pp")):
                 # CP, EP, PP, GP, SP in this export order.
                 currency["cp"] = ints[0]
                 currency["ep"] = ints[1]

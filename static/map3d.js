@@ -18668,9 +18668,9 @@ updateCombatUI();
     s.id = 'ffx-menu-style';
     s.textContent = `
     #action-menu { font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; opacity:1; }
-    .ffx-main { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.45); border-radius:10px 0 0 10px; min-width:215px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9),inset 0 1px 0 rgba(56,189,248,0.18); }
+    .ffx-main { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.45); border-radius:10px 0 0 10px; min-width:232px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9),inset 0 1px 0 rgba(56,189,248,0.18); }
     .ffx-main-solo { border-radius:10px; }
-    .ffx-sub { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.35); border-left:none; border-radius:0 10px 10px 0; min-width:190px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); }
+    .ffx-sub { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.35); border-left:none; border-radius:0 10px 10px 0; min-width:202px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); }
     .ffx-header { display:flex; gap:8px; align-items:center; padding:7px 14px 6px; border-bottom:1px solid rgba(56,189,248,0.18); background:rgb(0,20,50); color:#7ecfff; font-size:11.5px; font-weight:600; letter-spacing:0.04em; }
     .ffx-res-pip { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; vertical-align:middle; }
     .ffx-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
