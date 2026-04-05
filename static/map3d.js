@@ -2607,6 +2607,8 @@ const consoleState = {
     history: [],
     commandHistory: [],
     commandHistoryIndex: -1,
+    suggestionMatches: [],
+    suggestionIndex: 0,
 };
 
 const consoleCommands = Object.create(null);
@@ -2698,6 +2700,8 @@ function renderConsoleSuggestions() {
     const raw = String(consoleInputEl.value || '');
     const trimmedStart = raw.trimStart();
     if (!trimmedStart.startsWith('/')) {
+        consoleState.suggestionMatches = [];
+        consoleState.suggestionIndex = 0;
         consoleSuggestionsEl.style.display = 'none';
         consoleSuggestionsEl.innerHTML = '';
         return;
@@ -2708,20 +2712,29 @@ function renderConsoleSuggestions() {
     const matches = all.filter((name) => name.includes(token)).slice(0, 12);
 
     if (matches.length <= 0) {
+        consoleState.suggestionMatches = [];
+        consoleState.suggestionIndex = 0;
         consoleSuggestionsEl.style.display = 'none';
         consoleSuggestionsEl.innerHTML = '';
         return;
     }
 
+    if (consoleState.suggestionMatches.join('|') !== matches.join('|')) {
+        consoleState.suggestionIndex = 0;
+    }
+    consoleState.suggestionMatches = matches;
+    const activeIdx = Math.max(0, Math.min(consoleState.suggestionIndex, matches.length - 1));
+    consoleState.suggestionIndex = activeIdx;
+
     consoleSuggestionsEl.innerHTML = '';
-    matches.forEach((name) => {
+    matches.forEach((name, idx) => {
         const row = document.createElement('button');
         row.type = 'button';
         row.textContent = `/${name}`;
         row.style.textAlign = 'left';
-        row.style.background = 'rgba(8, 14, 28, 0.92)';
+        row.style.background = idx === activeIdx ? 'rgba(40, 74, 122, 0.96)' : 'rgba(8, 14, 28, 0.92)';
         row.style.color = '#d9e8ff';
-        row.style.border = '1px solid rgba(120, 168, 255, 0.34)';
+        row.style.border = idx === activeIdx ? '1px solid rgba(120, 200, 255, 0.75)' : '1px solid rgba(120, 168, 255, 0.34)';
         row.style.borderRadius = '6px';
         row.style.padding = '6px 8px';
         row.style.cursor = 'pointer';
@@ -2729,6 +2742,7 @@ function renderConsoleSuggestions() {
         row.style.fontSize = '12px';
         row.addEventListener('mousedown', (event) => {
             event.preventDefault();
+            consoleState.suggestionIndex = idx;
             consoleInputEl.value = `/${name} `;
             renderConsoleSuggestions();
             requestAnimationFrame(() => {
@@ -2813,6 +2827,30 @@ function ensureConsoleUi() {
     });
     consoleInputEl.addEventListener('keydown', (event) => {
         event.stopPropagation();
+
+        if (event.key === 'Tab') {
+            renderConsoleSuggestions();
+            const suggestions = Array.isArray(consoleState.suggestionMatches)
+                ? consoleState.suggestionMatches
+                : [];
+            if (suggestions.length > 0) {
+                const step = event.shiftKey ? -1 : 1;
+                if (event.shiftKey || suggestions.length > 1) {
+                    const nextIdx = (consoleState.suggestionIndex + step + suggestions.length) % suggestions.length;
+                    consoleState.suggestionIndex = nextIdx;
+                }
+                const selectedName = suggestions[consoleState.suggestionIndex] || suggestions[0];
+                if (selectedName) {
+                    consoleInputEl.value = `/${selectedName} `;
+                    renderConsoleSuggestions();
+                    requestAnimationFrame(() => {
+                        consoleInputEl.setSelectionRange(consoleInputEl.value.length, consoleInputEl.value.length);
+                    });
+                }
+            }
+            event.preventDefault();
+            return;
+        }
 
         if (event.key === 'Enter') {
             const commandText = (consoleInputEl.value || '').trim();
