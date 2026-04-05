@@ -15362,6 +15362,14 @@ function updateAllPlayerHeadHealthBars() {
     const localKey = 'local-player';
     const headBarHeightOffset = 1.65;
 
+    // Combat uses dedicated UI; clear world-space player stat bars so they do not linger.
+    if (currentGameMode === GAME_MODE.COMBAT) {
+        for (const key of Array.from(playerHeadHealthBars.keys())) {
+            removePlayerHeadHealthBar(key);
+        }
+        return;
+    }
+
     if (modeManager.current !== MODE.DM && playerRig && playerRig.parent) {
         createPlayerHeadHealthBar(localKey, 'Player');
         const bar = playerHeadHealthBars.get(localKey);
