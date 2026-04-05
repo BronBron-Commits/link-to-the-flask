@@ -857,16 +857,8 @@ function hydrateWorld(payload) {
             );
             dummy.rotation.y = Number(enemyState.rotationY) || 0;
             
-            // Only sync HP if dummy wasn't recently damaged locally (within 1000ms)
-            const now = Date.now();
-            const lastDamagedTime = recentlyDamagedDummies.get(actorId);
-            if (!lastDamagedTime || (now - lastDamagedTime) > 1000) {
-                dummy.userData.hp = Number(enemyState.hp) || 0;
-            }
-            // Clean up old damage entries
-            if (lastDamagedTime && (now - lastDamagedTime) > 1000) {
-                recentlyDamagedDummies.delete(actorId);
-            }
+            // Always sync HP from authoritative server state so health bars never drift.
+            dummy.userData.hp = Number(enemyState.hp) || 0;
             
             dummy.userData.maxHp = Number(enemyState.maxHp) || 50;
             dummy.userData.ac = Number(enemyState.ac) || 12;
