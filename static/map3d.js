@@ -2455,7 +2455,6 @@ function hardSuppressPlayerFacingUiForDm() {
     // DM command center is the only active UI authority in DM mode.
     const detachIds = [
         'combat-log',
-        'action-bar',
         'combat-ui',
         'action-menu',
         'coords-hud',
@@ -13629,16 +13628,14 @@ function restoreCombatInteractionTargetVisual() {
 
 function hideCombatConfirmUI() {
     if (!confirmUI) return;
-    confirmUI.style.display = 'none';
-    confirmUI.style.visibility = 'hidden';
-    confirmUI.style.opacity = '0';
+    if (confirmUI.parentElement) confirmUI.parentElement.removeChild(confirmUI);
+    confirmUI = null;
 }
 
 function isCombatReviewUiOpen() {
     if (currentGameMode !== GAME_MODE.COMBAT) return false;
     if (combatInteraction.awaitingConfirm) return true;
-    if (!confirmUI) return false;
-    return confirmUI.style.display !== 'none' && confirmUI.style.visibility !== 'hidden';
+    return false;
 }
 
 function resetCombatInteraction(options = {}) {
@@ -13658,82 +13655,14 @@ function resetCombatInteraction(options = {}) {
 }
 
 function ensureCombatConfirmUI() {
-    if (confirmUI) return confirmUI;
-
-    confirmUI = document.createElement('div');
-    confirmUI.style.position = 'fixed';
-    confirmUI.style.top = 'auto';
-    confirmUI.style.left = 'auto';
-    confirmUI.style.right = '24px';
-    confirmUI.style.bottom = '24px';
-    confirmUI.style.transform = 'none';
-    confirmUI.style.minWidth = '380px';
-    confirmUI.style.width = 'min(42vw, 580px)';
-    confirmUI.style.maxWidth = 'min(42vw, 580px)';
-    confirmUI.style.padding = '22px 24px';
-    confirmUI.style.background = 'linear-gradient(180deg, rgba(6,10,20,0.94), rgba(10,14,30,0.96))';
-    confirmUI.style.border = '2px solid rgba(115, 206, 255, 0.75)';
-    confirmUI.style.borderRadius = '14px';
-    confirmUI.style.boxShadow = '0 20px 56px rgba(0,0,0,0.58), 0 0 28px rgba(78,214,255,0.22), inset 0 0 0 1px rgba(255,255,255,0.06)';
-    confirmUI.style.backdropFilter = 'blur(10px)';
-    confirmUI.style.color = '#eef6ff';
-    confirmUI.style.fontFamily = 'Consolas, "Segoe UI", monospace';
-    confirmUI.style.fontSize = '15px';
-    confirmUI.style.lineHeight = '1.6';
-    confirmUI.style.textAlign = 'left';
-    confirmUI.style.zIndex = '120000';
-    confirmUI.style.display = 'none';
-    confirmUI.style.visibility = 'hidden';
-    confirmUI.style.opacity = '0';
-    confirmUI.style.pointerEvents = 'auto';
-    confirmUI.style.cursor = 'default';
-    document.body.appendChild(confirmUI);
-    window.addEventListener('resize', () => {
-        if (confirmUI && confirmUI.style.display !== 'none') {
-            positionCombatConfirmUI();
-        }
-    });
-    return confirmUI;
+    // Legacy confirm panel is retired. The FFX action-menu renders inline confirm controls.
+    if (confirmUI && confirmUI.parentElement) confirmUI.parentElement.removeChild(confirmUI);
+    confirmUI = null;
+    return null;
 }
 
 function positionCombatConfirmUI() {
-    if (!confirmUI) return;
-
-    const hud = document.getElementById('hud');
-    if (!hud || !hud.classList.contains('visible')) {
-        confirmUI.style.right = '24px';
-        confirmUI.style.bottom = '24px';
-        confirmUI.style.left = 'auto';
-        confirmUI.style.top = 'auto';
-        confirmUI.style.transform = 'none';
-        return;
-    }
-
-    const hudRect = hud.getBoundingClientRect();
-    const spacing = 18;
-    const viewportPadding = 16;
-    const panelRect = confirmUI.getBoundingClientRect();
-    const panelWidth = panelRect.width || 380;
-    const panelHeight = panelRect.height || 180;
-
-    let left = hudRect.right + spacing;
-    let top = hudRect.bottom - panelHeight;
-
-    if (left + panelWidth > window.innerWidth - viewportPadding) {
-        left = window.innerWidth - panelWidth - viewportPadding;
-    }
-    if (left < viewportPadding) {
-        left = viewportPadding;
-    }
-    if (top < viewportPadding) {
-        top = Math.max(viewportPadding, hudRect.top - panelHeight - spacing);
-    }
-
-    confirmUI.style.left = `${Math.round(left)}px`;
-    confirmUI.style.top = `${Math.round(top)}px`;
-    confirmUI.style.right = 'auto';
-    confirmUI.style.bottom = 'auto';
-    confirmUI.style.transform = 'none';
+    // No-op: legacy confirm panel removed.
 }
 
 let endTurnPromptUI = null;
@@ -13861,75 +13790,13 @@ function hideEndTurnPrompt() {
 }
 
 function showAttackPreviewUI() {
-    if (modeManager.current === MODE.DM) {
-        hideCombatConfirmUI();
-        return;
-    }
-    if (!combatInteraction.preview) return;
-    releasePointerLockIfActive();
-    const ui = ensureCombatConfirmUI();
-    const preview = combatInteraction.preview;
-    console.log('SHOWING CONFIRM UI', preview);
-    ui.innerHTML = `
-        <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Attack Preview</div>
-        <div style="font-size:17px;font-weight:700;margin-bottom:10px;">Ready to attack</div>
-        <div style="opacity:0.82;margin-bottom:12px;">Server resolves roll and damage • ${combatInteraction.target?.userData?.name || 'Target'}</div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <button id="confirmAttack" style="padding:8px 12px;background:#16a34a;border:1px solid #22c55e;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">CONFIRM</button>
-            <button id="cancelAttack" style="padding:8px 12px;background:#7f1d1d;border:1px solid #dc2626;color:#fff;border-radius:6px;cursor:pointer;">CANCEL</button>
-        </div>
-    `;
-    ui.style.display = 'block';
-    ui.style.visibility = 'visible';
-    ui.style.opacity = '1';
-    positionCombatConfirmUI();
-
-    showFloatingText('Attack queued', '#ffeb3b', true);
-
-    const confirmBtn = document.getElementById('confirmAttack');
-    const cancelBtn = document.getElementById('cancelAttack');
-    if (confirmBtn) confirmBtn.onclick = confirmAction;
-    if (cancelBtn) cancelBtn.onclick = cancelAction;
+    hideCombatConfirmUI();
+    updateActionMenu();
 }
 
 function showMoveConfirmUI() {
-    if (modeManager.current === MODE.DM) {
-        hideCombatConfirmUI();
-        return;
-    }
-    if (!combatInteraction.preview) return;
-    releasePointerLockIfActive();
-    const ui = ensureCombatConfirmUI();
-    const preview = combatInteraction.preview;
-    const isMoveAndAttack = combatInteraction.action === 'move-and-attack';
-    const isDash = combatInteraction.action === 'dash';
-    const isDisengage = combatInteraction.action === 'disengage';
-    const titleText = isMoveAndAttack
-        ? 'Move Then Attack'
-        : (isDash ? 'Dash Destination' : (isDisengage ? 'Disengage Route' : 'Move Destination'));
-    const confirmText = isMoveAndAttack
-        ? 'MOVE + ATTACK'
-        : (isDash ? 'DASH HERE' : (isDisengage ? 'DISENGAGE HERE' : 'MOVE HERE'));
-    ui.innerHTML = `
-        <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">${titleText}</div>
-        <div style="font-size:17px;font-weight:700;margin-bottom:10px;">${preview.costFeet} ft &mdash; ${preview.valid ? '<span style="color:#7dffb2">IN RANGE</span>' : '<span style="color:#ff7070">TOO FAR</span>'}</div>
-        <div style="opacity:0.82;margin-bottom:12px;">${preview.remainingFeet} ft remaining after move${isDash ? ' • action spent to gain full dash range' : (isDisengage ? ' • no opportunity attacks on this move' : '')}</div>
-        <div style="display:flex;gap:10px;justify-content:flex-end;">
-            <button id="confirmAttack" style="padding:8px 12px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">${confirmText}</button>
-            <button id="cancelAttack" style="padding:8px 12px;background:#7f1d1d;border:1px solid #dc2626;color:#fff;border-radius:6px;cursor:pointer;">CANCEL</button>
-        </div>
-    `;
-    ui.style.display = 'block';
-    ui.style.visibility = 'visible';
-    ui.style.opacity = '1';
-    positionCombatConfirmUI();
-
-    showFloatingText(preview.valid ? `Move ${preview.costFeet} ft` : 'Out of range', preview.valid ? '#66b3ff' : '#ff8a8a', true);
-
-    const confirmBtn = document.getElementById('confirmAttack');
-    const cancelBtn  = document.getElementById('cancelAttack');
-    if (confirmBtn) confirmBtn.onclick = confirmAction;
-    if (cancelBtn)  cancelBtn.onclick  = cancelAction;
+    hideCombatConfirmUI();
+    updateActionMenu();
 }
 
 function selectMoveAndAttackAction(target) {
@@ -13951,11 +13818,11 @@ function selectMoveAndAttackAction(target) {
     combatInteraction.target = target;
     
     if (inMeleeRange) {
-        // In range: show move-or-attack choice
-        showMoveOrAttackPrompt(target);
+        // Unified flow: enemy click + attack mode goes straight to inline FFX confirm.
+        selectAttackTarget(target);
     } else if (approachPreview && approachPreview.valid) {
-        // Reachable this turn: let player choose auto move+attack vs manual movement.
-        showAutoMoveAttackPrompt(target, approachPreview);
+        // Unified flow: create move+attack preview and confirm through the FFX menu only.
+        initiateAutoApproachToTarget(target, approachPreview);
     } else {
         // Too far to auto-combo this turn, fall back to manual move guidance.
         showFloatingText('Too far this turn - move closer first', '#66b3ff', true);
@@ -13991,116 +13858,13 @@ function buildAutoApproachPreview(target) {
 }
 
 function showAutoMoveAttackPrompt(target, preview) {
-    releasePointerLockIfActive();
-    const ui = ensureCombatConfirmUI();
-    const dist = getEffectiveCombatDistanceFeet(playerState, target);
-
-    ui.innerHTML = `
-        <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Target Reachable This Turn</div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Distance: ${dist.toFixed(1)} ft</div>
-        <div style="opacity:0.82;margin-bottom:10px;">Auto move cost: ${preview.costFeet} ft • ${preview.remainingFeet} ft left after move</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-            <button id="confirmAttack" style="padding:8px 14px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">⚔ AUTO MOVE + MELEE</button>
-            <button id="arcaneInPlaceBtn" style="padding:8px 14px;background:#4c1d95;border:1px solid #7c3aed;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">✦ ARCANE ATTACK</button>
-            <button id="cancelAttack" style="padding:8px 14px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;">↑ MOVE MANUALLY</button>
-        </div>
-    `;
-    ui.style.display = 'block';
-    ui.style.visibility = 'visible';
-    ui.style.opacity = '1';
-    positionCombatConfirmUI();
-
-    combatInteraction.action = 'auto-move-attack-choice';
-    combatInteraction.autoApproachPreview = {
-        destX: preview.destPos.x,
-        destY: preview.destPos.y,
-        destZ: preview.destPos.z,
-        costFeet: preview.costFeet,
-        valid: preview.valid,
-        remainingFeet: preview.remainingFeet,
-    };
-    combatInteraction.awaitingConfirm = true;
-
-    const confirmBtn = document.getElementById('confirmAttack');
-    const arcaneInPlaceBtn = document.getElementById('arcaneInPlaceBtn');
-    const cancelBtn = document.getElementById('cancelAttack');
-
-    if (confirmBtn) {
-        confirmBtn.onclick = () => {
-            confirmAction();
-        };
-    }
-
-    if (arcaneInPlaceBtn) {
-        arcaneInPlaceBtn.onclick = () => {
-            hideCombatConfirmUI();
-            combatInteraction.awaitingConfirm = false;
-            rangedAttack(target);
-        };
-    }
-
-    if (cancelBtn) {
-        cancelBtn.onclick = () => {
-            hideCombatConfirmUI();
-            combatInteraction.awaitingConfirm = false;
-            currentAction = 'move';
-            showMovementTilesForApproach(target);
-        };
-    }
+    // Legacy chooser UI removed. Route through unified FFX menu flow.
+    initiateAutoApproachToTarget(target, preview);
 }
 
 function showMoveOrAttackPrompt(target) {
-    releasePointerLockIfActive();
-    const ui = ensureCombatConfirmUI();
-    const dist = getEffectiveCombatDistanceFeet(playerState, target);
-    const preview = { damageMin: '-', damageMax: '-' };
-
-    ui.innerHTML = `
-        <div style="font-size:13px;color:#82d8ff;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;">Choose Attack</div>
-        <div style="font-size:14px;font-weight:700;margin-bottom:6px;">Distance: ${dist.toFixed(1)} ft</div>
-        <div style="opacity:0.82;margin-bottom:10px;">Melee — resolved by server authority</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-            <button id="meleeAttackBtn" style="padding:8px 14px;background:#dc2626;border:1px solid #ef4444;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">⚔ MELEE ATTACK</button>
-            <button id="arcaneAttackBtn" style="padding:8px 14px;background:#4c1d95;border:1px solid #7c3aed;color:#fff;border-radius:6px;cursor:pointer;font-weight:700;">✦ ARCANE ATTACK</button>
-            <button id="moveFirstBtn" style="padding:8px 14px;background:#2563eb;border:1px solid #60a5fa;color:#fff;border-radius:6px;cursor:pointer;">↑ MOVE FIRST</button>
-        </div>
-    `;
-    ui.style.display = 'block';
-    ui.style.visibility = 'visible';
-    ui.style.opacity = '1';
-    positionCombatConfirmUI();
-
-    combatInteraction.action = 'move-or-attack-choice';
-    combatInteraction.awaitingConfirm = true;
-
-    const meleeBtn = document.getElementById('meleeAttackBtn');
-    const arcaneBtn = document.getElementById('arcaneAttackBtn');
-    const moveBtn = document.getElementById('moveFirstBtn');
-
-    if (meleeBtn) {
-        meleeBtn.onclick = () => {
-            hideCombatConfirmUI();
-            combatInteraction.awaitingConfirm = false;
-            selectAttackTarget(target);
-        };
-    }
-
-    if (arcaneBtn) {
-        arcaneBtn.onclick = () => {
-            hideCombatConfirmUI();
-            combatInteraction.awaitingConfirm = false;
-            rangedAttack(target);
-        };
-    }
-
-    if (moveBtn) {
-        moveBtn.onclick = () => {
-            hideCombatConfirmUI();
-            combatInteraction.awaitingConfirm = false;
-            currentAction = 'move';
-            showMovementTilesForApproach(target);
-        };
-    }
+    // Legacy chooser UI removed. Route through unified FFX menu flow.
+    selectAttackTarget(target);
 }
 
 function initiateAutoApproachToTarget(target, preparedPreview = null) {
@@ -18571,7 +18335,7 @@ updateCombatUI();
     .ffx-main { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.45); border-radius:10px 0 0 10px; min-width:215px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9),inset 0 1px 0 rgba(56,189,248,0.18); }
     .ffx-main-solo { border-radius:10px; }
     .ffx-sub { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.35); border-left:none; border-radius:0 10px 10px 0; min-width:190px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); }
-    .ffx-header { display:flex; gap:8px; align-items:center; padding:7px 14px 6px; border-bottom:1px solid rgba(56,189,248,0.13); background:rgba(0,20,50,0.55); color:#7ecfff; font-size:11.5px; font-weight:600; letter-spacing:0.04em; }
+    .ffx-header { display:flex; gap:8px; align-items:center; padding:7px 14px 6px; border-bottom:1px solid rgba(56,189,248,0.18); background:rgb(0,20,50); color:#7ecfff; font-size:11.5px; font-weight:600; letter-spacing:0.04em; }
     .ffx-res-pip { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; vertical-align:middle; }
     .ffx-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
     .ffx-row:hover:not(.ffx-row-disabled) { background:rgba(14,64,112,0.5); border-left-color:rgba(56,189,248,0.45); }
