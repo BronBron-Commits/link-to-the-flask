@@ -6,6 +6,7 @@ SocketIO event handlers belong in app.py instead.
 """
 import json
 import os
+import re
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,7 +16,12 @@ from werkzeug.utils import secure_filename
 from extensions import app
 import game_state as gs
 from state_sync import broadcast_world
-from scripts.pdf_to_tidy_data import parse_character_tables, write_outputs, build_master_character_record
+from scripts.pdf_to_tidy_data import (
+    parse_character_tables,
+    write_outputs,
+    build_master_character_record,
+    build_engine_entity,
+)
 
 
 def _resolve_contract(filename: str) -> Path | None:
@@ -23,6 +29,82 @@ def _resolve_contract(filename: str) -> Path | None:
         if candidate.exists():
             return candidate
     return None
+
+
+def _sheet_label_for_path(path: Path) -> str:
+    base = re.sub(r"[_\s]+", " ", path.stem).strip()
+    return base or path.name
+
+
+def _discover_selectable_character_sheets() -> list[dict]:
+    sheets: list[dict] = []
+    roots = (
+        ("static", gs.STATIC_DIR),
+        ("uploads", gs.UPLOADS_DIR),
+    )
+    for source, root in roots:
+        if not root.exists():
+            continue
+        for path in sorted(root.rglob("*.pdf")):
+            if not path.is_file():
+                continue
+            rel_path = path.relative_to(root).as_posix()
+            sheets.append(
+                {
+                    "sheetId": f"{source}/{rel_path}",
+                    "source": source,
+                    "filename": path.name,
+                    "relativePath": rel_path,
+                    "label": _sheet_label_for_path(path),
+                }
+            )
+    sheets.sort(key=lambda row: (str(row.get("label") or "").lower(), str(row.get("relativePath") or "").lower()))
+    return sheets
+
+
+def _resolve_selectable_pdf(sheet_id: str) -> Path | None:
+    raw = str(sheet_id or "").strip()
+    if not raw:
+        return None
+    source, sep, rel_path = raw.partition("/")
+    if not sep or not rel_path:
+        return None
+    root = {
+        "static": gs.STATIC_DIR,
+        "uploads": gs.UPLOADS_DIR,
+    }.get(source)
+    if root is None:
+        return None
+    relative = Path(rel_path)
+    if relative.is_absolute() or ".." in relative.parts:
+        return None
+    candidate = (root / relative).resolve()
+    try:
+        candidate.relative_to(root.resolve())
+    except ValueError:
+        return None
+    if not candidate.exists() or not candidate.is_file() or candidate.suffix.lower() != ".pdf":
+        return None
+    return candidate
+
+
+def _import_pdf_to_contracts(source_path: Path) -> dict:
+    gs.CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
+    tables = parse_character_tables(source_path)
+    print("[PDF PARSE OUTPUT]", tables, flush=True)
+
+    master = build_master_character_record(tables)
+    print("[MASTER RECORD]", master, flush=True)
+
+    engine_entity = build_engine_entity(master)
+    write_outputs(gs.CONTRACTS_DIR, tables)
+    return {
+        "ok": True,
+        "source_file": source_path.name,
+        "character": tables.get("character", {}),
+        "master": master,
+        "engine_entity": engine_entity,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +207,10 @@ def character_tidy_data_files(filename: str):
 # PDF import
 # ---------------------------------------------------------------------------
 
+@app.route("/api/character-sheets", methods=["GET"])
+def character_sheets_api():
+    return jsonify(ok=True, sheets=_discover_selectable_character_sheets())
+
 @app.route("/api/import-pdf", methods=["POST"])
 def import_pdf_api():
     pdf_file = request.files.get("pdf")
@@ -136,15 +222,21 @@ def import_pdf_api():
     filename = secure_filename(pdf_file.filename)
     source_path = gs.UPLOADS_DIR / filename
     pdf_file.save(source_path)
-    gs.CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
-    tables = parse_character_tables(source_path)
-    print("[PDF PARSE OUTPUT]", tables, flush=True)
+    return jsonify(_import_pdf_to_contracts(source_path))
 
-    master = build_master_character_record(tables)
-    print("[MASTER RECORD]", master, flush=True)
 
-    write_outputs(gs.CONTRACTS_DIR, tables)
-    return jsonify(ok=True, source_file=filename, character=tables.get("character", {}), master=master)
+@app.route("/api/import-character-sheet", methods=["POST"])
+def import_character_sheet_api():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        payload = request.form.to_dict(flat=True)
+    sheet_id = str(payload.get("sheetId") or payload.get("sheet") or "").strip()
+    if not sheet_id:
+        return jsonify(ok=False, error="missing sheetId"), 400
+    source_path = _resolve_selectable_pdf(sheet_id)
+    if source_path is None:
+        return jsonify(ok=False, error="character sheet not found"), 404
+    return jsonify(_import_pdf_to_contracts(source_path))
 
 
 @app.route("/api/player-info")

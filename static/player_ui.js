@@ -88,6 +88,15 @@ style.textContent = `
     border-color: rgba(255,255,255,0.2);
     color: #eef2ff;
   }
+  #entry-library-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  #entry-library-row.hidden {
+    display: none;
+  }
   #entry-file-row {
     display: none;
     flex-direction: column;
@@ -98,6 +107,17 @@ style.textContent = `
     display: flex;
   }
   #entry-pdf-input {
+    background: #111626;
+    color: #eef2ff;
+    border: 1px solid #3b4566;
+    border-radius: 6px;
+    padding: 8px;
+    font-family: inherit;
+    font-size: 12px;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  #entry-sheet-select {
     background: #111626;
     color: #eef2ff;
     border: 1px solid #3b4566;
@@ -128,34 +148,154 @@ overlay.innerHTML = `
     <h1>Enter the Scene</h1>
     <p>Load your character sheet to play with full mechanics,<br>or explore the world freely.</p>
 
-    <div id="entry-file-row">
-      <input id="entry-pdf-input" type="file" accept="application/pdf,.pdf" />
-      <div id="entry-status"></div>
+    <div id="entry-library-row" class="hidden">
+      <select id="entry-sheet-select"></select>
     </div>
 
-    <button class="entry-btn primary" id="entry-btn-pdf">Upload Player Sheet</button>
+    <div id="entry-status"></div>
+
+    <button class="entry-btn primary" id="entry-btn-sheet">Load Selected Character</button>
+
+    <div id="entry-file-row">
+      <input id="entry-pdf-input" type="file" accept="application/pdf,.pdf" />
+    </div>
+
+    <button class="entry-btn" id="entry-btn-pdf">Upload New Player Sheet</button>
     <button class="entry-btn ghost" id="entry-btn-explore">Explore Without Mechanics</button>
   </div>
 `;
 document.body.appendChild(overlay);
 
+const libraryRow = document.getElementById('entry-library-row');
+const sheetSelect = document.getElementById('entry-sheet-select');
 const fileRow = document.getElementById('entry-file-row');
 const pdfInput = document.getElementById('entry-pdf-input');
 const statusEl = document.getElementById('entry-status');
+const btnSheet = document.getElementById('entry-btn-sheet');
 const btnPdf = document.getElementById('entry-btn-pdf');
 const btnExplore = document.getElementById('entry-btn-explore');
 
 let uploadMode = false;
+let availableSheets = [];
 
 function setStatus(msg, isError = false) {
   statusEl.textContent = msg;
   statusEl.classList.toggle('error', isError);
 }
 
+function setBusy(isBusy) {
+  btnSheet.disabled = isBusy || availableSheets.length === 0;
+  btnPdf.disabled = isBusy;
+  btnExplore.disabled = isBusy;
+}
+
 function dismiss() {
   overlay.classList.add('fade-out');
   overlay.addEventListener('transitionend', () => overlay.remove(), { once: true });
 }
+
+function applyImportedCharacter(data) {
+  setStatus(`Loaded: ${data.source_file}`);
+
+  if (window.socket) {
+    const ch = data.character || {};
+    const engineEntity = data.engine_entity || {};
+    window.socket.emit('player-character-stats', {
+      ac: ch.armor_class ?? null,
+      maxHp: ch.hit_points ?? null,
+      initiativeBonus: ch.initiative_bonus ?? null,
+      speedFt: ch.speed ?? null,
+      inventory: engineEntity.inventory ?? null,
+    });
+  }
+
+  if (data.master) {
+    const m = data.master;
+    const hp = m.hit_points ?? {};
+    const maxHp = hp.max_hp ?? null;
+    const currentHp = hp.current_hp ?? maxHp;
+    document.dispatchEvent(new CustomEvent('hud:refresh', {
+      detail: {
+        summary: {
+          name: m.identity?.character_name ?? null,
+          class_level: m.identity?.class_level ?? null,
+          armor_class: m.core_stats?.armor_class ?? null,
+          max_hp: maxHp,
+          current_hp: currentHp,
+          speed_ft: m.core_stats?.speed_ft ?? null,
+          proficiency_bonus: m.core_stats?.proficiency_bonus ?? null,
+          initiative_bonus: m.core_stats?.initiative_bonus ?? null,
+        },
+        abilities: m.abilities ?? {},
+      },
+    }));
+  } else {
+    document.dispatchEvent(new CustomEvent('hud:refresh'));
+  }
+
+  setTimeout(dismiss, 800);
+}
+
+async function loadRepoSheetOptions() {
+  try {
+    const res = await fetch('/api/character-sheets');
+    const data = await res.json();
+    if (!res.ok || !data.ok || !Array.isArray(data.sheets) || data.sheets.length === 0) {
+      libraryRow.classList.add('hidden');
+      btnSheet.disabled = true;
+      btnSheet.textContent = 'No Repo Sheets Found';
+      return;
+    }
+
+    availableSheets = data.sheets;
+    sheetSelect.innerHTML = '';
+    for (const sheet of availableSheets) {
+      const option = document.createElement('option');
+      option.value = sheet.sheetId;
+      option.textContent = sheet.relativePath === sheet.filename
+        ? sheet.label
+        : `${sheet.label} (${sheet.relativePath})`;
+      sheetSelect.appendChild(option);
+    }
+    libraryRow.classList.remove('hidden');
+    btnSheet.disabled = false;
+  } catch (err) {
+    libraryRow.classList.add('hidden');
+    btnSheet.disabled = true;
+    setStatus(`Could not load repo sheets: ${err}`, true);
+  }
+}
+
+btnSheet.addEventListener('click', async () => {
+  const sheetId = sheetSelect.value;
+  if (!sheetId) {
+    setStatus('Choose a repo PDF first.', true);
+    return;
+  }
+
+  setBusy(true);
+  setStatus('Loading selected sheet...');
+
+  try {
+    const res = await fetch('/api/import-character-sheet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sheetId }),
+    });
+    const data = await res.json();
+
+    if (!res.ok || !data.ok) {
+      setStatus(data.error || 'Import failed.', true);
+      setBusy(false);
+      return;
+    }
+
+    applyImportedCharacter(data);
+  } catch (err) {
+    setStatus(`Error: ${err}`, true);
+    setBusy(false);
+  }
+});
 
 btnPdf.addEventListener('click', async () => {
   if (!uploadMode) {
@@ -173,8 +313,7 @@ btnPdf.addEventListener('click', async () => {
     return;
   }
 
-  btnPdf.disabled = true;
-  btnExplore.disabled = true;
+  setBusy(true);
   setStatus('Importing\u2026');
 
   try {
@@ -185,56 +324,17 @@ btnPdf.addEventListener('click', async () => {
 
     if (!res.ok || !data.ok) {
       setStatus(data.error || 'Import failed.', true);
-      btnPdf.disabled = false;
-      btnExplore.disabled = false;
+      setBusy(false);
       return;
     }
 
-    setStatus(`Loaded: ${data.source_file}`);
-
-    // Push character combat stats to the server so AC, max HP, etc.
-    // are used in server-side combat calculations for this session.
-    if (data.character && window.socket) {
-      const ch = data.character;
-      window.socket.emit('player-character-stats', {
-        ac:               ch.armor_class        ?? null,
-        maxHp:            ch.hit_points         ?? null,
-        initiativeBonus:  ch.initiative_bonus   ?? null,
-        speedFt:          ch.speed              ?? null,
-      });
-    }
-
-    // Pass the master record directly in the event so the HUD doesn't need
-    // a second HTTP round-trip and always shows freshly parsed data.
-    if (data.master) {
-      const m = data.master;
-      const hp = m.hit_points ?? {};
-      const maxHp = hp.max_hp ?? null;
-      document.dispatchEvent(new CustomEvent('hud:refresh', {
-        detail: {
-          summary: {
-            name:              m.identity?.character_name  ?? null,
-            class_level:       m.identity?.class_level     ?? null,
-            armor_class:       m.core_stats?.armor_class   ?? null,
-            max_hp:            maxHp,
-            current_hp:        maxHp,
-            speed_ft:          m.core_stats?.speed_ft      ?? null,
-            proficiency_bonus: m.core_stats?.proficiency_bonus ?? null,
-            initiative_bonus:  m.core_stats?.initiative_bonus  ?? null,
-          },
-          abilities: m.abilities ?? {},
-        },
-      }));
-    } else {
-      document.dispatchEvent(new CustomEvent('hud:refresh'));
-    }
-
-    setTimeout(dismiss, 800);
+    applyImportedCharacter(data);
   } catch (err) {
     setStatus(`Error: ${err}`, true);
-    btnPdf.disabled = false;
-    btnExplore.disabled = false;
+    setBusy(false);
   }
 });
 
 btnExplore.addEventListener('click', dismiss);
+
+loadRepoSheetOptions();
