@@ -216,9 +216,6 @@ let lastFrameTimeMs = 0;
 let focusedMaxFPS = SETTINGS.maxFPS;
 let focusedParticlesEnabled = SETTINGS.particles;
 let focusedRenderScale = SETTINGS.renderScale;
-let backgroundThrottled = (document.hidden === true);
-const BACKGROUND_TAB_MAX_FPS = 5;
-const BACKGROUND_TAB_MAX_RENDER_SCALE = 0.4;
 const CLIENT_MODE_FULL = 'full';
 const CLIENT_MODE_OBSERVER = 'observer';
 const OBSERVER_RENDER_SCALE_MAX = 0.5;
@@ -227,7 +224,7 @@ let CLIENT_MODE = CLIENT_MODE_FULL;
 let forceObserverMode = false;
 
 function isPrimaryClient() {
-    return !backgroundThrottled;
+    return true;
 }
 
 function isObserverClient() {
@@ -236,28 +233,24 @@ function isObserverClient() {
 
 function applySettings() {
     const configuredMaxFPS = Number(SETTINGS.maxFPS) || 60;
-    const baseMaxFPS = isPrimaryClient()
-        ? Math.max(10, configuredMaxFPS)
-        : Math.min(Math.max(1, configuredMaxFPS), BACKGROUND_TAB_MAX_FPS);
+    const baseMaxFPS = Math.max(10, configuredMaxFPS);
     const effectiveMaxFPS = isObserverClient()
         ? Math.min(baseMaxFPS, OBSERVER_MAX_FPS)
         : baseMaxFPS;
     frameIntervalMs = 1000 / effectiveMaxFPS;
-    combatParticlesEnabled = !!SETTINGS.particles && isPrimaryClient() && !isObserverClient();
+    combatParticlesEnabled = !!SETTINGS.particles && !isObserverClient();
     updateCombatParticleBudget();
 
     if (!rendererReady) return;
 
     const dpr = window.devicePixelRatio || 1;
     const configuredScale = Math.max(0.35, Math.min(1.0, Number(SETTINGS.renderScale) || 1));
-    const primaryScale = isPrimaryClient()
-        ? configuredScale
-        : Math.min(configuredScale, BACKGROUND_TAB_MAX_RENDER_SCALE);
+    const primaryScale = configuredScale;
     const scale = isObserverClient()
         ? Math.min(primaryScale, OBSERVER_RENDER_SCALE_MAX)
         : primaryScale;
     renderer.setPixelRatio(dpr * scale);
-    renderer.shadowMap.enabled = !!SETTINGS.shadows && isPrimaryClient() && !isObserverClient();
+    renderer.shadowMap.enabled = !!SETTINGS.shadows && !isObserverClient();
 }
 
 function setQuality(level) {
@@ -292,21 +285,9 @@ function setQuality(level) {
 }
 
 document.addEventListener('visibilitychange', () => {
-    if (document.hidden) {
-        focusedMaxFPS = Number(SETTINGS.maxFPS) || focusedMaxFPS;
-        focusedParticlesEnabled = !!SETTINGS.particles;
-        focusedRenderScale = Math.max(0.35, Math.min(1.0, Number(SETTINGS.renderScale) || focusedRenderScale));
-
-        backgroundThrottled = true;
-        SETTINGS.maxFPS = Math.min(focusedMaxFPS, BACKGROUND_TAB_MAX_FPS);
-        SETTINGS.particles = false;
-        SETTINGS.renderScale = Math.min(focusedRenderScale, BACKGROUND_TAB_MAX_RENDER_SCALE);
-    } else {
-        backgroundThrottled = false;
-        SETTINGS.maxFPS = focusedMaxFPS;
-        SETTINGS.particles = focusedParticlesEnabled;
-        SETTINGS.renderScale = focusedRenderScale;
-    }
+    focusedMaxFPS = Number(SETTINGS.maxFPS) || focusedMaxFPS;
+    focusedParticlesEnabled = !!SETTINGS.particles;
+    focusedRenderScale = Math.max(0.35, Math.min(1.0, Number(SETTINGS.renderScale) || focusedRenderScale));
     applySettings();
 });
 
@@ -10966,9 +10947,7 @@ function acquireCombatParticle(colorHex = 0xff4444) {
 function updateCombatParticleBudget() {
     const quality = String(SETTINGS.quality || 'high').toLowerCase();
     const qualityCap = quality === 'low' ? COMBAT_PARTICLE_POOL_LOW_MAX : COMBAT_PARTICLE_POOL_DEFAULT_MAX;
-    combatParticlePoolMax = isPrimaryClient()
-        ? qualityCap
-        : Math.min(qualityCap, COMBAT_PARTICLE_POOL_HIDDEN_MAX);
+    combatParticlePoolMax = qualityCap;
 
     while (combatParticlePool.length > combatParticlePoolMax) {
         const extra = combatParticlePool.pop();
@@ -10985,7 +10964,7 @@ function getCombatParticleSpawnBudgetPerFrame() {
 }
 
 function enqueueCombatParticleBurst(position, config = {}) {
-    if (!combatParticlesEnabled || !isPrimaryClient() || !isSimulationOwner()) return;
+    if (!combatParticlesEnabled || !isSimulationOwner()) return;
     if (!position) return;
 
     const count = Math.max(1, Math.min(MAX_PARTICLE_BURST, Number(config.count) || 1));
@@ -11006,7 +10985,7 @@ function enqueueCombatParticleBurst(position, config = {}) {
 
 function processQueuedCombatParticleBursts() {
     if (!pendingCombatParticleBursts.length) return;
-    if (!combatParticlesEnabled || !isPrimaryClient() || !isSimulationOwner()) {
+    if (!combatParticlesEnabled || !isSimulationOwner()) {
         pendingCombatParticleBursts.length = 0;
         return;
     }
@@ -20567,9 +20546,6 @@ function animate(nowMs) {
     const delta = inHitStop ? (rawDelta * 0.24) : rawDelta;
     lastTime = now;
 
-    if (!isPrimaryClient()) {
-        return;
-    }
     syncSkyboxWithGameMode();
     updateClientRuntimeModeFromAuthority();
 
