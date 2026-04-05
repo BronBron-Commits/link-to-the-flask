@@ -1867,6 +1867,7 @@ let inspectorOpen = false;
 let inspectorMenu = null;
 let inspectorTab = null;
 let actionMenuEl = null;
+let ffxMenuState = { openSub: null };
 let diceCinematicOverlay = null;
 let diceCinematicTimer = null;
 let diceCinematicActive = false;
@@ -18564,7 +18565,6 @@ updateCombatUI();
 
 // ── Action Menu UI ──
 // --- FFX-style nested combat menu ---
-let ffxMenuState = { openSub: null };
 
 (function injectFfxMenuCss() {
     if (document.getElementById('ffx-menu-style')) return;
