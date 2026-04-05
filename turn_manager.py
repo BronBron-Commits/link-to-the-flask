@@ -22,6 +22,53 @@ from state_sync import broadcast_world
 # Core turn advancement
 # ---------------------------------------------------------------------------
 
+def evaluate_combat_end() -> str | None:
+    """Return the authoritative combat outcome once one side can no longer act."""
+    combat = gs.world_state.get("combat", {})
+    state = combat.get("state", {}) if isinstance(combat, dict) else {}
+    if not bool(state.get("inCombat")):
+        return None
+
+    players_alive = [
+        sid for sid, entry in gs.players.items()
+        if isinstance(entry, dict)
+        and gs.normalize_role(entry.get("role")) == "player"
+        and not gs.is_player_downed(entry)
+    ]
+    entities = gs.world_state.get("entities", {})
+    enemies_alive = [
+        eid for eid, entity in (entities.items() if isinstance(entities, dict) else [])
+        if gs.is_enemy(entity) and not gs.is_enemy_downed(entity)
+    ]
+
+    if not players_alive:
+        return "players_defeated"
+    if not enemies_alive:
+        return "players_victorious"
+    return None
+
+
+def conclude_combat_if_needed(initiator_sid: str | None = None) -> str | None:
+    """Finalize combat immediately when the result is decided."""
+    result = evaluate_combat_end()
+    if not result:
+        return None
+
+    combat = gs.world_state.get("combat", {})
+    state = combat.get("state", {}) if isinstance(combat, dict) else {}
+    resolved_initiator = str(initiator_sid or state.get("initiator") or "").strip()
+    rounds = max(1, int(gs.safe_float(state.get("roundNumber", 1), 1)))
+    removed_enemy_ids = gs.prune_defeated_enemies() if result == "players_victorious" else []
+
+    socketio.emit("combat-ended", {
+        "result": result,
+        "rounds": rounds,
+        "winner": "players" if result == "players_victorious" else "enemies",
+        "removedEnemyIds": removed_enemy_ids,
+    })
+    end_combat(resolved_initiator)
+    return result
+
 def _advance_turn() -> dict | None:
     """Increment the turn index by one. Returns the new turn payload or None."""
     combat = gs.world_state.setdefault("combat", {})
@@ -59,17 +106,26 @@ def advance_and_resolve() -> dict | None:
 
     Must be called inside gs.turn_lock.
     """
+    if conclude_combat_if_needed() is not None:
+        return None
+
     while True:
         turn_data = _advance_turn()
         if turn_data is None:
             return None
         actor = turn_data.get("currentActor") or {}
+        if not gs.is_combat_actor_active(actor):
+            if conclude_combat_if_needed() is not None:
+                return None
+            continue
         if actor.get("type") != "enemy":
             # Next up is a player — return and let the caller broadcast.
             return turn_data
         # Show all clients that this enemy is the active actor, then resolve.
         socketio.emit("combat-turn", turn_data)
         run_enemy_turn(actor)
+        if conclude_combat_if_needed() is not None:
+            return None
         # Loop: continue advancing until we land on a player turn.
 
 
@@ -110,6 +166,9 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
         "id": actor_id, "type": "enemy",
         "position": {"x": 0.0, "y": 0.0, "z": 0.0},
     })
+    if gs.is_enemy_downed(enemy):
+        print(f"[ENEMY] {actor_id} is downed; skipping turn", flush=True)
+        return {"attacker": actor_id, "type": "none", "reason": "downed"}
     e_pos = enemy.get("position") if isinstance(enemy.get("position"), dict) else {"x": 0.0, "y": 0.0, "z": 0.0}
     ex = gs.safe_float(e_pos.get("x"))
     ey = gs.safe_float(e_pos.get("y"))
@@ -243,6 +302,8 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     if is_hit:
         current_hp = gs.safe_float(target.get("hp", 100.0), 100.0)
         target["hp"] = max(0.0, current_hp - float(damage))
+        if target["hp"] <= 0.0:
+            gs.mark_player_downed(target)
         print(f"[ENEMY] {actor_id} HIT! target HP: {current_hp:.1f} -> {target['hp']:.1f}", flush=True)
 
     event = {
@@ -250,6 +311,8 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
         "targetId": target_actor_id or None,
         "hitRoll": hit_roll, "attackBonus": atk_bonus, "toHit": total,
         "targetAC": target_ac, "hit": is_hit, "damage": damage,
+        "targetHp": gs.safe_float(target.get("hp", 0.0), 0.0),
+        "targetState": str(target.get("state") or "active"),
     }
     socketio.emit("combat-action-record", {
         "record": {
@@ -275,6 +338,13 @@ def start_combat(
     approver: str | None = None,
 ) -> None:
     """Transition to combat mode and initialise the turn order."""
+    for entry in gs.players.values():
+        gs.clear_combatant_state(entry)
+    entities = gs.world_state.get("entities", {})
+    if isinstance(entities, dict):
+        for entity in entities.values():
+            gs.clear_combatant_state(entity)
+
     gs.world_state["mode"] = "combat"
     order = gs.build_turn_order(initiator_sid)
     combat_state: dict = {"inCombat": True, "initiator": initiator_sid, "roundNumber": 1}

@@ -1213,6 +1213,29 @@ function registerSocketHandlers() {
         forceLeaveCombatPresentation('combat-reset');
     });
 
+    socket.on('combat-ended', (packet) => {
+        if (!packet || typeof packet !== 'object') return;
+        endTurnPending = false;
+        if (endTurnWatchdog) {
+            clearTimeout(endTurnWatchdog);
+            endTurnWatchdog = null;
+        }
+
+        const result = String(packet.result || '').trim();
+        const rounds = Math.max(1, Number(packet.rounds) || 1);
+        console.info('[COMBAT] combat-ended received', { result, rounds, packet });
+
+        if (result === 'players_defeated') {
+            showFloatingText('YOU HAVE FALLEN', '#ff2d2d', true);
+            logCombatEvent(`Combat lost after ${rounds} round${rounds === 1 ? '' : 's'}`, 'miss');
+        } else if (result === 'players_victorious') {
+            showFloatingText('ENEMIES DEFEATED', '#8dd694', true);
+            logCombatEvent(`Combat won in ${rounds} round${rounds === 1 ? '' : 's'}`, 'hit');
+        }
+
+        showCombatOutcomeOverlay(packet);
+    });
+
     socket.on('end-turn-denied', (packet) => {
         endTurnPending = false;
         if (endTurnWatchdog) {
@@ -1245,6 +1268,9 @@ function registerSocketHandlers() {
         const isHit = Boolean(packet.hit);
         const damage = Number(packet.damage) || 0;
         const targetId = String(packet.targetId || '');
+        const targetState = String(packet.targetState || '').trim().toLowerCase();
+        const targetHp = Number(packet.targetHp);
+        const hasAuthoritativeTargetHp = Number.isFinite(targetHp);
         const hitRoll = Number(packet.hitRoll) || 0;
         const toHit = Number(packet.toHit) || 0;
         const targetAC = Number(packet.targetAC) || 0;
@@ -1275,7 +1301,13 @@ function registerSocketHandlers() {
                 : `${attacker} miss`;
             logCombatEvent(logText, isHit ? 'hit' : 'miss');
             showFloatingText(floatText, isHit ? '#ff8a8a' : '#8dd694', true);
-            if (shouldApplyLocalDamage) {
+            if (targetIsLocal && hasAuthoritativeTargetHp) {
+                playerState.hp = Math.max(0, targetHp);
+                updatePlayerHealthHud();
+                if (targetState === 'downed' || playerState.hp <= 0) {
+                    showFloatingText('YOU ARE DOWN', '#ff2d2d');
+                }
+            } else if (shouldApplyLocalDamage) {
                 applyPlayerDamage(damage, attacker);
             }
             return;
@@ -1292,6 +1324,12 @@ function registerSocketHandlers() {
 
             const targetActor = targetId ? findCombatActorById(targetId) : null;
             if (targetActor && targetActor.position) {
+                if (targetActor.userData && hasAuthoritativeTargetHp) {
+                    targetActor.userData.hp = Math.max(0, targetHp);
+                    if (targetState === 'downed') {
+                        targetActor.userData.state = 'downed';
+                    }
+                }
                 const rollLabel = 'ATTACK ROLL';
                 spawnVisualDice(Math.max(1, hitRoll), 20, targetActor, rollLabel);
                 if (isHit) {
@@ -1299,6 +1337,9 @@ function registerSocketHandlers() {
                     triggerEnemyFlinch(targetActor);
                     spawnImpactBurst(targetActor.position, 0x00ff66, 20);
                     playCombatSfxCue('melee-hit');
+                    if (targetState === 'downed' || (hasAuthoritativeTargetHp && targetHp <= 0)) {
+                        showFloatingText(`${(targetActor.userData?.name || 'Target').toUpperCase()} DOWN`, '#ff2d2d', true, { anchorObject: targetActor });
+                    }
                 } else {
                     showFloatingText('MISS', '#ff8a8a', true, { anchorObject: targetActor });
                     playCombatSfxCue('miss');
@@ -12216,6 +12257,155 @@ function forceLeaveCombatPresentation(reason = 'sync') {
     console.info(`[COMBAT] forced exit presentation (${reason})`);
 }
 
+let combatOutcomeOverlay = null;
+let combatOutcomeHideTimer = null;
+
+function ensureCombatOutcomeOverlay() {
+    if (combatOutcomeOverlay) return combatOutcomeOverlay;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'combat-outcome-overlay';
+    overlay.style.position = 'fixed';
+    overlay.style.inset = '0';
+    overlay.style.zIndex = '12000';
+    overlay.style.display = 'none';
+    overlay.style.alignItems = 'center';
+    overlay.style.justifyContent = 'center';
+    overlay.style.background = 'radial-gradient(circle at center, rgba(18,24,28,0.62) 0%, rgba(3,4,6,0.88) 100%)';
+    overlay.style.backdropFilter = 'blur(7px)';
+
+    const panel = document.createElement('div');
+    panel.style.minWidth = 'min(520px, 88vw)';
+    panel.style.maxWidth = '88vw';
+    panel.style.padding = '28px 26px';
+    panel.style.border = '1px solid rgba(255,255,255,0.18)';
+    panel.style.background = 'linear-gradient(180deg, rgba(19,22,28,0.96) 0%, rgba(8,10,14,0.98) 100%)';
+    panel.style.boxShadow = '0 30px 100px rgba(0,0,0,0.55)';
+    panel.style.borderRadius = '18px';
+    panel.style.display = 'flex';
+    panel.style.flexDirection = 'column';
+    panel.style.alignItems = 'center';
+    panel.style.gap = '12px';
+    panel.style.textAlign = 'center';
+
+    const eyebrow = document.createElement('div');
+    eyebrow.dataset.role = 'eyebrow';
+    eyebrow.style.fontFamily = 'Georgia, Times New Roman, serif';
+    eyebrow.style.letterSpacing = '0.28em';
+    eyebrow.style.fontSize = '12px';
+    eyebrow.style.textTransform = 'uppercase';
+    eyebrow.style.color = '#9fb2c8';
+
+    const title = document.createElement('div');
+    title.dataset.role = 'title';
+    title.style.fontFamily = 'Georgia, Times New Roman, serif';
+    title.style.fontSize = '42px';
+    title.style.lineHeight = '1.05';
+    title.style.fontWeight = '700';
+    title.style.color = '#f6f1df';
+    title.style.textShadow = '0 6px 24px rgba(0,0,0,0.45)';
+
+    const body = document.createElement('div');
+    body.dataset.role = 'body';
+    body.style.maxWidth = '42ch';
+    body.style.fontFamily = 'Segoe UI, sans-serif';
+    body.style.fontSize = '15px';
+    body.style.lineHeight = '1.55';
+    body.style.color = '#d0d6e1';
+
+    const actions = document.createElement('div');
+    actions.style.display = 'flex';
+    actions.style.flexWrap = 'wrap';
+    actions.style.justifyContent = 'center';
+    actions.style.gap = '10px';
+    actions.style.marginTop = '8px';
+
+    const retryBtn = document.createElement('button');
+    retryBtn.type = 'button';
+    retryBtn.dataset.action = 'retry';
+    retryBtn.textContent = 'Retry';
+    retryBtn.style.padding = '10px 18px';
+    retryBtn.style.borderRadius = '999px';
+    retryBtn.style.border = '1px solid rgba(255,255,255,0.16)';
+    retryBtn.style.background = '#f1e2b0';
+    retryBtn.style.color = '#16181c';
+    retryBtn.style.fontWeight = '700';
+    retryBtn.style.cursor = 'pointer';
+
+    const continueBtn = document.createElement('button');
+    continueBtn.type = 'button';
+    continueBtn.dataset.action = 'continue';
+    continueBtn.style.padding = '10px 18px';
+    continueBtn.style.borderRadius = '999px';
+    continueBtn.style.border = '1px solid rgba(255,255,255,0.14)';
+    continueBtn.style.background = 'rgba(255,255,255,0.06)';
+    continueBtn.style.color = '#eef3ff';
+    continueBtn.style.fontWeight = '600';
+    continueBtn.style.cursor = 'pointer';
+
+    actions.appendChild(retryBtn);
+    actions.appendChild(continueBtn);
+    panel.appendChild(eyebrow);
+    panel.appendChild(title);
+    panel.appendChild(body);
+    panel.appendChild(actions);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+
+    combatOutcomeOverlay = overlay;
+    return overlay;
+}
+
+function hideCombatOutcomeOverlay() {
+    if (combatOutcomeHideTimer) {
+        clearTimeout(combatOutcomeHideTimer);
+        combatOutcomeHideTimer = null;
+    }
+    if (combatOutcomeOverlay) {
+        combatOutcomeOverlay.style.display = 'none';
+    }
+}
+
+function showCombatOutcomeOverlay(packet = {}) {
+    const overlay = ensureCombatOutcomeOverlay();
+    if (!overlay) return;
+
+    const result = String(packet.result || '').trim().toLowerCase();
+    const rounds = Math.max(1, Number(packet.rounds) || 1);
+    const eyebrow = overlay.querySelector('[data-role="eyebrow"]');
+    const title = overlay.querySelector('[data-role="title"]');
+    const body = overlay.querySelector('[data-role="body"]');
+    const retryBtn = overlay.querySelector('[data-action="retry"]');
+    const continueBtn = overlay.querySelector('[data-action="continue"]');
+    if (!eyebrow || !title || !body || !retryBtn || !continueBtn) return;
+
+    const isDefeat = result === 'players_defeated';
+    eyebrow.textContent = isDefeat ? 'Game Over' : 'Victory';
+    title.textContent = isDefeat ? 'You Have Fallen' : 'Enemies Defeated';
+    title.style.color = isDefeat ? '#ffd0d0' : '#e7f6c7';
+    body.textContent = isDefeat
+        ? `Your party can no longer fight. The battle ended after ${rounds} round${rounds === 1 ? '' : 's'}.`
+        : `The battlefield is yours. Combat ended in ${rounds} round${rounds === 1 ? '' : 's'}.`;
+
+    retryBtn.style.display = isDefeat ? 'inline-flex' : 'none';
+    continueBtn.textContent = isDefeat ? 'Return to World' : 'Continue';
+    retryBtn.onclick = () => {
+        hideCombatOutcomeOverlay();
+        window.location.reload();
+    };
+    continueBtn.onclick = () => {
+        hideCombatOutcomeOverlay();
+    };
+
+    overlay.style.display = 'flex';
+
+    if (!isDefeat) {
+        combatOutcomeHideTimer = setTimeout(() => {
+            hideCombatOutcomeOverlay();
+        }, 2200);
+    }
+}
+
 function tryEnterCombat(target, options = {}) {
     const bypassDmApproval = options && options.bypassDmApproval === true;
     const skipNetworkEmit = options && options.skipNetworkEmit === true;
@@ -12228,6 +12418,7 @@ function tryEnterCombat(target, options = {}) {
     }
 
     console.info('Entering combat...');
+    hideCombatOutcomeOverlay();
     combatTimeline.length = 0;
     resetCombatActionHistory();
     currentGameMode = GAME_MODE.COMBAT;

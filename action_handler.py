@@ -12,7 +12,7 @@ from flask_socketio import emit
 from extensions import socketio
 import game_state as gs
 import reaction_system
-from turn_manager import advance_and_resolve
+from turn_manager import advance_and_resolve, conclude_combat_if_needed
 from state_sync import broadcast_world, broadcast_lobby
 
 
@@ -116,6 +116,8 @@ def handle_end_turn(sid: str, data: dict) -> dict:
         turn_data = advance_and_resolve()
 
     if turn_data is None:
+        if not gs.world_state.get("combat", {}).get("state", {}).get("inCombat"):
+            return {"ok": True, "turnIndex": None, "combatEnded": True}
         return deny("turn-advance-failed")
 
     print(f"[END-TURN] advanced to idx={turn_data.get('turnIndex')}", flush=True)
@@ -207,6 +209,8 @@ def handle_combat_action(sid: str, data: dict) -> None:
             hp_before = gs.safe_float(target_entity.get("hp", target_entity.get("maxHp", 1)), 1)
             hp_after = max(0.0, hp_before - float(damage))
             target_entity["hp"] = hp_after
+            if hp_after <= 0.0:
+                gs.mark_enemy_downed(target_entity)
 
         result.update({
             "targetId": target_id,
@@ -223,6 +227,8 @@ def handle_combat_action(sid: str, data: dict) -> None:
                 "damageBonus": dmg_bonus,
                 "damageType": weapon.get("damageType"),
             },
+            "targetHp": gs.safe_float(target_entity.get("hp", 0.0), 0.0),
+            "targetState": str(target_entity.get("state") or "active"),
         })
 
     elif action_type in {"move", "dash", "disengage"}:
@@ -316,6 +322,8 @@ def handle_combat_action(sid: str, data: dict) -> None:
         })
 
     socketio.emit("combat-action-result", result)
+    if conclude_combat_if_needed(sid) is not None:
+        return
     broadcast_world(include_scene=False)
 
 

@@ -547,7 +547,14 @@ def is_enemy(entity: dict) -> bool:
     if not isinstance(entity, dict):
         return False
     t = str(entity.get("type") or entity.get("entityType") or "").strip().lower()
-    return t in {"enemy", "training-dummy", "player-dummy", "elite-dummy"}
+    if t in {"enemy", "training-dummy", "player-dummy", "elite-dummy"}:
+        return True
+    # Older tests and some server-side fixtures omit an explicit type but still
+    # represent combat enemies with HP + AC and attack metadata.
+    return (
+        ("hp" in entity or "maxHp" in entity)
+        and "ac" in entity
+    )
 
 
 def get_dm_sids() -> list[str]:
@@ -848,6 +855,8 @@ def sync_enemies_into_order() -> bool:
         actor_id = str((entity or {}).get("networkId") or eid or "").strip()
         if not actor_id or actor_id in existing_ids:
             continue
+        if safe_float((entity or {}).get("hp", (entity or {}).get("maxHp", 0.0)), 0.0) <= 0:
+            continue
         if isinstance(entity, dict) and not entity.get("networkId"):
             entity["networkId"] = actor_id
         order.append({"id": actor_id, "type": "enemy",
@@ -855,6 +864,83 @@ def sync_enemies_into_order() -> bool:
         existing_ids.add(actor_id)
         changed = True
     return changed
+
+
+def is_player_downed(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    state = str(entry.get("state") or "").strip().lower()
+    if state == "downed":
+        return True
+    if "hp" not in entry and "max_hp" not in entry:
+        return False
+    hp = safe_float(entry.get("hp", entry.get("max_hp", 0.0)), 0.0)
+    return hp <= 0.0
+
+
+def is_enemy_downed(entity: dict) -> bool:
+    if not isinstance(entity, dict):
+        return False
+    state = str(entity.get("state") or "").strip().lower()
+    hp = safe_float(entity.get("hp", entity.get("maxHp", 0.0)), 0.0)
+    return state == "downed" or hp <= 0.0
+
+
+def mark_player_downed(entry: dict) -> bool:
+    if not isinstance(entry, dict):
+        return False
+    entry["hp"] = 0.0
+    entry["state"] = "downed"
+    return True
+
+
+def mark_enemy_downed(entity: dict) -> bool:
+    if not isinstance(entity, dict):
+        return False
+    entity["hp"] = 0.0
+    entity["state"] = "downed"
+    return True
+
+
+def clear_combatant_state(entry: dict) -> None:
+    if not isinstance(entry, dict):
+        return
+    if safe_float(entry.get("hp", entry.get("maxHp", entry.get("max_hp", 0.0))), 0.0) > 0.0:
+        entry.pop("state", None)
+
+
+def is_combat_actor_active(actor: dict) -> bool:
+    if not isinstance(actor, dict):
+        return False
+    actor_type = str(actor.get("type") or "").strip().lower()
+    actor_id = str(actor.get("id") or "").strip()
+    if actor_type == "player":
+        owner_sid = str(actor.get("ownerSid") or "").strip()
+        entry = players.get(owner_sid) if owner_sid else None
+        if not isinstance(entry, dict) and actor_id:
+            resolved_sid = sid_for_actor(actor_id)
+            entry = players.get(resolved_sid) if resolved_sid else None
+        return isinstance(entry, dict) and normalize_role(entry.get("role")) == "player" and not is_player_downed(entry)
+    if actor_type == "enemy":
+        entities = world_state.get("entities", {})
+        entity = entities.get(actor_id) if isinstance(entities, dict) else None
+        return isinstance(entity, dict) and is_enemy(entity) and not is_enemy_downed(entity)
+    return False
+
+
+def prune_defeated_enemies() -> list[str]:
+    entities = world_state.get("entities", {})
+    if not isinstance(entities, dict):
+        return []
+    removed: list[str] = []
+    for eid, entity in list(entities.items()):
+        if not is_enemy(entity):
+            continue
+        if not is_enemy_downed(entity):
+            continue
+        removed.append(str((entity or {}).get("networkId") or eid or ""))
+        entities.pop(eid, None)
+    return removed
 
 
 # --- Resume session helpers ---
