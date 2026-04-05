@@ -1418,6 +1418,13 @@ function registerSocketHandlers() {
                     playCombatSfxCue('miss');
                 }
             }
+
+            // Keep local turn UI in sync after server-authoritative attack results.
+            cancelAction();
+            syncTurnExhaustionState();
+            updateActionMenu();
+            updateCombatUI();
+            return;
         }
     });
 
@@ -10380,6 +10387,7 @@ function setCombatTimelineBusy(busy) {
 function isInputLockedForCombat(inputType = 'GENERAL') {
     if (currentGameMode !== GAME_MODE.COMBAT) return false;
     if (turnEndRequired && inputType !== 'END_TURN') return true;
+    if (inputType === 'END_TURN') return false;
     return combatState.lock;
 }
 
