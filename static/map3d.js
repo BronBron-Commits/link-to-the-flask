@@ -13650,6 +13650,7 @@ function resetCombatInteraction(options = {}) {
     if (!preserveAction) {
         combatInteraction.action = null;
         currentAction = null;
+        ffxMenuState.openSub = null;
     }
     hideCombatConfirmUI();
 }
@@ -18562,29 +18563,115 @@ document.body.appendChild(combatUiEl);
 updateCombatUI();
 
 // ── Action Menu UI ──
+// --- FFX-style nested combat menu ---
+let ffxMenuState = { openSub: null };
+
+(function injectFfxMenuCss() {
+    if (document.getElementById('ffx-menu-style')) return;
+    const s = document.createElement('style');
+    s.id = 'ffx-menu-style';
+    s.textContent = `
+    #action-menu { font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; }
+    .ffx-main { background:rgba(4,10,26,0.96); border:1px solid rgba(56,189,248,0.28); border-radius:10px 0 0 10px; min-width:215px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.7),inset 0 1px 0 rgba(56,189,248,0.12); }
+    .ffx-main-solo { border-radius:10px; }
+    .ffx-sub { background:rgba(4,10,26,0.96); border:1px solid rgba(56,189,248,0.22); border-left:none; border-radius:0 10px 10px 0; min-width:190px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.7); }
+    .ffx-header { display:flex; gap:8px; align-items:center; padding:7px 14px 6px; border-bottom:1px solid rgba(56,189,248,0.13); background:rgba(0,20,50,0.55); color:#7ecfff; font-size:11.5px; font-weight:600; letter-spacing:0.04em; }
+    .ffx-res-pip { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; vertical-align:middle; }
+    .ffx-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
+    .ffx-row:hover:not(.ffx-row-disabled) { background:rgba(14,64,112,0.5); border-left-color:rgba(56,189,248,0.45); }
+    .ffx-row.ffx-row-active { background:rgba(14,64,112,0.82); border-left-color:#38bdf8; color:#e8f8ff; }
+    .ffx-row.ffx-row-disabled { color:#334a57; cursor:not-allowed; }
+    .ffx-row.ffx-row-urgent { border-left-color:#ef4444 !important; color:#fca5a5 !important; }
+    .ffx-arrow { width:13px; flex-shrink:0; color:#38bdf8; font-size:10px; }
+    .ffx-label { flex:1; font-size:14px; font-weight:500; letter-spacing:0.02em; white-space:nowrap; }
+    .ffx-detail { color:#507a92; font-size:12px; white-space:nowrap; padding-left:8px; }
+    .ffx-badge { background:rgba(56,189,248,0.18); border:1px solid rgba(56,189,248,0.38); color:#7ecfff; font-size:11px; border-radius:10px; padding:1px 6px; margin-left:6px; }
+    .ffx-divider { height:1px; margin:2px 0; background:rgba(56,189,248,0.1); }
+    .ffx-sub-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
+    .ffx-sub-row:hover:not(.ffx-sub-disabled) { background:rgba(14,64,112,0.5); border-left-color:rgba(56,189,248,0.45); }
+    .ffx-sub-row.ffx-sub-active { background:rgba(14,64,112,0.82); border-left-color:#38bdf8; color:#e8f8ff; }
+    .ffx-sub-row.ffx-sub-disabled { color:#334a57; cursor:not-allowed; }
+    .ffx-confirm-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(0,15,38,0.97); border-top:1px solid rgba(56,189,248,0.18); }
+    .ffx-confirm-btn { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; border:1px solid; transition:background 0.1s; background:none; }
+    .ffx-confirm-ok { border-color:#22c55e; color:#86efac; }
+    .ffx-confirm-ok:hover { background:rgba(22,163,74,0.35); }
+    .ffx-confirm-cancel { border-color:#dc2626; color:#fca5a5; }
+    .ffx-confirm-cancel:hover { background:rgba(127,29,29,0.35); }
+    .ffx-confirm-desc { flex:1; color:#7ecfff; font-size:12px; text-align:center; }
+    `;
+    document.head.appendChild(s);
+})();
+
 actionMenuEl = document.createElement('div');
 actionMenuEl.id = 'action-menu';
-actionMenuEl.style.position = 'fixed';
-actionMenuEl.style.bottom = '140px';
-actionMenuEl.style.left = '50%';
-actionMenuEl.style.transform = 'translateX(-50%)';
-actionMenuEl.style.padding = '12px 16px';
-actionMenuEl.style.background = 'rgba(0,0,0,0.85)';
-actionMenuEl.style.border = '2px solid rgba(99, 102, 241, 0.6)';
-actionMenuEl.style.borderRadius = '8px';
-actionMenuEl.style.color = '#eef2ff';
-actionMenuEl.style.fontFamily = 'Consolas, "Segoe UI", monospace';
-actionMenuEl.style.fontSize = '15px';
-actionMenuEl.style.zIndex = '2300';
-actionMenuEl.style.pointerEvents = 'auto';
-actionMenuEl.style.display = 'flex';
-actionMenuEl.style.gap = '8px';
-actionMenuEl.style.visibility = 'hidden'; // Hidden by default
+actionMenuEl.style.cssText = 'position:fixed;bottom:24px;left:24px;z-index:2300;pointer-events:auto;visibility:hidden;user-select:none;display:flex;align-items:flex-end;';
 document.body.appendChild(actionMenuEl);
 
 function setActionMenuVisible(visible) {
     if (!actionMenuEl) return;
     actionMenuEl.style.visibility = visible ? 'visible' : 'hidden';
+}
+
+// Build the inner HTML for a submenu column (Actions or Items pane).
+function _ffxBuildSubRows(rows) {
+    return rows.map(r => {
+        const activeClass = r.active ? ' ffx-sub-active' : '';
+        const disabledClass = r.disabled ? ' ffx-sub-disabled' : '';
+        const instAttr = r._instanceId ? ` data-instance-id="${String(r._instanceId).replace(/"/g,'')}"` : '';
+        const detailHtml = r.detail ? `<span class="ffx-detail">${r.detail}</span>` : '';
+        return `<div class="ffx-sub-row${activeClass}${disabledClass}" data-ffx-sub="${r.id}"${instAttr}>`
+             + `<span class="ffx-arrow">${r.active ? '►' : ''}</span>`
+             + `<span class="ffx-label">${r.label}</span>`
+             + detailHtml
+             + `</div>`;
+    }).join('');
+}
+
+function _ffxHandleTopClick(topId) {
+    if (topId !== 'end-turn' && isInputLockedForCombat('ACTION')) return;
+    if (topId === 'attack') {
+        ffxMenuState.openSub = null;
+        setCurrentAction('attack');
+    } else if (topId === 'actions') {
+        ffxMenuState.openSub = ffxMenuState.openSub === 'actions' ? null : 'actions';
+        updateActionMenu();
+    } else if (topId === 'items') {
+        ffxMenuState.openSub = ffxMenuState.openSub === 'items' ? null : 'items';
+        updateActionMenu();
+    } else if (topId === 'end-turn') {
+        ffxMenuState.openSub = null;
+        turnEndRequired ? confirmEndTurn() : endTurn();
+    }
+}
+
+function _ffxHandleSubClick(pane, subId, instanceId) {
+    if (pane === 'actions') {
+        if (subId === 'dodge') {
+            if (!socket || !socket.connected) return;
+            ffxMenuState.openSub = null;
+            socket.emit('combat-action', {
+                id: `client_dodge_${Date.now()}_${Math.floor(Math.random() * 1e5)}`,
+                type: 'dodge',
+            });
+            showFloatingText('Dodge — enemies have disadvantage', '#38bdf8', true);
+            updateActionMenu();
+        } else {
+            if (isInputLockedForCombat('ACTION')) return;
+            setCurrentAction(subId);
+            if (subId === 'dash') showFloatingText('Dash — choose a destination', '#8dd694', true);
+            else if (subId === 'disengage') showFloatingText('Disengage — choose a safe route', '#8dd694', true);
+        }
+    } else if (pane === 'items') {
+        if (subId === '__none') return;
+        if (!socket || !socket.connected) return;
+        ffxMenuState.openSub = null;
+        socket.emit('combat-action', {
+            id: `client_use_object_${Date.now()}_${Math.floor(Math.random() * 1e5)}`,
+            type: 'use-object',
+            instanceId: instanceId || subId,
+        });
+        updateActionMenu();
+    }
 }
 
 function updateActionMenu() {
@@ -18603,95 +18690,136 @@ function updateActionMenu() {
     }
     
     setActionMenuVisible(true);
-    
-    // Show end-turn prompt if player is out of resources
-    if (!turnEndRequired && shouldShowEndTurnPrompt()) {
-        showEndTurnPrompt();
-    } else {
-        hideEndTurnPrompt();
+    hideEndTurnPrompt(); // End-turn state is shown inline in the FFX menu row
+
+    // — Derive state values —
+    const locked      = turnEndRequired || !!combatState.lock;
+    const actionUsed  = !!combatState.player.actionUsed;
+    const bonusUsed   = !!combatState.player.bonusUsed;
+    const moveFt      = Math.max(0, Number(combatState.player.movementRemaining) || 0);
+    const baseFt      = getPlayerBaseSpeedFt();
+    const movePct     = baseFt > 0 ? Math.round(Math.min(100, (moveFt / baseFt) * 100)) : 0;
+    const moveColor   = moveFt <= 0 ? '#334a57' : moveFt < baseFt / 2 ? '#f59e0b' : '#38bdf8';
+    const weaponName  = window.loadedEngineEntity?.combat?.weapon?.name || 'Melee';
+    const consumables = getCombatConsumableItems();
+    const openSub     = ffxMenuState.openSub;
+
+    // — Capability gates —
+    const canAttack    = !actionUsed && !locked;
+    const canMove      = moveFt > 0 && !locked;
+    const canDash      = playerCombatCapabilities.can_dash && !actionUsed && !locked;
+    const canDisengage = playerCombatCapabilities.can_disengage && !actionUsed && !locked;
+    const canDodge     = playerCombatCapabilities.can_dodge && !actionUsed && !locked;
+    const hasItems     = consumables.length > 0 && !actionUsed && !locked;
+
+    // — Active state flags —
+    const isAttackActive    = currentAction === 'attack';
+    const isMoveActive      = currentAction === 'move';
+    const isDashActive      = currentAction === 'dash';
+    const isDisengageActive = currentAction === 'disengage';
+    const isActionsSubOpen  = openSub === 'actions';
+    const isItemsSubOpen    = openSub === 'items';
+    const actionsRowActive  = isActionsSubOpen || isMoveActive || isDashActive || isDisengageActive;
+
+    // — Confirm bar —
+    const awaiting = combatInteraction.awaitingConfirm;
+    let confirmDesc = '';
+    if (awaiting) {
+        const preview = combatInteraction.preview;
+        const costFt  = preview ? Math.round(Number(preview.costFeet) || 0) : 0;
+        if (combatInteraction.action === 'attack' || combatInteraction.action === 'auto-move-attack-choice') {
+            confirmDesc = 'Strike target';
+        } else if (costFt > 0) {
+            confirmDesc = `Move ${costFt}ft`;
+        } else {
+            confirmDesc = String(combatInteraction.action || '').replace(/-/g, ' ');
+        }
     }
-    
-    const isMove = currentAction === 'move';
-    const isDash = currentAction === 'dash';
-    const isDisengage = currentAction === 'disengage';
-    const dodgeDisabled = !playerCombatCapabilities.can_dodge || combatState.player.actionUsed || turnEndRequired || combatState.lock;
-    const dashDisabled = !playerCombatCapabilities.can_dash || combatState.player.actionUsed || turnEndRequired || combatState.lock;
-    const disengageDisabled = !playerCombatCapabilities.can_disengage || combatState.player.actionUsed || turnEndRequired || combatState.lock;
-    const primaryConsumable = getPrimaryCombatConsumable();
-    const useItemDisabled = !primaryConsumable || combatState.player.actionUsed || turnEndRequired || combatState.lock;
-    const useItemLabel = primaryConsumable
-        ? `Use Item (${String(primaryConsumable.itemId || 'item').replace(/_/g, ' ')} x${Math.max(0, Number(primaryConsumable.qty) || 0)})`
-        : 'Use Item';
-    const actionButtonsDisabled = (turnEndRequired || combatState.lock)
-        ? 'opacity: 0.45; cursor: not-allowed;'
+    const confirmBarHtml = awaiting
+        ? `<div class="ffx-confirm-bar">
+            <button class="ffx-confirm-btn ffx-confirm-ok" data-ffx-confirm="ok">✓&nbsp;Confirm</button>
+            <span class="ffx-confirm-desc">${confirmDesc}</span>
+            <button class="ffx-confirm-btn ffx-confirm-cancel" data-ffx-confirm="cancel">✕&nbsp;Cancel</button>
+           </div>`
         : '';
-    const endTurnButtonStyle = turnEndRequired
-        ? 'padding: 8px 12px; background: #7f1d1d; border: 1px solid #ef4444; color: #fff; border-radius: 4px; cursor: pointer; margin-left: 8px; font-weight: 700;'
-        : 'padding: 8px 12px; background: #38404f; border: 1px solid #555; color: #999; border-radius: 4px; cursor: pointer; margin-left: 8px;';
-    
-    actionMenuEl.innerHTML = `
-        <button class="action-btn ${isMove ? 'active' : ''}" data-action="move" style="padding: 8px 12px; background: ${isMove ? '#4f46e5' : '#38404f'}; border: 1px solid ${isMove ? '#818cf8' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: pointer; ${actionButtonsDisabled}">Move</button>
-        <button class="action-btn ${isDash ? 'active' : ''}" data-action="dash" ${dashDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: ${isDash ? '#0f766e' : '#38404f'}; border: 1px solid ${isDash ? '#5eead4' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: ${dashDisabled ? 'not-allowed' : 'pointer'}; ${dashDisabled ? 'opacity: 0.45;' : ''}">Dash</button>
-        <button class="action-btn ${isDisengage ? 'active' : ''}" data-action="disengage" ${disengageDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: ${isDisengage ? '#7c2d12' : '#38404f'}; border: 1px solid ${isDisengage ? '#fb923c' : '#555'}; color: #eef2ff; border-radius: 4px; cursor: ${disengageDisabled ? 'not-allowed' : 'pointer'}; ${disengageDisabled ? 'opacity: 0.45;' : ''}">Disengage</button>
-        <button class="action-btn" data-action="dodge" ${dodgeDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: #38404f; border: 1px solid #555; color: #eef2ff; border-radius: 4px; cursor: ${dodgeDisabled ? 'not-allowed' : 'pointer'}; ${dodgeDisabled ? 'opacity: 0.45;' : ''}">Dodge</button>
-        <button class="action-btn" data-action="use-object" ${useItemDisabled ? 'disabled' : ''} style="padding: 8px 12px; background: #38404f; border: 1px solid #555; color: #eef2ff; border-radius: 4px; cursor: ${useItemDisabled ? 'not-allowed' : 'pointer'}; ${useItemDisabled ? 'opacity: 0.45;' : ''}">${useItemLabel}</button>
-        <button class="action-btn end-turn" data-action="end-turn" style="${endTurnButtonStyle}">${turnEndRequired ? 'End Turn Required' : 'End Turn'}</button>
-        ${combatInteraction.awaitingConfirm ? '<button class="confirm-btn" style="padding: 8px 12px; background: #16a34a; border: 1px solid #22c55e; color: #fff; border-radius: 4px; cursor: pointer; font-weight: bold;">CONFIRM</button>' : ''}
-        ${combatInteraction.awaitingConfirm ? '<button class="cancel-btn" style="padding: 8px 12px; background: #7f1d1d; border: 1px solid #dc2626; color: #fff; border-radius: 4px; cursor: pointer;">Cancel</button>' : ''}
-    `;
-    
-    // Attach click handlers
-    Array.from(actionMenuEl.querySelectorAll('.action-btn')).forEach(btn => {
-        btn.addEventListener('click', (e) => {
+
+    // — Resource header —
+    const actionPip = `<span class="ffx-res-pip" style="background:${actionUsed ? '#334a57' : '#38bdf8'};box-shadow:0 0 5px ${actionUsed ? 'transparent' : '#38bdf8'};"></span>`;
+    const bonusPip  = `<span class="ffx-res-pip" style="background:${bonusUsed ? '#334a57' : '#fbbf24'};box-shadow:0 0 5px ${bonusUsed ? 'transparent' : '#fbbf2488'};"></span>`;
+    const movePipBar = `<div style="width:40px;height:4px;background:rgba(56,189,248,0.15);border-radius:2px;overflow:hidden;margin-left:3px;display:inline-block;vertical-align:middle;">
+        <div style="height:100%;width:${movePct}%;background:${moveColor};border-radius:2px;transition:width 0.3s;"></div></div>`;
+
+    // — Subcolumn HTML —
+    let subColHtml = '';
+    if (isActionsSubOpen) {
+        subColHtml = _ffxBuildSubRows([
+            { id: 'move',      label: 'Move',      detail: `${moveFt}ft`,        active: isMoveActive,      disabled: !canMove },
+            { id: 'dash',      label: 'Dash',      detail: `${baseFt * 2}ft max`, active: isDashActive,      disabled: !canDash },
+            { id: 'disengage', label: 'Disengage', detail: 'No opp. attacks',     active: isDisengageActive, disabled: !canDisengage },
+            { id: 'dodge',     label: 'Dodge',     detail: 'Adv. resistance',                                disabled: !canDodge },
+        ]);
+    } else if (isItemsSubOpen) {
+        subColHtml = consumables.length === 0
+            ? _ffxBuildSubRows([{ id: '__none', label: 'No items', disabled: true }])
+            : _ffxBuildSubRows(consumables.map(c => ({
+                id:          c.instanceId || c.itemId,
+                label:       String(c.itemId || 'Item').replace(/_/g, ' ').replace(/\b\w/g, x => x.toUpperCase()),
+                detail:      `×${Math.max(0, Number(c.qty) || 0)}`,
+                _instanceId: c.instanceId,
+                disabled:    false,
+              })));
+    }
+
+    const subColClass   = subColHtml ? '' : ' ffx-main-solo';
+    const endTurnUrgent = turnEndRequired;
+
+    actionMenuEl.innerHTML =
+        `<div class="ffx-main${subColClass}">
+          <div class="ffx-header">
+            ${actionPip}Action &nbsp; ${bonusPip}Bonus
+            <span style="margin-left:auto;color:${moveColor};font-variant-numeric:tabular-nums;">${moveFt}ft</span>
+            ${movePipBar}
+          </div>
+          <div class="ffx-row${isAttackActive ? ' ffx-row-active' : ''}${!canAttack ? ' ffx-row-disabled' : ''}" data-action-top="attack">
+            <span class="ffx-arrow">${isAttackActive ? '►' : ''}</span>
+            <span class="ffx-label">Attack</span>
+            <span class="ffx-detail">${weaponName}</span>
+          </div>
+          <div class="ffx-row${actionsRowActive ? ' ffx-row-active' : ''}" data-action-top="actions">
+            <span class="ffx-arrow">${actionsRowActive ? '►' : ''}</span>
+            <span class="ffx-label">Actions</span>
+            <span class="ffx-detail" style="color:#38bdf8;">▸</span>
+          </div>
+          <div class="ffx-row${isItemsSubOpen ? ' ffx-row-active' : ''}${!hasItems && consumables.length === 0 ? ' ffx-row-disabled' : ''}" data-action-top="items">
+            <span class="ffx-arrow">${isItemsSubOpen ? '►' : ''}</span>
+            <span class="ffx-label">Items</span>
+            ${consumables.length > 0 ? `<span class="ffx-badge">${consumables.length}</span>` : ''}
+            <span class="ffx-detail" style="color:#38bdf8;margin-left:4px;">▸</span>
+          </div>
+          <div class="ffx-divider"></div>
+          <div class="ffx-row${endTurnUrgent ? ' ffx-row-urgent' : ''}" data-action-top="end-turn"
+               style="color:${endTurnUrgent ? '#fca5a5' : '#60a5d0'};">
+            <span class="ffx-arrow">${endTurnUrgent ? '!' : ''}</span>
+            <span class="ffx-label">${endTurnUrgent ? 'End Turn !' : 'End Turn'}</span>
+          </div>
+          ${confirmBarHtml}
+        </div>${subColHtml ? `<div class="ffx-sub">${subColHtml}</div>` : ''}`;
+
+    // — Wire events —
+    actionMenuEl.querySelectorAll('[data-action-top]').forEach(row => {
+        row.addEventListener('click', e => { e.stopPropagation(); _ffxHandleTopClick(row.dataset.actionTop); });
+    });
+    actionMenuEl.querySelectorAll('[data-ffx-sub]').forEach(row => {
+        row.addEventListener('click', e => {
             e.stopPropagation();
-            const action = btn.dataset.action;
-            if (action === 'end-turn') {
-                if (turnEndRequired) {
-                    confirmEndTurn();
-                } else {
-                    endTurn();
-                }
-            } else if (action === 'dodge') {
-                if (!socket || !socket.connected) return;
-                socket.emit('combat-action', {
-                    id: `client_${action}_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
-                    type: 'dodge',
-                });
-            } else if (action === 'use-object') {
-                const consumable = getPrimaryCombatConsumable();
-                if (!consumable || !socket || !socket.connected) return;
-                socket.emit('combat-action', {
-                    id: `client_use_object_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
-                    type: 'use-object',
-                    instanceId: consumable.instanceId,
-                });
-            } else {
-                if (isInputLockedForCombat('ACTION')) return;
-                setCurrentAction(action);
-                if (action === 'dash') {
-                    showFloatingText('Dash selected - choose a destination', '#8dd694', true);
-                } else if (action === 'disengage') {
-                    showFloatingText('Disengage selected - choose a safe route', '#8dd694', true);
-                }
-            }
+            if (row.classList.contains('ffx-sub-disabled')) return;
+            _ffxHandleSubClick(openSub, row.dataset.ffxSub, row.dataset.instanceId);
         });
     });
-    
-    const confirmBtn = actionMenuEl.querySelector('.confirm-btn');
-    if (confirmBtn) {
-        confirmBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            confirmAction();
-        });
-    }
-    
-    const cancelBtn = actionMenuEl.querySelector('.cancel-btn');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            cancelAction();
-        });
-    }
+    const okBtn = actionMenuEl.querySelector('[data-ffx-confirm="ok"]');
+    if (okBtn) okBtn.addEventListener('click', e => { e.stopPropagation(); confirmAction(); });
+    const cancelBtn = actionMenuEl.querySelector('[data-ffx-confirm="cancel"]');
+    if (cancelBtn) cancelBtn.addEventListener('click', e => { e.stopPropagation(); cancelAction(); });
 }
 
 function setCurrentAction(action) {
