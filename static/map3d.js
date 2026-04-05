@@ -1098,7 +1098,7 @@ function registerSocketHandlers() {
         _netStats.sceneUpdatesIn += 1;
         netLog(`scene-update  type=${data && data.type}  in#=${_netStats.sceneUpdatesIn}`);
         if (data.type === 'material') {
-            const mesh = findMeshByName(data.name);
+            const mesh = findMeshByPersistentId(data.objectId) || findMeshByName(data.name);
             if (!mesh) return;
             if (Array.isArray(mesh.material)) {
                 applyMaterialState(mesh.material[data.materialIndex], data.materialState, mesh);
@@ -20082,7 +20082,8 @@ fetch('/static/everything_.gltf', { method: 'HEAD' })
                 // Spawn data-driven entity shells after static world is available.
                 void initDataDrivenLayer(gltf.scene);
 
-                // Load persisted scene state now that the model is in the scene
+                // Load persisted scene/material state now that the model is in the scene.
+                ensurePersistentMeshIds();
                 fetch('/scene_state')
                     .then((r) => {
                         if (!r.ok) return null;
@@ -20092,6 +20093,16 @@ fetch('/static/everything_.gltf', { method: 'HEAD' })
                     })
                     .then((state) => {
                         if (state) hydrateWorld(state);
+                        return fetch('/materials_state');
+                    })
+                    .then((r) => {
+                        if (!r || !r.ok) return null;
+                        const contentType = r.headers.get('content-type') || '';
+                        if (!contentType.includes('application/json')) return null;
+                        return r.json();
+                    })
+                    .then((materialsState) => {
+                        if (materialsState) applyMaterialOverrides(materialsState);
                     })
                     .catch(err => console.warn('Could not load scene state:', err));
 
@@ -20126,7 +20137,44 @@ fetch('/static/everything_.gltf', { method: 'HEAD' })
 
 // --- Save/Load Scene State ---
 
-// --- Improved serialization using object names as keys, robust material/transform handling ---
+// --- Improved serialization using stable mesh IDs for persistence ---
+const MATERIALS_STATE_SCHEMA_VERSION = 'materials.v1';
+
+function sanitizePersistToken(value) {
+    return String(value || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9_\-]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
+function getMeshPersistentId(mesh) {
+    const existing = mesh?.userData?.persistId;
+    if (typeof existing === 'string' && existing.trim()) return existing.trim();
+    return null;
+}
+
+function ensurePersistentMeshIds() {
+    let autoIndex = 0;
+    scene.traverse((obj) => {
+        if (!obj || !obj.isMesh) return;
+        const existing = getMeshPersistentId(obj);
+        if (existing) return;
+        const fromName = sanitizePersistToken(obj.name);
+        const id = fromName || `mesh_auto_${autoIndex++}`;
+        obj.userData.persistId = id;
+    });
+}
+
+function getPersistableTextureMapUrl(mat) {
+    const src = mat?.map?.image?.src;
+    if (typeof src !== 'string') return null;
+    const value = src.trim();
+    if (!value) return null;
+    if (value.startsWith('blob:') || value.startsWith('data:')) return null;
+    return value;
+}
+
 function serializeMaterial(mat) {
     if (!mat) return null;
     const textureAnim = getMaterialTextureAnim(mat);
@@ -20138,7 +20186,7 @@ function serializeMaterial(mat) {
         roughness: typeof mat.roughness === 'number' ? mat.roughness : undefined,
         opacity: typeof mat.opacity === 'number' ? mat.opacity : undefined,
         wireframe: typeof mat.wireframe === 'boolean' ? mat.wireframe : undefined,
-        map: mat.map?.image?.src || null,
+        map: getPersistableTextureMapUrl(mat),
         textureAnim,
     };
 }
@@ -20148,29 +20196,40 @@ function emitMaterialChange(obj, materialIndex = 0) {
     let mat = Array.isArray(obj.material)
         ? obj.material[materialIndex]
         : obj.material;
+    const objectId = getMeshPersistentId(obj) || (obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id);
     socket.emit('scene-update', {
         type: 'material',
+        objectId,
         name: obj.name,
         materialIndex,
         materialState: serializeMaterial(mat)
     });
 }
 
+function findMeshByPersistentId(objectId) {
+    let found = null;
+    scene.traverse((obj) => {
+        if (obj.isMesh) {
+            if (getMeshPersistentId(obj) === objectId) found = obj;
+        }
+    });
+    return found;
+}
+
 function findMeshByName(name) {
     let found = null;
-    scene.traverse(obj => {
-        if (obj.isMesh) {
-            const n = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
-            if (n === name) found = obj;
-        }
+    scene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        const n = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
+        if (n === name) found = obj;
     });
     return found;
 }
 
 function serializeObject(obj) {
     if (!obj.isMesh) return null;
-    // Use name as key, fallback to type+index if missing
     const name = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
+    const objectId = getMeshPersistentId(obj) || name;
     let materials = null;
     if (Array.isArray(obj.material)) {
         materials = obj.material.map(m => serializeMaterial(m));
@@ -20178,6 +20237,7 @@ function serializeObject(obj) {
         materials = [serializeMaterial(obj.material)];
     }
     return {
+        objectId,
         name,
         position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
         rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
@@ -20187,11 +20247,12 @@ function serializeObject(obj) {
 }
 
 function serializeScene() {
+    ensurePersistentMeshIds();
     const objects = {};
     const lights = {};
     scene.traverse(obj => {
         const data = serializeObject(obj);
-        if (data) objects[data.name] = data;
+        if (data) objects[data.objectId] = data;
 
         const lightData = serializeLight(obj);
         if (lightData) lights[lightData.name] = lightData;
@@ -20212,8 +20273,8 @@ function applyMaterialState(mat, state, mesh) {
         }
         mat = newMat;
     }
-    if (state.color && mat.color) mat.color.setHex(state.color);
-    if (state.emissive && mat.emissive) mat.emissive.setHex(state.emissive);
+    if (state.color !== null && state.color !== undefined && mat.color) mat.color.setHex(state.color);
+    if (state.emissive !== null && state.emissive !== undefined && mat.emissive) mat.emissive.setHex(state.emissive);
     if (typeof state.metalness === 'number') mat.metalness = state.metalness;
     if (typeof state.roughness === 'number') mat.roughness = state.roughness;
     if (typeof state.opacity === 'number') mat.opacity = state.opacity;
@@ -20231,6 +20292,54 @@ function applyMaterialState(mat, state, mesh) {
         });
     }
     mat.needsUpdate = true;
+}
+
+function serializeMaterialOverrides() {
+    ensurePersistentMeshIds();
+    const materials = {};
+    scene.traverse((obj) => {
+        if (!obj || !obj.isMesh || !obj.material) return;
+        const objectId = getMeshPersistentId(obj);
+        if (!objectId) return;
+        const rows = Array.isArray(obj.material)
+            ? obj.material.map((mat, materialIndex) => ({ materialIndex, materialState: serializeMaterial(mat) }))
+            : [{ materialIndex: 0, materialState: serializeMaterial(obj.material) }];
+        materials[objectId] = {
+            name: obj.name || '',
+            materials: rows,
+        };
+    });
+    return {
+        schemaVersion: MATERIALS_STATE_SCHEMA_VERSION,
+        updatedAt: new Date().toISOString(),
+        worldId: 'map3d',
+        materials,
+    };
+}
+
+function applyMaterialOverrides(payload) {
+    if (!payload || typeof payload !== 'object') return;
+    const materials = payload.materials;
+    if (!materials || typeof materials !== 'object') return;
+    ensurePersistentMeshIds();
+
+    for (const objectId in materials) {
+        const row = materials[objectId];
+        if (!row || typeof row !== 'object') continue;
+        const mesh = findMeshByPersistentId(objectId) || (row.name ? findMeshByName(row.name) : null);
+        if (!mesh || !mesh.material) continue;
+        const entries = Array.isArray(row.materials) ? row.materials : [];
+        for (const item of entries) {
+            const idx = Number.isInteger(item?.materialIndex) ? item.materialIndex : 0;
+            const state = item?.materialState;
+            if (!state) continue;
+            if (Array.isArray(mesh.material)) {
+                if (mesh.material[idx]) applyMaterialState(mesh.material[idx], state, mesh);
+            } else if (idx === 0) {
+                applyMaterialState(mesh.material, state, mesh);
+            }
+        }
+    }
 }
 
 function applyStateToObject(obj, state) {
@@ -20258,17 +20367,23 @@ function applySceneState(state) {
         });
         return;
     }
-    // Map name to mesh
-    const meshMap = {};
+    ensurePersistentMeshIds();
+    const meshById = {};
+    const meshByName = {};
     scene.traverse(obj => {
         if (obj.isMesh) {
             const name = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
-            meshMap[name] = obj;
+            const objectId = getMeshPersistentId(obj) || name;
+            meshById[objectId] = obj;
+            meshByName[name] = obj;
         }
     });
-    for (const name in state.objects) {
-        if (meshMap[name]) {
-            applyStateToObject(meshMap[name], state.objects[name]);
+    for (const objectKey in state.objects) {
+        const objectState = state.objects[objectKey];
+        const objectId = objectState?.objectId || objectKey;
+        const mesh = meshById[objectId] || (objectState?.name ? meshByName[objectState.name] : null);
+        if (mesh) {
+            applyStateToObject(mesh, objectState);
         }
     }
 
@@ -20325,13 +20440,31 @@ function addSaveLoadButtonsToInspector() {
     saveBtn.style.width = '85%';
     saveBtn.onclick = () => {
         const state = serializeScene();
-        fetch('/scene_state', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(state)
-        }).then(r => r.json()).then(data => {
-            if (data.ok) alert('Scene state saved!');
-            else alert('Failed to save scene state.');
+        const materialState = serializeMaterialOverrides();
+        Promise.all([
+            fetch('/scene_state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(state)
+            }),
+            fetch('/materials_state', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(materialState)
+            }),
+        ])
+        .then(async ([sceneRes, materialRes]) => {
+            const sceneData = await sceneRes.json();
+            const materialData = await materialRes.json();
+            if (sceneRes.ok && materialRes.ok && sceneData.ok && materialData.ok) {
+                alert('Scene and material state saved!');
+            } else {
+                alert('Failed to save scene/material state.');
+            }
+        })
+        .catch((err) => {
+            console.warn('Save failed:', err);
+            alert('Failed to save scene/material state.');
         });
     };
     btnContainer.appendChild(saveBtn);
@@ -20348,22 +20481,32 @@ function addSaveLoadButtonsToInspector() {
     loadBtn.style.cursor = 'pointer';
     loadBtn.style.width = '85%';
     loadBtn.onclick = () => {
-        fetch('/scene_state')
-            .then((r) => {
+        Promise.all([
+            fetch('/scene_state').then((r) => {
                 if (!r.ok) throw new Error(`Scene state unavailable (${r.status})`);
                 const contentType = r.headers.get('content-type') || '';
                 if (!contentType.includes('application/json')) {
                     throw new Error('Scene state endpoint did not return JSON');
                 }
                 return r.json();
-            })
-            .then(state => {
-                hydrateWorld(state);
-                alert('Scene state loaded!');
+            }),
+            fetch('/materials_state').then((r) => {
+                if (!r.ok) throw new Error(`Materials state unavailable (${r.status})`);
+                const contentType = r.headers.get('content-type') || '';
+                if (!contentType.includes('application/json')) {
+                    throw new Error('Materials state endpoint did not return JSON');
+                }
+                return r.json();
+            }),
+        ])
+            .then(([sceneState, materialState]) => {
+                hydrateWorld(sceneState);
+                applyMaterialOverrides(materialState);
+                alert('Scene and material state loaded!');
             })
             .catch((err) => {
                 console.warn('Could not load scene state from button:', err);
-                alert('Scene state is unavailable on this server.');
+                alert('Scene/material state is unavailable on this server.');
             });
     };
     btnContainer.appendChild(loadBtn);

@@ -31,6 +31,21 @@ def _resolve_contract(filename: str) -> Path | None:
     return None
 
 
+def _read_json_file(path: Path) -> dict | None:
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _write_json_file(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
 def _sheet_label_for_path(path: Path) -> str:
     base = re.sub(r"[_\s]+", " ", path.stem).strip()
     return base or path.name
@@ -148,6 +163,13 @@ def state():
 
 @app.route("/scene_state", methods=["GET"])
 def scene_state_get():
+    persisted = _read_json_file(gs.SCENE_STATE_FILE)
+    if isinstance(persisted, dict):
+        gs.latest_scene_state = {
+            "objects": persisted.get("objects", {}),
+            "lights": persisted.get("lights", {}),
+        }
+        gs.world_state["scene"] = gs.latest_scene_state
     return jsonify(gs.build_world_payload(include_scene=True))
 
 
@@ -164,6 +186,7 @@ def scene_state_post():
         "lights": incoming.get("lights", {}),
     }
     gs.world_state["scene"] = gs.latest_scene_state
+    _write_json_file(gs.SCENE_STATE_FILE, gs.latest_scene_state)
     if isinstance(data.get("entities"), dict):
         gs.world_state["entities"] = data["entities"]
         if gs.world_state.get("combat", {}).get("state", {}).get("inCombat"):
@@ -172,6 +195,38 @@ def scene_state_post():
         gs.world_state["combat"] = data["combat"]
     broadcast_world(include_scene=True)
     return jsonify(ok=True, state=gs.latest_scene_state)
+
+
+@app.route("/materials_state", methods=["GET"])
+def materials_state_get():
+    payload = _read_json_file(gs.MATERIALS_STATE_FILE)
+    if not isinstance(payload, dict):
+        payload = {
+            "schemaVersion": "materials.v1",
+            "materials": {},
+        }
+    if not isinstance(payload.get("materials"), dict):
+        payload["materials"] = {}
+    return jsonify(payload)
+
+
+@app.route("/materials_state", methods=["POST"])
+def materials_state_post():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error="invalid payload"), 400
+    materials = payload.get("materials")
+    if not isinstance(materials, dict):
+        return jsonify(ok=False, error="materials must be an object"), 400
+    out = {
+        "schemaVersion": str(payload.get("schemaVersion") or "materials.v1"),
+        "updatedAt": payload.get("updatedAt"),
+        "updatedBy": payload.get("updatedBy"),
+        "worldId": payload.get("worldId"),
+        "materials": materials,
+    }
+    _write_json_file(gs.MATERIALS_STATE_FILE, out)
+    return jsonify(ok=True, state=out)
 
 
 # ---------------------------------------------------------------------------

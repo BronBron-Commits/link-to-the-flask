@@ -50,6 +50,9 @@ ENTITY_STAT_TEMPLATES = {
 CONTRACTS_DIR = Path("data") / "character_tidy"
 STATIC_DIR = Path("static")
 UPLOADS_DIR = Path("data") / "uploads"
+PERSISTENCE_DIR = Path("data")
+SCENE_STATE_FILE = PERSISTENCE_DIR / "scene_state.json"
+MATERIALS_STATE_FILE = PERSISTENCE_DIR / "materials_state.json"
 CHARACTER_MODELS_DIR = STATIC_DIR / "user_models"
 ENGINE_ENTITY_CONTRACT_NAME = "engine_entity.json"
 
