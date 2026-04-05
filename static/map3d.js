@@ -7529,14 +7529,19 @@ function syncLocalPlayerProfile(profile) {
     if (!profile || typeof profile !== 'object') return;
     const summary = profile.summary && typeof profile.summary === 'object' ? profile.summary : {};
     const master = profile.master && typeof profile.master === 'object' ? profile.master : null;
+    const inCombatNow = currentGameMode === GAME_MODE.COMBAT || combatState.inCombat;
+    const nextMaxHp = Number.isFinite(Number(summary.max_hp)) ? Number(summary.max_hp) : null;
+    const nextCurrentHp = Number.isFinite(Number(summary.current_hp)) ? Number(summary.current_hp) : null;
 
-    if (Number.isFinite(Number(summary.max_hp))) {
-        playerState.maxHp = Number(summary.max_hp);
+    if (nextMaxHp !== null) {
+        playerState.maxHp = nextMaxHp;
     }
-    if (Number.isFinite(Number(summary.current_hp))) {
-        playerState.hp = Number(summary.current_hp);
-    } else if (Number.isFinite(Number(summary.max_hp)) && !Number.isFinite(Number(playerState.hp))) {
-        playerState.hp = Number(summary.max_hp);
+    if (nextMaxHp !== null && !inCombatNow) {
+        playerState.hp = nextMaxHp;
+    } else if (nextCurrentHp !== null) {
+        playerState.hp = nextCurrentHp;
+    } else if (nextMaxHp !== null && !Number.isFinite(Number(playerState.hp))) {
+        playerState.hp = nextMaxHp;
     }
     if (Number.isFinite(Number(summary.speed_ft))) {
         playerState.speedFt = Math.max(5, Number(summary.speed_ft));

@@ -186,6 +186,7 @@ def socket_player_character_stats(data):
 
     ac = coerce_int("ac")
     max_hp = coerce_int("maxHp")
+    current_hp = coerce_int("currentHp")
     init_bonus = coerce_int("initiativeBonus")
     speed_ft = coerce_int("speedFt")
     movement_caps = data.get("movementCapabilities") if isinstance(data.get("movementCapabilities"), dict) else data.get("movement_capabilities")
@@ -207,9 +208,14 @@ def socket_player_character_stats(data):
     # Apply validated stats
     if "ac" in validated:
         entry["ac"] = validated["ac"]
-    if "hp" in validated:
+    if max_hp is not None and "hp" in validated:
         entry["max_hp"] = validated["hp"]
-        if "hp" not in entry:
+        in_combat = bool(gs.world_state.get("combat", {}).get("state", {}).get("inCombat"))
+        if current_hp is not None and in_combat:
+            entry["hp"] = max(0.0, min(float(validated["hp"]), float(current_hp)))
+        elif not in_combat:
+            entry["hp"] = float(validated["hp"])
+        elif "hp" not in entry:
             entry["hp"] = float(validated["hp"])
     if "initiativeBonus" in validated:
         entry["initiative_bonus"] = validated["initiativeBonus"]
