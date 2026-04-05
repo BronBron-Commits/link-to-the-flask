@@ -14852,17 +14852,9 @@ async function runEnemyTurn(enemyActor = null) {
 }
 
 function showActionUI(show) {
-    const bar = document.getElementById('action-bar');
-    if (!bar) return;
-    if (modeManager.current === MODE.DM) {
-        bar.style.display = 'none';
-        return;
-    }
-    if (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER') {
-        bar.style.display = 'none';
-        return;
-    }
-    bar.style.display = show ? 'flex' : 'none';
+    if (modeManager.current === MODE.DM) { setActionMenuVisible(false); return; }
+    if (currentGameMode === GAME_MODE.COMBAT && combatState.phase === 'PLAYER') { setActionMenuVisible(false); return; }
+    setActionMenuVisible(show);
 }
 
 function summarizeCombatActionForTimeline(actionRecord, index, total) {
@@ -18576,9 +18568,9 @@ updateCombatUI();
     s.id = 'ffx-menu-style';
     s.textContent = `
     #action-menu { font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; }
-    .ffx-main { background:rgba(4,10,26,0.96); border:1px solid rgba(56,189,248,0.28); border-radius:10px 0 0 10px; min-width:215px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.7),inset 0 1px 0 rgba(56,189,248,0.12); }
+    .ffx-main { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.45); border-radius:10px 0 0 10px; min-width:215px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9),inset 0 1px 0 rgba(56,189,248,0.18); }
     .ffx-main-solo { border-radius:10px; }
-    .ffx-sub { background:rgba(4,10,26,0.96); border:1px solid rgba(56,189,248,0.22); border-left:none; border-radius:0 10px 10px 0; min-width:190px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.7); }
+    .ffx-sub { background:rgb(4,10,26); border:1px solid rgba(56,189,248,0.35); border-left:none; border-radius:0 10px 10px 0; min-width:190px; overflow:hidden; box-shadow:0 12px 48px rgba(0,0,0,0.9); }
     .ffx-header { display:flex; gap:8px; align-items:center; padding:7px 14px 6px; border-bottom:1px solid rgba(56,189,248,0.13); background:rgba(0,20,50,0.55); color:#7ecfff; font-size:11.5px; font-weight:600; letter-spacing:0.04em; }
     .ffx-res-pip { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:3px; vertical-align:middle; }
     .ffx-row { display:flex; align-items:center; padding:9px 12px 9px 10px; cursor:pointer; border-left:3px solid transparent; transition:background 0.08s,border-color 0.08s; color:#c8e4f8; }
@@ -18595,7 +18587,7 @@ updateCombatUI();
     .ffx-sub-row:hover:not(.ffx-sub-disabled) { background:rgba(14,64,112,0.5); border-left-color:rgba(56,189,248,0.45); }
     .ffx-sub-row.ffx-sub-active { background:rgba(14,64,112,0.82); border-left-color:#38bdf8; color:#e8f8ff; }
     .ffx-sub-row.ffx-sub-disabled { color:#334a57; cursor:not-allowed; }
-    .ffx-confirm-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(0,15,38,0.97); border-top:1px solid rgba(56,189,248,0.18); }
+    .ffx-confirm-bar { display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgb(0,10,24); border-top:1px solid rgba(56,189,248,0.28); }
     .ffx-confirm-btn { padding:5px 14px; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; border:1px solid; transition:background 0.1s; background:none; }
     .ffx-confirm-ok { border-color:#22c55e; color:#86efac; }
     .ffx-confirm-ok:hover { background:rgba(22,163,74,0.35); }
@@ -18952,53 +18944,10 @@ combatFlashEl.style.mixBlendMode = 'screen';
 document.body.appendChild(combatFlashEl);
 
 // Action bar (bottom center, shown only during player turn)
-(function buildActionBar() {
-    const bar = document.createElement('div');
-    bar.id = 'action-bar';
-    bar.style.position = 'fixed';
-    bar.style.bottom = '24px';
-    bar.style.left = '50%';
-    bar.style.transform = 'translateX(-50%)';
-    bar.style.display = 'none';
-    bar.style.flexDirection = 'row';
-    bar.style.gap = '10px';
-    bar.style.zIndex = '2400';
-    bar.style.pointerEvents = 'auto';
-
-    const btnStyle = `
-        padding: 10px 20px;
-        background: rgba(20,20,30,0.88);
-        color: #e6f0ff;
-        border: 1px solid rgba(180,180,255,0.4);
-        border-radius: 6px;
-        font-family: monospace;
-        font-size: 14px;
-        cursor: pointer;
-        pointer-events: auto;
-    `;
-
-    const makeBtn = (label, onClick) => {
-        const b = document.createElement('button');
-        b.textContent = label;
-        b.setAttribute('style', btnStyle);
-        b.addEventListener('mousedown', e => e.stopPropagation());
-        b.addEventListener('click', (e) => { e.stopPropagation(); onClick(); });
-        return b;
-    };
-
-    bar.appendChild(makeBtn('⚔ Melee', () => {
-        if (!playerState.actionAvailable) { showFloatingText('No action left', '#ff8a8a'); return; }
-        pendingAction = 'melee';
-        showFloatingText('Click a target to attack', '#ffd166');
-    }));
-    bar.appendChild(makeBtn('🏹 Ranged', () => {
-        if (!playerState.actionAvailable) { showFloatingText('No action left', '#ff8a8a'); return; }
-        pendingAction = 'ranged';
-        showFloatingText('Click a target to shoot', '#ffd166');
-    }));
-    bar.appendChild(makeBtn('⏩ End Turn', () => endTurn()));
-
-    document.body.appendChild(bar);
+// Legacy action-bar removed — FFX menu (action-menu) is the sole combat UI.
+(function removeLegacyActionBar() {
+    const old = document.getElementById('action-bar');
+    if (old) old.remove();
 })();
 
 // DM timeline scrubber (bottom center)
