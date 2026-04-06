@@ -915,29 +915,12 @@ function registerSocketHandlers() {
         updatePlayerHealthHud();
     });
 
-    socket.on('world-init', (world) => {
-        netLog('world-init received');
-        hydrateWorld(world);
-    });
-
-    socket.on('world-update', (world) => {
-        hydrateWorld(world);
-    });
-
-    socket.on('combat-state', (packet) => {
-        const packetMode = String(packet && packet.mode ? packet.mode : '').toLowerCase();
-        const inCombat = packetMode
-            ? packetMode === 'combat'
-            : !!(packet && packet.active);
-        console.log('[NET] combat-state received', {
-            active: inCombat,
-            mode: packet && packet.mode,
-            initiator: packet && packet.initiator,
-        });
-        combatDomainStore.dispatch({
-            type: COMBAT_DOMAIN_ACTION.COMBAT_PACKET,
-            packet,
-        });
+    registerCombatStateSocketHandlers({
+        socket,
+        netLog,
+        hydrateWorld,
+        combatDomainStore,
+        combatDomainAction: COMBAT_DOMAIN_ACTION,
     });
 
     socket.on('players-state', (players) => {
@@ -1622,6 +1605,7 @@ import { GLTFLoader } from '/static/GLTFLoader.js';
 import { COMBAT_DOMAIN_ACTION, computeCombatTruthFromWorldPayload, createCombatDomainStore } from '/static/map3d/domain/combatDomainStore.js';
 import { createCombatRenderTransitionAdapter } from '/static/map3d/adapters/combatRenderAdapter.js';
 import { createWorldHydrator } from '/static/map3d/net/worldHydrator.js';
+import { registerCombatStateSocketHandlers } from '/static/map3d/net/combatStateSocketHandlers.js';
 import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from '/static/avatar_rig_runtime.js';
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
