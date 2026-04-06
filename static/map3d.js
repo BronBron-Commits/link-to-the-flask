@@ -183,29 +183,16 @@ let lastFrameTimeMs = 0;
 let focusedMaxFPS = SETTINGS.maxFPS;
 let focusedParticlesEnabled = SETTINGS.particles;
 let focusedRenderScale = SETTINGS.renderScale;
-const CLIENT_MODE_FULL = 'full';
-const CLIENT_MODE_OBSERVER = 'observer';
-const OBSERVER_RENDER_SCALE_MAX = 0.5;
-const OBSERVER_MAX_FPS = 30;
-let CLIENT_MODE = CLIENT_MODE_FULL;
-let forceObserverMode = false;
 
 function isPrimaryClient() {
     return true;
 }
 
-function isObserverClient() {
-    return CLIENT_MODE === CLIENT_MODE_OBSERVER;
-}
-
 function applySettings() {
     const configuredMaxFPS = Number(SETTINGS.maxFPS) || 60;
     const baseMaxFPS = Math.max(10, configuredMaxFPS);
-    const effectiveMaxFPS = isObserverClient()
-        ? Math.min(baseMaxFPS, OBSERVER_MAX_FPS)
-        : baseMaxFPS;
-    frameIntervalMs = 1000 / effectiveMaxFPS;
-    combatParticlesEnabled = !!SETTINGS.particles && !isObserverClient();
+    frameIntervalMs = 1000 / baseMaxFPS;
+    combatParticlesEnabled = !!SETTINGS.particles;
     updateCombatParticleBudget();
 
     if (!rendererReady) return;
@@ -213,11 +200,8 @@ function applySettings() {
     const dpr = window.devicePixelRatio || 1;
     const configuredScale = Math.max(0.35, Math.min(1.0, Number(SETTINGS.renderScale) || 1));
     const primaryScale = configuredScale;
-    const scale = isObserverClient()
-        ? Math.min(primaryScale, OBSERVER_RENDER_SCALE_MAX)
-        : primaryScale;
-    renderer.setPixelRatio(dpr * scale);
-    renderer.shadowMap.enabled = !!SETTINGS.shadows && !isObserverClient();
+    renderer.setPixelRatio(dpr * primaryScale);
+    renderer.shadowMap.enabled = !!SETTINGS.shadows;
 }
 
 function setQuality(level) {
@@ -1457,7 +1441,7 @@ function isSimulationOwner() {
 function updateClientRuntimeModeFromAuthority() {
     // Online multiplayer should not auto-degrade non-authoritative clients.
     // Keep observer mode as an explicit dev/testing override only.
-    const nextMode = forceObserverMode ? CLIENT_MODE_OBSERVER : CLIENT_MODE_FULL;
+    const nextMode = CLIENT_MODE_FULL;
     if (CLIENT_MODE === nextMode) return false;
     CLIENT_MODE = nextMode;
     applySettings();
@@ -2281,8 +2265,7 @@ function registerDefaultConsoleCommands() {
         renderConsoleHistory,
         setQuality,
         isObserverClient,
-        getForceObserverMode: () => forceObserverMode,
-        setForceObserverMode: (value) => { forceObserverMode = !!value; },
+
         updateClientRuntimeModeFromAuthority,
         getClientModeFull: () => CLIENT_MODE_FULL,
         setClientMode: (value) => { CLIENT_MODE = value; },
@@ -16909,8 +16892,6 @@ let lastTime = performance.now();
 let lastFrameDeltaMs = 0;
 let lastFrameSpikeLogAtMs = 0;
 const FRAME_SPIKE_LOG_THRESHOLD_MS = 30;
-let observerFrameCounter = 0;
-const OBSERVER_FRAME_STRIDE = 2;
 function animate(nowMs) {
     // No need to force scene.background = null; skybox is now a mesh
     const now = Number.isFinite(nowMs) ? nowMs : performance.now();
@@ -16928,18 +16909,6 @@ function animate(nowMs) {
     syncSkyboxWithGameMode();
     updateClientRuntimeModeFromAuthority();
 
-    if (isObserverClient()) {
-        observerFrameCounter += 1;
-        if ((observerFrameCounter % OBSERVER_FRAME_STRIDE) !== 0) {
-            return;
-        }
-        const observerView = getActiveViewCamera();
-        syncDicePassCamera();
-        renderWorldWithDmInset(observerView);
-        renderer.clearDepth();
-        renderer.render(diceScene, dicePassCamera);
-        return;
-    }
     const simulationOwner = isSimulationOwner();
 
     if (simulationOwner) {
