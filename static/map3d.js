@@ -1341,25 +1341,6 @@ const MODE_PERMISSIONS = Object.freeze({
     'audio.debug': [MODE.DEV],
 });
 
-// Resolves once the user picks a role from the startup overlay.
-// Nothing that depends on the chosen role should run before this settles.
-let _resolveRoleChosen;
-const roleChosenPromise = new Promise((resolve) => { _resolveRoleChosen = resolve; });
-
-// Debug: log when promise resolves
-roleChosenPromise.then(() => {
-    netLog('✅ ROLE PROMISE RESOLVED — app resuming initialization');
-    traceDmPipeline('ROLE PROMISE RESOLVED', { mode: modeManager.current });
-    if (window.__DM_FORCE_GOD_MODE__ === true) {
-        forceGodModeForDiagnostics();
-    }
-});
-
-// Socket connection defers until role is chosen.
-roleChosenPromise.then(() => {
-    initializeSocketConnection();
-});
-
 const modeManager = {
     current: null,  // ← NO DEFAULT: null until user chooses via overlay
     listeners: [],
@@ -1391,6 +1372,26 @@ const modeManager = {
         };
     },
 };
+
+// Resolves once the user picks a role from the startup overlay.
+// Nothing that depends on the chosen role should run before this settles.
+let _resolveRoleChosen;
+const roleChosenPromise = new Promise((resolve) => { _resolveRoleChosen = resolve; });
+
+// Debug: log when promise resolves
+roleChosenPromise.then(() => {
+    netLog('✅ ROLE PROMISE RESOLVED — app resuming initialization');
+    traceDmPipeline('ROLE PROMISE RESOLVED', { mode: modeManager.current });
+    if (window.__DM_FORCE_GOD_MODE__ === true) {
+        forceGodModeForDiagnostics();
+    }
+});
+
+// Socket connection defers until role is chosen.
+roleChosenPromise.then(() => {
+    initializeSocketConnection();
+});
+
 
 function hasModePermission(permissionKey, mode = modeManager.current) {
     const allowed = MODE_PERMISSIONS[permissionKey];
