@@ -677,63 +677,14 @@ function triggerSharedDiceRoll(rollPayload, options = {}) {
     }
 }
 
-function extractSceneStateFromWorldPayload(payload) {
-    if (!payload || typeof payload !== 'object') return null;
-    if (payload.scene && typeof payload.scene === 'object') return payload.scene;
-    if (payload.objects) {
-        return {
-            objects: payload.objects,
-            lights: payload.lights || {},
-        };
-    }
-    return null;
-}
+const _updateSceneVisibilityForCombatState = createSceneCombatVisibilityUpdater({
+    isSceneReadyForWorldState,
+    getScene: () => scene,
+    netLog,
+});
 
 function updateSceneVisibilityForCombatState(inCombat) {
-    // Cache combat-hide candidates to avoid traversing the full scene every update.
-    if (!isSceneReadyForWorldState()) return;
-
-    const COMBAT_HIDE_LIST_REFRESH_MS = 5000;
-    if (!Array.isArray(updateSceneVisibilityForCombatState._cached)) {
-        updateSceneVisibilityForCombatState._cached = [];
-        updateSceneVisibilityForCombatState._cachedAt = 0;
-    }
-
-    const nowMs = performance.now();
-    const cacheExpired = (nowMs - (updateSceneVisibilityForCombatState._cachedAt || 0)) > COMBAT_HIDE_LIST_REFRESH_MS;
-    if (cacheExpired || updateSceneVisibilityForCombatState._cached.length === 0) {
-        const next = [];
-        scene.traverse((obj) => {
-            if (!obj || !obj.userData) return;
-
-            const objectType = String(obj.userData.type || '').toLowerCase();
-            const isFurniture = objectType === 'furniture' || objectType === 'prop' || objectType === 'decoration' || objectType === 'decor';
-
-            const meshName = String(obj.name || '').toLowerCase();
-            const hasMatchingName = meshName.includes('furniture') || meshName.includes('prop') || meshName.includes('decor') || meshName.includes('glb');
-
-            const shouldHideInCombat = isFurniture || (hasMatchingName && !meshName.includes('player') && !meshName.includes('enemy'));
-            if (shouldHideInCombat) {
-                next.push(obj);
-            }
-        });
-        updateSceneVisibilityForCombatState._cached = next;
-        updateSceneVisibilityForCombatState._cachedAt = nowMs;
-    }
-
-    updateSceneVisibilityForCombatState._cached.forEach((obj) => {
-        if (!obj || !obj.userData || !obj.parent) return;
-
-        if (inCombat && obj.visible) {
-            obj.userData.wasVisibleBeforeCombat = true;
-            obj.visible = false;
-            netLog(`[COMBAT] Hiding furniture: ${obj.name || obj.userData.id || obj.type}`);
-        } else if (!inCombat && !obj.visible && (obj.userData.wasVisibleBeforeCombat !== false)) {
-            obj.visible = true;
-            delete obj.userData.wasVisibleBeforeCombat;
-            netLog(`[COMBAT] Showing furniture: ${obj.name || obj.userData.id || obj.type}`);
-        }
-    });
+    _updateSceneVisibilityForCombatState(inCombat);
 }
 
 function computeCombatWorldTruth(payload, fallbackInCombat) {
@@ -1088,8 +1039,11 @@ import '/static/inventory.js';
 
 import { GLTFLoader } from '/static/GLTFLoader.js';
 import { COMBAT_DOMAIN_ACTION, computeCombatTruthFromWorldPayload, createCombatDomainStore } from '/static/map3d/domain/combatDomainStore.js';
+import { COMBAT_UI_PHASE, createCombatInteractionState, createCombatUiLifecycle, applyCombatUiPhase, turnPhaseToCombatPhase as mapTurnPhaseToCombatPhase, isPlayerInputTurn as mapIsPlayerInputTurn } from '/static/map3d/core/combatStateMachine.js';
 import { createCombatRenderTransitionAdapter } from '/static/map3d/adapters/combatRenderAdapter.js';
+import { createSceneCombatVisibilityUpdater } from '/static/map3d/render/sceneCombatVisibility.js';
 import { createWorldHydrator } from '/static/map3d/net/worldHydrator.js';
+import { extractSceneStateFromWorldPayload } from '/static/map3d/net/worldPayloadUtils.js';
 import { registerCombatStateSocketHandlers } from '/static/map3d/net/combatStateSocketHandlers.js';
 import { registerCombatControlAndSceneSocketHandlers } from '/static/map3d/net/combatControlAndSceneSocketHandlers.js';
 import { registerPlayerStateSocketHandlers } from '/static/map3d/net/playerStateSocketHandlers.js';
@@ -7322,32 +7276,12 @@ let pendingAction = null; // 'melee' | 'ranged' | null
 
 // ── Combat Interaction State ──
 let currentAction = null;       // 'move' | 'attack' | 'ability' | null
-const COMBAT_UI_PHASE = {
-    IDLE: 'idle',
-    TARGETING: 'targeting',
-    PREVIEW_PENDING: 'preview-pending',
-    CONFIRM_READY: 'confirm-ready',
-    RESOLVING: 'resolving',
-};
-const combatUiLifecycle = {
-    phase: COMBAT_UI_PHASE.IDLE,
-    requestId: null,
-    action: null,
-};
-const combatInteraction = {
-    action: null,
-    target: null,
-    preview: null,
-    autoApproachPreview: null,
-    awaitingConfirm: false,
-    previewRequestId: null,
-};
+const combatUiLifecycle = createCombatUiLifecycle();
+const combatInteraction = createCombatInteractionState();
 let confirmUI = null;
 
 function setCombatUiPhase(phase, details = {}) {
-    combatUiLifecycle.phase = String(phase || COMBAT_UI_PHASE.IDLE);
-    combatUiLifecycle.action = details.action || combatInteraction.action || null;
-    combatUiLifecycle.requestId = details.requestId || null;
+    applyCombatUiPhase(combatUiLifecycle, combatInteraction, phase, details);
 }
 
 const combatState = {
@@ -7388,14 +7322,17 @@ let combatActorIdCounter = 1;
 const recentlyDamagedDummies = new Map(); // actorId -> timestamp (ms)
 
 function turnPhaseToCombatPhase(phase) {
-    if (phase === TURN_PHASE.ENEMY) return 'ENEMY';
-    if (phase === TURN_PHASE.TRANSITION) return 'TRANSITION';
-    return 'PLAYER';
+    return mapTurnPhaseToCombatPhase(phase, TURN_PHASE);
 }
 
 function isPlayerInputTurn() {
-    if (currentGameMode !== GAME_MODE.COMBAT) return false;
-    return combatState.phase === 'PLAYER' || currentTurnPhase === TURN_PHASE.PLAYER;
+    return mapIsPlayerInputTurn({
+        currentGameMode,
+        combatMode: GAME_MODE.COMBAT,
+        combatPhase: combatState.phase,
+        currentTurnPhase,
+        turnPhase: TURN_PHASE,
+    });
 }
 
 function cloneJsonSafe(value) {
