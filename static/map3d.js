@@ -1948,7 +1948,7 @@ function ensureCommandConsoleUiManager() {
     commandConsoleUiManager = createCommandConsoleUiManager({
         consoleState,
         getCurrentMode: () => modeManager.current,
-        getAvailableCommandNames,
+        getAvailableCommandNames: getAvailableConsoleCommandNames,
         runConsoleCommand,
         isTextInputTarget,
         onRootElChanged: (rootEl) => {
