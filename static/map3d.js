@@ -46,43 +46,8 @@ let pendingRuntimeMode = null;
 let pendingSceneState = null;
 let pendingWorldHydrationPayload = null;
 let _worldHydrator = null;
+let socketConnectionManager = null;
 const serverEntityNetworkIds = new Set();
-
-const CLIENT_RESUME_STORAGE_KEY = 'map3d_resume_key_v1';
-
-function getResumeKeyStorage() {
-    try {
-        if (typeof window !== 'undefined' && window.sessionStorage) {
-            return window.sessionStorage;
-        }
-    } catch (_err) {
-        return null;
-    }
-    return null;
-}
-
-function getOrCreateClientResumeKey() {
-    const fallback = `anon-${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
-    const storage = getResumeKeyStorage();
-    try {
-        const existing = String(storage?.getItem(CLIENT_RESUME_STORAGE_KEY) || '').trim();
-        if (existing) return existing;
-        const generated = (window.crypto && typeof window.crypto.randomUUID === 'function')
-            ? window.crypto.randomUUID()
-            : fallback;
-        storage?.setItem(CLIENT_RESUME_STORAGE_KEY, generated);
-        try {
-            // Old builds used localStorage, which is shared across tabs and caused
-            // new tabs to impersonate an existing client session.
-            window.localStorage?.removeItem(CLIENT_RESUME_STORAGE_KEY);
-        } catch (_storageCleanupErr) {
-            // Best-effort cleanup only.
-        }
-        return generated;
-    } catch (_err) {
-        return fallback;
-    }
-}
 
 function isCameraReadyForRuntimeMode() {
     try {
@@ -125,17 +90,18 @@ function flushPendingRuntimeMode() {
 }
 
 function getNetworkRoleFromMode(mode) {
-    const normalized = String(mode || '').toLowerCase();
-    if (normalized === 'dm') return 'dm';
-    if (normalized === 'dev') return 'dev';
-    return 'player';
+    if (!socketConnectionManager) {
+        const normalized = String(mode || '').toLowerCase();
+        if (normalized === 'dm') return 'dm';
+        if (normalized === 'dev') return 'dev';
+        return 'player';
+    }
+    return socketConnectionManager.getNetworkRoleFromMode(mode);
 }
 
 function registerRoleWithServer() {
-    if (!socket) return;
-    socket.emit('register-role', {
-        role: getNetworkRoleFromMode(modeManager.current),
-    });
+    if (!socketConnectionManager) return;
+    socketConnectionManager.registerRoleWithServer();
 }
 
 let lobbyState = null;
@@ -293,11 +259,8 @@ document.addEventListener('visibilitychange', () => {
 });
 
 function requestStartGame() {
-    if (!socket) {
-        appendConsoleHistory('Cannot start game: no server connection', 'error');
-        return;
-    }
-    socket.emit('start-game');
+    if (!socketConnectionManager) return;
+    socketConnectionManager.requestStartGame();
 }
 
 function updateLobbyOverlayFromState() {
@@ -889,79 +852,8 @@ function registerSocketHandlers() {
 }
 
 async function initializeSocketConnection() {
-    if (!window.io || window.__DISABLE_MAP3D_SOCKET__) {
-        netLog('socket init skipped: window.io missing or __DISABLE_MAP3D_SOCKET__ set');
-        return;
-    }
-    
-    if (!modeManager.current) {
-        netWarn('initializeSocketConnection called but modeManager.current is not set — this should not happen');
-        return;
-    }
-
-    try {
-        const buildProbe = await fetch('/server-build', {
-            method: 'GET',
-            headers: { Accept: 'application/json' },
-        });
-        if (buildProbe.ok) {
-            const buildInfo = await buildProbe.json();
-            console.log('[NET] server-build probe', buildInfo);
-            appendConsoleHistory(`[NET] server-build ${String(buildInfo && buildInfo.build ? buildInfo.build : 'unknown')}`, 'ok');
-        } else {
-            console.warn('[NET] server-build probe failed:', buildProbe.status);
-        }
-    } catch (_buildErr) {
-        console.warn('[NET] server-build probe failed: network error');
-    }
-    
-    try {
-        // Probe once to avoid repeated 404 reconnect spam when Socket.IO backend is unavailable.
-        const probe = await fetch('/socket.io/?EIO=4&transport=polling', {
-            method: 'GET',
-            headers: { Accept: '*/*' },
-        });
-        if (!probe.ok) {
-            console.info('[NET] Socket.IO endpoint unavailable; multiplayer sync disabled for this session.');
-            return;
-        }
-        netLog(`probe OK  status=${probe.status}`);
-    } catch (_err) {
-        console.info('[NET] Socket.IO probe failed; multiplayer sync disabled for this session.');
-        return;
-    }
-
-    const resumeKey = getOrCreateClientResumeKey();
-
-    socket = window.io(window.location.origin, {
-        transports: ['websocket'],
-        upgrade: false,
-    });
-    window.socket = socket;
-    netLog('socket created, registering handlers…');
-    appendConsoleHistory('[NET] transport mode: websocket-only', 'ok');
-    registerSocketHandlers();
-
-    if (socketModeUnsubscribe) {
-        socketModeUnsubscribe();
-    }
-    if (typeof modeManager !== 'undefined' && modeManager && typeof modeManager.onChange === 'function') {
-        socketModeUnsubscribe = modeManager.onChange(() => {
-            registerRoleWithServer();
-        });
-    }
-
-    registerRoleWithServer();
-    
-    // Safety: Ensure role is registered even if timing is tight
-    // This handles case where socket connects but modeManager.current is not immediately available
-    setTimeout(() => {
-        if (modeManager.current && socket) {
-            const currentRole = getNetworkRoleFromMode(modeManager.current);
-            netLog(`Fallback role check: ${currentRole}`);
-            registerRoleWithServer();
-        }
-    }, 250);
+    if (!socketConnectionManager) return;
+    await socketConnectionManager.initializeSocketConnection();
 }
 
 // NOTE: do NOT call initializeSocketConnection() here anymore.
@@ -984,9 +876,25 @@ import { createSceneCombatVisibilityUpdater } from '/static/map3d/render/sceneCo
 import { createWorldHydrator } from '/static/map3d/net/worldHydrator.js';
 import { extractSceneStateFromWorldPayload } from '/static/map3d/net/worldPayloadUtils.js';
 import { registerMap3dSocketHandlers } from '/static/map3d/net/socketOrchestrator.js';
+import { createSocketConnectionManager } from '/static/map3d/managers/socketConnectionManager.js';
 import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from '/static/avatar_rig_runtime.js';
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
+
+socketConnectionManager = createSocketConnectionManager({
+    windowObj: window,
+    modeManager,
+    getSocket: () => socket,
+    setSocket: (value) => { socket = value; },
+    getSocketModeUnsubscribe: () => socketModeUnsubscribe,
+    setSocketModeUnsubscribe: (value) => { socketModeUnsubscribe = value; },
+    netLog,
+    netWarn,
+    appendConsoleHistory,
+    registerSocketHandlers,
+    bootstrapPlayerCombatProfile,
+    updateClientRuntimeModeFromAuthority,
+});
 
 let ITEM_DB = {};
 let equipItem = () => false;
