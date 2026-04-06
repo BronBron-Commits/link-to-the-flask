@@ -897,22 +897,20 @@ function registerSocketHandlers() {
         }
     });
 
-    socket.on('player-character-stats-ack', (packet) => {
-        if (!packet || typeof packet !== 'object') return;
-        if (Number.isFinite(Number(packet.maxHp))) {
-            playerState.maxHp = Number(packet.maxHp);
-            const inCombatNow = currentGameMode === GAME_MODE.COMBAT || combatState.inCombat;
-            if (!inCombatNow || !Number.isFinite(Number(playerState.hp)) || Number(playerState.hp) > playerState.maxHp) {
-                playerState.hp = playerState.maxHp;
-            }
-        }
-        if (packet.movementCapabilities && typeof packet.movementCapabilities === 'object') {
-            applyPlayerMovementCapabilities(packet.movementCapabilities);
-        }
-        if (window.loadedEngineEntity && typeof window.loadedEngineEntity === 'object' && packet.inventory && typeof packet.inventory === 'object') {
-            window.loadedEngineEntity.inventory = structuredClone(packet.inventory);
-        }
-        updatePlayerHealthHud();
+    registerPlayerStateSocketHandlers({
+        socket,
+        netLog,
+        appendConsoleHistory,
+        removePlayerAvatar,
+        upsertPlayerAvatar,
+        applyLiveCombatSyncFromPlayer,
+        netStats: _netStats,
+        playerState,
+        gameMode: GAME_MODE,
+        getCurrentGameMode: () => currentGameMode,
+        combatState,
+        applyPlayerMovementCapabilities,
+        updatePlayerHealthHud,
     });
 
     registerCombatStateSocketHandlers({
@@ -923,46 +921,6 @@ function registerSocketHandlers() {
         combatDomainAction: COMBAT_DOMAIN_ACTION,
     });
 
-    socket.on('players-state', (players) => {
-        if (!players) return;
-        const ids = Object.keys(players);
-        netLog(`players-state  count=${ids.length}  ids=[${ids.join(', ')}]`);
-        Object.values(players).forEach((player) => {
-            if (player && player.role === 'player' && player.combatSync) {
-                applyLiveCombatSyncFromPlayer(player.id, player.combatSync);
-            }
-            upsertPlayerAvatar(player);
-        });
-    });
-
-    socket.on('player-joined', (player) => {
-        netLog(`player-joined  id=${player && player.id}  role=${player && player.role}`);
-        appendConsoleHistory(`[NET] player joined: ${player && player.id}`, 'ok');
-        if (player && player.role === 'player' && player.combatSync) {
-            applyLiveCombatSyncFromPlayer(player.id, player.combatSync);
-        }
-        upsertPlayerAvatar(player);
-    });
-
-    socket.on('player-update', (player) => {
-        _netStats.playerUpdatesIn += 1;
-        if (_netStats.playerUpdatesIn % 120 === 0) {
-            // Log every 120th update (~once every 8 s at 15 Hz) to avoid console spam.
-            netLog(`player-update  id=${player && player.id}  in#=${_netStats.playerUpdatesIn}`);
-        }
-        if (player && player.role === 'player' && player.combatSync) {
-            applyLiveCombatSyncFromPlayer(player.id, player.combatSync);
-        }
-        upsertPlayerAvatar(player);
-    });
-
-    socket.on('player-left', (data) => {
-        netLog(`player-left  id=${data && data.id}`);
-        if (data && data.id) {
-            appendConsoleHistory(`[NET] player left: ${data.id}`, 'ok');
-            removePlayerAvatar(data.id);
-        }
-    });
 
     socket.on('combat-start-request', (packet) => {
         if (modeManager.current !== MODE.DM || !socket) return;
@@ -1072,86 +1030,25 @@ function registerSocketHandlers() {
         }
     });
 
-    // ── Server-authoritative turn state ────────────────────────────────────────
-    socket.on('combat-turn', (packet) => {
-        console.log('[COMBAT-TURN] received', {
-            turnIndex: packet && packet.turnIndex,
-            actor: packet && packet.currentActor && packet.currentActor.id,
-            type: packet && packet.currentActor && packet.currentActor.type,
-            round: packet && packet.roundNumber,
-        });
-        if (!packet || typeof packet !== 'object') return;
-        const wasEndTurnPending = endTurnPending;
-        endTurnPending = false;
-        if (endTurnWatchdog) {
-            clearTimeout(endTurnWatchdog);
-            endTurnWatchdog = null;
-        }
-        const order = Array.isArray(packet.order) ? packet.order : [];
-        const turnIndex = Math.max(0, Math.min(Number(packet.turnIndex) || 0, order.length > 0 ? order.length - 1 : 0));
-        const roundNumber = Math.max(1, Number(packet.roundNumber) || 1);
-        const currentActor = packet.currentActor || (order[turnIndex] ?? null);
-
-        // Hard-overwrite local turn state with server authority — no merging.
-        combatState.turnQueue = order;
-        combatState.currentTurnIndex = turnIndex;
-        combatState.turnIndex = turnIndex;
-        combatState.roundNumber = roundNumber;
-        combatState.turnOrder = order.map((entry) => {
-            if (!entry) return null;
-            if (entry.type === 'player') {
-                return isLocalPlayerTurnEntry(entry) ? playerState : findCombatActorById(entry.id);
-            }
-            return findCombatActorById(entry.id)?.userData;
-        }).filter(Boolean);
-
-        if (currentGameMode === GAME_MODE.COMBAT && currentActor) {
-            dispatchCombatTurnActor(currentActor);
-        }
-        if (uxTelemetry.enabled && uxTelemetry.marks.endTurnSentAt > 0) {
-            uxRecordSample(uxTelemetry.samples.endTurnRttMs, performance.now() - uxTelemetry.marks.endTurnSentAt);
-            uxTelemetry.marks.endTurnSentAt = 0;
-        }
-        if (wasEndTurnPending) {
-            uxSetIntentStatus('endTurn', 'resolved', 'turn-advanced');
-        }
-        updateCombatUI();
-        updateDmControlPanel();
-    });
-
-    socket.on('combat-full-state', (packet) => {
-        if (!packet || typeof packet !== 'object') return;
-        const order = Array.isArray(packet.order) ? packet.order : [];
-        const turn = Number(packet.turn) || 0;
-        const turnIndex = order.length > 0 ? Math.max(0, Math.min(turn, order.length - 1)) : 0;
-        const roundNumber = Math.max(1, Number((packet.state || {}).roundNumber) || 1);
-
-        combatState.turnQueue = order;
-        combatState.currentTurnIndex = turnIndex;
-        combatState.turnIndex = turnIndex;
-        combatState.roundNumber = roundNumber;
-        combatState.turnOrder = order.map((entry) => {
-            if (!entry) return null;
-            if (entry.type === 'player') {
-                return isLocalPlayerTurnEntry(entry) ? playerState : findCombatActorById(entry.id);
-            }
-            return findCombatActorById(entry.id)?.userData;
-        }).filter(Boolean);
-
-        updateCombatUI();
-        updateDmControlPanel();
-    });
-
-    socket.on('combat-reset', () => {
-        endTurnPending = false;
-        if (endTurnWatchdog) {
-            clearTimeout(endTurnWatchdog);
-            endTurnWatchdog = null;
-        }
-        uxSetIntentStatus('attack', 'idle');
-        uxSetIntentStatus('move', 'idle');
-        uxSetIntentStatus('endTurn', 'idle');
-        forceLeaveCombatPresentation('combat-reset');
+    registerCombatTurnSocketHandlers({
+        socket,
+        combatState,
+        getCurrentGameMode: () => currentGameMode,
+        gameMode: GAME_MODE,
+        dispatchCombatTurnActor,
+        uxTelemetry,
+        uxRecordSample,
+        uxSetIntentStatus,
+        updateCombatUI,
+        updateDmControlPanel,
+        isLocalPlayerTurnEntry,
+        playerState,
+        findCombatActorById,
+        getEndTurnPending: () => endTurnPending,
+        setEndTurnPending: (value) => { endTurnPending = value; },
+        getEndTurnWatchdog: () => endTurnWatchdog,
+        setEndTurnWatchdog: (value) => { endTurnWatchdog = value; },
+        forceLeaveCombatPresentation,
     });
 
     socket.on('combat-ended', (packet) => {
@@ -1606,6 +1503,8 @@ import { COMBAT_DOMAIN_ACTION, computeCombatTruthFromWorldPayload, createCombatD
 import { createCombatRenderTransitionAdapter } from '/static/map3d/adapters/combatRenderAdapter.js';
 import { createWorldHydrator } from '/static/map3d/net/worldHydrator.js';
 import { registerCombatStateSocketHandlers } from '/static/map3d/net/combatStateSocketHandlers.js';
+import { registerPlayerStateSocketHandlers } from '/static/map3d/net/playerStateSocketHandlers.js';
+import { registerCombatTurnSocketHandlers } from '/static/map3d/net/combatTurnSocketHandlers.js';
 import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from '/static/avatar_rig_runtime.js';
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
