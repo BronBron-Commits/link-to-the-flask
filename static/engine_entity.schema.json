@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "engine_entity",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "combat", "stats", "inventory"],
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "combat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hp", "maxHp", "ac", "initiative", "speed"],
+      "properties": {
+        "hp": { "type": "number" },
+        "maxHp": { "type": "number" },
+        "ac": { "type": "number" },
+        "initiative": { "type": "number" },
+        "speed": { "type": "number" }
+      }
+    },
+    "stats": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["str", "dex", "con", "int", "wis", "cha"],
+      "properties": {
+        "str": { "type": "number" },
+        "dex": { "type": "number" },
+        "con": { "type": "number" },
+        "int": { "type": "number" },
+        "wis": { "type": "number" },
+        "cha": { "type": "number" }
+      }
+    },
+    "skills": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["value", "proficient"],
+        "properties": {
+          "value": { "type": "number" },
+          "proficient": { "type": "boolean" }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["items"],
+      "properties": {
+        "capacity": { "type": "number" },
+        "weight": { "type": "number" },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["instanceId", "itemId", "qty"],
+            "properties": {
+              "instanceId": { "type": "string" },
+              "itemId": { "type": "string" },
+              "qty": { "type": "number" },
+              "equipped": { "type": "boolean" },
+              "slot": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "weapons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "attackBonus"],
+        "properties": {
+          "name": { "type": "string" },
+          "attackBonus": { "type": "number" },
+          "damage": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "dice": { "type": "string" },
+              "flat": { "type": "number" },
+              "type": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "spells": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "range": { "type": ["string", "null"] },
+          "duration": { "type": ["string", "null"] },
+          "castingTime": { "type": ["string", "null"] },
+          "prepared": { "type": "boolean" }
+        }
+      }
+    },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": ["string", "null"] },
+          "uses": { "type": "string" },
+          "ruleId": { "type": "string" }
+        }
+      }
+    }
+  }
+}

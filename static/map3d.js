@@ -873,6 +873,9 @@ import { createLoadingOverlayVarietyManager } from '/static/map3d/managers/loadi
 import { createLoadingOverlayStyleManager } from '/static/map3d/managers/loadingOverlayStyleManager.js';
 import { createLoadingOverlayBuilderManager } from '/static/map3d/managers/loadingOverlayBuilderManager.js';
 import { createLoadingDiceManager } from '/static/map3d/managers/loadingDiceManager.js';
+import { createLoadingOverlayFinishManager } from '/static/map3d/managers/loadingOverlayFinishManager.js';
+import { registerDefaultConsoleCommandsFromManager } from '/static/map3d/managers/consoleCommandRegistryManager.js';
+import { createConsoleCommandRuntimeManager } from '/static/map3d/managers/consoleCommandRuntimeManager.js';
 import { createCombatRenderTransitionAdapter } from '/static/map3d/adapters/combatRenderAdapter.js';
 import { createSceneCombatVisibilityUpdater } from '/static/map3d/render/sceneCombatVisibility.js';
 import { createEnemyHealthBarPrimitive, removeEnemyHealthBarPrimitive, createPlayerHeadHealthBarPrimitive, removePlayerHeadHealthBarPrimitive, updateSingleHeadHealthBarPrimitive, attachTargetSelectionRingPrimitive, removeTargetSelectionRingPrimitive } from '/static/map3d/render/combatOverlayPrimitives.js';
@@ -1940,6 +1943,7 @@ const uxIntentState = {
 const consoleCommands = Object.create(null);
 let consoleRootEl = null;
 let commandConsoleUiManager = null;
+let consoleCommandRuntimeManager = null;
 let consoleEventBus = null;
 let combatParticlesEnabled = true;
 let consoleAudioMuted = false;
@@ -2016,14 +2020,7 @@ function isConsoleToggleKey(event) {
 }
 
 function tokenizeConsoleInput(raw) {
-    if (!raw) return [];
-    const tokens = [];
-    const re = /"([^"]*)"|'([^']*)'|([^\s]+)/g;
-    let match = null;
-    while ((match = re.exec(raw)) !== null) {
-        tokens.push(match[1] ?? match[2] ?? match[3]);
-    }
-    return tokens;
+    return ensureConsoleCommandRuntimeManager().tokenizeConsoleInput(raw);
 }
 
 function registerConsoleCommand(name, config) {
@@ -2036,141 +2033,55 @@ function registerConsoleCommand(name, config) {
     };
 }
 
+function ensureConsoleCommandRuntimeManager() {
+    if (consoleCommandRuntimeManager) return consoleCommandRuntimeManager;
+    consoleCommandRuntimeManager = createConsoleCommandRuntimeManager({
+        getScene: () => scene,
+        getRenderer: () => renderer,
+        getPlayerState: () => playerState,
+        requestTrainingDummySpawn,
+        saveSnapshot,
+        requestRewindTurn,
+        requestReplayLastAction,
+        getDmOverride: () => dmOverride,
+        setDmOverride: (value) => { dmOverride = value; },
+        requestEndTurn,
+        requestStepTurn,
+        requestPossessActor,
+        requestReleasePossession,
+        getControlledActor,
+        getMode: () => modeManager.current,
+        modeDm: MODE.DM,
+        appendConsoleHistory,
+        runPossessedEnemyAttack,
+        getSelectedCombatTarget: () => selectedCombatTarget,
+        getTrainingDummies: () => trainingDummies,
+        getEdgeDistanceFeet,
+        setSelectedCombatTarget,
+        selectMoveAndAttackAction,
+        getConsoleAudioMuted: () => consoleAudioMuted,
+        setConsoleAudioMuted: (value) => { consoleAudioMuted = !!value; },
+        getCombatMixerMasterGain: () => combatMixerMasterGain,
+        getCombatAudioMasterGain: () => combatAudioMasterGain,
+        getCombatMusicMasterGain: () => combatMusicMasterGain,
+        getCombatMusicTargetGain,
+        playCombatSfxCue,
+        getEventBus: () => consoleEventBus,
+        getConsoleCommands: () => consoleCommands,
+    });
+    return consoleCommandRuntimeManager;
+}
+
 function buildConsoleContext() {
-    return {
-        scene,
-        renderer,
-        playerState,
-        combatSystem: {
-            spawnEnemy(type = 'dummy') {
-                const enemyName = type && String(type).trim().length > 0 ? String(type).trim() : 'Training Dummy';
-                const baseAngle = Math.random() * Math.PI * 2;
-                const spawnRadius = 2.8 + (Math.random() * 1.6);
-                const x = playerState.position.x + (Math.cos(baseAngle) * spawnRadius);
-                const z = playerState.position.z + (Math.sin(baseAngle) * spawnRadius);
-                const y = playerState.position.y;
-                return requestTrainingDummySpawn(x, y, z, enemyName);
-            },
-            saveSnapshot,
-            rewindTurn: requestRewindTurn,
-            replayLastAction: requestReplayLastAction,
-            setDmOverride(override) {
-                dmOverride = override ? { ...override } : null;
-                return dmOverride;
-            },
-            endTurn: requestEndTurn,
-            stepTurn: requestStepTurn,
-            possessActor: requestPossessActor,
-            releasePossession: requestReleasePossession,
-            getControlledActor,
-            basicAttack() {
-                const controlled = getControlledActor();
-                if (modeManager.current === MODE.DM && !controlled) {
-                    appendConsoleHistory('DM must possess an actor before attacking', 'error');
-                    return false;
-                }
-
-                const actor = controlled || playerState;
-                if (actor !== playerState) {
-                    const acted = runPossessedEnemyAttack(actor);
-                    if (!acted) {
-                        appendConsoleHistory('Possessed actor cannot attack right now', 'error');
-                    }
-                    return acted;
-                }
-
-                let target = selectedCombatTarget;
-                if (!target || !target.parent || (target.userData?.hp || 0) <= 0) {
-                    const alive = trainingDummies.filter((dummy) => dummy && dummy.parent && (dummy.userData?.hp || 0) > 0);
-                    if (alive.length > 0) {
-                        target = alive.sort((a, b) => getEdgeDistanceFeet(playerState, a) - getEdgeDistanceFeet(playerState, b))[0];
-                    }
-                }
-                if (!target) {
-                    appendConsoleHistory('No valid target for attack', 'error');
-                    return false;
-                }
-                setSelectedCombatTarget(target);
-                selectMoveAndAttackAction(target);
-                return true;
-            },
-        },
-        audioSystem: {
-            mute() {
-                consoleAudioMuted = true;
-                if (combatMixerMasterGain && combatMixerMasterGain.gain) {
-                    combatMixerMasterGain.gain.value = 0;
-                }
-                if (combatAudioMasterGain && combatAudioMasterGain.gain) {
-                    combatAudioMasterGain.gain.value = 0;
-                }
-                if (combatMusicMasterGain && combatMusicMasterGain.gain) {
-                    combatMusicMasterGain.gain.value = 0.0001;
-                }
-            },
-            unmute() {
-                consoleAudioMuted = false;
-                if (combatMixerMasterGain && combatMixerMasterGain.gain) {
-                    combatMixerMasterGain.gain.value = 0.6;
-                }
-                if (combatAudioMasterGain && combatAudioMasterGain.gain) {
-                    combatAudioMasterGain.gain.value = 0.6;
-                }
-                if (combatMusicMasterGain && combatMusicMasterGain.gain) {
-                    combatMusicMasterGain.gain.value = getCombatMusicTargetGain();
-                }
-            },
-            play(cueName = 'melee-hit') {
-                playCombatSfxCue(cueName);
-            },
-            get muted() {
-                return consoleAudioMuted;
-            },
-        },
-        eventBus: consoleEventBus,
-    };
+    return ensureConsoleCommandRuntimeManager().buildConsoleContext();
 }
 
 function runConsoleCommand(input) {
-    const trimmed = (input || '').trim();
-    if (!trimmed) return;
-    appendConsoleHistory(`> ${trimmed}`);
-
-    const tokens = tokenizeConsoleInput(trimmed);
-    if (tokens.length === 0) return;
-    const rawName = String(tokens[0] || '').toLowerCase();
-    const name = rawName.startsWith('/') ? rawName.slice(1) : rawName;
-    const args = tokens.slice(1);
-    const command = consoleCommands[name];
-
-    if (!command) {
-        appendConsoleHistory(`Unknown command: ${name}`, 'error');
-        return;
-    }
-
-    if (!command.modes.includes(modeManager.current)) {
-        appendConsoleHistory(`Command not allowed in ${modeManager.current} mode`, 'error');
-        return;
-    }
-
-    try {
-        const ctx = buildConsoleContext();
-        command.execute(ctx, args);
-    } catch (err) {
-        appendConsoleHistory(`Command failed: ${err && err.message ? err.message : String(err)}`, 'error');
-    }
+    ensureConsoleCommandRuntimeManager().runConsoleCommand(input);
 }
 
 function parseConsoleScalar(raw) {
-    const text = String(raw ?? '').trim();
-    if (!text.length) return '';
-    const lower = text.toLowerCase();
-    if (lower === 'true' || lower === 'on' || lower === 'yes') return true;
-    if (lower === 'false' || lower === 'off' || lower === 'no') return false;
-    if (lower === 'null') return null;
-    const numeric = Number(text);
-    if (Number.isFinite(numeric)) return numeric;
-    return text;
+    return ensureConsoleCommandRuntimeManager().parseConsoleScalar(raw);
 }
 
 function uxResetTelemetry() {
@@ -2347,760 +2258,79 @@ async function runUxMacro(cycles = 3) {
 }
 
 function registerDefaultConsoleCommands() {
-    registerConsoleCommand('help', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
-        usage: 'help',
-        description: 'List commands available in the current mode',
-        execute: () => {
-            const names = Object.keys(consoleCommands)
-                .filter((name) => consoleCommands[name].modes.includes(modeManager.current))
-                .sort();
-            appendConsoleHistory(`Available commands (${modeManager.current}): ${names.join(', ')}`);
-        },
-    });
-
-    registerConsoleCommand('clear', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
-        usage: 'clear',
-        description: 'Clear console scrollback',
-        execute: () => {
-            consoleState.history.length = 0;
-            renderConsoleHistory();
-        },
-    });
-
-    registerConsoleCommand('mode', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
-        usage: 'mode <dev|dm|player>',
-        description: 'Switch command mode',
-        execute: (_ctx, args) => {
-            const next = String(args[0] || '').toLowerCase();
-            if (!Object.values(CONSOLE_MODE).includes(next)) {
-                appendConsoleHistory('Usage: mode <dev|dm|player>', 'error');
-                return;
-            }
-            if (!modeManager.setMode(next)) {
-                appendConsoleHistory(`Failed to switch mode to ${next}`, 'error');
-                return;
-            }
-            appendConsoleHistory(`Mode switched to ${next}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('wireframe', {
-        modes: [CONSOLE_MODE.DEV],
-        usage: 'wireframe',
-        description: 'Toggle mesh wireframe',
-        execute: ({ scene: activeScene }) => {
-            let toggledCount = 0;
-            activeScene.traverse((obj) => {
-                if (!obj || !obj.isMesh || !obj.material) return;
-                if (Array.isArray(obj.material)) {
-                    obj.material.forEach((mat) => {
-                        if (mat && typeof mat.wireframe === 'boolean') {
-                            mat.wireframe = !mat.wireframe;
-                            toggledCount += 1;
-                        }
-                    });
-                } else if (typeof obj.material.wireframe === 'boolean') {
-                    obj.material.wireframe = !obj.material.wireframe;
-                    toggledCount += 1;
-                }
-            });
-            appendConsoleHistory(`Wireframe toggled on ${toggledCount} materials`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('audio', {
-        modes: [CONSOLE_MODE.DEV],
-        usage: 'audio <mute|unmute|play> [cue]',
-        description: 'Audio debug controls',
-        execute: ({ audioSystem }, args) => {
-            const op = String(args[0] || '').toLowerCase();
-            if (op === 'mute') {
-                audioSystem.mute();
-                appendConsoleHistory('Audio muted', 'ok');
-                return;
-            }
-            if (op === 'unmute') {
-                audioSystem.unmute();
-                appendConsoleHistory('Audio unmuted', 'ok');
-                return;
-            }
-            if (op === 'play') {
-                const cueName = String(args[1] || 'melee-hit');
-                audioSystem.play(cueName);
-                appendConsoleHistory(`Audio cue played: ${cueName}`, 'ok');
-                return;
-            }
-            appendConsoleHistory('Usage: audio <mute|unmute|play> [cue]', 'error');
-        },
-    });
-
-    registerConsoleCommand('quality', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.PLAYER],
-        usage: 'quality <low|medium|high>',
-        description: 'Switch runtime performance quality preset',
-        execute: (_ctx, args) => {
-            const level = String(args[0] || '').toLowerCase();
-            if (!setQuality(level)) {
-                appendConsoleHistory('Usage: quality <low|medium|high>', 'error');
-                return;
-            }
-            appendConsoleHistory(`Quality set to ${SETTINGS.quality} (${SETTINGS.maxFPS} fps, scale ${SETTINGS.renderScale})`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('observer', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.PLAYER],
-        usage: 'observer <auto|on|off|status>',
-        description: 'Force observer runtime mode for low-power multi-instance testing',
-        execute: (_ctx, args) => {
-            const op = String(args[0] || 'status').toLowerCase();
-            if (op === 'status') {
-                appendConsoleHistory(`Observer mode: ${isObserverClient() ? 'ON' : 'OFF'} (forced=${forceObserverMode ? 'yes' : 'no'})`, 'ok');
-                return;
-            }
-            if (op === 'auto') {
-                forceObserverMode = false;
-                updateClientRuntimeModeFromAuthority();
-                appendConsoleHistory(`Observer mode auto (runtime=${isObserverClient() ? 'observer' : 'full'})`, 'ok');
-                return;
-            }
-            if (op === 'on') {
-                forceObserverMode = true;
-                updateClientRuntimeModeFromAuthority();
-                appendConsoleHistory('Observer mode forced ON', 'ok');
-                return;
-            }
-            if (op === 'off') {
-                forceObserverMode = false;
-                CLIENT_MODE = CLIENT_MODE_FULL;
-                applySettings();
-                appendConsoleHistory('Observer mode forced OFF (full mode)', 'ok');
-                return;
-            }
-            appendConsoleHistory('Usage: observer <auto|on|off|status>', 'error');
-        },
-    });
-
-    registerConsoleCommand('spawn', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'spawn [type] [count]',
-        description: 'Spawn one or more enemies near player',
-        execute: ({ combatSystem }, args) => {
-            const type = String(args[0] || 'Training Dummy');
-            const requestedCount = Number.parseInt(args[1], 10);
-            const count = Number.isFinite(requestedCount)
-                ? Math.max(1, Math.min(16, requestedCount))
-                : 1;
-            let okCount = 0;
-            for (let i = 0; i < count; i++) {
-                const spawned = combatSystem.spawnEnemy(type);
-                if (spawned !== false) {
-                    okCount += 1;
-                }
-            }
-            if (okCount <= 0) {
-                appendConsoleHistory(`Spawn failed for ${type}`, 'error');
-                return;
-            }
-            if (modeManager.current === MODE.DM) {
-                appendConsoleHistory(`Dispatched ${okCount} spawn command(s) for ${type}`, 'ok');
-                return;
-            }
-            appendConsoleHistory(`Spawned ${okCount} ${type}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('endturn', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'endturn',
-        description: 'End current player turn',
-        execute: ({ combatSystem }) => {
-            if (!combatSystem.endTurn()) {
-                appendConsoleHistory('End turn unavailable right now', 'error');
-                return;
-            }
-            appendConsoleHistory(modeManager.current === MODE.DM ? 'End turn command dispatched' : 'End turn requested', 'ok');
-        },
-    });
-
-    registerConsoleCommand('stepturn', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'stepturn',
-        description: 'Advance combat to the next queued actor turn',
-        execute: ({ combatSystem }) => {
-            if (!combatSystem.stepTurn()) {
-                appendConsoleHistory('Turn step unavailable right now', 'error');
-                return;
-            }
-            appendConsoleHistory(modeManager.current === MODE.DM ? 'Step turn command dispatched' : 'Advanced to next queued actor', 'ok');
-        },
-    });
-
-    registerConsoleCommand('brawl', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'brawl [count]',
-        description: 'Spawn dummies that fight each other while you spectate (player turns auto-skipped)',
-        execute: ({ combatSystem }, args) => {
-            if (currentGameMode === GAME_MODE.COMBAT) {
-                appendConsoleHistory('End combat first before starting a brawl', 'error');
-                return;
-            }
-            const count = Math.max(2, Math.min(8, Number.parseInt(args[0], 10) || 2));
-            // Spawn dummies in a ring ~5 units from the player, spread evenly
-            const BRAWL_RADIUS = 5;
-            let spawned = 0;
-            for (let i = 0; i < count; i++) {
-                const angle = (i / count) * Math.PI * 2;
-                const x = playerState.position.x + Math.cos(angle) * BRAWL_RADIUS;
-                const z = playerState.position.z + Math.sin(angle) * BRAWL_RADIUS;
-                const dummy = requestTrainingDummySpawn(x, playerState.position.y, z, `Dummy ${i + 1}`);
-                if (dummy !== false) spawned += 1;
-            }
-            if (spawned === 0) {
-                appendConsoleHistory('Failed to spawn brawl dummies', 'error');
-                return;
-            }
-            spectatorCombat = true;
-            // Small delay to let dummies finish spawning before starting combat
-            setTimeout(() => {
-                if (currentGameMode !== GAME_MODE.COMBAT) {
-                    requestDmStartCombat(null) || emitCombatStateEvent(true, {
-                        initiator: localPlayerId || (socket ? socket.id : null),
-                    });
-                }
-            }, 400);
-            appendConsoleHistory(`Brawl started: ${spawned} dummies spawned. Your turns will be skipped automatically.`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('possess', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'possess [actorId|selected]',
-        description: 'Possess selected enemy or actor id for manual turn control',
-        execute: ({ combatSystem }, args) => {
-            let actor = null;
-            const requested = String(args[0] || '').trim();
-            if (requested.length > 0 && requested.toLowerCase() !== 'selected') {
-                actor = findCombatActorById(requested);
-                if (!actor && requested.toLowerCase() === 'player') {
-                    actor = playerState;
-                }
-            } else {
-                actor = selectedCombatTarget;
-            }
-            if (!actor) {
-                appendConsoleHistory('No actor to possess (select a target or pass actorId)', 'error');
-                return;
-            }
-            if (!combatSystem.possessActor(actor)) {
-                appendConsoleHistory('Possession failed for requested actor', 'error');
-                return;
-            }
-            const actorName = actor === playerState
-                ? 'Player'
-                : (actor.userData?.name || actor.userData?.actorId || 'Enemy');
-            appendConsoleHistory(modeManager.current === MODE.DM ? `Possess command dispatched for ${actorName}` : `Possessing ${actorName}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('release', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'release',
-        description: 'Release currently possessed actor',
-        execute: ({ combatSystem }) => {
-            if (!combatSystem.releasePossession()) {
-                appendConsoleHistory('No possessed actor active', 'error');
-                return;
-            }
-            appendConsoleHistory(modeManager.current === MODE.DM ? 'Release command dispatched' : 'Possession released', 'ok');
-        },
-    });
-
-    registerConsoleCommand('rewind', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'rewind',
-        description: 'Rewind combat to the previous saved turn snapshot',
-        execute: ({ combatSystem }) => {
-            if (!combatSystem.rewindTurn()) {
-                appendConsoleHistory('No earlier combat snapshot available', 'error');
-                return;
-            }
-            appendConsoleHistory(modeManager.current === MODE.DM ? 'Rewind command dispatched' : 'Combat rewound to previous turn snapshot', 'ok');
-        },
-    });
-
-    registerConsoleCommand('forcehit', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'forcehit [damage]',
-        description: 'Force the next attack resolution to hit',
-        execute: ({ combatSystem }, args) => {
-            const damage = Number.parseInt(args[0], 10);
-            combatSystem.setDmOverride({
-                hit: true,
-                resultType: 'crit',
-                damage: Number.isFinite(damage) ? Math.max(0, damage) : undefined,
-            });
-            appendConsoleHistory('Next attack forced to hit', 'ok');
-        },
-    });
-
-    registerConsoleCommand('forcemiss', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'forcemiss',
-        description: 'Force the next attack resolution to miss',
-        execute: ({ combatSystem }) => {
-            combatSystem.setDmOverride({ hit: false, resultType: 'fumble', damage: 0 });
-            appendConsoleHistory('Next attack forced to miss', 'ok');
-        },
-    });
-
-    registerConsoleCommand('snapshot', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'snapshot',
-        description: 'Save a manual combat snapshot',
-        execute: ({ combatSystem }) => {
-            if (!combatSystem.saveSnapshot('manual')) {
-                appendConsoleHistory('Combat snapshot unavailable outside combat', 'error');
-                return;
-            }
-            appendConsoleHistory(`Combat snapshot saved (${combatTimeline.length} total)`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('replay', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'replay',
-        description: 'Replay the last recorded combat action',
-        execute: ({ combatSystem }) => {
-            void combatSystem.replayLastAction().then((ok) => {
-                const successMessage = modeManager.current === MODE.DM
-                    ? 'Replay command dispatched'
-                    : 'Replaying last action';
-                appendConsoleHistory(ok ? successMessage : 'No recorded action to replay', ok ? 'ok' : 'error');
-            }).catch((err) => {
-                appendConsoleHistory(`Replay failed: ${err && err.message ? err.message : String(err)}`, 'error');
-            });
-        },
-    });
-
-    registerConsoleCommand('replayprev', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'replayprev',
-        description: 'Move replay cursor to the previous recorded action and replay it',
-        execute: ({ combatSystem }) => {
-            if (!combatActionHistory.length) {
-                appendConsoleHistory('No recorded action to replay', 'error');
-                return;
-            }
-            getCombatActionAtCursor(-1);
-            void combatSystem.replayLastAction().then((ok) => {
-                appendConsoleHistory(ok ? `Replaying action ${combatActionHistoryCursor + 1}/${combatActionHistory.length}` : 'Replay blocked while another timeline is active', ok ? 'ok' : 'error');
-            }).catch((err) => {
-                appendConsoleHistory(`Replay failed: ${err && err.message ? err.message : String(err)}`, 'error');
-            });
-        },
-    });
-
-    registerConsoleCommand('replaynext', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'replaynext',
-        description: 'Move replay cursor to the next recorded action and replay it',
-        execute: ({ combatSystem }) => {
-            if (!combatActionHistory.length) {
-                appendConsoleHistory('No recorded action to replay', 'error');
-                return;
-            }
-            getCombatActionAtCursor(1);
-            void combatSystem.replayLastAction().then((ok) => {
-                appendConsoleHistory(ok ? `Replaying action ${combatActionHistoryCursor + 1}/${combatActionHistory.length}` : 'Replay blocked while another timeline is active', ok ? 'ok' : 'error');
-            }).catch((err) => {
-                appendConsoleHistory(`Replay failed: ${err && err.message ? err.message : String(err)}`, 'error');
-            });
-        },
-    });
-
-    registerConsoleCommand('attack', {
-        modes: [CONSOLE_MODE.PLAYER, CONSOLE_MODE.DM],
-        usage: 'attack',
-        description: 'Run basic attack against selected or nearest target',
-        execute: ({ combatSystem }) => {
-            const attacked = combatSystem.basicAttack();
-            if (attacked) {
-                appendConsoleHistory('Attack preview opened. Confirm to execute.', 'ok');
-            }
-        },
-    });
-
-    registerConsoleCommand('particles', {
-        modes: [CONSOLE_MODE.DEV],
-        usage: 'particles <on|off|toggle>',
-        description: 'Enable or disable combat burst particles',
-        execute: (_ctx, args) => {
-            const op = String(args[0] || 'toggle').toLowerCase();
-            if (op === 'on') {
-                combatParticlesEnabled = true;
-            } else if (op === 'off') {
-                combatParticlesEnabled = false;
-            } else {
-                combatParticlesEnabled = !combatParticlesEnabled;
-            }
-            appendConsoleHistory(`Particles ${combatParticlesEnabled ? 'enabled' : 'disabled'}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('grid', {
-        modes: [CONSOLE_MODE.DEV],
-        usage: 'grid <on|off|toggle>',
-        description: 'Toggle world grid overlay',
-        execute: (_ctx, args) => {
-            const op = String(args[0] || 'toggle').toLowerCase();
-            if (op === 'on') {
-                setGridVisibility(true);
-            } else if (op === 'off') {
-                setGridVisibility(false);
-            } else {
-                toggleGrid();
-            }
-            appendConsoleHistory(`Grid ${gridVisible ? 'enabled' : 'disabled'}`, 'ok');
-        },
-    });
-
-    const runtimeTunables = {
-        'camera.fov': {
-            get: () => Number(camera?.fov) || 0,
-            set: (value) => {
-                const next = THREE.MathUtils.clamp(Number(value) || 58, 5, 120);
-                camera.fov = next;
-                camera.updateProjectionMatrix();
-                return next;
-            },
-        },
-        'camera.yaw': {
-            get: () => Number(yaw) || 0,
-            set: (value) => {
-                yaw = Number(value) || 0;
-                return yaw;
-            },
-        },
-        'camera.pitch': {
-            get: () => Number(pitch) || 0,
-            set: (value) => {
-                pitch = THREE.MathUtils.clamp(Number(value) || 0, -Math.PI / 2, Math.PI / 2);
-                return pitch;
-            },
-        },
-        'input.lookSpeed': {
-            get: () => Number(lookSpeed) || 0,
-            set: (value) => {
-                lookSpeed = THREE.MathUtils.clamp(Number(value) || 0.0025, 0.0001, 0.02);
-                return lookSpeed;
-            },
-        },
-        'player.hp': {
-            get: () => Number(playerState?.hp) || 0,
-            set: (value) => {
-                const hp = Math.max(0, Number(value) || 0);
-                const maxHp = Math.max(1, Number(playerState?.maxHp) || 1);
-                playerState.hp = Math.min(maxHp, hp);
-                updatePlayerHealthHud();
-                return playerState.hp;
-            },
-        },
-        'player.maxHp': {
-            get: () => Number(playerState?.maxHp) || 0,
-            set: (value) => {
-                playerState.maxHp = Math.max(1, Number(value) || 1);
-                playerState.hp = Math.min(Number(playerState.hp) || 0, playerState.maxHp);
-                updatePlayerHealthHud();
-                return playerState.maxHp;
-            },
-        },
-        'player.speed': {
-            get: () => Number(playerState?.speed) || 0,
-            set: (value) => {
-                playerState.speed = Math.max(0.1, Number(value) || 5);
-                return playerState.speed;
-            },
-        },
-        'combat.inCombat': {
-            get: () => !!combatState?.inCombat,
-            set: (value) => {
-                const on = !!value;
-                if (on) {
-                    currentGameMode = GAME_MODE.COMBAT;
-                    combatState.inCombat = true;
-                    setCombatPhase(combatState.phase || 'PLAYER');
-                } else {
-                    currentGameMode = GAME_MODE.FREE;
-                    combatState.inCombat = false;
-                    setCombatPhase('TRANSITION');
-                    setCombatLock(false);
-                    deactivateCombatCamera();
-                }
-                updateCombatUI();
-                updateActionMenu();
-                return combatState.inCombat;
-            },
-        },
-        'combat.round': {
-            get: () => Number(combatState?.roundNumber) || 0,
-            set: (value) => {
-                combatState.roundNumber = Math.max(0, Math.floor(Number(value) || 0));
-                updateCombatUI();
-                return combatState.roundNumber;
-            },
-        },
-        'combat.turnIndex': {
-            get: () => Number(combatState?.currentTurnIndex) || 0,
-            set: (value) => {
-                combatState.currentTurnIndex = Math.max(0, Math.floor(Number(value) || 0));
-                updateCombatUI();
-                return combatState.currentTurnIndex;
-            },
-        },
-        'combat.lock': {
-            get: () => !!combatState?.lock,
-            set: (value) => {
-                setCombatLock(!!value);
-                return !!combatState.lock;
-            },
-        },
-        'dm.autostep': {
-            get: () => !!dmAutoStepEnabled,
-            set: (value) => {
-                setDmAutoStepEnabled(!!value);
-                return !!dmAutoStepEnabled;
-            },
-        },
-        'dm.authority': {
-            get: () => String(simulationAuthority || ''),
-            set: (value) => {
-                const next = String(value || '').toLowerCase();
-                if (next === SIMULATION_AUTHORITY.SERVER || next === SIMULATION_AUTHORITY.LOCAL_DM) {
-                    setSimulationAuthority(next);
-                    syncDmAuthorityLayerFromState();
-                }
-                return String(simulationAuthority || '');
-            },
-        },
-        'dm.layer': {
-            get: () => String(dmAuthorityLayer || ''),
-            set: (value) => {
-                const next = String(value || '').toLowerCase();
-                if (Object.values(DM_AUTHORITY_LAYER).includes(next)) {
-                    setDmAuthorityLayer(next);
-                }
-                return String(dmAuthorityLayer || '');
-            },
-        },
-    };
-
-    registerConsoleCommand('vars', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'vars [filter]',
-        description: 'List runtime variable keys that can be controlled via console',
-        execute: (_ctx, args) => {
-            const filter = String(args[0] || '').toLowerCase();
-            const keys = Object.keys(runtimeTunables)
-                .filter((k) => !filter || k.toLowerCase().includes(filter))
-                .sort();
-            appendConsoleHistory(keys.length ? `Vars: ${keys.join(', ')}` : 'No vars matched filter', keys.length ? 'ok' : 'error');
-        },
-    });
-
-    registerConsoleCommand('get', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'get <varKey>',
-        description: 'Read a runtime variable from the control registry',
-        execute: (_ctx, args) => {
-            const key = String(args[0] || '').trim();
-            const tunable = runtimeTunables[key];
-            if (!tunable) {
-                appendConsoleHistory(`Unknown var key: ${key}`, 'error');
-                return;
-            }
-            const value = tunable.get();
-            appendConsoleHistory(`${key} = ${String(value)}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('set', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'set <varKey> <value>',
-        description: 'Set a runtime variable in the control registry',
-        execute: (_ctx, args) => {
-            const key = String(args[0] || '').trim();
-            const tunable = runtimeTunables[key];
-            if (!tunable) {
-                appendConsoleHistory(`Unknown var key: ${key}`, 'error');
-                return;
-            }
-            if (args.length < 2) {
-                appendConsoleHistory('Usage: set <varKey> <value>', 'error');
-                return;
-            }
-            const value = parseConsoleScalar(args.slice(1).join(' '));
-            const updated = tunable.set(value);
-            appendConsoleHistory(`${key} -> ${String(updated)}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('inc', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'inc <varKey> [delta]',
-        description: 'Increment a numeric runtime variable by delta (default 1)',
-        execute: (_ctx, args) => {
-            const key = String(args[0] || '').trim();
-            const tunable = runtimeTunables[key];
-            if (!tunable) {
-                appendConsoleHistory(`Unknown var key: ${key}`, 'error');
-                return;
-            }
-            const current = Number(tunable.get());
-            if (!Number.isFinite(current)) {
-                appendConsoleHistory(`${key} is not numeric`, 'error');
-                return;
-            }
-            const delta = Number(args[1]);
-            const next = current + (Number.isFinite(delta) ? delta : 1);
-            const updated = tunable.set(next);
-            appendConsoleHistory(`${key} -> ${String(updated)}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('tp', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
-        usage: 'tp <x> <y> <z>',
-        description: 'Teleport local player actor to world coordinates',
-        execute: (_ctx, args) => {
-            if (args.length < 3) {
-                appendConsoleHistory('Usage: tp <x> <y> <z>', 'error');
-                return;
-            }
-            const x = Number(args[0]);
-            const y = Number(args[1]);
-            const z = Number(args[2]);
-            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-                appendConsoleHistory('tp requires numeric x y z', 'error');
-                return;
-            }
-            playerState.position.set(x, y, z);
-            playerState.prevPosition.copy(playerState.position);
-            syncPlayerRigFromState();
-            appendConsoleHistory(`Teleported to (${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)})`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('gamemode', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'gamemode <combat|free>',
-        description: 'Switch between combat and exploration mode quickly',
-        execute: (_ctx, args) => {
-            const mode = String(args[0] || '').toLowerCase();
-            if (mode !== 'combat' && mode !== 'free') {
-                appendConsoleHistory('Usage: gamemode <combat|free>', 'error');
-                return;
-            }
-            runtimeTunables['combat.inCombat'].set(mode === 'combat');
-            appendConsoleHistory(`Game mode set to ${mode}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('phase', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'phase <player|enemy|transition>',
-        description: 'Set combat phase directly',
-        execute: (_ctx, args) => {
-            const phase = String(args[0] || '').toUpperCase();
-            if (!['PLAYER', 'ENEMY', 'TRANSITION'].includes(phase)) {
-                appendConsoleHistory('Usage: phase <player|enemy|transition>', 'error');
-                return;
-            }
-            setCombatPhase(phase);
-            updateCombatUI();
-            appendConsoleHistory(`Combat phase set to ${phase}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('authority', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'authority <server|local-dm>',
-        description: 'Set DM simulation authority source',
-        execute: (_ctx, args) => {
-            const next = String(args[0] || '').toLowerCase();
-            if (next !== SIMULATION_AUTHORITY.SERVER && next !== SIMULATION_AUTHORITY.LOCAL_DM) {
-                appendConsoleHistory('Usage: authority <server|local-dm>', 'error');
-                return;
-            }
-            runtimeTunables['dm.authority'].set(next);
-            appendConsoleHistory(`Authority set to ${simulationAuthority}`, 'ok');
-        },
-    });
-
-    registerConsoleCommand('autostep', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM],
-        usage: 'autostep <on|off|toggle|status>',
-        description: 'Control DM auto-step timeline behavior',
-        execute: (_ctx, args) => {
-            const op = String(args[0] || 'status').toLowerCase();
-            if (op === 'status') {
-                appendConsoleHistory(`autostep: ${dmAutoStepEnabled ? 'ON' : 'OFF'}`, 'ok');
-                return;
-            }
-            if (op === 'toggle') {
-                setDmAutoStepEnabled(!dmAutoStepEnabled);
-                appendConsoleHistory(`autostep: ${dmAutoStepEnabled ? 'ON' : 'OFF'}`, 'ok');
-                return;
-            }
-            if (op === 'on' || op === 'off') {
-                setDmAutoStepEnabled(op === 'on');
-                appendConsoleHistory(`autostep: ${dmAutoStepEnabled ? 'ON' : 'OFF'}`, 'ok');
-                return;
-            }
-            appendConsoleHistory('Usage: autostep <on|off|toggle|status>', 'error');
-        },
-    });
-
-    registerConsoleCommand('ux', {
-        modes: [CONSOLE_MODE.DEV, CONSOLE_MODE.DM, CONSOLE_MODE.PLAYER],
-        usage: 'ux <start|stop|report|reset|macro> [cycles]',
-        description: 'Measure interaction feel with telemetry and optional scripted macro cycles',
-        execute: (_ctx, args) => {
-            const op = String(args[0] || 'report').toLowerCase();
-            if (op === 'start') {
-                uxStartTelemetry();
-                appendConsoleHistory('UX telemetry started', 'ok');
-                return;
-            }
-            if (op === 'stop') {
-                uxStopTelemetry();
-                appendConsoleHistory('UX telemetry stopped', 'ok');
-                return;
-            }
-            if (op === 'reset') {
-                uxResetTelemetry();
-                appendConsoleHistory('UX telemetry reset', 'ok');
-                return;
-            }
-            if (op === 'macro') {
-                const cycles = Math.max(1, Math.min(12, Number.parseInt(args[1], 10) || 3));
-                void runUxMacro(cycles);
-                return;
-            }
-            const since = uxTelemetry.sessionStartedAt
-                ? new Date(uxTelemetry.sessionStartedAt).toLocaleTimeString()
-                : 'n/a';
-            appendConsoleHistory(`UX report (started=${since}, enabled=${uxTelemetry.enabled ? 'yes' : 'no'})`, 'ok');
-            appendConsoleHistory(uxFormatStats('confirm-ui', uxTelemetry.samples.confirmUiMs), 'ok');
-            appendConsoleHistory(uxFormatStats('attack-rtt', uxTelemetry.samples.attackRttMs), 'ok');
-            appendConsoleHistory(uxFormatStats('move-rtt', uxTelemetry.samples.moveRttMs), 'ok');
-            appendConsoleHistory(uxFormatStats('endturn-rtt', uxTelemetry.samples.endTurnRttMs), 'ok');
-            appendConsoleHistory(`feel-score: ${uxComputeFeelScore().toFixed(1)} / 100`, 'ok');
-            appendConsoleHistory(`counters: confirms=${uxTelemetry.counters.confirms} cancels=${uxTelemetry.counters.cancels} timeouts=${uxTelemetry.counters.timeouts} macroRuns=${uxTelemetry.counters.macroRuns}`, 'ok');
-        },
+    registerDefaultConsoleCommandsFromManager({
+        registerConsoleCommand,
+        CONSOLE_MODE,
+        MODE,
+        GAME_MODE,
+        SETTINGS,
+        SIMULATION_AUTHORITY,
+        DM_AUTHORITY_LAYER,
+        THREE,
+        camera,
+        combatState,
+        playerState,
+        combatTimeline,
+        combatActionHistory,
+        getCombatActionHistoryCursor: () => combatActionHistoryCursor,
+        getCombatActionAtCursor,
+        modeManager,
+        consoleCommands,
+        consoleState,
+        appendConsoleHistory,
+        renderConsoleHistory,
+        setQuality,
+        isObserverClient,
+        getForceObserverMode: () => forceObserverMode,
+        setForceObserverMode: (value) => { forceObserverMode = !!value; },
+        updateClientRuntimeModeFromAuthority,
+        getClientModeFull: () => CLIENT_MODE_FULL,
+        setClientMode: (value) => { CLIENT_MODE = value; },
+        applySettings,
+        getCurrentGameMode: () => currentGameMode,
+        setCurrentGameMode: (value) => { currentGameMode = value; },
+        requestTrainingDummySpawn,
+        getSpectatorCombat: () => spectatorCombat,
+        setSpectatorCombat: (value) => { spectatorCombat = !!value; },
+        requestDmStartCombat,
+        emitCombatStateEvent,
+        getLocalPlayerId: () => localPlayerId,
+        getSocket: () => socket,
+        findCombatActorById,
+        getSelectedCombatTarget: () => selectedCombatTarget,
+        getCombatParticlesEnabled: () => combatParticlesEnabled,
+        setCombatParticlesEnabled: (value) => { combatParticlesEnabled = !!value; },
+        setGridVisibility,
+        toggleGrid,
+        getGridVisible: () => gridVisible,
+        getYaw: () => yaw,
+        setYaw: (value) => { yaw = value; },
+        getPitch: () => pitch,
+        setPitch: (value) => { pitch = value; },
+        getLookSpeed: () => lookSpeed,
+        setLookSpeed: (value) => { lookSpeed = value; },
+        updatePlayerHealthHud,
+        setCombatPhase,
+        setCombatLock,
+        deactivateCombatCamera,
+        updateCombatUI,
+        updateActionMenu,
+        getDmAutoStepEnabled: () => dmAutoStepEnabled,
+        setDmAutoStepEnabled,
+        getSimulationAuthority: () => simulationAuthority,
+        setSimulationAuthority,
+        syncDmAuthorityLayerFromState,
+        getDmAuthorityLayer: () => dmAuthorityLayer,
+        setDmAuthorityLayer,
+        parseConsoleScalar,
+        syncPlayerRigFromState,
+        uxStartTelemetry,
+        uxStopTelemetry,
+        uxResetTelemetry,
+        runUxMacro,
+        uxTelemetry,
+        uxFormatStats,
+        uxComputeFeelScore,
     });
 }
 
@@ -3468,6 +2698,7 @@ let loadingOverlayRuntimeManager = null;
 let loadingOverlayStyleManager = null;
 let loadingOverlayBuilderManager = null;
 let loadingDiceManager = null;
+let loadingOverlayFinishManager = null;
 
 function ensureLoadingOverlayRuntimeManager() {
     if (loadingOverlayRuntimeManager) return loadingOverlayRuntimeManager;
@@ -3633,92 +2864,43 @@ function ensureLoadingOverlayVarietyManager() {
     return loadingOverlayVarietyManager;
 }
 
-function finishLoadingOverlay(message = 'Ready') {
-    if (!loadingOverlayRoot || loadingOverlayFinished || loadingOverlayCloseScheduled) return;
-    loadingOverlayCloseScheduled = true;
-
-    const startProgress = loadingProgressValue;
-    const progressStartAt = performance.now();
-    const progressDuration = 900;
-    const animateProgress = () => {
-        if (loadingOverlayFinished) return;
-        const elapsed = performance.now() - progressStartAt;
-        const t = clamp01(elapsed / progressDuration);
-        const eased = 1 - Math.pow(1 - t, 3);
-        setLoadingProgress(startProgress + ((1 - startProgress) * eased));
-        if (t < 1) {
-            window.requestAnimationFrame(animateProgress);
-        }
-    };
-    window.requestAnimationFrame(animateProgress);
-
-    const elapsedVisible = performance.now() - loadingOverlayStartedAt;
-    const remainingToMinVisible = Math.max(0, LOADING_MIN_VISIBLE_MS - elapsedVisible);
-    setLoadingOverlayStatus(`${message} - finalizing visuals...`);
-
-    // Add one last playful fakeout sequence before fade.
-    window.setTimeout(() => {
-        if (loadingOverlayFinished) return;
-        setLoadingOverlayStatus('99.2% - polishing boss-level dramatic timing...');
-        spawnLoadingMessageBurst(18);
-    }, Math.max(120, remainingToMinVisible * 0.2));
-    window.setTimeout(() => {
-        if (loadingOverlayFinished) return;
-        setLoadingOverlayStatus('99.8% - pretending this is the final pass...');
-        spawnLoadingMessageBurst(14);
-    }, Math.max(260, remainingToMinVisible * 0.45));
-    window.setTimeout(() => {
-        if (loadingOverlayFinished) return;
-        setLoadingOverlayStatus(`${message} - absolutely final pass for real this time.`);
-        spawnLoadingMessageBurst(20);
-    }, Math.max(420, remainingToMinVisible * 0.7));
-
-    const closeDelay = remainingToMinVisible + LOADING_POST_COMPLETE_HOLD_MS;
-    window.setTimeout(() => {
-        if (!loadingOverlayRoot || loadingOverlayFinished) return;
-        setLoadingOverlayStatus(message);
-        spawnLoadingMessageBurst(20);
-        window.setTimeout(() => {
-            spawnLoadingMessageBurst(26);
-        }, 220);
-        loadingOverlayRoot.style.opacity = '0';
-
-        window.setTimeout(() => {
-            loadingOverlayFinished = true;
-            if (loadingLogFlushTimer) {
-                window.clearInterval(loadingLogFlushTimer);
-                loadingLogFlushTimer = null;
-            }
-            if (loadingQuoteTimer) {
-                window.clearInterval(loadingQuoteTimer);
-                loadingQuoteTimer = null;
-            }
-            if (loadingFlavorTimer) {
-                window.clearInterval(loadingFlavorTimer);
-                loadingFlavorTimer = null;
-            }
-            if (loadingDiceRollTimer) {
-                window.clearInterval(loadingDiceRollTimer);
-                loadingDiceRollTimer = null;
-            }
-            if (loadingStatusTimer) {
-                window.clearTimeout(loadingStatusTimer);
-                loadingStatusTimer = null;
-            }
-            if (loadingProgressAnimFrame !== null) {
-                window.cancelAnimationFrame(loadingProgressAnimFrame);
-                loadingProgressAnimFrame = null;
-            }
-            if (loadingBackdropAnimFrame !== null) {
-                window.cancelAnimationFrame(loadingBackdropAnimFrame);
-                loadingBackdropAnimFrame = null;
-            }
-            if (loadingOverlayRoot && loadingOverlayRoot.parentElement) {
-                loadingOverlayRoot.parentElement.removeChild(loadingOverlayRoot);
-            }
-            // Fade out loading screen track and transition to docks ambient.
-            stopMainTheme();
-            startDocksTheme();
+function ensureLoadingOverlayFinishManager() {
+    if (loadingOverlayFinishManager) return loadingOverlayFinishManager;
+    loadingOverlayFinishManager = createLoadingOverlayFinishManager({
+        windowObj: window,
+        performanceObj: performance,
+        getLoadingOverlayRoot: () => loadingOverlayRoot,
+        getLoadingOverlayFinished: () => loadingOverlayFinished,
+        setLoadingOverlayFinished: (value) => { loadingOverlayFinished = !!value; },
+        getLoadingOverlayCloseScheduled: () => loadingOverlayCloseScheduled,
+        setLoadingOverlayCloseScheduled: (value) => { loadingOverlayCloseScheduled = !!value; },
+        getLoadingProgressValue: () => loadingProgressValue,
+        setLoadingProgress,
+        clamp01,
+        getLoadingOverlayStartedAt: () => loadingOverlayStartedAt,
+        loadingMinVisibleMs: LOADING_MIN_VISIBLE_MS,
+        loadingPostCompleteHoldMs: LOADING_POST_COMPLETE_HOLD_MS,
+        loadingFadeDurationMs: LOADING_FADE_DURATION_MS,
+        setLoadingOverlayStatus,
+        spawnLoadingMessageBurst,
+        stopMainTheme,
+        startDocksTheme,
+        updateDmControlPanel,
+        getLoadingLogFlushTimer: () => loadingLogFlushTimer,
+        setLoadingLogFlushTimer: (value) => { loadingLogFlushTimer = value; },
+        getLoadingQuoteTimer: () => loadingQuoteTimer,
+        setLoadingQuoteTimer: (value) => { loadingQuoteTimer = value; },
+        getLoadingFlavorTimer: () => loadingFlavorTimer,
+        setLoadingFlavorTimer: (value) => { loadingFlavorTimer = value; },
+        getLoadingDiceRollTimer: () => loadingDiceRollTimer,
+        setLoadingDiceRollTimer: (value) => { loadingDiceRollTimer = value; },
+        getLoadingStatusTimer: () => loadingStatusTimer,
+        setLoadingStatusTimer: (value) => { loadingStatusTimer = value; },
+        getLoadingProgressAnimFrame: () => loadingProgressAnimFrame,
+        setLoadingProgressAnimFrame: (value) => { loadingProgressAnimFrame = value; },
+        getLoadingBackdropAnimFrame: () => loadingBackdropAnimFrame,
+        setLoadingBackdropAnimFrame: (value) => { loadingBackdropAnimFrame = value; },
+        clearOverlayRefs: () => {
             loadingOverlayRoot = null;
             loadingOverlayLog = null;
             loadingOverlayStatus = null;
@@ -3729,10 +2911,16 @@ function finishLoadingOverlay(message = 'Ready') {
             loadingOverlayCard = null;
             loadingOverlayAccentBar = null;
             loadingDiceTray = null;
+        },
+        clearLoadingStatusQueue: () => {
             loadingStatusQueue.length = 0;
-            updateDmControlPanel();
-        }, LOADING_FADE_DURATION_MS);
-    }, closeDelay);
+        },
+    });
+    return loadingOverlayFinishManager;
+}
+
+function finishLoadingOverlay(message = 'Ready') {
+    ensureLoadingOverlayFinishManager().finishLoadingOverlay(message);
 }
 
 let loadingMusicManager = null;

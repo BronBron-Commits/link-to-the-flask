@@ -1,0 +1,292 @@
+{
+  "id": "b2fc3bd0ec2046d29b2a660eb1a4f71d",
+  "name": "Wysacaryn",
+  "combat": {
+    "hp": 25,
+    "maxHp": 25,
+    "ac": 12,
+    "initiative": 2,
+    "speed": 35
+  },
+  "stats": {
+    "str": 14,
+    "dex": 14,
+    "con": 12,
+    "int": 12,
+    "wis": 12,
+    "cha": 9
+  },
+  "skills": {
+    "acrobatics": {
+      "value": 2,
+      "proficient": false
+    },
+    "animal_handling": {
+      "value": 1,
+      "proficient": false
+    },
+    "arcana": {
+      "value": 3,
+      "proficient": true
+    },
+    "athletics": {
+      "value": 2,
+      "proficient": false
+    },
+    "deception": {
+      "value": -1,
+      "proficient": false
+    },
+    "history": {
+      "value": 3,
+      "proficient": true
+    },
+    "insight": {
+      "value": 1,
+      "proficient": false
+    },
+    "intimidation": {
+      "value": -1,
+      "proficient": false
+    },
+    "investigation": {
+      "value": 1,
+      "proficient": false
+    },
+    "medicine": {
+      "value": 3,
+      "proficient": true
+    },
+    "nature": {
+      "value": 1,
+      "proficient": false
+    },
+    "perception": {
+      "value": 3,
+      "proficient": true
+    },
+    "performance": {
+      "value": -1,
+      "proficient": false
+    },
+    "persuasion": {
+      "value": 1,
+      "proficient": true
+    },
+    "religion": {
+      "value": 1,
+      "proficient": false
+    },
+    "sleight_of_hand": {
+      "value": 2,
+      "proficient": false
+    },
+    "stealth": {
+      "value": 2,
+      "proficient": false
+    },
+    "survival": {
+      "value": 1,
+      "proficient": false
+    }
+  },
+  "inventory": {
+    "items": [
+      {
+        "instanceId": "inv_001",
+        "itemId": "shield",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_002",
+        "itemId": "chain_mail",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_003",
+        "itemId": "longsword",
+        "qty": 1,
+        "equipped": true,
+        "slot": "main_hand"
+      },
+      {
+        "instanceId": "inv_004",
+        "itemId": "javelin",
+        "qty": 6,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_005",
+        "itemId": "holy_symbol",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_006",
+        "itemId": "backpack",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_007",
+        "itemId": "rations",
+        "qty": 7,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_008",
+        "itemId": "robe",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_009",
+        "itemId": "blanket",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_010",
+        "itemId": "tinderbox",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_011",
+        "itemId": "lamp",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_012",
+        "itemId": "holy_water",
+        "qty": 1,
+        "equipped": false
+      }
+    ],
+    "capacity": 210,
+    "weight": 105
+  },
+  "weapons": [
+    {
+      "name": "Unarmed Strike",
+      "attackBonus": 4,
+      "damage": {
+        "dice": null,
+        "flat": 3,
+        "type": "bludgeoning"
+      }
+    }
+  ],
+  "spells": [
+    {
+      "name": "Thaumaturgy",
+      "range": null,
+      "duration": null,
+      "castingTime": null,
+      "prepared": false
+    },
+    {
+      "name": "Resistance",
+      "range": null,
+      "duration": null,
+      "castingTime": null,
+      "prepared": false
+    },
+    {
+      "name": "Divine Smite",
+      "range": null,
+      "duration": null,
+      "castingTime": null,
+      "prepared": false
+    }
+  ],
+  "features": [
+    {
+      "name": "PALADIN FEATURES",
+      "type": "section"
+    },
+    {
+      "name": "Core Paladin Traits",
+      "type": "feature"
+    },
+    {
+      "name": "Lay On Hands",
+      "type": "feature",
+      "ruleId": "lay_on_hands"
+    },
+    {
+      "name": "Spellcasting",
+      "type": "feature",
+      "ruleId": "spell_casting"
+    },
+    {
+      "name": "Weapon Mastery",
+      "type": "feature"
+    },
+    {
+      "name": "Fighting Style",
+      "type": "feature"
+    },
+    {
+      "name": "Paladin\u2019s Smite",
+      "type": "feature"
+    },
+    {
+      "name": "Channel Divinity",
+      "type": "feature",
+      "ruleId": "channel_divinity"
+    },
+    {
+      "name": "Paladin Subclass",
+      "type": "feature"
+    },
+    {
+      "name": "Oath Spells",
+      "type": "feature"
+    },
+    {
+      "name": "Channel Divinity (Legacy)",
+      "type": "feature",
+      "ruleId": "channel_divinity"
+    },
+    {
+      "name": "Ability Score Increase",
+      "type": "feature"
+    },
+    {
+      "name": "Darkvision",
+      "type": "feature"
+    },
+    {
+      "name": "Keen Senses",
+      "type": "feature"
+    },
+    {
+      "name": "Fey Ancestry",
+      "type": "feature"
+    },
+    {
+      "name": "Trance",
+      "type": "feature"
+    },
+    {
+      "name": "Ability Score Increase",
+      "type": "feature"
+    },
+    {
+      "name": "Elf Weapon Training",
+      "type": "feature"
+    },
+    {
+      "name": "Fleet of Foot",
+      "type": "feature"
+    },
+    {
+      "name": "Mask of the Wild",
+      "type": "feature"
+    }
+  ]
+}
