@@ -794,9 +794,7 @@ const _netStats = {
 window.__netStats = _netStats;
 
 function registerSocketHandlers() {
-    if (!socket) return;
-
-    registerConnectionLifecycleSocketHandlers({
+    registerMap3dSocketHandlers({
         socket,
         modeManager,
         netLog,
@@ -812,12 +810,6 @@ function registerSocketHandlers() {
             _netStats.disconnects += 1;
             return _netStats.disconnects;
         },
-    });
-
-    registerPlayerStateSocketHandlers({
-        socket,
-        netLog,
-        appendConsoleHistory,
         removePlayerAvatar,
         upsertPlayerAvatar,
         applyLiveCombatSyncFromPlayer,
@@ -828,18 +820,9 @@ function registerSocketHandlers() {
         combatState,
         applyPlayerMovementCapabilities,
         updatePlayerHealthHud,
-    });
-
-    registerCombatStateSocketHandlers({
-        socket,
-        netLog,
         hydrateWorld,
         combatDomainStore,
         combatDomainAction: COMBAT_DOMAIN_ACTION,
-    });
-    registerCombatControlAndSceneSocketHandlers({
-        socket,
-        modeManager,
         mode: MODE,
         findCombatActorById,
         getCombatActorLabel,
@@ -848,28 +831,17 @@ function registerSocketHandlers() {
         getPendingCombatStartRequest: () => pendingCombatStartRequest,
         setPendingCombatStartRequest: (value) => { pendingCombatStartRequest = value; },
         showFloatingText,
-        appendConsoleHistory,
-        netStats: _netStats,
-        netLog,
         findMeshByPersistentId,
         findMeshByName,
         applyMaterialState,
         applySceneState,
         traceDmPipeline,
         applyDmCommandFromServer,
-        netWarn,
         alignNetworkCombatTimeline,
         recordCombatAction,
         isDmObserverMode,
         getCombatActorLabelById,
         queueNetworkCombatAction,
-    });
-
-    registerCombatTurnSocketHandlers({
-        socket,
-        combatState,
-        getCurrentGameMode: () => currentGameMode,
-        gameMode: GAME_MODE,
         dispatchCombatTurnActor,
         uxTelemetry,
         uxRecordSample,
@@ -877,23 +849,11 @@ function registerSocketHandlers() {
         updateCombatUI,
         updateDmControlPanel,
         isLocalPlayerTurnEntry,
-        playerState,
-        findCombatActorById,
         getEndTurnPending: () => endTurnPending,
         setEndTurnPending: (value) => { endTurnPending = value; },
         getEndTurnWatchdog: () => endTurnWatchdog,
         setEndTurnWatchdog: (value) => { endTurnWatchdog = value; },
         forceLeaveCombatPresentation,
-    });
-
-    registerCombatAndSessionSocketHandlers({
-        socket,
-        getEndTurnPending: () => endTurnPending,
-        setEndTurnPending: (value) => { endTurnPending = value; },
-        getEndTurnWatchdog: () => endTurnWatchdog,
-        setEndTurnWatchdog: (value) => { endTurnWatchdog = value; },
-        uxSetIntentStatus,
-        showFloatingText,
         logCombatEvent,
         showCombatOutcomeOverlay,
         combatInteraction,
@@ -901,51 +861,30 @@ function registerSocketHandlers() {
         combatUiPhase: COMBAT_UI_PHASE,
         resetCombatInteraction,
         updateActionMenu,
-        uxTelemetry,
-        uxRecordSample,
-        playerState,
-        gameMode: GAME_MODE,
-        getCurrentGameMode: () => currentGameMode,
         getLocalCombatActorId,
         syncPlayerRigFromState,
-        combatState,
         getPlayerBaseSpeedFt,
         tryUseAction,
         tryMove,
         syncTurnExhaustionState,
         playerRig,
         cancelAction,
-        updateCombatUI,
         getSocket: () => socket,
-        getLocalPlayerId: () => localPlayerId,
         getConnectedCombatPlayerEntries,
-        getCombatActorLabelById,
         applyPlayerDamage,
-        findCombatActorById,
         spawnVisualDice,
         triggerEnemyFlinch,
         spawnImpactBurst,
         playCombatSfxCue,
-        updatePlayerHealthHud,
-        appendConsoleHistory,
         triggerSharedDiceRoll,
-        netLog,
         showRuntimeModeSelectionOverlay,
         closeModeSelectionOverlay,
         getSessionGameState: () => sessionGameState,
         setSessionGameState: (value) => { sessionGameState = value; },
         getAuthoritativePlayerId: () => authoritativePlayerId,
         setAuthoritativePlayerId: (value) => { authoritativePlayerId = value; },
-        updateClientRuntimeModeFromAuthority,
         updateLobbyOverlayFromState,
         setLobbyState: (value) => { lobbyState = value; },
-    });
-
-    // Debug: log all socket events except high-frequency noise
-    const _debugIgnoredEvents = new Set(['player-update', 'players-state', 'world-update', 'combat-action-record']);
-    socket.onAny((eventName, data) => {
-        if (_debugIgnoredEvents.has(eventName)) return;
-        console.log('[SOCKET-EVENT]', eventName, typeof data === 'object' ? JSON.stringify(data).slice(0, 120) : data);
     });
 }
 
@@ -1044,12 +983,7 @@ import { createCombatRenderTransitionAdapter } from '/static/map3d/adapters/comb
 import { createSceneCombatVisibilityUpdater } from '/static/map3d/render/sceneCombatVisibility.js';
 import { createWorldHydrator } from '/static/map3d/net/worldHydrator.js';
 import { extractSceneStateFromWorldPayload } from '/static/map3d/net/worldPayloadUtils.js';
-import { registerCombatStateSocketHandlers } from '/static/map3d/net/combatStateSocketHandlers.js';
-import { registerCombatControlAndSceneSocketHandlers } from '/static/map3d/net/combatControlAndSceneSocketHandlers.js';
-import { registerPlayerStateSocketHandlers } from '/static/map3d/net/playerStateSocketHandlers.js';
-import { registerCombatTurnSocketHandlers } from '/static/map3d/net/combatTurnSocketHandlers.js';
-import { registerCombatAndSessionSocketHandlers } from '/static/map3d/net/combatAndSessionSocketHandlers.js';
-import { registerConnectionLifecycleSocketHandlers } from '/static/map3d/net/connectionLifecycleSocketHandlers.js';
+import { registerMap3dSocketHandlers } from '/static/map3d/net/socketOrchestrator.js';
 import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from '/static/avatar_rig_runtime.js';
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
