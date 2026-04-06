@@ -161,6 +161,10 @@ world_state: dict = {
 # Mutex for turn advancement — prevents double-advance on concurrent events
 turn_lock = Lock()
 
+# Monotonic server event sequence used by clients to reject stale packets.
+_event_sequence_lock = Lock()
+_event_sequence_counter = 0
+
 # ---------------------------------------------------------------------------
 # Pure helpers — no I/O, no imports from project modules
 # ---------------------------------------------------------------------------
@@ -175,6 +179,14 @@ def safe_float(value, default: float = 0.0) -> float:
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+def next_event_sequence() -> int:
+    """Return the next monotonic server sequence number."""
+    global _event_sequence_counter
+    with _event_sequence_lock:
+        _event_sequence_counter += 1
+        return _event_sequence_counter
 
 
 def _to_jsonable_state(value):
@@ -800,6 +812,7 @@ def build_world_payload(include_scene: bool = True) -> dict:
                 "damageBonus": int(safe_float(entity.get("damageBonus", 0), 0)),
             })
     payload = {
+        "serverSeq": next_event_sequence(),
         "serverBuild": SERVER_BUILD_TAG,
         "players": deepcopy(players),
         "entities": deepcopy(entities),

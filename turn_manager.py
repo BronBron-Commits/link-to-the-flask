@@ -382,6 +382,7 @@ def start_combat(
             print(f"[COMBAT] ignoring unknown target_id at start: {target_id}", flush=True)
 
     socketio.emit("combat-state", {
+        "serverSeq": gs.next_event_sequence(),
         "active": True, "initiator": initiator_sid,
         "targetId": target_id, "mode": "combat", "approvedBy": approver,
     })
@@ -394,7 +395,12 @@ def end_combat(initiator_sid: str) -> None:
     """Return to exploration mode and clear the turn order."""
     gs.world_state["mode"] = "exploration"
     gs.world_state["combat"] = {"turn": None, "order": [], "state": {"inCombat": False}}
-    socketio.emit("combat-state", {"active": False, "initiator": initiator_sid, "mode": "exploration"})
+    socketio.emit("combat-state", {
+        "serverSeq": gs.next_event_sequence(),
+        "active": False,
+        "initiator": initiator_sid,
+        "mode": "exploration",
+    })
     socketio.emit("combat-full-state", gs.world_state.get("combat", {}))
     socketio.emit("combat-reset", {})
     broadcast_world(include_scene=False)

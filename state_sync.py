@@ -32,8 +32,10 @@ def emit_combat_state_to(sid: str) -> None:
     """Emit the current combat active/inactive state to a single client."""
     combat_state = gs.world_state.get("combat", {}).get("state", {})
     in_combat = bool(combat_state.get("inCombat", False))
+    seq = gs.next_event_sequence()
     if in_combat:
         emit("combat-state", {
+            "serverSeq": seq,
             "active": True,
             "initiator": combat_state.get("initiator"),
             "targetId": combat_state.get("targetId"),
@@ -42,6 +44,7 @@ def emit_combat_state_to(sid: str) -> None:
         }, to=sid)
     else:
         emit("combat-state", {
+            "serverSeq": seq,
             "active": False,
             "initiator": combat_state.get("initiator"),
             "mode": "exploration",

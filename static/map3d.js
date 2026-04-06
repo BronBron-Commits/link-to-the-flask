@@ -735,6 +735,158 @@ function updateSceneVisibilityForCombatState(inCombat) {
     });
 }
 
+const COMBAT_DOMAIN_ACTION = {
+    WORLD_SNAPSHOT: 'WORLD_SNAPSHOT',
+    COMBAT_PACKET: 'COMBAT_PACKET',
+};
+
+function computeCombatTruthFromWorldPayload(payload, fallbackInCombat) {
+    const modeRaw = String((payload && payload.mode) || '').toLowerCase();
+    const modeFromWorld = modeRaw === 'combat' ? GAME_MODE.COMBAT : (modeRaw === 'exploration' ? GAME_MODE.FREE : null);
+    const combatFromPayload = (payload && payload.combat && typeof payload.combat === 'object') ? payload.combat : null;
+    const combatStateFromPayload = combatFromPayload && typeof combatFromPayload.state === 'object'
+        ? combatFromPayload.state
+        : null;
+    const inCombatFlag = !!(combatStateFromPayload && combatStateFromPayload.inCombat === true);
+
+    const shouldBeInCombat = modeFromWorld === GAME_MODE.COMBAT
+        ? true
+        : (modeFromWorld === GAME_MODE.FREE
+            ? (inCombatFlag ? true : false)
+            : (inCombatFlag ? true : !!fallbackInCombat));
+
+    const initiatorSid = String(
+        (combatStateFromPayload && combatStateFromPayload.initiator)
+        || (payload && payload.initiator)
+        || ''
+    ).trim() || null;
+    const targetId = String(
+        (combatStateFromPayload && combatStateFromPayload.targetId)
+        || (payload && payload.targetId)
+        || ''
+    ).trim() || null;
+
+    return {
+        shouldBeInCombat,
+        modeFromWorld,
+        initiatorSid,
+        targetId,
+    };
+}
+
+function reduceCombatDomainState(prevState, action) {
+    if (!action || typeof action !== 'object') return prevState;
+
+    const extractSeq = (value) => {
+        const seq = Number(value);
+        return Number.isFinite(seq) ? seq : null;
+    };
+
+    if (action.type === COMBAT_DOMAIN_ACTION.WORLD_SNAPSHOT) {
+        const payload = action.payload && typeof action.payload === 'object' ? action.payload : {};
+        const seq = extractSeq(payload.serverSeq);
+        if (seq !== null && seq <= prevState.lastServerSeq) {
+            return prevState;
+        }
+        const worldTruth = computeCombatTruthFromWorldPayload(payload, prevState.inCombat);
+        return {
+            ...prevState,
+            lastServerSeq: seq !== null ? seq : prevState.lastServerSeq,
+            inCombat: worldTruth.shouldBeInCombat,
+            initiatorSid: worldTruth.initiatorSid || prevState.initiatorSid,
+            targetId: worldTruth.targetId || prevState.targetId,
+        };
+    }
+
+    if (action.type === COMBAT_DOMAIN_ACTION.COMBAT_PACKET) {
+        const packet = action.packet && typeof action.packet === 'object' ? action.packet : {};
+        const seq = extractSeq(packet.serverSeq);
+        if (seq !== null && seq <= prevState.lastServerSeq) {
+            return prevState;
+        }
+        const packetMode = String(packet.mode || '').toLowerCase();
+        const inCombat = packetMode ? packetMode === 'combat' : !!packet.active;
+        const initiatorSid = String(packet.initiator || '').trim() || null;
+        const targetId = String(packet.targetId || '').trim() || null;
+        return {
+            ...prevState,
+            lastServerSeq: seq !== null ? seq : prevState.lastServerSeq,
+            inCombat,
+            initiatorSid: initiatorSid || prevState.initiatorSid,
+            targetId: targetId || prevState.targetId,
+        };
+    }
+
+    return prevState;
+}
+
+function applyCombatDomainTransition(prevState, nextState, action) {
+    const isCombatPacket = !!(action && action.type === COMBAT_DOMAIN_ACTION.COMBAT_PACKET);
+    combatState.inCombat = !!nextState.inCombat;
+
+    if (nextState.inCombat) {
+        combatInitiatorSid = nextState.initiatorSid || combatInitiatorSid;
+        if (combatInitiatorSid) {
+            const resolvedInitiatorActorId = resolveCombatActorIdForPlayerSid(combatInitiatorSid);
+            if (resolvedInitiatorActorId) {
+                combatInitiatorActorId = resolvedInitiatorActorId;
+            }
+        }
+        if (currentGameMode !== GAME_MODE.COMBAT) {
+            currentGameMode = GAME_MODE.COMBAT;
+            setCombatPhase('PLAYER');
+            setCombatLock(false);
+        }
+        const targetId = String(nextState.targetId || '').trim();
+        const targetActor = targetId ? findCombatActorById(targetId) : null;
+        ensureCombatEnvironmentPresentation({ targetActor });
+        syncCombatMusicToGameMode();
+    } else if (prevState.inCombat || currentGameMode === GAME_MODE.COMBAT) {
+        const worldTruth = action && action.type === COMBAT_DOMAIN_ACTION.WORLD_SNAPSHOT
+            ? computeCombatTruthFromWorldPayload(action.payload || {}, prevState.inCombat)
+            : null;
+        const explicitWorldExit = worldTruth && worldTruth.modeFromWorld === GAME_MODE.FREE;
+        const allowExit = (action && action.type === COMBAT_DOMAIN_ACTION.COMBAT_PACKET) || explicitWorldExit;
+        if (allowExit) {
+            forceLeaveCombatPresentation((action && action.type === COMBAT_DOMAIN_ACTION.WORLD_SNAPSHOT) ? 'world-sync' : 'combat-state');
+        }
+    }
+
+    updateSceneVisibilityForCombatState(!!nextState.inCombat);
+    if (isCombatPacket) {
+        syncSkyboxWithGameMode();
+        updateActionMenu();
+        updateLobbyOverlayFromState();
+    }
+}
+
+function createCombatDomainStore(initialState = {}) {
+    let state = {
+        inCombat: false,
+        initiatorSid: null,
+        targetId: null,
+        lastServerSeq: -1,
+        ...initialState,
+    };
+
+    return {
+        getState() {
+            return state;
+        },
+        dispatch(action) {
+            const prevState = state;
+            const nextState = reduceCombatDomainState(prevState, action);
+            state = nextState;
+            applyCombatDomainTransition(prevState, nextState, action);
+            return state;
+        },
+    };
+}
+
+const combatDomainStore = createCombatDomainStore({
+    inCombat: false,
+});
+
 function hydrateWorld(payload) {
     if (!payload || typeof payload !== 'object') return;
 
@@ -771,36 +923,11 @@ function hydrateWorld(payload) {
         applySceneState(sceneState);
     }
 
-    // Combat authority: prefer payload.mode, but fall back to payload.combat.state.inCombat
-    // for backward compatibility and transitional snapshots.
-    const modeRaw = String(payload.mode || '').toLowerCase();
-    const modeFromWorld = modeRaw === 'combat' ? GAME_MODE.COMBAT : (modeRaw === 'exploration' ? GAME_MODE.FREE : null);
-    const combatFromPayload = (payload.combat && typeof payload.combat === 'object') ? payload.combat : null;
-    const combatStateFromPayload = combatFromPayload && typeof combatFromPayload.state === 'object'
-        ? combatFromPayload.state
-        : null;
-    const inCombatFlag = !!(combatStateFromPayload && combatStateFromPayload.inCombat === true);
-
-    const shouldBeInCombat = modeFromWorld === GAME_MODE.COMBAT
-        ? true
-        : (modeFromWorld === GAME_MODE.FREE
-            ? (inCombatFlag ? true : false)
-            : (inCombatFlag ? true : !!combatState.inCombat));
-
-    const wasInCombat = !!combatState.inCombat;
-    combatState.inCombat = shouldBeInCombat;
-
-    if (shouldBeInCombat) {
-        ensureCombatEnvironmentPresentation();
-    } else if (wasInCombat || currentGameMode === GAME_MODE.COMBAT) {
-        // Only exit combat when the server explicitly signals exploration mode.
-        // Guard against stale world-updates (queued before combat started) arriving
-        // after a combat-state { active: true } and incorrectly evicting the client.
-        if (modeFromWorld === GAME_MODE.FREE) {
-            forceLeaveCombatPresentation('world-sync');
-        }
-    }
-    updateSceneVisibilityForCombatState(shouldBeInCombat);
+    // Domain state is authoritative; renderer sync happens in one transition path.
+    combatDomainStore.dispatch({
+        type: COMBAT_DOMAIN_ACTION.WORLD_SNAPSHOT,
+        payload,
+    });
 
     if (payload.players && typeof payload.players === 'object') {
         const players = payload.players;
@@ -983,37 +1110,15 @@ function registerSocketHandlers() {
         const inCombat = packetMode
             ? packetMode === 'combat'
             : !!(packet && packet.active);
-        const packetInitiatorSid = String(packet && packet.initiator ? packet.initiator : '').trim() || null;
         console.log('[NET] combat-state received', {
             active: inCombat,
             mode: packet && packet.mode,
             initiator: packet && packet.initiator,
         });
-        if (inCombat) {
-            combatInitiatorSid = packetInitiatorSid || combatInitiatorSid;
-            if (packetInitiatorSid) {
-                const resolvedInitiatorActorId = resolveCombatActorIdForPlayerSid(packetInitiatorSid);
-                if (resolvedInitiatorActorId) {
-                    combatInitiatorActorId = resolvedInitiatorActorId;
-                }
-            }
-            combatState.inCombat = true;
-            if (currentGameMode !== GAME_MODE.COMBAT) {
-                currentGameMode = GAME_MODE.COMBAT;
-                setCombatPhase('PLAYER');
-                setCombatLock(false);
-            }
-            const targetId = packet && packet.targetId ? String(packet.targetId) : '';
-            const targetActor = targetId ? findCombatActorById(targetId) : null;
-            ensureCombatEnvironmentPresentation({ targetActor });
-            syncCombatMusicToGameMode();
-        } else {
-            forceLeaveCombatPresentation('combat-state');
-        }
-        syncSkyboxWithGameMode();
-        updateSceneVisibilityForCombatState(inCombat);
-        updateActionMenu();
-        updateLobbyOverlayFromState();
+        combatDomainStore.dispatch({
+            type: COMBAT_DOMAIN_ACTION.COMBAT_PACKET,
+            packet,
+        });
     });
 
     socket.on('players-state', (players) => {
