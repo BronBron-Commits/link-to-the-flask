@@ -871,21 +871,6 @@ import { applyStoredAvatarRig, sanitizeStoredRigSettings, findRigHandBone } from
 import { spawnEntityFromContracts } from '/static/utils/renderBindingAdapter.js';
 import { initializeBVH, buildMergedColliderMesh, resolveCollisionsWithBVH, queryGroundHeightBVH, disposeBVHCollider, applyAcceleratedRaycast } from '/static/bvh_collision.js';
 
-socketConnectionManager = createSocketConnectionManager({
-    windowObj: window,
-    modeManager,
-    getSocket: () => socket,
-    setSocket: (value) => { socket = value; },
-    getSocketModeUnsubscribe: () => socketModeUnsubscribe,
-    setSocketModeUnsubscribe: (value) => { socketModeUnsubscribe = value; },
-    netLog,
-    netWarn,
-    appendConsoleHistory,
-    registerSocketHandlers,
-    bootstrapPlayerCombatProfile,
-    updateClientRuntimeModeFromAuthority,
-});
-
 let ITEM_DB = {};
 let equipItem = () => false;
 let useItem = () => false;
@@ -1372,6 +1357,21 @@ const modeManager = {
         };
     },
 };
+
+socketConnectionManager = createSocketConnectionManager({
+    windowObj: window,
+    modeManager,
+    getSocket: () => socket,
+    setSocket: (value) => { socket = value; },
+    getSocketModeUnsubscribe: () => socketModeUnsubscribe,
+    setSocketModeUnsubscribe: (value) => { socketModeUnsubscribe = value; },
+    netLog,
+    netWarn,
+    appendConsoleHistory,
+    registerSocketHandlers,
+    bootstrapPlayerCombatProfile,
+    updateClientRuntimeModeFromAuthority,
+});
 
 // Resolves once the user picks a role from the startup overlay.
 // Nothing that depends on the chosen role should run before this settles.
