@@ -1,28 +1,33 @@
 # =========================
-# 🔧 PYTHON
+# PYTHON
 # =========================
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
-*.py[cod]
 *.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Virtual environments
+# Virtual environments / local env files
 venv/
-.env/
-.env.*
 .venv/
+.env/
+.env
+.env.*
+.env.local
+.env.production
 
 # =========================
-# 🧰 BUILD / RUNTIME
+# BUILD / RUNTIME
 # =========================
 dist/
 build/
 *.log
 
 # =========================
-# 🌐 NODE / FRONTEND (if used later)
+# NODE / FRONTEND (if used)
 # =========================
 node_modules/
 npm-debug.log*
@@ -30,7 +35,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # =========================
-# 🧠 IDE / EDITOR
+# IDE / EDITOR
 # =========================
 .vscode/
 .idea/
@@ -42,14 +47,14 @@ yarn-error.log*
 *.swo
 
 # =========================
-# 🪟 OS FILES
+# OS FILES
 # =========================
 .DS_Store
 Thumbs.db
 desktop.ini
 
 # =========================
-# 🧪 PROJECT JUNK / BACKUPS
+# PROJECT JUNK / BACKUPS
 # =========================
 backup/
 Blender/
@@ -61,62 +66,38 @@ schemas/
 *.tmp
 
 # =========================
-# 🎨 BLENDER / 3D SOURCE FILES
+# 3D SOURCE / ENGINE FORMATS
 # =========================
 *.blend
 *.blend1
-
-# =========================
-# 📄 DOCUMENTS
-# =========================
-*.pdf
-*.docx
-
-# =========================
-# 🎮 GAME ENGINE / UNUSED FORMATS
-# =========================
 *.mtlx
 *.tres
 *.usdc
 
 # =========================
-# 🚫 LARGE / RAW ASSETS (CRITICAL)
+# DOCUMENTS
 # =========================
+*.pdf
+*.docx
 
-# Binary dumps
+# =========================
+# LARGE / GENERATED ASSETS
+# =========================
 *.bin
-
-# Large GLB files (adjust if needed)
 static/*.glb
 
-# If you want SOME GLBs tracked, comment the line above
-# and instead ignore specific large ones like:
-# static/barrel.glb
-# static/everything_.bin
+# Runtime-generated uploaded models (very high churn)
+static/user_models/
+
+# Optional large local asset trees
+assets/*
+!assets/README.md
+three.js-r183/
 
 # =========================
-# 🔊 AUDIO (optional)
+# OPTIONAL MEDIA (uncomment when needed)
 # =========================
-# Uncomment if you start adding large audio
 # *.wav
 # *.mp3
-
-# =========================
-# 🖼️ TEXTURES (OPTIONAL CONTROL)
-# =========================
-
-# If textures get huge, uncomment:
 # static/*.png
 # static/*.jpg
-
-# =========================
-# 🔐 ENV / SECRETS
-# =========================
-.env
-.env.local
-.env.production
-
-# =========================
-# 🚀 DEPLOYMENT EXCLUSIONS
-# =========================
-# You can exclude test/dev-only files here later
