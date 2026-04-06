@@ -380,23 +380,30 @@ function beginLocalCombatTimeline() {
     return true;
 }
 
+const dmAuthorityManager = createDmAuthorityManager({
+    SIMULATION_AUTHORITY,
+    DM_AUTHORITY_LAYER,
+    modeDm: 'dm',
+    getSimulationAuthority: () => simulationAuthority,
+    setSimulationAuthorityState: (value) => { simulationAuthority = value; },
+    getDmAuthorityLayer: () => dmAuthorityLayer,
+    setDmAuthorityLayerState: (value) => { dmAuthorityLayer = value; },
+    getCurrentGameMode: () => currentGameMode,
+    gameModeCombat: 'combat',
+    beginLocalCombatTimeline,
+    getControlledActor,
+    releasePossession,
+    getModeManager: () => modeManager,
+    traceDmPipeline,
+    appendConsoleHistory,
+});
+
 function startLocalSimulation() {
-    simulationAuthority = SIMULATION_AUTHORITY.LOCAL_DM;
-    dmAuthorityLayer = DM_AUTHORITY_LAYER.SIMULATOR;
-    if (currentGameMode === GAME_MODE.COMBAT) {
-        beginLocalCombatTimeline();
-    }
-    return true;
+    return dmAuthorityManager.startLocalSimulation();
 }
 
 function setSimulationAuthority(authority) {
-    const normalized = String(authority || '').toLowerCase();
-    if (!Object.values(SIMULATION_AUTHORITY).includes(normalized)) return false;
-    simulationAuthority = normalized;
-    if (simulationAuthority === SIMULATION_AUTHORITY.LOCAL_DM && currentGameMode === GAME_MODE.COMBAT) {
-        beginLocalCombatTimeline();
-    }
-    return true;
+    return dmAuthorityManager.setSimulationAuthority(authority);
 }
 
 function getDmCapabilities() {
@@ -407,35 +414,11 @@ function getDmCapabilities() {
 }
 
 function syncDmAuthorityLayerFromState() {
-    if (simulationAuthority === SIMULATION_AUTHORITY.LOCAL_DM) {
-        dmAuthorityLayer = DM_AUTHORITY_LAYER.SIMULATOR;
-        return dmAuthorityLayer;
-    }
-    if (dmAuthorityLayer === DM_AUTHORITY_LAYER.SIMULATOR) {
-        dmAuthorityLayer = DM_AUTHORITY_LAYER.OBSERVER;
-    }
-    if (getControlledActor() && dmAuthorityLayer === DM_AUTHORITY_LAYER.OBSERVER) {
-        dmAuthorityLayer = DM_AUTHORITY_LAYER.PUPPETEER;
-    }
-    if (!Object.values(DM_AUTHORITY_LAYER).includes(dmAuthorityLayer)) {
-        dmAuthorityLayer = DM_AUTHORITY_LAYER.OBSERVER;
-    }
-    return dmAuthorityLayer;
+    return dmAuthorityManager.syncDmAuthorityLayerFromState();
 }
 
 function setDmAuthorityLayer(nextLayer) {
-    const normalized = String(nextLayer || '').toLowerCase();
-    if (!Object.values(DM_AUTHORITY_LAYER).includes(normalized)) return false;
-    dmAuthorityLayer = normalized;
-    if (normalized === DM_AUTHORITY_LAYER.SIMULATOR) {
-        setSimulationAuthority(SIMULATION_AUTHORITY.LOCAL_DM);
-    } else {
-        setSimulationAuthority(SIMULATION_AUTHORITY.SERVER);
-        if (normalized === DM_AUTHORITY_LAYER.OBSERVER) {
-            releasePossession();
-        }
-    }
-    return true;
+    return dmAuthorityManager.setDmAuthorityLayer(nextLayer);
 }
 
 function canIssueDmCommand(type) {
@@ -871,8 +854,28 @@ import '/static/inventory.js';
 import { GLTFLoader } from '/static/GLTFLoader.js';
 import { COMBAT_DOMAIN_ACTION, computeCombatTruthFromWorldPayload, createCombatDomainStore } from '/static/map3d/domain/combatDomainStore.js';
 import { COMBAT_UI_PHASE, createCombatInteractionState, createCombatUiLifecycle, applyCombatUiPhase, turnPhaseToCombatPhase as mapTurnPhaseToCombatPhase, isPlayerInputTurn as mapIsPlayerInputTurn } from '/static/map3d/core/combatStateMachine.js';
+import { FEET_PER_UNIT, FEET_PER_SQUARE, COMBAT_TILE_FEET, MOVE_ZONE_COLOR, MOVE_DEST_COLOR, DND_RANGES, COMBAT_DISTANCE_SCALE, OPPORTUNITY_ATTACK_TRIGGER_CHANCE, RETREAT_TRIP_TRIGGER_CHANCE, RETREAT_TRIP_MOVE_PENALTY_FEET, TRAINING_DUMMY_Y_OFFSET, unitsToFeet, feetToUnits, getDistance, getDistanceFeet, getFlatDistanceFeet, getEdgeDistanceFeet, getEffectiveCombatDistanceFeet, getDistanceInSquares, gridDistanceFromWorld, canReachInFeet, canReachInSquares } from '/static/map3d/core/combatDistance.js';
+import { createAttackResolutionService } from '/static/map3d/core/attackResolution.js';
+import { createCombatTargetingService } from '/static/map3d/core/combatTargeting.js';
+import { createEnemyCombatFeedbackService } from '/static/map3d/core/enemyCombatFeedback.js';
+import { createSpawnAndTurnRequestService } from '/static/map3d/core/spawnAndTurnRequests.js';
+import { createDmActorControlService } from '/static/map3d/core/dmActorControl.js';
+import { createDmInjectedInputHandler } from '/static/map3d/core/dmInjectedInput.js';
+import { createScenePersistenceManager } from '/static/map3d/managers/scenePersistenceManager.js';
+import { createDmCommandBus } from '/static/map3d/managers/dmCommandBus.js';
+import { createDmCommandApplier } from '/static/map3d/managers/dmCommandApplier.js';
+import { createDmAuthorityManager } from '/static/map3d/managers/dmAuthorityManager.js';
+import { createMobileTouchControlsManager } from '/static/map3d/managers/mobileTouchControlsManager.js';
+import { createCommandConsoleUiManager } from '/static/map3d/managers/commandConsoleUiManager.js';
+import { createLoadingOverlayRuntimeManager } from '/static/map3d/managers/loadingOverlayRuntimeManager.js';
+import { createLoadingMusicManager } from '/static/map3d/managers/loadingMusicManager.js';
+import { createLoadingOverlayVarietyManager } from '/static/map3d/managers/loadingOverlayVarietyManager.js';
+import { createLoadingOverlayStyleManager } from '/static/map3d/managers/loadingOverlayStyleManager.js';
+import { createLoadingOverlayBuilderManager } from '/static/map3d/managers/loadingOverlayBuilderManager.js';
+import { createLoadingDiceManager } from '/static/map3d/managers/loadingDiceManager.js';
 import { createCombatRenderTransitionAdapter } from '/static/map3d/adapters/combatRenderAdapter.js';
 import { createSceneCombatVisibilityUpdater } from '/static/map3d/render/sceneCombatVisibility.js';
+import { createEnemyHealthBarPrimitive, removeEnemyHealthBarPrimitive, createPlayerHeadHealthBarPrimitive, removePlayerHeadHealthBarPrimitive, updateSingleHeadHealthBarPrimitive, attachTargetSelectionRingPrimitive, removeTargetSelectionRingPrimitive } from '/static/map3d/render/combatOverlayPrimitives.js';
 import { createWorldHydrator } from '/static/map3d/net/worldHydrator.js';
 import { extractSceneStateFromWorldPayload } from '/static/map3d/net/worldPayloadUtils.js';
 import { registerMap3dSocketHandlers } from '/static/map3d/net/socketOrchestrator.js';
@@ -1935,78 +1938,12 @@ const uxIntentState = {
 };
 
 const consoleCommands = Object.create(null);
-const consoleEventBus = createEventBus();
 let consoleRootEl = null;
-let consoleModeEl = null;
-let consoleLogEl = null;
-let consoleInputEl = null;
-let consoleSuggestionsEl = null;
+let commandConsoleUiManager = null;
+let consoleEventBus = null;
 let combatParticlesEnabled = true;
 let consoleAudioMuted = false;
 let modeOverlayEl = null;
-
-function createEventBus() {
-    const listeners = new Map();
-    return {
-        on(eventName, handler) {
-            if (!listeners.has(eventName)) listeners.set(eventName, new Set());
-            listeners.get(eventName).add(handler);
-            return () => this.off(eventName, handler);
-        },
-        off(eventName, handler) {
-            const handlers = listeners.get(eventName);
-            if (!handlers) return;
-            handlers.delete(handler);
-            if (handlers.size === 0) listeners.delete(eventName);
-        },
-        emit(eventName, payload) {
-            const handlers = listeners.get(eventName);
-            if (!handlers || handlers.size === 0) return;
-            handlers.forEach((handler) => {
-                try {
-                    handler(payload);
-                } catch (err) {
-                    console.error('Console event handler failed', eventName, err);
-                }
-            });
-        },
-    };
-}
-
-function appendConsoleHistory(text, tone = 'info') {
-    const line = `[${modeManager.current}] ${text}`;
-    consoleState.history.push({ line, tone });
-    if (consoleState.history.length > 300) {
-        consoleState.history.splice(0, consoleState.history.length - 300);
-    }
-    console.log('[CONSOLE]', text);
-    renderConsoleHistory();
-}
-
-function renderConsoleHistory() {
-    if (!consoleLogEl) return;
-    consoleLogEl.innerHTML = '';
-    const start = Math.max(0, consoleState.history.length - 80);
-    for (let i = start; i < consoleState.history.length; i++) {
-        const entry = consoleState.history[i];
-        const row = document.createElement('div');
-        row.textContent = entry.line;
-        row.style.padding = '2px 0';
-        row.style.color = entry.tone === 'error'
-            ? '#ff9b9b'
-            : entry.tone === 'ok'
-                ? '#9ff0b2'
-                : '#d5e3ff';
-        consoleLogEl.appendChild(row);
-    }
-    consoleLogEl.scrollTop = consoleLogEl.scrollHeight;
-}
-
-function updateConsoleModeBadge() {
-    if (!consoleModeEl) return;
-    consoleModeEl.textContent = `mode: ${modeManager.current}`;
-    renderConsoleSuggestions();
-}
 
 function getAvailableConsoleCommandNames() {
     return Object.keys(consoleCommands)
@@ -2017,265 +1954,50 @@ function getAvailableConsoleCommandNames() {
         .sort();
 }
 
-function renderConsoleSuggestions() {
-    if (!consoleSuggestionsEl || !consoleInputEl) return;
-
-    const raw = String(consoleInputEl.value || '');
-    const trimmedStart = raw.trimStart();
-    if (!trimmedStart.startsWith('/')) {
-        consoleState.suggestionMatches = [];
-        consoleState.suggestionIndex = 0;
-        consoleSuggestionsEl.style.display = 'none';
-        consoleSuggestionsEl.innerHTML = '';
-        return;
-    }
-
-    const token = String(trimmedStart.split(/\s+/)[0] || '').slice(1).toLowerCase();
-    const all = getAvailableConsoleCommandNames();
-    const matches = all.filter((name) => name.includes(token)).slice(0, 12);
-
-    if (matches.length <= 0) {
-        consoleState.suggestionMatches = [];
-        consoleState.suggestionIndex = 0;
-        consoleSuggestionsEl.style.display = 'none';
-        consoleSuggestionsEl.innerHTML = '';
-        return;
-    }
-
-    if (consoleState.suggestionMatches.join('|') !== matches.join('|')) {
-        consoleState.suggestionIndex = 0;
-    }
-    consoleState.suggestionMatches = matches;
-    const activeIdx = Math.max(0, Math.min(consoleState.suggestionIndex, matches.length - 1));
-    consoleState.suggestionIndex = activeIdx;
-
-    consoleSuggestionsEl.innerHTML = '';
-    matches.forEach((name, idx) => {
-        const row = document.createElement('button');
-        row.type = 'button';
-        row.textContent = `/${name}`;
-        row.style.textAlign = 'left';
-        row.style.background = idx === activeIdx ? 'rgba(40, 74, 122, 0.96)' : 'rgba(8, 14, 28, 0.92)';
-        row.style.color = '#d9e8ff';
-        row.style.border = idx === activeIdx ? '1px solid rgba(120, 200, 255, 0.75)' : '1px solid rgba(120, 168, 255, 0.34)';
-        row.style.borderRadius = '6px';
-        row.style.padding = '6px 8px';
-        row.style.cursor = 'pointer';
-        row.style.fontFamily = 'Consolas, "Segoe UI", monospace';
-        row.style.fontSize = '12px';
-        row.addEventListener('mousedown', (event) => {
-            event.preventDefault();
-            consoleState.suggestionIndex = idx;
-            consoleInputEl.value = `/${name} `;
-            renderConsoleSuggestions();
-            requestAnimationFrame(() => {
-                consoleInputEl.focus();
-                consoleInputEl.setSelectionRange(consoleInputEl.value.length, consoleInputEl.value.length);
-            });
-        });
-        consoleSuggestionsEl.appendChild(row);
+function ensureCommandConsoleUiManager() {
+    if (commandConsoleUiManager) return commandConsoleUiManager;
+    commandConsoleUiManager = createCommandConsoleUiManager({
+        consoleState,
+        getCurrentMode: () => modeManager.current,
+        getAvailableCommandNames,
+        runConsoleCommand,
+        isTextInputTarget,
+        onRootElChanged: (rootEl) => {
+            consoleRootEl = rootEl || null;
+        },
     });
-    consoleSuggestionsEl.style.display = 'grid';
+    consoleEventBus = commandConsoleUiManager.getEventBus();
+    return commandConsoleUiManager;
+}
+
+ensureCommandConsoleUiManager();
+
+function appendConsoleHistory(text, tone = 'info') {
+    ensureCommandConsoleUiManager().appendConsoleHistory(text, tone);
+}
+
+function renderConsoleHistory() {
+    ensureCommandConsoleUiManager().renderConsoleHistory();
+}
+
+function updateConsoleModeBadge() {
+    ensureCommandConsoleUiManager().updateConsoleModeBadge();
+}
+
+function renderConsoleSuggestions() {
+    ensureCommandConsoleUiManager().renderConsoleSuggestions();
 }
 
 function ensureConsoleUi() {
-    if (consoleRootEl) return;
-    if (!document.body) return;
-
-    consoleRootEl = document.createElement('div');
-    consoleRootEl.id = 'console-root';
-    consoleRootEl.style.position = 'fixed';
-    consoleRootEl.style.left = '14px';
-    consoleRootEl.style.bottom = '14px';
-    consoleRootEl.style.width = 'min(720px, calc(100vw - 28px))';
-    consoleRootEl.style.height = '300px';
-    consoleRootEl.style.display = 'none';
-    consoleRootEl.style.flexDirection = 'column';
-    consoleRootEl.style.padding = '10px';
-    consoleRootEl.style.border = '1px solid rgba(125, 175, 255, 0.6)';
-    consoleRootEl.style.borderRadius = '8px';
-    consoleRootEl.style.background = 'rgba(6, 10, 20, 0.9)';
-    consoleRootEl.style.backdropFilter = 'blur(3px)';
-    consoleRootEl.style.boxShadow = '0 12px 30px rgba(0, 0, 0, 0.5)';
-    consoleRootEl.style.zIndex = '131520';
-    consoleRootEl.addEventListener('mousedown', (event) => event.stopPropagation());
-
-    const topRow = document.createElement('div');
-    topRow.style.display = 'flex';
-    topRow.style.justifyContent = 'space-between';
-    topRow.style.alignItems = 'center';
-    topRow.style.fontFamily = 'Consolas, "Segoe UI", monospace';
-    topRow.style.fontSize = '13px';
-    topRow.style.color = '#a9c8ff';
-    topRow.style.marginBottom = '6px';
-
-    const titleEl = document.createElement('div');
-    titleEl.textContent = 'map3d command console';
-    titleEl.style.textTransform = 'uppercase';
-    titleEl.style.letterSpacing = '0.8px';
-    topRow.appendChild(titleEl);
-
-    consoleModeEl = document.createElement('div');
-    consoleModeEl.style.color = '#ffd58c';
-    topRow.appendChild(consoleModeEl);
-
-    consoleLogEl = document.createElement('div');
-    consoleLogEl.style.flex = '1';
-    consoleLogEl.style.overflowY = 'auto';
-    consoleLogEl.style.padding = '6px';
-    consoleLogEl.style.border = '1px solid rgba(120, 150, 220, 0.28)';
-    consoleLogEl.style.background = 'rgba(5, 9, 18, 0.7)';
-    consoleLogEl.style.borderRadius = '6px';
-    consoleLogEl.style.fontFamily = 'Consolas, "Segoe UI", monospace';
-    consoleLogEl.style.fontSize = '13px';
-    consoleLogEl.style.lineHeight = '1.45';
-
-    consoleInputEl = document.createElement('input');
-    consoleInputEl.type = 'text';
-    consoleInputEl.autocapitalize = 'off';
-    consoleInputEl.autocomplete = 'off';
-    consoleInputEl.spellcheck = false;
-    consoleInputEl.placeholder = 'type a command, press Enter';
-    consoleInputEl.style.marginTop = '8px';
-    consoleInputEl.style.padding = '8px 10px';
-    consoleInputEl.style.border = '1px solid rgba(125, 175, 255, 0.55)';
-    consoleInputEl.style.borderRadius = '6px';
-    consoleInputEl.style.background = 'rgba(5, 9, 18, 0.95)';
-    consoleInputEl.style.color = '#e6f0ff';
-    consoleInputEl.style.outline = 'none';
-    consoleInputEl.style.fontFamily = 'Consolas, "Segoe UI", monospace';
-    consoleInputEl.style.fontSize = '14px';
-    consoleInputEl.addEventListener('input', () => {
-        renderConsoleSuggestions();
-    });
-    consoleInputEl.addEventListener('keydown', (event) => {
-        event.stopPropagation();
-
-        if (event.key === 'Tab') {
-            renderConsoleSuggestions();
-            const suggestions = Array.isArray(consoleState.suggestionMatches)
-                ? consoleState.suggestionMatches
-                : [];
-            if (suggestions.length > 0) {
-                const step = event.shiftKey ? -1 : 1;
-                if (event.shiftKey || suggestions.length > 1) {
-                    const nextIdx = (consoleState.suggestionIndex + step + suggestions.length) % suggestions.length;
-                    consoleState.suggestionIndex = nextIdx;
-                }
-                const selectedName = suggestions[consoleState.suggestionIndex] || suggestions[0];
-                if (selectedName) {
-                    consoleInputEl.value = `/${selectedName} `;
-                    renderConsoleSuggestions();
-                    requestAnimationFrame(() => {
-                        consoleInputEl.setSelectionRange(consoleInputEl.value.length, consoleInputEl.value.length);
-                    });
-                }
-            }
-            event.preventDefault();
-            return;
-        }
-
-        if (event.key === 'Enter') {
-            const commandText = (consoleInputEl.value || '').trim();
-            if (commandText.length > 0) {
-                runConsoleCommand(commandText);
-                consoleState.commandHistory.push(commandText);
-                if (consoleState.commandHistory.length > 120) {
-                    consoleState.commandHistory.shift();
-                }
-                consoleState.commandHistoryIndex = consoleState.commandHistory.length;
-            }
-            consoleInputEl.value = '';
-            event.preventDefault();
-            return;
-        }
-
-        if (event.key === 'ArrowUp') {
-            if (consoleState.commandHistory.length === 0) {
-                event.preventDefault();
-                return;
-            }
-            consoleState.commandHistoryIndex = Math.max(0, consoleState.commandHistoryIndex - 1);
-            consoleInputEl.value = consoleState.commandHistory[consoleState.commandHistoryIndex] || '';
-            requestAnimationFrame(() => {
-                consoleInputEl.setSelectionRange(consoleInputEl.value.length, consoleInputEl.value.length);
-            });
-            event.preventDefault();
-            return;
-        }
-
-        if (event.key === 'ArrowDown') {
-            if (consoleState.commandHistory.length === 0) {
-                event.preventDefault();
-                return;
-            }
-            consoleState.commandHistoryIndex = Math.min(consoleState.commandHistory.length, consoleState.commandHistoryIndex + 1);
-            consoleInputEl.value = consoleState.commandHistory[consoleState.commandHistoryIndex] || '';
-            requestAnimationFrame(() => {
-                consoleInputEl.setSelectionRange(consoleInputEl.value.length, consoleInputEl.value.length);
-            });
-            event.preventDefault();
-            return;
-        }
-
-        if (event.key === 'Escape') {
-            setConsoleOpen(false);
-            event.preventDefault();
-        }
-    });
-
-    consoleRootEl.appendChild(topRow);
-    consoleRootEl.appendChild(consoleLogEl);
-    consoleRootEl.appendChild(consoleInputEl);
-
-    consoleSuggestionsEl = document.createElement('div');
-    consoleSuggestionsEl.style.display = 'none';
-    consoleSuggestionsEl.style.marginTop = '6px';
-    consoleSuggestionsEl.style.maxHeight = '150px';
-    consoleSuggestionsEl.style.overflowY = 'auto';
-    consoleSuggestionsEl.style.gap = '6px';
-    consoleSuggestionsEl.style.padding = '6px';
-    consoleSuggestionsEl.style.border = '1px solid rgba(120, 168, 255, 0.34)';
-    consoleSuggestionsEl.style.borderRadius = '6px';
-    consoleSuggestionsEl.style.background = 'rgba(4, 8, 16, 0.9)';
-    consoleRootEl.appendChild(consoleSuggestionsEl);
-
-    document.body.appendChild(consoleRootEl);
-
-    updateConsoleModeBadge();
-    renderConsoleHistory();
+    ensureCommandConsoleUiManager().ensureConsoleUi();
 }
 
 function setConsoleOpen(open) {
-    ensureConsoleUi();
-    if (!consoleRootEl) return;
-    if (!consoleRootEl.parentNode && document.body) {
-        document.body.appendChild(consoleRootEl);
-        consoleRootEl.__dmDetachedLegacy = false;
-    }
-    consoleState.open = !!open;
-    consoleRootEl.style.display = consoleState.open ? 'flex' : 'none';
-    if (!consoleState.open && consoleSuggestionsEl) {
-        consoleSuggestionsEl.style.display = 'none';
-    }
-    updateConsoleModeBadge();
-    if (consoleState.open) {
-        if (document.pointerLockElement) {
-            document.exitPointerLock();
-        }
-        requestAnimationFrame(() => {
-            if (!consoleInputEl) return;
-            consoleInputEl.focus();
-            consoleInputEl.select();
-            renderConsoleSuggestions();
-        });
-    } else if (consoleInputEl) {
-        consoleInputEl.blur();
-    }
+    ensureCommandConsoleUiManager().setConsoleOpen(open);
 }
 
 function toggleConsoleOpen() {
-    setConsoleOpen(!consoleState.open);
+    ensureCommandConsoleUiManager().toggleConsoleOpen();
 }
 
 function isTextInputTarget(target) {
@@ -3742,213 +3464,87 @@ function initializeCommandConsole() {
 
 initializeCommandConsole();
 
+let loadingOverlayRuntimeManager = null;
+let loadingOverlayStyleManager = null;
+let loadingOverlayBuilderManager = null;
+let loadingDiceManager = null;
+
+function ensureLoadingOverlayRuntimeManager() {
+    if (loadingOverlayRuntimeManager) return loadingOverlayRuntimeManager;
+    loadingOverlayRuntimeManager = createLoadingOverlayRuntimeManager({
+        performanceObj: performance,
+        windowObj: window,
+        getLoadingOverlayFinished: () => loadingOverlayFinished,
+        getLoadingOverlayCloseScheduled: () => loadingOverlayCloseScheduled,
+        getProgressFill: () => loadingOverlayProgressFill,
+        getProgressText: () => loadingOverlayProgressText,
+        getStatusEl: () => loadingOverlayStatus,
+        getLoadingProgressValue: () => loadingProgressValue,
+        setLoadingProgressValue: (value) => { loadingProgressValue = value; },
+        getLoadingProgressTarget: () => loadingProgressTarget,
+        setLoadingProgressTarget: (value) => { loadingProgressTarget = value; },
+        getLoadingProgressAnimFrame: () => loadingProgressAnimFrame,
+        setLoadingProgressAnimFrame: (value) => { loadingProgressAnimFrame = value; },
+        getLoadingStatusQueue: () => loadingStatusQueue,
+        getLoadingStatusTimer: () => loadingStatusTimer,
+        setLoadingStatusTimer: (value) => { loadingStatusTimer = value; },
+        getLoadingStatusLastShownAt: () => loadingStatusLastShownAt,
+        setLoadingStatusLastShownAt: (value) => { loadingStatusLastShownAt = value; },
+        loadingStatusMinIntervalMs: LOADING_STATUS_MIN_INTERVAL_MS,
+        spawnLoadingMessageBurst,
+    });
+    return loadingOverlayRuntimeManager;
+}
+
 function clamp01(value) {
-    return Math.max(0, Math.min(1, value));
+    return ensureLoadingOverlayRuntimeManager().clamp01(value);
 }
 
 function renderLoadingProgress(value) {
-    if (!loadingOverlayProgressFill || !loadingOverlayProgressText) return;
-    const percent = value * 100;
-    loadingOverlayProgressFill.style.width = `${percent.toFixed(2)}%`;
-    const pulse = 1 + (Math.sin((performance.now() * 0.013) + (percent * 0.05)) * 0.04);
-    loadingOverlayProgressFill.style.transform = `scaleY(${pulse.toFixed(3)})`;
-    loadingOverlayProgressText.textContent = `${percent.toFixed(1)}%`;
+    ensureLoadingOverlayRuntimeManager().renderLoadingProgress(value);
 }
 
 function animateLoadingProgressFrame() {
-    loadingProgressAnimFrame = null;
-    if (!loadingOverlayProgressFill || !loadingOverlayProgressText || loadingOverlayFinished) return;
-
-    const delta = loadingProgressTarget - loadingProgressValue;
-    if (Math.abs(delta) < 0.0005) {
-        loadingProgressValue = loadingProgressTarget;
-        renderLoadingProgress(loadingProgressValue);
-        return;
-    }
-
-    // Critically damped easing: visually progressive and smooth without lagging too far behind.
-    loadingProgressValue = clamp01(loadingProgressValue + (delta * 0.12));
-    renderLoadingProgress(loadingProgressValue);
-    loadingProgressAnimFrame = window.requestAnimationFrame(animateLoadingProgressFrame);
+    ensureLoadingOverlayRuntimeManager().animateLoadingProgressFrame();
 }
 
 function ensureLoadingProgressAnimation() {
-    if (loadingProgressAnimFrame !== null) return;
-    loadingProgressAnimFrame = window.requestAnimationFrame(animateLoadingProgressFrame);
+    ensureLoadingOverlayRuntimeManager().ensureLoadingProgressAnimation();
 }
 
 function setLoadingProgress(value) {
-    loadingProgressTarget = clamp01(value);
-    if (!loadingOverlayProgressFill || !loadingOverlayProgressText || loadingOverlayFinished) return;
-    ensureLoadingProgressAnimation();
+    ensureLoadingOverlayRuntimeManager().setLoadingProgress(value);
 }
 
 function updateLoadingState(statusText, progressValue) {
-    if (loadingOverlayCloseScheduled || loadingOverlayFinished) return;
-    if (typeof progressValue === 'number') {
-        setLoadingProgress(progressValue);
-    }
-    setLoadingOverlayStatus(statusText);
+    ensureLoadingOverlayRuntimeManager().updateLoadingState(statusText, progressValue);
 }
 
 function formatLoadingLogArgs(args) {
-    return args.map((arg) => {
-        if (typeof arg === 'string') return arg;
-        if (arg instanceof Error) return arg.stack || arg.message;
-        try {
-            return JSON.stringify(arg);
-        } catch (_err) {
-            return String(arg);
-        }
-    }).join(' ');
+    return ensureLoadingOverlayRuntimeManager().formatLoadingLogArgs(args);
 }
 
 function appendLoadingLog(level, args) {
-    void level;
-    void args;
+    ensureLoadingOverlayRuntimeManager().appendLoadingLog(level, args);
 }
 
 function setLoadingOverlayStatus(text) {
-    if (!loadingOverlayStatus || loadingOverlayFinished) return;
-    const next = String(text || '').trim();
-    if (!next) return;
-
-    // Keep only the most recent message so the overlay does not backlog multiple silly lines.
-    loadingStatusQueue.length = 0;
-    loadingStatusQueue.push(next);
-
-    const pump = () => {
-        if (loadingOverlayFinished || !loadingOverlayStatus) {
-            loadingStatusTimer = null;
-            return;
-        }
-        if (loadingStatusQueue.length === 0) {
-            loadingStatusTimer = null;
-            return;
-        }
-
-        const now = performance.now();
-        const sinceLast = now - loadingStatusLastShownAt;
-        if (sinceLast < LOADING_STATUS_MIN_INTERVAL_MS) {
-            loadingStatusTimer = window.setTimeout(pump, LOADING_STATUS_MIN_INTERVAL_MS - sinceLast);
-            return;
-        }
-
-        const message = loadingStatusQueue.shift();
-        loadingOverlayStatus.textContent = message;
-        loadingStatusLastShownAt = performance.now();
-
-        loadingOverlayStatus.style.animation = 'none';
-        void loadingOverlayStatus.offsetWidth;
-        loadingOverlayStatus.style.animation = 'loading-status-pop 520ms cubic-bezier(0.18, 0.88, 0.23, 1)';
-        spawnLoadingMessageBurst(10);
-
-        const jitterDelay = 40 + Math.round(Math.random() * 90);
-        loadingStatusTimer = window.setTimeout(pump, jitterDelay);
-    };
-
-    if (!loadingStatusTimer) {
-        const randomDelay = 70 + Math.round(Math.random() * 150);
-        loadingStatusTimer = window.setTimeout(pump, randomDelay);
-    }
+    ensureLoadingOverlayRuntimeManager().setLoadingOverlayStatus(text);
 }
 
 function setLoadingOverlayQuote(text) {
-    if (loadingOverlayFinished) return;
-    const next = String(text || '').trim();
-    if (!next) return;
-    setLoadingOverlayStatus(next);
+    ensureLoadingOverlayRuntimeManager().setLoadingOverlayQuote(text);
 }
 
 function ensureLoadingOverlayFxStyles() {
-    if (loadingOverlayFxStylesInjected) return;
-    if (!document.head) return;
-    const style = document.createElement('style');
-    style.id = 'loading-overlay-fx-style';
-    style.textContent = `
-@keyframes loading-status-pop {
-    0% { transform: translateY(8px) scale(0.94) rotate(-0.6deg); opacity: 0.45; }
-    44% { transform: translateY(0px) scale(1.03) rotate(0.45deg); opacity: 1; }
-    100% { transform: translateY(0px) scale(1) rotate(0deg); opacity: 1; }
-}
-@keyframes loading-quote-bounce {
-    0% { transform: translateX(-8px); opacity: 0.55; }
-    45% { transform: translateX(4px); opacity: 1; }
-    100% { transform: translateX(0px); opacity: 0.95; }
-}
-@keyframes loading-glyph-burst {
-    0% { transform: translate(0px, 0px) scale(0.8) rotate(0deg); opacity: 0; }
-    20% { opacity: 1; }
-    100% { transform: translate(var(--tx), var(--ty)) scale(var(--s)) rotate(var(--r)); opacity: 0; }
-}
-@keyframes loading-card-jitter {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    14% { transform: translateY(-1.5px) rotate(0.22deg) skewX(0.3deg); }
-    28% { transform: translateY(1.5px) rotate(-0.18deg); }
-    42% { transform: translateY(-0.5px) rotate(0.08deg) skewX(-0.2deg); }
-    57% { transform: translateY(1px) rotate(0.14deg); }
-    71% { transform: translateY(-1.2px) rotate(-0.1deg) skewX(0.15deg); }
-    85% { transform: translateY(0.6px) rotate(0.05deg); }
-}
-@keyframes loading-title-glitch {
-    0%, 88%, 100% { text-shadow: 0 0 2px rgba(255,255,255,0.9), 0 0 22px rgba(83,184,255,0.45), 0 0 30px rgba(255,88,122,0.25), 0 6px 16px rgba(0,0,0,0.85); clip-path: none; transform: translateX(0); }
-    89% { clip-path: inset(12% 0 80% 0); transform: translateX(-6px); text-shadow: 3px 0 #ff0066, -3px 0 #00ffff; color: #ff99bb; }
-    90% { clip-path: none; transform: translateX(3px); }
-    91% { clip-path: inset(72% 0 10% 0); transform: translateX(5px); text-shadow: -4px 0 #00ffff, 4px 0 #ff0066; color: #99eeff; }
-    92% { clip-path: none; transform: translateX(0); text-shadow: 0 0 2px rgba(255,255,255,0.9), 0 0 22px rgba(83,184,255,0.45); }
-    94% { clip-path: inset(35% 0 55% 0); transform: translateX(-3px) scaleX(1.02); color: #ffffff; }
-    95% { clip-path: none; transform: translateX(0); }
-}
-@keyframes loading-scanline {
-    0% { background-position: 0 0; }
-    100% { background-position: 0 200px; }
-}
-@keyframes loading-scanline-sweep {
-    0% { top: -4px; opacity: 0.14; }
-    80% { opacity: 0.22; }
-    100% { top: 100%; opacity: 0; }
-}
-@keyframes loading-flicker {
-    0%, 19%, 21%, 23%, 62%, 64%, 100% { opacity: 1; }
-    20% { opacity: 0.55; }
-    22% { opacity: 0.88; }
-    63% { opacity: 0.6; }
-}
-@keyframes loading-card-hard-glitch {
-    0%, 100% { clip-path: none; transform: translateX(0); filter: none; }
-    5% { clip-path: inset(6% 0 88% 0); transform: translateX(-8px); filter: hue-rotate(120deg) brightness(1.6); }
-    6% { clip-path: none; transform: translateX(4px); filter: none; }
-    7% { clip-path: inset(78% 0 6% 0); transform: translateX(-4px); filter: hue-rotate(240deg); }
-    8% { clip-path: none; transform: translateX(0); }
-    50% { clip-path: none; filter: none; }
-    51% { clip-path: inset(45% 0 45% 0); transform: translateX(6px); filter: saturate(3) hue-rotate(60deg); }
-    52% { clip-path: none; transform: translateX(0); filter: none; }
-}
-@keyframes loading-rgb-split {
-    0%, 100% { transform: translate(0, 0); opacity: 0.18; }
-    25% { transform: translate(-3px, 0); opacity: 0.28; }
-    50% { transform: translate(3px, 1px); opacity: 0.22; }
-    75% { transform: translate(-1px, -1px); opacity: 0.15; }
-}
-@keyframes loading-dice-spin {
-    0% { transform: rotateY(0deg) scale(0.4) translateY(-6px); opacity: 0; }
-    25% { opacity: 1; }
-    75% { transform: rotateY(540deg) scale(1.15) translateY(-2px); }
-    100% { transform: rotateY(720deg) scale(1) translateY(0px); opacity: 1; }
-}
-@keyframes loading-dice-settle {
-    0% { transform: scale(1.18) rotate(-6deg); }
-    35% { transform: scale(0.88) rotate(4deg); }
-    65% { transform: scale(1.06) rotate(-2deg); }
-    100% { transform: scale(1) rotate(0deg); }
-}
-@keyframes loading-dice-glow {
-    0%, 100% { filter: drop-shadow(0 0 4px #ffd700) drop-shadow(0 0 10px #ff8800); }
-    50% { filter: drop-shadow(0 0 8px #ffffff) drop-shadow(0 0 18px #ffd700); }
-}
-`;
-    document.head.appendChild(style);
-    loadingOverlayFxStylesInjected = true;
+    if (!loadingOverlayStyleManager) {
+        loadingOverlayStyleManager = createLoadingOverlayStyleManager({
+            documentObj: document,
+            getLoadingOverlayFxStylesInjected: () => loadingOverlayFxStylesInjected,
+            setLoadingOverlayFxStylesInjected: (value) => { loadingOverlayFxStylesInjected = !!value; },
+        });
+    }
+    loadingOverlayStyleManager.ensureLoadingOverlayFxStyles();
 }
 
 function spawnLoadingMessageBurst(count = 8) {
@@ -3986,96 +3582,55 @@ function spawnLoadingMessageBurst(count = 8) {
 }
 
 function startLoadingQuoteCycle() {
-    if (!loadingOverlayQuote || loadingOverlayFinished) return;
-    if (loadingQuoteTimer) {
-        window.clearInterval(loadingQuoteTimer);
-        loadingQuoteTimer = null;
-    }
-
-    const pickQuote = () => {
-        const quote = LOADING_NONSENSE_QUOTES[loadingQuoteIndex % LOADING_NONSENSE_QUOTES.length];
-        loadingQuoteIndex += 1;
-        setLoadingOverlayQuote(quote);
-    };
-
-    pickQuote();
-    loadingQuoteTimer = window.setInterval(pickQuote, LOADING_QUOTE_INTERVAL_MS);
+    ensureLoadingOverlayVarietyManager().startLoadingQuoteCycle();
 }
 
 function animateLoadingBackdropFrame() {
-    loadingBackdropAnimFrame = null;
-    if (!loadingOverlayRoot || !loadingOverlayCard || loadingOverlayFinished) return;
-
-    const t = performance.now() * 0.00055;
-    const x = 50 + (Math.sin(t * 1.4) * 18);
-    const y = 24 + (Math.cos(t * 1.1) * 11);
-    const hue = Math.round((Math.sin(t * 0.8) * 10) + 3);
-
-    loadingOverlayRoot.style.background = `radial-gradient(circle at ${x.toFixed(1)}% ${y.toFixed(1)}%, rgba(255,77,109,0.24), rgba(18,21,38,0.94) 42%, rgba(5,7,18,0.99) 100%)`;
-    loadingOverlayCard.style.filter = `hue-rotate(${hue}deg)`;
-
-    if (loadingOverlayAccentBar) {
-        const pulse = 0.92 + (Math.sin(t * 3.6) * 0.08);
-        loadingOverlayAccentBar.style.transform = `scaleX(${pulse.toFixed(3)})`;
-    }
-
-    loadingBackdropAnimFrame = window.requestAnimationFrame(animateLoadingBackdropFrame);
+    ensureLoadingOverlayVarietyManager().animateLoadingBackdropFrame();
 }
 
 function startLoadingBackdropAnimation() {
-    if (loadingBackdropAnimFrame !== null) return;
-    loadingBackdropAnimFrame = window.requestAnimationFrame(animateLoadingBackdropFrame);
+    ensureLoadingOverlayVarietyManager().startLoadingBackdropAnimation();
 }
 
 function startLoadingVarietyCycle() {
-    if (loadingFlavorTimer) {
-        window.clearInterval(loadingFlavorTimer);
-        loadingFlavorTimer = null;
-    }
+    ensureLoadingOverlayVarietyManager().startLoadingVarietyCycle();
+}
 
-    loadingFlavorTimer = window.setInterval(() => {
-        if (loadingOverlayFinished || !loadingOverlayRoot) return;
-        const roll = Math.random();
+let loadingOverlayVarietyManager = null;
 
-        if (roll < 0.28) {
-            const status = LOADING_VARIETY_STATUSES[Math.floor(Math.random() * LOADING_VARIETY_STATUSES.length)];
-            setLoadingOverlayStatus(status);
-            return;
-        }
-
-        if (roll < 0.5) {
-            const quote = LOADING_VARIETY_QUOTES[Math.floor(Math.random() * LOADING_VARIETY_QUOTES.length)];
-            setLoadingOverlayStatus(quote);
-            return;
-        }
-
-        if (roll < 0.7) {
-            setLoadingOverlayStatus(`Showtime pulse #${(loadingBurstCounter % 9) + 1}: increasing dramatic tension...`);
-            spawnLoadingMessageBurst(10 + Math.floor(Math.random() * 12));
-            return;
-        }
-
-        if (roll < 0.78) {
-            // Re-roll the dice tray
-            const diceNames = ['d4','d6','d8','d10','d12','d20'];
-            const die = diceNames[Math.floor(Math.random() * diceNames.length)];
-            const max = parseInt(die.slice(1));
-            const result = Math.floor(Math.random() * max) + 1;
-            const flavour = result === max ? '💥 NATURAL MAX!' : result === 1 ? '💀 rolled a 1...' : `rolled ${die}: ${result}`;
-            setLoadingOverlayStatus(flavour);
-            if (loadingDiceTray) rollAllLoadingDice();
-            return;
-        }
-
-        if (roll < 0.86) {
-            const progressNudge = (Math.random() * 0.03) - 0.012;
-            setLoadingProgress(clamp01(loadingProgressTarget + progressNudge));
-            setLoadingOverlayStatus('Buffering extra swagger into the loading bar...');
-            return;
-        }
-
-        spawnLoadingMessageBurst(16 + Math.floor(Math.random() * 10));
-    }, 920);
+function ensureLoadingOverlayVarietyManager() {
+    if (loadingOverlayVarietyManager) return loadingOverlayVarietyManager;
+    loadingOverlayVarietyManager = createLoadingOverlayVarietyManager({
+        windowObj: window,
+        performanceObj: performance,
+        getLoadingOverlayFinished: () => loadingOverlayFinished,
+        getLoadingOverlayRoot: () => loadingOverlayRoot,
+        getLoadingOverlayCard: () => loadingOverlayCard,
+        getLoadingOverlayAccentBar: () => loadingOverlayAccentBar,
+        getLoadingOverlayQuote: () => loadingOverlayQuote,
+        getLoadingQuoteTimer: () => loadingQuoteTimer,
+        setLoadingQuoteTimer: (value) => { loadingQuoteTimer = value; },
+        getLoadingQuoteIndex: () => loadingQuoteIndex,
+        setLoadingQuoteIndex: (value) => { loadingQuoteIndex = value; },
+        loadingNonsenseQuotes: LOADING_NONSENSE_QUOTES,
+        loadingQuoteIntervalMs: LOADING_QUOTE_INTERVAL_MS,
+        getLoadingBackdropAnimFrame: () => loadingBackdropAnimFrame,
+        setLoadingBackdropAnimFrame: (value) => { loadingBackdropAnimFrame = value; },
+        getLoadingFlavorTimer: () => loadingFlavorTimer,
+        setLoadingFlavorTimer: (value) => { loadingFlavorTimer = value; },
+        loadingVarietyStatuses: LOADING_VARIETY_STATUSES,
+        loadingVarietyQuotes: LOADING_VARIETY_QUOTES,
+        getLoadingBurstCounter: () => loadingBurstCounter,
+        spawnLoadingMessageBurst,
+        setLoadingOverlayStatus,
+        getLoadingDiceTray: () => loadingDiceTray,
+        rollAllLoadingDice,
+        getLoadingProgressTarget: () => loadingProgressTarget,
+        setLoadingProgress,
+        clamp01,
+    });
+    return loadingOverlayVarietyManager;
 }
 
 function finishLoadingOverlay(message = 'Ready') {
@@ -4180,422 +3735,97 @@ function finishLoadingOverlay(message = 'Ready') {
     }, closeDelay);
 }
 
+let loadingMusicManager = null;
+
+function ensureLoadingMusicManager() {
+    if (loadingMusicManager) return loadingMusicManager;
+    loadingMusicManager = createLoadingMusicManager({
+        audioCtor: Audio,
+        getMainThemeAudio: () => mainThemeAudio,
+        setMainThemeAudio: (value) => { mainThemeAudio = value; },
+        getDocksMusicAudio: () => docksMusicAudio,
+        setDocksMusicAudio: (value) => { docksMusicAudio = value; },
+    });
+    return loadingMusicManager;
+}
+
 function startMainTheme() {
-    // maintheme.wav is the loading screen track only — plays once, then docks.wav takes over.
-    try {
-        if (!mainThemeAudio) {
-            mainThemeAudio = new Audio('/static/maintheme.wav');
-            mainThemeAudio.loop = false;  // Loading screen only — does not loop
-            mainThemeAudio.volume = 0;
-            mainThemeAudio.preload = 'auto';
-            // When maintheme ends naturally, transition to docks ambient
-            mainThemeAudio.addEventListener('ended', () => {
-                startDocksTheme();
-            }, { once: true });
-        }
-        const playPromise = mainThemeAudio.play();
-        if (playPromise && typeof playPromise.then === 'function') {
-            playPromise.then(() => {
-                const targetVol = 0.45;
-                const steps = 30;
-                const stepMs = 60;
-                let step = 0;
-                const fadeIn = setInterval(() => {
-                    step += 1;
-                    mainThemeAudio.volume = Math.min(targetVol, (step / steps) * targetVol);
-                    if (step >= steps) clearInterval(fadeIn);
-                }, stepMs);
-            }).catch(() => {
-                // Autoplay blocked — will play on next user gesture
-            });
-        }
-    } catch (_err) {
-        // Ignore audio errors
-    }
+    ensureLoadingMusicManager().startMainTheme();
 }
 
 function startDocksTheme() {
-    // Ambient exploration music — loops continuously after loading screen.
-    try {
-        if (!docksMusicAudio) {
-            docksMusicAudio = new Audio('/static/docks.wav');
-            docksMusicAudio.loop = true;
-            docksMusicAudio.volume = 0;
-            docksMusicAudio.preload = 'auto';
-        }
-        const playPromise = docksMusicAudio.play();
-        if (playPromise && typeof playPromise.then === 'function') {
-            playPromise.then(() => {
-                const targetVol = 0.45;
-                const steps = 30;
-                const stepMs = 60;
-                let step = 0;
-                const fadeIn = setInterval(() => {
-                    step += 1;
-                    docksMusicAudio.volume = Math.min(targetVol, (step / steps) * targetVol);
-                    if (step >= steps) clearInterval(fadeIn);
-                }, stepMs);
-            }).catch(() => {
-                // Autoplay blocked
-            });
-        }
-    } catch (_err) {
-        // Ignore audio errors
-    }
+    ensureLoadingMusicManager().startDocksTheme();
 }
 
 function stopDocksTheme() {
-    if (!docksMusicAudio) return;
-    try {
-        const audio = docksMusicAudio;
-        const steps = 30;
-        const stepMs = 50;
-        const startVol = audio.volume;
-        let step = 0;
-        const fadeOut = setInterval(() => {
-            step += 1;
-            audio.volume = Math.max(0, startVol * (1 - step / steps));
-            if (step >= steps) {
-                clearInterval(fadeOut);
-                audio.pause();
-                audio.currentTime = 0;
-                audio.volume = 0;
-            }
-        }, stepMs);
-    } catch (_err) {
-        // Ignore audio errors
-    }
+    ensureLoadingMusicManager().stopDocksTheme();
 }
 
 function stopMainTheme() {
-    if (!mainThemeAudio) return;
-    try {
-        const audio = mainThemeAudio;
-        const steps = 30;
-        const stepMs = 50;
-        const startVol = audio.volume;
-        let step = 0;
-        const fadeOut = setInterval(() => {
-            step += 1;
-            audio.volume = Math.max(0, startVol * (1 - step / steps));
-            if (step >= steps) {
-                clearInterval(fadeOut);
-                audio.pause();
-                audio.currentTime = 0;
-                audio.volume = 0;
-            }
-        }, stepMs);
-    } catch (_err) {
-        // Ignore audio errors
-    }
+    ensureLoadingMusicManager().stopMainTheme();
+}
+
+function ensureLoadingOverlayBuilderManager() {
+    if (loadingOverlayBuilderManager) return loadingOverlayBuilderManager;
+    loadingOverlayBuilderManager = createLoadingOverlayBuilderManager({
+        documentObj: document,
+        performanceObj: performance,
+        ensureLoadingOverlayFxStyles,
+        startMainTheme,
+        renderLoadingProgress,
+        setLoadingProgress,
+        startLoadingVarietyCycle,
+        startLoadingBackdropAnimation,
+        spawnLoadingMessageBurst,
+        rollAllLoadingDice,
+        startLoadingDiceRollCycle,
+        setLoadingOverlayStartedAt: (value) => { loadingOverlayStartedAt = value; },
+        setLoadingOverlayRoot: (value) => { loadingOverlayRoot = value; },
+        setLoadingOverlayCard: (value) => { loadingOverlayCard = value; },
+        setLoadingOverlayFxLayer: (value) => { loadingOverlayFxLayer = value; },
+        setLoadingOverlayAccentBar: (value) => { loadingOverlayAccentBar = value; },
+        setLoadingOverlayProgressText: (value) => { loadingOverlayProgressText = value; },
+        setLoadingOverlayProgressFill: (value) => { loadingOverlayProgressFill = value; },
+        setLoadingOverlayStatusEl: (value) => { loadingOverlayStatus = value; },
+        setLoadingOverlayQuoteEl: (value) => { loadingOverlayQuote = value; },
+        setLoadingOverlayLog: (value) => { loadingOverlayLog = value; },
+        setLoadingDiceTray: (value) => { loadingDiceTray = value; },
+        setLoadingProgressValue: (value) => { loadingProgressValue = value; },
+        setLoadingProgressTarget: (value) => { loadingProgressTarget = value; },
+        setLoadingQuoteIndex: (value) => { loadingQuoteIndex = value; },
+        getLoadingOverlayQuote: () => loadingOverlayQuote,
+    });
+    return loadingOverlayBuilderManager;
 }
 
 function createLoadingOverlay() {
-    ensureLoadingOverlayFxStyles();
-    loadingOverlayStartedAt = performance.now();
-    startMainTheme();
-    loadingOverlayRoot = document.createElement('div');
-    loadingOverlayRoot.style.position = 'fixed';
-    loadingOverlayRoot.style.inset = '0';
-    loadingOverlayRoot.style.zIndex = '99999';
-    loadingOverlayRoot.style.display = 'flex';
-    loadingOverlayRoot.style.flexDirection = 'column';
-    loadingOverlayRoot.style.justifyContent = 'center';
-    loadingOverlayRoot.style.alignItems = 'center';
-    loadingOverlayRoot.style.padding = 'clamp(10px, 2vw, 24px)';
-    loadingOverlayRoot.style.background = 'radial-gradient(circle at 15% 12%, rgba(255,77,109,0.24), rgba(18,21,38,0.94) 42%, rgba(5,7,18,0.99) 100%)';
-    loadingOverlayRoot.style.color = '#e8f2ff';
-    loadingOverlayRoot.style.fontFamily = '"Noto Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif';
-    loadingOverlayRoot.style.fontSize = 'clamp(16px, 1.3vw, 24px)';
-    loadingOverlayRoot.style.transition = 'opacity 0.45s ease';
+    ensureLoadingOverlayBuilderManager().createLoadingOverlay();
+}
 
-    const card = document.createElement('div');
-    loadingOverlayCard = card;
-    card.style.width = '100%';
-    card.style.height = '100%';
-    card.style.maxWidth = 'none';
-    card.style.maxHeight = 'none';
-    card.style.display = 'flex';
-    card.style.flexDirection = 'column';
-    card.style.gap = 'clamp(10px, 1.6vh, 18px)';
-    card.style.padding = 'clamp(16px, 2.4vw, 34px)';
-    card.style.borderRadius = 'clamp(14px, 1.3vw, 24px)';
-    card.style.border = '2px solid rgba(115, 206, 255, 0.6)';
-    card.style.background = 'linear-gradient(180deg, rgba(10,14,29,0.9), rgba(7,9,20,0.94))';
-    card.style.boxShadow = '0 24px 80px rgba(0,0,0,0.62), inset 0 0 0 2px rgba(255,255,255,0.05), inset 0 14px 24px rgba(255,77,109,0.08), 0 0 36px rgba(83,184,255,0.22)';
-    card.style.animation = 'none';
-    card.style.position = 'relative';
-    loadingOverlayRoot.appendChild(card);
-
-    loadingOverlayFxLayer = document.createElement('div');
-    loadingOverlayFxLayer.style.position = 'absolute';
-    loadingOverlayFxLayer.style.inset = '0';
-    loadingOverlayFxLayer.style.pointerEvents = 'none';
-    loadingOverlayFxLayer.style.overflow = 'hidden';
-    loadingOverlayFxLayer.style.zIndex = '3';
-    card.appendChild(loadingOverlayFxLayer);
-
-    const accentBar = document.createElement('div');
-    loadingOverlayAccentBar = accentBar;
-    accentBar.style.height = 'clamp(6px, 0.8vh, 10px)';
-    accentBar.style.borderRadius = '999px';
-    accentBar.style.background = 'linear-gradient(90deg, rgba(255,77,109,0.95), rgba(255,188,66,0.9), rgba(78,214,255,0.95))';
-    accentBar.style.boxShadow = '0 0 20px rgba(255,77,109,0.45), 0 0 18px rgba(78,214,255,0.35)';
-    card.appendChild(accentBar);
-
-    // Scanlines overlay
-    const scanlineOverlay = document.createElement('div');
-    scanlineOverlay.style.position = 'absolute';
-    scanlineOverlay.style.inset = '0';
-    scanlineOverlay.style.zIndex = '5';
-    scanlineOverlay.style.pointerEvents = 'none';
-    scanlineOverlay.style.borderRadius = 'inherit';
-    scanlineOverlay.style.background = 'repeating-linear-gradient(to bottom, transparent 0px, transparent 3px, rgba(0,0,0,0.14) 3px, rgba(0,0,0,0.14) 4px)';
-    scanlineOverlay.style.animation = 'loading-scanline 1.8s linear infinite, loading-flicker 5.2s step-start infinite';
-    card.appendChild(scanlineOverlay);
-
-    // Scanline sweep (single bright line passing top to bottom)
-    const scanlineSweep = document.createElement('div');
-    scanlineSweep.style.position = 'absolute';
-    scanlineSweep.style.left = '0';
-    scanlineSweep.style.right = '0';
-    scanlineSweep.style.height = '4px';
-    scanlineSweep.style.background = 'linear-gradient(to right, transparent, rgba(78,214,255,0.6), transparent)';
-    scanlineSweep.style.pointerEvents = 'none';
-    scanlineSweep.style.zIndex = '6';
-    scanlineSweep.style.animation = 'loading-scanline-sweep 3.1s linear infinite';
-    card.appendChild(scanlineSweep);
-
-    // Title wrapper (for RGB split layers)
-    const titleWrap = document.createElement('div');
-    titleWrap.style.position = 'relative';
-    titleWrap.style.lineHeight = '1.08';
-    card.appendChild(titleWrap);
-
-    // RGB ghost layers (chromatic aberration)
-    ['#ff005580', '#00ffff55'].forEach((col, i) => {
-        const ghost = document.createElement('div');
-        ghost.textContent = 'PARAVAL ENGINE';
-        ghost.style.position = 'absolute';
-        ghost.style.inset = '0';
-        ghost.style.fontSize = 'clamp(36px, 6.2vw, 82px)';
-        ghost.style.fontWeight = '900';
-        ghost.style.letterSpacing = '1.8px';
-        ghost.style.color = col;
-        ghost.style.pointerEvents = 'none';
-        ghost.style.userSelect = 'none';
-        ghost.style.animation = `loading-rgb-split ${1.4 + i * 0.7}s ease-in-out infinite`;
-        ghost.style.animationDelay = `${i * 0.3}s`;
-        titleWrap.appendChild(ghost);
+function ensureLoadingDiceManager() {
+    if (loadingDiceManager) return loadingDiceManager;
+    loadingDiceManager = createLoadingDiceManager({
+        documentObj: document,
+        windowObj: window,
+        getLoadingOverlayFinished: () => loadingOverlayFinished,
+        getLoadingDiceTray: () => loadingDiceTray,
+        getLoadingDiceRollTimer: () => loadingDiceRollTimer,
+        setLoadingDiceRollTimer: (value) => { loadingDiceRollTimer = value; },
     });
-
-    const title = document.createElement('div');
-    title.textContent = 'PARAVAL ENGINE';
-    title.style.fontSize = 'clamp(36px, 6.2vw, 82px)';
-    title.style.fontWeight = '900';
-    title.style.letterSpacing = '1.8px';
-    title.style.lineHeight = '1.08';
-    title.style.color = '#ffffff';
-    title.style.position = 'relative';
-    title.style.zIndex = '1';
-    title.style.textShadow = '0 0 2px rgba(255,255,255,0.9), 0 0 22px rgba(83,184,255,0.45), 0 0 30px rgba(255,88,122,0.25), 0 6px 16px rgba(0,0,0,0.85)';
-    title.style.animation = 'loading-title-glitch 7.3s steps(1) infinite';
-    titleWrap.appendChild(title);
-
-    const progressHeader = document.createElement('div');
-    progressHeader.style.display = 'flex';
-    progressHeader.style.justifyContent = 'space-between';
-    progressHeader.style.alignItems = 'center';
-    progressHeader.style.color = '#cae6ff';
-    progressHeader.style.fontSize = 'clamp(17px, 2.1vw, 32px)';
-
-    const progressLabel = document.createElement('span');
-    progressLabel.textContent = '加载进度  //  Progress';
-    progressHeader.appendChild(progressLabel);
-
-    loadingOverlayProgressText = document.createElement('span');
-    loadingOverlayProgressText.textContent = '0%';
-    progressHeader.appendChild(loadingOverlayProgressText);
-    card.appendChild(progressHeader);
-
-    const progressTrack = document.createElement('div');
-    progressTrack.style.height = 'clamp(14px, 2.3vh, 28px)';
-    progressTrack.style.borderRadius = '999px';
-    progressTrack.style.overflow = 'hidden';
-    progressTrack.style.background = 'rgba(70, 103, 156, 0.25)';
-    progressTrack.style.border = '2px solid rgba(128, 196, 255, 0.55)';
-
-    loadingOverlayProgressFill = document.createElement('div');
-    loadingOverlayProgressFill.style.height = '100%';
-    loadingOverlayProgressFill.style.width = '0%';
-    loadingOverlayProgressFill.style.background = 'linear-gradient(90deg, #ff4d6d, #ffbc42 46%, #4ed6ff)';
-    loadingOverlayProgressFill.style.boxShadow = '0 0 18px rgba(255,77,109,0.42), 0 0 18px rgba(78,214,255,0.4), inset 0 0 10px rgba(255,255,255,0.2)';
-    loadingOverlayProgressFill.style.transition = 'none';
-    loadingOverlayProgressFill.style.transformOrigin = 'left center';
-    progressTrack.appendChild(loadingOverlayProgressFill);
-    card.appendChild(progressTrack);
-
-    loadingOverlayStatus = document.createElement('div');
-    loadingOverlayStatus.textContent = '正在初始化渲染器和资源...';
-    loadingOverlayStatus.style.color = '#bfe3ff';
-    loadingOverlayStatus.style.fontSize = 'clamp(20px, 2.4vw, 36px)';
-    loadingOverlayStatus.style.minHeight = 'clamp(24px, 3vh, 40px)';
-    loadingOverlayStatus.style.fontWeight = '800';
-    loadingOverlayStatus.style.letterSpacing = '0.8px';
-    card.appendChild(loadingOverlayStatus);
-
-    loadingOverlayQuote = document.createElement('div');
-    loadingOverlayQuote.textContent = '系统正在校准... // preparing scene vectors...';
-    loadingOverlayQuote.style.color = '#e7f1ff';
-    loadingOverlayQuote.style.fontSize = 'clamp(17px, 1.95vw, 32px)';
-    loadingOverlayQuote.style.minHeight = 'clamp(22px, 3vh, 36px)';
-    loadingOverlayQuote.style.fontStyle = 'normal';
-    loadingOverlayQuote.style.opacity = '0.95';
-    loadingOverlayQuote.style.letterSpacing = '0.5px';
-    card.appendChild(loadingOverlayQuote);
-
-    loadingOverlayLog = null;
-
-    // Dice tray panel
-    loadingDiceTray = document.createElement('div');
-    loadingDiceTray.style.display = 'flex';
-    loadingDiceTray.style.gap = 'clamp(8px, 1.2vw, 18px)';
-    loadingDiceTray.style.alignItems = 'center';
-    loadingDiceTray.style.justifyContent = 'center';
-    loadingDiceTray.style.padding = '6px 0 2px';
-    loadingDiceTray.style.minHeight = 'clamp(60px, 8vh, 90px)';
-    loadingDiceTray.style.flexShrink = '0';
-    card.appendChild(loadingDiceTray);
-
-    document.body.appendChild(loadingOverlayRoot);
-    loadingProgressValue = 0;
-    loadingProgressTarget = 0;
-    loadingQuoteIndex = 0;
-    renderLoadingProgress(0);
-    setLoadingProgress(0.02);
-    if (loadingOverlayQuote) {
-        loadingOverlayQuote.textContent = '';
-        loadingOverlayQuote.style.minHeight = '0';
-        loadingOverlayQuote.style.opacity = '0';
-    }
-    startLoadingVarietyCycle();
-    startLoadingBackdropAnimation();
-    spawnLoadingMessageBurst(14);
-    rollAllLoadingDice();
-    startLoadingDiceRollCycle();
+    return loadingDiceManager;
 }
 
 // Build an inline SVG die face
 function buildDieSvg(dieType, value) {
-    const shapes = {
-        d4:  { vb: '0 0 60 56', pts: '30,3 58,53 2,53', cy: '42' },
-        d6:  { vb: '0 0 60 60', pts: '5,5 55,5 55,55 5,55', cy: '50%' },
-        d8:  { vb: '0 0 60 60', pts: '30,3 57,30 30,57 3,30', cy: '50%' },
-        d10: { vb: '0 0 60 66', pts: '30,3 58,26 46,63 14,63 2,26', cy: '52%' },
-        d12: { vb: '0 0 64 64', pts: '32,3 62,22 50,59 14,59 2,22', cy: '50%' },
-        d20: { vb: '0 0 70 62', pts: '35,3 68,58 2,58', cy: '54%' },
-    };
-    const cfg = shapes[dieType] || shapes.d6;
-    const colors = {
-        d4: '#ff6b6b', d6: '#4ed6ff', d8: '#ffd700',
-        d10: '#c084fc', d12: '#6bffb8', d20: '#ff9f43',
-    };
-    const strokeCol = colors[dieType] || '#4ed6ff';
-    const ns = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(ns, 'svg');
-    svg.setAttribute('viewBox', cfg.vb);
-    svg.setAttribute('width', '52');
-    svg.setAttribute('height', '52');
-    svg.style.overflow = 'visible';
-    svg.style.filter = `drop-shadow(0 0 5px ${strokeCol})`;
-
-    const poly = document.createElementNS(ns, 'polygon');
-    poly.setAttribute('points', cfg.pts);
-    poly.setAttribute('fill', 'rgba(6,12,30,0.95)');
-    poly.setAttribute('stroke', strokeCol);
-    poly.setAttribute('stroke-width', '3');
-    poly.setAttribute('stroke-linejoin', 'round');
-    svg.appendChild(poly);
-
-    const label = document.createElementNS(ns, 'text');
-    label.setAttribute('x', '50%');
-    label.setAttribute('y', cfg.cy);
-    label.setAttribute('text-anchor', 'middle');
-    label.setAttribute('dominant-baseline', 'middle');
-    label.setAttribute('fill', strokeCol);
-    label.setAttribute('font-size', value >= 10 ? '17' : '20');
-    label.setAttribute('font-weight', '900');
-    label.setAttribute('font-family', 'Consolas, monospace');
-    label.textContent = String(value);
-    svg.appendChild(label);
-
-    return svg;
+    return ensureLoadingDiceManager().buildDieSvg(dieType, value);
 }
 
 function rollAllLoadingDice() {
-    if (!loadingDiceTray || loadingOverlayFinished) return;
-    loadingDiceTray.innerHTML = '';
-    const dieTypes = ['d4', 'd6', 'd8', 'd10', 'd12', 'd20'];
-    const maxRolls = { d4: 4, d6: 6, d8: 8, d10: 10, d12: 12, d20: 20 };
-
-    dieTypes.forEach((dieType, idx) => {
-        const max = maxRolls[dieType];
-        const finalValue = Math.floor(Math.random() * max) + 1;
-
-        const wrapper = document.createElement('div');
-        wrapper.style.display = 'flex';
-        wrapper.style.flexDirection = 'column';
-        wrapper.style.alignItems = 'center';
-        wrapper.style.gap = '3px';
-        wrapper.style.opacity = '0';
-        wrapper.style.transition = `opacity 120ms ease ${idx * 60}ms`;
-
-        const svgEl = buildDieSvg(dieType, Math.floor(Math.random() * max) + 1);
-        svgEl.style.animation = 'loading-dice-spin 480ms cubic-bezier(0.22, 0.8, 0.36, 1) forwards';
-        svgEl.style.animationDelay = `${idx * 55}ms`;
-        wrapper.appendChild(svgEl);
-
-        const lbl = document.createElement('div');
-        lbl.textContent = dieType.toUpperCase();
-        lbl.style.fontSize = '10px';
-        lbl.style.fontFamily = 'Consolas, monospace';
-        lbl.style.color = '#7ab8dd';
-        lbl.style.letterSpacing = '1px';
-        wrapper.appendChild(lbl);
-
-        loadingDiceTray.appendChild(wrapper);
-        window.requestAnimationFrame(() => { wrapper.style.opacity = '1'; });
-
-        // Rapid-fire random values while spinning, then settle on final
-        let rollCount = 0;
-        const rollInterval = window.setInterval(() => {
-            if (loadingOverlayFinished) { window.clearInterval(rollInterval); return; }
-            rollCount++;
-            const rollingVal = Math.floor(Math.random() * max) + 1;
-            const newSvg = buildDieSvg(dieType, rollingVal);
-            if (wrapper.firstChild) wrapper.replaceChild(newSvg, wrapper.firstChild);
-
-            if (rollCount >= 6) {
-                window.clearInterval(rollInterval);
-                const settledSvg = buildDieSvg(dieType, finalValue);
-                settledSvg.style.animation = 'loading-dice-settle 320ms ease-out forwards, loading-dice-glow 2.2s ease-in-out infinite';
-                settledSvg.style.animationDelay = '0ms, 100ms';
-                if (wrapper.firstChild) wrapper.replaceChild(settledSvg, wrapper.firstChild);
-            }
-        }, 75 + idx * 10);
-    });
+    ensureLoadingDiceManager().rollAllLoadingDice();
 }
 
 function startLoadingDiceRollCycle() {
-    if (loadingDiceRollTimer) { window.clearInterval(loadingDiceRollTimer); }
-    loadingDiceRollTimer = window.setInterval(() => {
-        if (loadingOverlayFinished || !loadingDiceTray) {
-            window.clearInterval(loadingDiceRollTimer);
-            loadingDiceRollTimer = null;
-            return;
-        }
-        rollAllLoadingDice();
-    }, 4200);
+    ensureLoadingDiceManager().startLoadingDiceRollCycle();
 }
 
 function mirrorConsoleToLoadingOverlay() {
@@ -6404,279 +5634,77 @@ let orbitPreviewLastY = 0;
 const orbitPreviewSensitivity = 0.006;
 const orbitPreviewMaxYaw = Math.PI * 0.7;
 const orbitPreviewMaxPitch = 1.2;
-const MOBILE_TOUCH_ENABLED = ('ontouchstart' in window) || ((navigator && navigator.maxTouchPoints) ? navigator.maxTouchPoints > 0 : false);
-const MOBILE_TOUCH_MAX_WIDTH = 900;
-const MOBILE_TOUCH_PAD_SIZE = 180;
-const MOBILE_TOUCH_STICK_SIZE = 88;
-const MOBILE_TOUCH_PAD_OFFSET_X = 20;
-const MOBILE_TOUCH_PAD_OFFSET_BOTTOM = 20;
-const TOUCH_MOVE_DEADZONE = 0.22;
-const TOUCH_LOOK_DEADZONE = 0.08;
-const TOUCH_LOOK_SPEED = 2.45;
-let touchControlsRootEl = null;
-let touchMovePadEl = null;
-let touchMoveStickEl = null;
-let touchLookPadEl = null;
-let touchLookStickEl = null;
-let touchMovePointerId = null;
-let touchLookPointerId = null;
-const touchMoveAxis = new THREE.Vector2(0, 0);
-const touchLookAxis = new THREE.Vector2(0, 0);
+let mobileTouchControlsManager = null;
+
+function ensureMobileTouchControlsManager() {
+    if (mobileTouchControlsManager) return mobileTouchControlsManager;
+    mobileTouchControlsManager = createMobileTouchControlsManager({
+        THREE,
+        windowObj: window,
+        documentObj: document,
+        isDmFreeCamera,
+        canUseStandardMovementControls,
+        isTextInputTarget,
+        isCombatReviewUiOpen,
+        getConsoleOpen: () => !!(consoleState && consoleState.open),
+        getDmCamera: () => dmCamera,
+        getCamera: () => camera,
+        getPlayerRig: () => playerRig,
+        getCombatCameraActive: () => combatCameraActive,
+        getYaw: () => yaw,
+        setYaw: (value) => { yaw = value; },
+        getPitch: () => pitch,
+        setPitch: (value) => { pitch = value; },
+        setMovementFlags: ({ forward, backward, left, right }) => {
+            moveForward = !!forward;
+            moveBackward = !!backward;
+            moveLeft = !!left;
+            moveRight = !!right;
+        },
+        setDmFreeMovementFlags: ({ forward, backward, left, right }) => {
+            dmFreeMoveForward = !!forward;
+            dmFreeMoveBackward = !!backward;
+            dmFreeMoveLeft = !!left;
+            dmFreeMoveRight = !!right;
+        },
+    });
+    return mobileTouchControlsManager;
+}
 
 function isMobileTouchScreenLayout() {
-    if (!MOBILE_TOUCH_ENABLED) return false;
-    if (window.matchMedia && window.matchMedia(`(max-width: ${MOBILE_TOUCH_MAX_WIDTH}px)`).matches) {
-        return true;
-    }
-    const width = Number(window.innerWidth) || 0;
-    const height = Number(window.innerHeight) || 0;
-    return Math.min(width, height) > 0 && Math.min(width, height) <= MOBILE_TOUCH_MAX_WIDTH;
+    return ensureMobileTouchControlsManager().isMobileTouchScreenLayout();
 }
 
 function resetTouchJoystickState() {
-    touchMovePointerId = null;
-    touchLookPointerId = null;
-    if (touchMoveStickEl) touchMoveStickEl.style.transform = 'translate(-50%, -50%)';
-    if (touchLookStickEl) touchLookStickEl.style.transform = 'translate(-50%, -50%)';
-    resetTouchMoveState();
-    resetTouchLookState();
-    updateTouchMoveFlags();
+    ensureMobileTouchControlsManager().resetTouchJoystickState();
 }
 
 function refreshMobileTouchControlsVisibility() {
-    if (!touchControlsRootEl) return;
-    const shouldShow = isMobileTouchScreenLayout();
-    touchControlsRootEl.style.display = shouldShow ? 'block' : 'none';
-    if (!shouldShow) {
-        resetTouchJoystickState();
-    }
+    ensureMobileTouchControlsManager().refreshMobileTouchControlsVisibility();
 }
 
 function resetTouchMoveState() {
-    touchMoveAxis.set(0, 0);
-    moveForward = false;
-    moveBackward = false;
-    moveLeft = false;
-    moveRight = false;
-    dmFreeMoveForward = false;
-    dmFreeMoveBackward = false;
-    dmFreeMoveLeft = false;
-    dmFreeMoveRight = false;
+    ensureMobileTouchControlsManager().resetTouchMoveState();
 }
 
 function resetTouchLookState() {
-    touchLookAxis.set(0, 0);
+    ensureMobileTouchControlsManager().resetTouchLookState();
 }
 
 function updateTouchMoveFlags() {
-    if (Math.abs(touchMoveAxis.x) < TOUCH_MOVE_DEADZONE && Math.abs(touchMoveAxis.y) < TOUCH_MOVE_DEADZONE) {
-        moveForward = false;
-        moveBackward = false;
-        moveLeft = false;
-        moveRight = false;
-        dmFreeMoveForward = false;
-        dmFreeMoveBackward = false;
-        dmFreeMoveLeft = false;
-        dmFreeMoveRight = false;
-        return;
-    }
-
-    const forward = touchMoveAxis.y < -TOUCH_MOVE_DEADZONE;
-    const backward = touchMoveAxis.y > TOUCH_MOVE_DEADZONE;
-    const left = touchMoveAxis.x < -TOUCH_MOVE_DEADZONE;
-    const right = touchMoveAxis.x > TOUCH_MOVE_DEADZONE;
-
-    if (isDmFreeCamera()) {
-        dmFreeMoveForward = forward;
-        dmFreeMoveBackward = backward;
-        dmFreeMoveLeft = left;
-        dmFreeMoveRight = right;
-        moveForward = false;
-        moveBackward = false;
-        moveLeft = false;
-        moveRight = false;
-        return;
-    }
-
-    if (canUseStandardMovementControls()) {
-        moveForward = forward;
-        moveBackward = backward;
-        moveLeft = left;
-        moveRight = right;
-    }
+    ensureMobileTouchControlsManager().updateTouchMoveFlags();
 }
 
 function applyTouchLookInput(delta) {
-    if (!MOBILE_TOUCH_ENABLED || !isMobileTouchScreenLayout()) return;
-    if (Math.abs(touchLookAxis.x) < TOUCH_LOOK_DEADZONE && Math.abs(touchLookAxis.y) < TOUCH_LOOK_DEADZONE) return;
-    if (consoleState.open || isCombatReviewUiOpen()) return;
-
-    const lookYaw = touchLookAxis.x * TOUCH_LOOK_SPEED * Math.max(0, delta);
-    const lookPitch = touchLookAxis.y * TOUCH_LOOK_SPEED * Math.max(0, delta);
-
-    if (isDmFreeCamera() && dmCamera) {
-        dmCamera.rotation.order = 'YXZ';
-        dmCamera.rotation.y -= lookYaw;
-        dmCamera.rotation.x = Math.max(-1.45, Math.min(1.45, dmCamera.rotation.x - lookPitch));
-        return;
-    }
-
-    if (!canUseStandardMovementControls()) return;
-    yaw -= lookYaw;
-    if (!combatCameraActive) {
-        pitch -= lookPitch;
-        pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
-    }
-    if (playerRig) {
-        playerRig.rotation.y = yaw;
-    }
-    if (!combatCameraActive) {
-        camera.rotation.x = pitch;
-    }
+    ensureMobileTouchControlsManager().applyTouchLookInput(delta);
 }
 
 function setTouchPadAxisFromEvent(padEl, stickEl, touch, axisVec) {
-    if (!padEl || !stickEl || !touch) return;
-    const rect = padEl.getBoundingClientRect();
-    const cx = rect.left + (rect.width * 0.5);
-    const cy = rect.top + (rect.height * 0.5);
-    const maxRadius = rect.width * 0.35;
-    let dx = touch.clientX - cx;
-    let dy = touch.clientY - cy;
-    const len = Math.hypot(dx, dy);
-    if (len > maxRadius && len > 0.0001) {
-        const s = maxRadius / len;
-        dx *= s;
-        dy *= s;
-    }
-    axisVec.set(dx / Math.max(1, maxRadius), dy / Math.max(1, maxRadius));
-    stickEl.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    ensureMobileTouchControlsManager().setTouchPadAxisFromEvent(padEl, stickEl, touch, axisVec);
 }
 
 function createMobileTouchControls() {
-    if (!MOBILE_TOUCH_ENABLED || touchControlsRootEl) return;
-
-    const root = document.createElement('div');
-    root.id = 'mobile-touch-controls';
-    root.style.position = 'fixed';
-    root.style.inset = '0';
-    root.style.pointerEvents = 'none';
-    root.style.zIndex = '2600';
-
-    const createPad = (left, right) => {
-        const pad = document.createElement('div');
-        pad.style.position = 'absolute';
-        if (left !== null) pad.style.left = left;
-        if (right !== null) pad.style.right = right;
-        pad.style.bottom = `${MOBILE_TOUCH_PAD_OFFSET_BOTTOM}px`;
-        pad.style.width = `${MOBILE_TOUCH_PAD_SIZE}px`;
-        pad.style.height = `${MOBILE_TOUCH_PAD_SIZE}px`;
-        pad.style.borderRadius = '999px';
-        pad.style.background = 'rgba(18, 26, 42, 0.45)';
-        pad.style.border = '1px solid rgba(160, 200, 255, 0.55)';
-        pad.style.backdropFilter = 'blur(3px)';
-        pad.style.touchAction = 'none';
-        pad.style.pointerEvents = 'auto';
-
-        const stick = document.createElement('div');
-        stick.style.position = 'absolute';
-        stick.style.left = '50%';
-        stick.style.top = '50%';
-        stick.style.width = `${MOBILE_TOUCH_STICK_SIZE}px`;
-        stick.style.height = `${MOBILE_TOUCH_STICK_SIZE}px`;
-        stick.style.borderRadius = '999px';
-        stick.style.transform = 'translate(-50%, -50%)';
-        stick.style.background = 'rgba(160, 205, 255, 0.24)';
-        stick.style.border = '1px solid rgba(190, 225, 255, 0.75)';
-        stick.style.boxShadow = '0 0 16px rgba(110, 170, 255, 0.4)';
-        pad.appendChild(stick);
-
-        root.appendChild(pad);
-        return { pad, stick };
-    };
-
-    const leftPad = createPad(`${MOBILE_TOUCH_PAD_OFFSET_X}px`, null);
-    const rightPad = createPad(null, `${MOBILE_TOUCH_PAD_OFFSET_X}px`);
-
-    touchMovePadEl = leftPad.pad;
-    touchMoveStickEl = leftPad.stick;
-    touchLookPadEl = rightPad.pad;
-    touchLookStickEl = rightPad.stick;
-
-    touchMovePadEl.addEventListener('touchstart', (event) => {
-        if (isTextInputTarget(event.target) || consoleState.open) return;
-        if (touchMovePointerId !== null) return;
-        const touch = event.changedTouches && event.changedTouches[0];
-        if (!touch) return;
-        touchMovePointerId = touch.identifier;
-        setTouchPadAxisFromEvent(touchMovePadEl, touchMoveStickEl, touch, touchMoveAxis);
-        updateTouchMoveFlags();
-        event.preventDefault();
-    }, { passive: false });
-
-    touchMovePadEl.addEventListener('touchmove', (event) => {
-        if (touchMovePointerId === null) return;
-        for (const t of event.changedTouches) {
-            if (t.identifier !== touchMovePointerId) continue;
-            setTouchPadAxisFromEvent(touchMovePadEl, touchMoveStickEl, t, touchMoveAxis);
-            updateTouchMoveFlags();
-            event.preventDefault();
-            break;
-        }
-    }, { passive: false });
-
-    const endMove = (event) => {
-        if (touchMovePointerId === null) return;
-        for (const t of event.changedTouches) {
-            if (t.identifier !== touchMovePointerId) continue;
-            touchMovePointerId = null;
-            touchMoveStickEl.style.transform = 'translate(-50%, -50%)';
-            resetTouchMoveState();
-            updateTouchMoveFlags();
-            event.preventDefault();
-            break;
-        }
-    };
-    touchMovePadEl.addEventListener('touchend', endMove, { passive: false });
-    touchMovePadEl.addEventListener('touchcancel', endMove, { passive: false });
-
-    touchLookPadEl.addEventListener('touchstart', (event) => {
-        if (isTextInputTarget(event.target) || consoleState.open) return;
-        if (touchLookPointerId !== null) return;
-        const touch = event.changedTouches && event.changedTouches[0];
-        if (!touch) return;
-        touchLookPointerId = touch.identifier;
-        setTouchPadAxisFromEvent(touchLookPadEl, touchLookStickEl, touch, touchLookAxis);
-        event.preventDefault();
-    }, { passive: false });
-
-    touchLookPadEl.addEventListener('touchmove', (event) => {
-        if (touchLookPointerId === null) return;
-        for (const t of event.changedTouches) {
-            if (t.identifier !== touchLookPointerId) continue;
-            setTouchPadAxisFromEvent(touchLookPadEl, touchLookStickEl, t, touchLookAxis);
-            event.preventDefault();
-            break;
-        }
-    }, { passive: false });
-
-    const endLook = (event) => {
-        if (touchLookPointerId === null) return;
-        for (const t of event.changedTouches) {
-            if (t.identifier !== touchLookPointerId) continue;
-            touchLookPointerId = null;
-            touchLookStickEl.style.transform = 'translate(-50%, -50%)';
-            resetTouchLookState();
-            event.preventDefault();
-            break;
-        }
-    };
-    touchLookPadEl.addEventListener('touchend', endLook, { passive: false });
-    touchLookPadEl.addEventListener('touchcancel', endLook, { passive: false });
-
-    document.body.appendChild(root);
-    touchControlsRootEl = root;
-    refreshMobileTouchControlsVisibility();
+    ensureMobileTouchControlsManager().createMobileTouchControls();
 }
 
 // Auto-orbit during animations (dance, flip)
@@ -6978,125 +6006,6 @@ function applyDummyDamage(dummy, amount) {
     
     return dmg;
 }
-
-// ========== D&D Distance & Grid System ==========
-const FEET_PER_UNIT = 5; // 1 Three.js unit = 5 feet (D&D standard)
-const FEET_PER_SQUARE = 5; // D&D uses 5 ft increments
-const COMBAT_TILE_FEET = 5; // 5-ft snap grid (D&D standard square)
-// BG3-style zone colours
-const MOVE_ZONE_COLOR  = 0x00e8ff;
-const MOVE_DEST_COLOR  = 0x00ffcc;
-
-// Convert Three.js units to feet
-function unitsToFeet(units) {
-    return units * FEET_PER_UNIT;
-}
-
-// Convert feet to Three.js units
-function feetToUnits(feet) {
-    return feet / FEET_PER_UNIT;
-}
-
-// Euclidean distance between two Vector3 positions (in units)
-function getDistance(a, b) {
-    return a.distanceTo(b);
-}
-
-// Euclidean distance between two Vector3 positions (in feet)
-function getDistanceFeet(a, b) {
-    return unitsToFeet(getDistance(a, b));
-}
-
-// Flat (XZ-only) distance in feet — ignores height difference for combat range checks
-function getFlatDistanceFeet(a, b) {
-    const dx = a.x - b.x;
-    const dz = a.z - b.z;
-    return unitsToFeet(Math.sqrt(dx * dx + dz * dz));
-}
-
-// Edge-to-edge distance in feet: flat distance minus both collider radii
-// a = object with .position and optional .radius (in units)
-// b = object with .position and optional .userData.radius (in units)
-function getEdgeDistanceFeet(a, b) {
-    const flat = getFlatDistanceFeet(a.position, b.position);
-    const rA = a.radius || 0;
-    const rB = (b.userData && b.userData.radius) || 0;
-    return Math.max(0, flat - unitsToFeet(rA + rB));
-}
-
-// Combat distance tuning: values < 1 make actors effectively feel closer for combat checks.
-const COMBAT_DISTANCE_SCALE = 0.85;
-
-function getEffectiveCombatDistanceFeet(a, b) {
-    return getEdgeDistanceFeet(a, b) * COMBAT_DISTANCE_SCALE;
-}
-
-// Convert distance to D&D grid squares (5 ft increments)
-function getDistanceInSquares(a, b) {
-    return Math.ceil(getDistanceFeet(a, b) / FEET_PER_SQUARE);
-}
-
-// Convert world position to grid coordinates (x, z only; y is height)
-function worldToGrid(pos) {
-    return {
-        x: Math.round(pos.x / FEET_PER_UNIT),
-        z: Math.round(pos.z / FEET_PER_UNIT),
-        y: Math.round(pos.y / FEET_PER_UNIT),
-    };
-}
-
-// Convert grid coordinates back to world position
-function gridToWorld(grid, height = 0) {
-    return new THREE.Vector3(
-        grid.x * FEET_PER_UNIT,
-        height || 0,
-        grid.z * FEET_PER_UNIT
-    );
-}
-
-// D&D grid distance (Chebyshev/max distance, allows diagonal)
-// Returns distance in grid squares
-function gridDistance(gridA, gridB) {
-    const dx = Math.abs(gridA.x - gridB.x);
-    const dz = Math.abs(gridA.z - gridB.z);
-    return Math.max(dx, dz);
-}
-
-// D&D grid distance from world positions
-function gridDistanceFromWorld(posA, posB) {
-    const gridA = worldToGrid(posA);
-    const gridB = worldToGrid(posB);
-    return gridDistance(gridA, gridB);
-}
-
-// Range check in feet
-function canReachInFeet(entityPos, targetPos, rangeInFeet) {
-    return getDistanceFeet(entityPos, targetPos) <= rangeInFeet;
-}
-
-// Range check in grid squares
-function canReachInSquares(entityPos, targetPos, rangeInSquares) {
-    return gridDistanceFromWorld(entityPos, targetPos) <= rangeInSquares;
-}
-
-// Common D&D ranges
-const DND_RANGES = {
-    melee: 8,          // widened melee range for smoother close combat feel
-    shortbow: 80,      // 80 feet
-    longsword: 8,      // match widened melee range
-    fireball: 150,     // 150 feet (casting range)
-    spellRange30: 30,  // 30 feet
-    spellRange60: 60,  // 60 feet
-    spellRange120: 120,// 120 feet
-    heavyCrossbow: 100,// 100 feet
-};
-
-const OPPORTUNITY_ATTACK_TRIGGER_CHANCE = 0.55;
-const RETREAT_TRIP_TRIGGER_CHANCE = 0.2;
-const RETREAT_TRIP_MOVE_PENALTY_FEET = 5;
-
-// Visual nudge so training dummies sit on the floor instead of hovering.
-const TRAINING_DUMMY_Y_OFFSET = -0.25;
 
 // ========== D&D Combat System ==========
 
@@ -12706,62 +11615,17 @@ function maybeResolveRetreatReaction(startPos, endPos) {
     showFloatingText('Clean disengage', '#8dd694', true);
 }
 
-// Get all valid targets for an ability (within range, has LOS, etc)
-function getValidTargets(attacker, rangeFeet, includeAllies = false) {
-    const validTargets = [];
-    
-    // Get all player avatars (excluding attacker)
-    Object.values(allPlayerAvatars || {}).forEach(avatar => {
-        if (avatar === attacker) return;
-        if (!includeAllies && avatar.isAlly === attacker.isAlly) return;
-        
-        if (canTarget(attacker, avatar, rangeFeet, true)) {
-            validTargets.push(avatar);
-        }
-    });
-    
-    return validTargets;
-}
-
-// Highlight valid targets for UI feedback
-function highlightTargets(attacker, rangeFeet, includeAllies = false) {
-    const validTargets = getValidTargets(attacker, rangeFeet, includeAllies);
-    
-    Object.values(allPlayerAvatars || {}).forEach(avatar => {
-        if (avatar === attacker) return;
-        
-        const isValid = validTargets.includes(avatar);
-        
-        if (avatar.userData.highlightMesh) {
-            avatar.userData.highlightMesh.visible = isValid;
-            if (isValid) {
-                avatar.userData.highlightMesh.material.color.setHex(0x00ff00);
-            } else {
-                avatar.userData.highlightMesh.material.color.setHex(0x888888);
-            }
-        }
-    });
-    
-    return validTargets;
-}
-
-// Clear all target highlights
-function clearTargetHighlights() {
-    Object.values(allPlayerAvatars || {}).forEach(avatar => {
-        if (avatar.userData.highlightMesh) {
-            avatar.userData.highlightMesh.visible = false;
-        }
-    });
-}
-
-function getFirstSelectableHit(intersects) {
-    for (const hit of intersects) {
-        if (!hit || !hit.object || !hit.object.isMesh) continue;
-        if (!isMeshSelectable(hit.object)) continue;
-        return resolveSelectableTarget(hit.object);
-    }
-    return null;
-}
+const {
+    getValidTargets,
+    highlightTargets,
+    clearTargetHighlights,
+    getFirstSelectableHit,
+} = createCombatTargetingService({
+    getAllPlayerAvatars: () => allPlayerAvatars,
+    canTarget,
+    isMeshSelectable,
+    resolveSelectableTarget,
+});
 
 function triggerLocalHammerAttackSwing() {
     if (!localPlayerAvatarRigState || !localPlayerAvatarRigState.active) return;
@@ -12770,108 +11634,16 @@ function triggerLocalHammerAttackSwing() {
 }
 
 // ── Attack Resolution with Dice ──
-function getAttackConfig(attackType = 'melee') {
-    const configs = {
-        melee: { attackBonus: 5, damageDie: 8, damageBonus: 2 },
-        ranged: { attackBonus: 4, damageDie: 6, damageBonus: 1 },
-    };
-    return configs[attackType] || configs.melee;
-}
-
-function getAttackPreview(attacker, target, attackType = 'melee') {
-    const config = getAttackConfig(attackType);
-    const targetAC = Number(target?.userData?.ac) || 12;
-    let successCount = 0;
-
-    // Deterministic preview only. No RNG in UI hover/preview paths.
-    for (let roll = 1; roll <= 20; roll++) {
-        if (roll === 1) continue;
-        if (roll === 20 || (roll + config.attackBonus) >= targetAC) {
-            successCount += 1;
-        }
-    }
-
-    const hitChance = successCount / 20;
-    return {
-        attackType,
-        attackBonus: config.attackBonus,
-        targetAC,
-        hitChance,
-        hitChancePct: Math.round(hitChance * 100),
-        damageMin: 1 + config.damageBonus,
-        damageMax: config.damageDie + config.damageBonus,
-    };
-}
-
-function resolveAttack(attacker, target, attackType = 'melee') {
-    // Roll d20 for attack
-    const roll = Math.floor(Math.random() * 20) + 1;
-
-    const config = getAttackConfig(attackType);
-    const attackBonus = config.attackBonus;
-    const total = roll + attackBonus;
-    
-    // AC = 12 (default dummy AC)
-    const targetAC = target.userData?.ac || 12;
-    const hit = total >= targetAC;
-    
-    // Roll damage if hit
-    let damageRoll = 0;
-    const damageBonus = config.damageBonus;
-    if (hit) {
-        damageRoll = Math.floor(Math.random() * config.damageDie) + 1;
-    }
-    
-    const totalDamage = damageRoll + damageBonus;
-    
-    // Check for critical (20) or fumble (1)
-    let resultType = 'normal';
-    if (roll === 20) resultType = 'crit';
-    if (roll === 1) resultType = 'fumble';
-    
-    return consumeDmOverride({
-        roll,
-        attackBonus,
-        total,
-        targetAC,
-        hit,
-        damageRoll,
-        damageBonus,
-        totalDamage,
-        resultType,
-        attackType
-    });
-}
-
-function resolveEnemyAttack(enemy, target) {
-    const roll = Math.floor(Math.random() * 20) + 1;
-    const attackBonus = Number.isFinite(enemy?.userData?.attackBonus)
-        ? enemy.userData.attackBonus
-        : 4;
-    const targetAC = Number.isFinite(target?.ac)
-        ? target.ac
-        : (Number.isFinite(playerState.ac) ? playerState.ac : 12);
-    const total = roll + attackBonus;
-    const hit = total >= targetAC;
-    const damageRoll = hit ? Math.max(1, Number(enemy?.userData?.damageRoll) || TRAINING_DUMMY_DAMAGE) : 0;
-    const damageBonus = hit ? Math.max(0, Number(enemy?.userData?.damageBonus) || 0) : 0;
-    let resultType = 'normal';
-    if (roll === 20) resultType = 'crit';
-    if (roll === 1) resultType = 'fumble';
-
-    return consumeDmOverride({
-        roll,
-        attackBonus,
-        total,
-        targetAC,
-        hit,
-        damageRoll,
-        damageBonus,
-        totalDamage: damageRoll + damageBonus,
-        resultType,
-        attackType: 'melee',
-    });
-}
+const {
+    getAttackConfig,
+    getAttackPreview,
+    resolveAttack,
+    resolveEnemyAttack,
+} = createAttackResolutionService({
+    consumeDmOverride,
+    trainingDummyDamage: TRAINING_DUMMY_DAMAGE,
+    getFallbackTargetAc: () => (Number.isFinite(playerState?.ac) ? playerState.ac : 12),
+});
 
 // ── 3D Dice Visualization ──
 function createD20Geometry() {
@@ -14574,155 +13346,23 @@ function createEnemyFOVMesh() {
 // ─── Enemy Health Bar System ───────────────────────────────────────────────
 
 function createEnemyHealthBar(dummy) {
-    if (enemyHealthBars.has(dummy)) return;
-
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '5000';
-    container.style.left = '-300px';
-    container.style.top = '-300px';
-    container.style.transform = 'translateX(-50%)';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = 'center';
-    container.style.gap = '2px';
-
-    const nameEl = document.createElement('div');
-    nameEl.textContent = dummy.userData.name || 'Enemy';
-    nameEl.style.fontSize = '11px';
-    nameEl.style.fontFamily = 'Consolas, monospace';
-    nameEl.style.color = '#ffcccc';
-    nameEl.style.textShadow = '0 1px 5px #000, 0 0 8px rgba(0,0,0,0.9)';
-    nameEl.style.letterSpacing = '0.5px';
-    nameEl.style.whiteSpace = 'nowrap';
-    container.appendChild(nameEl);
-
-    const track = document.createElement('div');
-    track.style.width = '80px';
-    track.style.height = '7px';
-    track.style.borderRadius = '4px';
-    track.style.background = 'rgba(0,0,0,0.75)';
-    track.style.border = '1px solid rgba(255,200,200,0.3)';
-    track.style.position = 'relative';
-    track.style.overflow = 'hidden';
-
-    const lagFill = document.createElement('div');
-    lagFill.style.position = 'absolute';
-    lagFill.style.left = '0';
-    lagFill.style.top = '0';
-    lagFill.style.height = '100%';
-    lagFill.style.width = '100%';
-    lagFill.style.background = '#cc2222';
-    lagFill.style.borderRadius = '4px';
-    track.appendChild(lagFill);
-
-    const hpFill = document.createElement('div');
-    hpFill.style.position = 'absolute';
-    hpFill.style.left = '0';
-    hpFill.style.top = '0';
-    hpFill.style.height = '100%';
-    hpFill.style.width = '100%';
-    hpFill.style.background = '#44ff66';
-    hpFill.style.borderRadius = '4px';
-    hpFill.style.transition = 'width 0.35s cubic-bezier(0.2,0.9,0.3,1)';
-    track.appendChild(hpFill);
-
-    container.appendChild(track);
-    document.body.appendChild(container);
-
-    enemyHealthBars.set(dummy, { container, hpFill, lagFill, nameEl, lagValue: 1.0 });
+    createEnemyHealthBarPrimitive(enemyHealthBars, dummy, document);
 }
 
 function removeEnemyHealthBar(dummy) {
-    const bar = enemyHealthBars.get(dummy);
-    if (!bar) return;
-    if (bar.container.parentNode) bar.container.parentNode.removeChild(bar.container);
-    enemyHealthBars.delete(dummy);
+    removeEnemyHealthBarPrimitive(enemyHealthBars, dummy);
 }
 
 function createPlayerHeadHealthBar(actorKey, name = 'Player') {
-    if (!actorKey || playerHeadHealthBars.has(actorKey)) return;
-
-    const container = document.createElement('div');
-    container.style.position = 'fixed';
-    container.style.pointerEvents = 'none';
-    container.style.zIndex = '5000';
-    container.style.left = '-300px';
-    container.style.top = '-300px';
-    container.style.transform = 'translateX(-50%)';
-    container.style.display = 'flex';
-    container.style.flexDirection = 'column';
-    container.style.alignItems = 'center';
-    container.style.gap = '2px';
-
-    const nameEl = document.createElement('div');
-    nameEl.textContent = name;
-    nameEl.style.fontSize = '11px';
-    nameEl.style.fontFamily = 'Consolas, monospace';
-    nameEl.style.color = '#c7e6ff';
-    nameEl.style.textShadow = '0 1px 5px #000, 0 0 8px rgba(0,0,0,0.9)';
-    nameEl.style.letterSpacing = '0.5px';
-    nameEl.style.whiteSpace = 'nowrap';
-    container.appendChild(nameEl);
-
-    const track = document.createElement('div');
-    track.style.width = '80px';
-    track.style.height = '7px';
-    track.style.borderRadius = '4px';
-    track.style.background = 'rgba(0,0,0,0.75)';
-    track.style.border = '1px solid rgba(150,210,255,0.35)';
-    track.style.position = 'relative';
-    track.style.overflow = 'hidden';
-
-    const lagFill = document.createElement('div');
-    lagFill.style.position = 'absolute';
-    lagFill.style.left = '0';
-    lagFill.style.top = '0';
-    lagFill.style.height = '100%';
-    lagFill.style.width = '100%';
-    lagFill.style.background = '#2a4f7a';
-    lagFill.style.borderRadius = '4px';
-    track.appendChild(lagFill);
-
-    const hpFill = document.createElement('div');
-    hpFill.style.position = 'absolute';
-    hpFill.style.left = '0';
-    hpFill.style.top = '0';
-    hpFill.style.height = '100%';
-    hpFill.style.width = '100%';
-    hpFill.style.background = '#44ff66';
-    hpFill.style.borderRadius = '4px';
-    hpFill.style.transition = 'width 0.35s cubic-bezier(0.2,0.9,0.3,1)';
-    track.appendChild(hpFill);
-
-    container.appendChild(track);
-    document.body.appendChild(container);
-
-    playerHeadHealthBars.set(actorKey, { container, hpFill, lagFill, nameEl, lagValue: 1.0 });
+    createPlayerHeadHealthBarPrimitive(playerHeadHealthBars, actorKey, name, document);
 }
 
 function removePlayerHeadHealthBar(actorKey) {
-    if (!actorKey) return;
-    const bar = playerHeadHealthBars.get(actorKey);
-    if (!bar) return;
-    if (bar.container.parentNode) bar.container.parentNode.removeChild(bar.container);
-    playerHeadHealthBars.delete(actorKey);
+    removePlayerHeadHealthBarPrimitive(playerHeadHealthBars, actorKey);
 }
 
 function updateSingleHeadHealthBar(bar, hp, maxHp) {
-    if (!bar) return;
-    const safeMax = Math.max(1, Number(maxHp) || 1);
-    const safeHp = Math.max(0, Math.min(safeMax, Number(hp) || 0));
-    const hpFrac = safeHp / safeMax;
-    bar.hpFill.style.width = `${hpFrac * 100}%`;
-    bar.hpFill.style.background = hpFrac > 0.6 ? '#44ff66' : hpFrac > 0.3 ? '#ffcc00' : '#ff4444';
-    if (bar.lagValue > hpFrac) {
-        bar.lagValue = Math.max(hpFrac, bar.lagValue - 0.006);
-    } else {
-        bar.lagValue = hpFrac;
-    }
-    bar.lagFill.style.width = `${bar.lagValue * 100}%`;
+    updateSingleHeadHealthBarPrimitive(bar, hp, maxHp);
 }
 
 function updateAllPlayerHeadHealthBars() {
@@ -14870,677 +13510,175 @@ function updateAllEnemyHealthBars() {
 }
 
 // ─── Hit Flinch ────────────────────────────────────────────────────────────
-
-function triggerEnemySwingAnim(enemy) {
-    if (!enemy || !enemy.userData) return;
-    const modelRoot = enemy.children.find((c) => c.name === 'training_dummy_visual');
-    if (!modelRoot) return;
-
-    // Find arm bones using the same helper pattern used during pose setup.
-    let leftUpperArm = null;
-    let rightUpperArm = null;
-    modelRoot.traverse((child) => {
-        if (!child.isBone) return;
-        const n = child.name || '';
-        if (!leftUpperArm  && /(left.*upperarm|upperarm.*left|leftarm|arm_l|l_upperarm|larm)/i.test(n))  leftUpperArm  = child;
-        if (!rightUpperArm && /(right.*upperarm|upperarm.*right|rightarm|arm_r|r_upperarm|rarm)/i.test(n)) rightUpperArm = child;
-    });
-    if (!leftUpperArm && !rightUpperArm) return;
-
-    // Snapshot rest rotations at the moment of call.
-    const leftRest  = leftUpperArm  ? leftUpperArm.rotation.clone()  : null;
-    const rightRest = rightUpperArm ? rightUpperArm.rotation.clone() : null;
-
-    const SWING_DURATION_MS = 480;
-    const startTime = performance.now();
-
-    const swingRig = enemy.userData.swingAnimRig || null;
-    if (swingRig) cancelAnimationFrame(swingRig.raf);
-
-    const state = { raf: null };
-    enemy.userData.swingAnimRig = state;
-
-    const tick = () => {
-        const elapsed = performance.now() - startTime;
-        const t = Math.min(1, elapsed / SWING_DURATION_MS);
-        // Arc forward (0→1) then back (1→0) smoothly.
-        const arc = t < 0.45
-            ? (t / 0.45)
-            : (1 - (t - 0.45) / 0.55);
-        const swing = arc * 1.9; // radians of forward pitch
-
-        if (leftUpperArm && leftRest) {
-            leftUpperArm.rotation.x  = leftRest.x  - swing;
-            leftUpperArm.rotation.z  = leftRest.z  + swing * 0.28;
-        }
-        if (rightUpperArm && rightRest) {
-            rightUpperArm.rotation.x = rightRest.x - swing;
-            rightUpperArm.rotation.z = rightRest.z  - swing * 0.28;
-        }
-
-        if (t < 1) {
-            state.raf = requestAnimationFrame(tick);
-        } else {
-            // Restore rest pose.
-            if (leftUpperArm  && leftRest)  leftUpperArm.rotation.copy(leftRest);
-            if (rightUpperArm && rightRest) rightUpperArm.rotation.copy(rightRest);
-            enemy.userData.swingAnimRig = null;
-        }
-    };
-    state.raf = requestAnimationFrame(tick);
-}
-
-function triggerEnemyFlinch(target) {
-    if (!target || !target.userData) return;
-    const dir = new THREE.Vector3(
-        target.position.x - playerState.position.x,
-        0,
-        target.position.z - playerState.position.z
-    );
-    if (dir.lengthSq() < 0.001) dir.set(1, 0, 0);
-    dir.normalize();
-    target.userData.flinchState = {
-        originX: target.position.x,
-        originZ: target.position.z,
-        offsetX: dir.x * 0.38,
-        offsetZ: dir.z * 0.38,
-        elapsed: 0,
-        duration: 260,
-    };
-}
-
-function updateEnemyFlinches(deltaMs) {
-    for (const dummy of trainingDummies) {
-        if (!dummy || !dummy.userData.flinchState) continue;
-        const f = dummy.userData.flinchState;
-        f.elapsed += deltaMs;
-        const t = Math.min(1, f.elapsed / f.duration);
-        // Knock forward then snap back
-        const knock = t < 0.35 ? (t / 0.35) : (1 - (t - 0.35) / 0.65);
-        dummy.position.x = f.originX + f.offsetX * knock;
-        dummy.position.z = f.originZ + f.offsetZ * knock;
-        if (f.elapsed >= f.duration) {
-            dummy.position.x = f.originX;
-            dummy.position.z = f.originZ;
-            dummy.userData.flinchState = null;
-        }
-    }
-}
-
-// ─── Kill Sequence ─────────────────────────────────────────────────────────
-
-async function playKillSequence(target) {
-    if (!target || !target.parent) return;
-    focusOutcomeText('DEFEATED', '#ff4444', 2200);
-    showFloatingText('DEFEATED', '#ff4444', true, { anchorObject: target });
-    spawnImpactBurst(target.position, 0xff4444, 55);
-    spawnImpactBurst(target.position, 0xffcc00, 30);
-    triggerCombatFlash('#ff2200', 0.38, 500);
-    shakeScreen(0.55, 600);
-    playCombatSfxCue('melee-hit');
-
-    // Collapse animation
-    const startScaleY = target.scale.y;
-    const startPosY = target.position.y;
-    const startTime = performance.now();
-    const duration = 560;
-    await new Promise((resolve) => {
-        const collapse = () => {
-            if (!target.parent) { resolve(); return; }
-            const t = Math.min(1, (performance.now() - startTime) / duration);
-            const eased = t * t;
-            target.scale.y = Math.max(0.001, startScaleY * (1 - eased));
-            target.position.y = startPosY - eased * 1.8;
-            if (t < 1) { requestAnimationFrame(collapse); } else { resolve(); }
-        };
-        requestAnimationFrame(collapse);
-    });
-    removeEnemyHealthBar(target);
-    logCombatEvent(`${target.userData.name || 'Target'} defeated`, 'hit');
-}
+const {
+    triggerEnemySwingAnim,
+    triggerEnemyFlinch,
+    updateEnemyFlinches,
+    playKillSequence,
+} = createEnemyCombatFeedbackService({
+    THREE,
+    getPlayerState: () => playerState,
+    getTrainingDummies: () => trainingDummies,
+    focusOutcomeText,
+    showFloatingText,
+    spawnImpactBurst,
+    triggerCombatFlash,
+    shakeScreen,
+    playCombatSfxCue,
+    removeEnemyHealthBar,
+    logCombatEvent,
+    requestAnimationFrameFn: requestAnimationFrame,
+    cancelAnimationFrameFn: cancelAnimationFrame,
+    performanceObj: performance,
+});
 
 // ─── Target Glow Ring ──────────────────────────────────────────────────────
 
 function attachTargetSelectionRing(target) {
-    if (!target || target.userData.selectionRing) return;
-    const geo = new THREE.RingGeometry(0.58, 0.82, 36);
-    const mat = new THREE.MeshBasicMaterial({
-        color: 0xffcc00, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false,
-    });
-    const ring = new THREE.Mesh(geo, mat);
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = -0.98;
-    ring.renderOrder = 22;
-    target.add(ring);
-    target.userData.selectionRing = ring;
+    attachTargetSelectionRingPrimitive(target, THREE);
 }
 
 function removeTargetSelectionRing(target) {
-    if (!target || !target.userData.selectionRing) return;
-    target.remove(target.userData.selectionRing);
-    target.userData.selectionRing.geometry.dispose();
-    target.userData.selectionRing.material.dispose();
-    target.userData.selectionRing = null;
+    removeTargetSelectionRingPrimitive(target);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
 
-function normalizeSpawnEntityType(type) {
-    const normalized = String(type || '').trim().toLowerCase();
-    if (normalized === 'player-dummy' || normalized === 'player_dummy' || normalized === 'ally-dummy') {
-        return 'player-dummy';
-    }
-    if (normalized === 'elite-dummy' || normalized === 'elite_dummy' || normalized === 'elite') {
-        return 'elite-dummy';
-    }
-    return 'training-dummy';
-}
+const {
+    normalizeSpawnEntityType,
+    spawnEntityByType,
+    requestEntitySpawn,
+    requestTrainingDummySpawn,
+    requestStepTurn,
+    requestEndTurn,
+    requestRewindTurn,
+    requestReplayLastAction,
+    requestPossessActor,
+    requestReleasePossession,
+} = createSpawnAndTurnRequestService({
+    getMode: () => modeManager.current,
+    modeDm: MODE.DM,
+    issueDmCommand,
+    spawnTrainingDummy,
+    consumePendingDmEncounterSetup,
+    getPlayerState: () => playerState,
+    canIssueDmCommand,
+    stepTurn,
+    endTurn,
+    rewindTurn,
+    replayLastAction,
+    getCurrentGameMode: () => currentGameMode,
+    gameModeCombat: GAME_MODE.COMBAT,
+    getCombatActorId,
+    getPlayerRig: () => playerRig,
+    possessActor,
+    releasePossession,
+});
 
-function spawnEntityByType(x, y, z, type = 'training-dummy') {
-    const entityType = normalizeSpawnEntityType(type);
-    const definitions = {
-        'training-dummy': {
-            name: 'Training Dummy',
-            maxHp: 50,
-        },
-        'player-dummy': {
-            name: 'Dummy Player',
-            maxHp: 42,
-            faction: 'player',
-        },
-        'elite-dummy': {
-            name: 'Elite Dummy',
-            maxHp: 90,
-            radius: 0.65,
-        },
-    };
-
-    const config = definitions[entityType] || definitions['training-dummy'];
-    console.log(`[spawnEntityByType] Type: ${entityType}, Config:`, config);
-    const dummy = spawnTrainingDummy(x, y, z, config.name);
-    console.log(`[spawnEntityByType] spawnTrainingDummy returned:`, dummy ? 'object' : 'null/false');
-    if (!dummy || !dummy.userData) {
-        console.error('[spawnEntityByType] Failed: no dummy or userData');
-        return false;
-    }
-
-    dummy.userData.spawnType = entityType;
-    dummy.userData.maxHp = config.maxHp;
-    dummy.userData.hp = config.maxHp;
-    if (Number.isFinite(config.radius)) {
-        dummy.userData.radius = config.radius;
-    }
-    if (config.faction) {
-        dummy.userData.faction = config.faction;
-    }
-    consumePendingDmEncounterSetup(dummy, entityType);
-    console.log(`[spawnEntityByType] Successfully spawned ${entityType}:`, dummy.userData);
-    return dummy;
-}
-
-function requestEntitySpawn(type = 'training-dummy') {
-    const spawnType = normalizeSpawnEntityType(type);
-    const angle = Math.random() * Math.PI * 2;
-    const radius = 2.8 + (Math.random() * 1.6);
-    const x = playerState.position.x + (Math.cos(angle) * radius);
-    const y = playerState.position.y;
-    const z = playerState.position.z + (Math.sin(angle) * radius);
-
-    console.log(`[requestEntitySpawn] Type: ${type} -> ${spawnType}, Pos: (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
-    console.log(`[requestEntitySpawn] Mode: ${modeManager.current}, Can issue spawn: ${canIssueDmCommand('spawn-entity')}`);
-
-    if (modeManager.current === MODE.DM) {
-        console.log('[requestEntitySpawn] Using DM command path');
-        const result = issueDmCommand('spawn-entity', {
-            entityType: spawnType,
-            position: { x, y, z },
-        });
-        console.log('[requestEntitySpawn] issueDmCommand returned:', result);
-        return result;
-    }
-
-    console.log('[requestEntitySpawn] Using direct spawn path (not DM mode)');
-    return spawnEntityByType(x, y, z, spawnType);
-}
-
-function requestTrainingDummySpawn(x, y, z, name = 'Training Dummy') {
-    const payload = {
-        position: { x, y, z },
-        name,
-    };
-
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('spawn-training-dummy', payload) ? null : false;
-    }
-
-    return spawnTrainingDummy(x, y, z, name);
-}
+const dmCommandBus = createDmCommandBus({
+    getMode: () => modeManager.current,
+    modeDm: MODE.DM,
+    canIssueDmCommand,
+    getDmAuthorityLayer: () => dmAuthorityLayer,
+    showFloatingText,
+    appendConsoleHistory,
+    getSimulationAuthority: () => simulationAuthority,
+    simulationAuthorityLocalDm: SIMULATION_AUTHORITY.LOCAL_DM,
+    getSocket: () => socket,
+    getNetStats: () => _netStats,
+    netLog,
+    traceDmPipeline,
+    applyDmCommandFromServer,
+    addDmEvent,
+    getWindow: () => window,
+});
 
 function dispatchDmCommand(command) {
-    if (!command || !command.type) return false;
-
-    traceDmPipeline('ISSUE DM COMMAND', {
-        type: command.type,
-        payload: command.payload || {},
-        mode: modeManager.current,
-        authority: simulationAuthority,
-        layer: dmAuthorityLayer,
-        hasSocket: !!socket,
-    });
-
-    const forceLocal = window.__DM_FORCE_LOCAL_DM_COMMANDS__ === true;
-    const skipSocket = window.__DM_SKIP_SOCKET_DM_COMMANDS__ === true;
-    const shouldExecuteLocalFirst = forceLocal || simulationAuthority === SIMULATION_AUTHORITY.LOCAL_DM;
-
-    if (!socket || shouldExecuteLocalFirst) {
-        const applied = applyDmCommandLocally(command);
-        if (socket && !skipSocket) {
-            _netStats.dmCommandsOut += 1;
-            netLog(`dm-command OUT  type=${command.type}  out#=${_netStats.dmCommandsOut}`);
-            socket.emit('dm-command', { command });
-        }
-        if (applied) {
-            logDmCommandAction(command);
-        }
-        return applied;
-    }
-
-    _netStats.dmCommandsOut += 1;
-    netLog(`dm-command OUT  type=${command.type}  out#=${_netStats.dmCommandsOut}`);
-    socket.emit('dm-command', { command });
-    logDmCommandAction(command);
-    return true;
+    return dmCommandBus.dispatchDmCommand(command);
 }
 
 function logDmCommandAction(command) {
-    if (!command || !command.type) return;
-    const type = String(command.type).toLowerCase();
-    const payload = command.payload || {};
-
-    let message = null;
-    switch (type) {
-    case 'spawn-entity':
-        message = `Spawn request: ${String(payload.entityType || 'training-dummy')}`;
-        break;
-    case 'spawn-training-dummy':
-        message = 'Spawn request: training dummy';
-        break;
-    case 'possess-actor':
-        message = `Possess request: ${String(payload.actorId || 'unknown')}`;
-        break;
-    case 'release-possession':
-        message = 'Released possession';
-        break;
-    case 'apply-damage':
-        message = `Damage applied: ${Math.max(0, Math.round(Number(payload.amount) || 0))}`;
-        break;
-    case 'set-hp':
-        message = `HP set: ${Math.max(0, Math.round(Number(payload.value) || 0))}`;
-        break;
-    case 'despawn-actor':
-        message = `Despawn request: ${String(payload.actorId || 'unknown')}`;
-        break;
-    case 'rewind-turn':
-        message = 'Timeline rewind requested';
-        break;
-    default:
-        break;
-    }
-
-    if (message) {
-        addDmEvent(message, 'system');
-    }
+    return dmCommandBus.logDmCommandAction(command);
 }
+
 window.dispatchDmCommand = dispatchDmCommand;
 
 function issueDmCommand(type, payload = {}) {
-    if (modeManager.current !== MODE.DM) return false;
-    let normalizedType = String(type || '').trim().toLowerCase();
-    // Backward-compatible aliases for older UI call sites.
-    if (normalizedType === 'possess') normalizedType = 'possess-actor';
-    if (!normalizedType) return false;
-    if (!canIssueDmCommand(normalizedType)) {
-        console.warn(`[issueDmCommand] Blocked: ${normalizedType} not available in ${dmAuthorityLayer.toUpperCase()} mode`);
-        showFloatingText(`Mode ${dmAuthorityLayer.toUpperCase()} cannot run ${normalizedType}`, '#ff8a8a', true);
-        appendConsoleHistory(`DM capability blocked: ${normalizedType} (requires SIMULATOR mode for spawn commands)`, 'error');
-        return false;
-    }
-
-    const command = {
-        type: normalizedType,
-        payload,
-        issuedAt: Date.now(),
-        authority: simulationAuthority,
-        layer: dmAuthorityLayer,
-    };
-
-    traceDmPipeline('SENDING DM COMMAND', command);
-
-    const forceLocal = window.__DM_FORCE_LOCAL_DM_COMMANDS__ === true;
-    const skipSocket = window.__DM_SKIP_SOCKET_DM_COMMANDS__ === true;
-    const shouldExecuteLocalFirst = forceLocal || simulationAuthority === SIMULATION_AUTHORITY.LOCAL_DM;
-
-    if (!socket || shouldExecuteLocalFirst) {
-        const applied = applyDmCommandLocally(command);
-        if (socket && !skipSocket) {
-            _netStats.dmCommandsOut += 1;
-            netLog(`dm-command OUT  type=${command.type}  out#=${_netStats.dmCommandsOut}`);
-            socket.emit('dm-command', { command });
-        }
-        return applied;
-    }
-
-    _netStats.dmCommandsOut += 1;
-    netLog(`dm-command OUT  type=${command.type}  out#=${_netStats.dmCommandsOut}`);
-    socket.emit('dm-command', { command });
-    return true;
+    return dmCommandBus.issueDmCommand(type, payload);
 }
 
 function emitDmCommand(command) {
-    if (!command || typeof command !== 'object') return false;
-    return issueDmCommand(command.type, command.payload || {});
+    return dmCommandBus.emitDmCommand(command);
 }
 
 function applyDmCommandLocally(command) {
-    if (!command || !command.type) return false;
-    traceDmPipeline('RECEIVED DM COMMAND', { from: 'local', command });
-    applyDmCommandFromServer({ command });
-    return true;
+    return dmCommandBus.applyDmCommandLocally(command);
 }
 
-function requestStepTurn() {
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('step-turn');
-    }
-    return stepTurn();
-}
+const {
+    resolveCombatActorForDm,
+    setActorHpById,
+    applyDamageToActorById,
+} = createDmActorControlService({
+    getLocalCombatActorId,
+    getPlayerState: () => playerState,
+    findCombatActorById,
+    updatePlayerHealthHud,
+    removeTrainingDummy,
+    getSelectedCombatTarget: () => selectedCombatTarget,
+    setSelectedCombatTarget,
+    exitCombatIfNoTargets,
+    applyPlayerDamage,
+});
 
-function requestEndTurn() {
-    if (currentGameMode !== GAME_MODE.COMBAT) return false;
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('end-turn');
-    }
-    endTurn();
-    return true;
-}
+const { handleDmInjectedInput } = createDmInjectedInputHandler({
+    resolveCombatActorForDm,
+    getSelectedCombatTarget: () => selectedCombatTarget,
+    getPlayerState: () => playerState,
+    setSelectedCombatTarget,
+    selectMoveAndAttackAction,
+    getControlledActor,
+    possessActor,
+    runPossessedEnemyAttack,
+});
 
-function requestRewindTurn() {
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('rewind-turn');
-    }
-    return rewindTurn();
-}
-
-async function requestReplayLastAction() {
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('replay-last-action');
-    }
-    return replayLastAction();
-}
-
-function requestPossessActor(actor) {
-    if (!actor) return false;
-    const resolved = actor === playerRig ? playerState : actor;
-    const actorId = getCombatActorId(resolved);
-    if (!actorId) return false;
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('possess-actor', { actorId });
-    }
-    return possessActor(resolved);
-}
-
-function requestReleasePossession() {
-    if (modeManager.current === MODE.DM) {
-        return issueDmCommand('release-possession');
-    }
-    return releasePossession();
-}
-
-function resolveCombatActorForDm(actorId) {
-    const id = String(actorId || '').trim();
-    if (!id) return null;
-    if (id === 'player' || id === getLocalCombatActorId()) return playerState;
-    return findCombatActorById(id);
-}
-
-function setActorHpById(actorId, value) {
-    const actor = resolveCombatActorForDm(actorId);
-    const hpValue = Math.max(0, Number(value) || 0);
-    if (!actor) return false;
-
-    if (actor === playerState) {
-        playerState.hp = Math.min(Number(playerState.maxHp) || hpValue, hpValue);
-        updatePlayerHealthHud();
-        return true;
-    }
-
-    actor.userData.hp = Math.min(Number(actor.userData?.maxHp) || hpValue, hpValue);
-    if (actor.userData.hp <= 0) {
-        removeTrainingDummy(actor);
-        if (selectedCombatTarget === actor) setSelectedCombatTarget(null);
-        exitCombatIfNoTargets();
-    }
-    return true;
-}
-
-function applyDamageToActorById(actorId, amount) {
-    const actor = resolveCombatActorForDm(actorId);
-    const damage = Math.max(0, Math.round(Number(amount) || 0));
-    if (!actor || damage <= 0) return false;
-
-    if (actor === playerState) {
-        applyPlayerDamage(damage, 'DM override');
-        return true;
-    }
-
-    return setActorHpById(actorId, Math.max(0, Number(actor.userData?.hp) - damage));
-}
-
-function handleDmInjectedInput(payload) {
-    const actorId = String(payload.actorId || '').trim();
-    const action = String(payload.action || payload.input?.action || '').toLowerCase();
-    const targetId = String(payload.targetId || payload.input?.target || '').trim();
-    if (!actorId || !action) return false;
-
-    const actor = resolveCombatActorForDm(actorId);
-    if (!actor) return false;
-
-    if (action === 'attack') {
-        const target = resolveCombatActorForDm(targetId) || selectedCombatTarget;
-        if (actor === playerState) {
-            if (!target || target === playerState || !target.parent) return false;
-            setSelectedCombatTarget(target);
-            selectMoveAndAttackAction(target);
-            return true;
-        }
-        if (actor !== playerState) {
-            if (getControlledActor() !== actor) {
-                possessActor(actor);
-            }
-            return runPossessedEnemyAttack(actor);
-        }
-    }
-
-    if (action === 'move') {
-        const move = payload.move || payload.input?.move;
-        if (!move || actor === playerState) return false;
-        const x = Number(move.x);
-        const z = Number(move.z);
-        if (!Number.isFinite(x) || !Number.isFinite(z)) return false;
-        actor.position.x += x;
-        actor.position.z += z;
-        return true;
-    }
-
-    return false;
-}
+const dmCommandApplier = createDmCommandApplier({
+    traceDmPipeline,
+    getMode: () => modeManager.current,
+    getSimulationAuthority: () => simulationAuthority,
+    getDmAuthorityLayer: () => dmAuthorityLayer,
+    isLocalCombatAuthority,
+    spawnTrainingDummy,
+    spawnEntityByType,
+    stepTurn,
+    endTurn,
+    rewindTurn,
+    replayLastAction,
+    resolveCombatActorForDm,
+    possessActor,
+    releasePossession,
+    setActorHpById,
+    applyDamageToActorById,
+    getPlayerState: () => playerState,
+    removeTrainingDummy,
+    handleDmInjectedInput,
+    saveSnapshot,
+    getCombatTimeline: () => combatTimeline,
+    restoreCombatSnapshot,
+    THREE,
+    MODE,
+    setSimulationAuthority,
+    syncDmAuthorityLayerFromState,
+    emitDiceRollEvent,
+    addDmEvent,
+});
 
 function applyDmCommandFromServer(packet) {
-    const command = packet && (packet.command || packet);
-    if (!command || !command.type) return;
-
-    traceDmPipeline('APPLY DM COMMAND', {
-        type: String(command.type || '').toLowerCase(),
-        from: packet && packet.from ? packet.from : 'unknown',
-        mode: modeManager.current,
-        authority: simulationAuthority,
-        layer: dmAuthorityLayer,
-    });
-
-    const payload = command.payload || {};
-
-    const commandType = String(command.type).toLowerCase();
-    switch (commandType) {
-    case 'spawn-training-dummy': {
-        if (!isLocalCombatAuthority()) return;
-        const pos = payload.position || {};
-        const x = Number(pos.x);
-        const y = Number(pos.y);
-        const z = Number(pos.z);
-        const name = String(payload.name || 'Training Dummy');
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return;
-        const dummy = spawnTrainingDummy(x, y, z, name);
-        const actorId = String(payload.actorId || '').trim();
-        if (dummy && dummy.userData && actorId) {
-            dummy.userData.actorId = actorId;
-            dummy.userData.networkId = actorId;
-        }
-        break;
-    }
-    case 'spawn-entity': {
-        if (!isLocalCombatAuthority()) {
-            console.warn('[SPAWN] spawn-entity blocked: not local combat authority');
-            return;
-        }
-        const pos = payload.position || {};
-        const x = Number(pos.x);
-        const y = Number(pos.y);
-        const z = Number(pos.z);
-        const type = String(payload.entityType || payload.type || 'training-dummy');
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
-            console.warn('[SPAWN] spawn-entity invalid position:', x, y, z);
-            return;
-        }
-        console.log(`[SPAWN] Spawning ${type} at (${x.toFixed(1)}, ${y.toFixed(1)}, ${z.toFixed(1)})`);
-        const result = spawnEntityByType(x, y, z, type);
-        const actorId = String(payload.actorId || '').trim();
-        if (result && result.userData && actorId) {
-            result.userData.actorId = actorId;
-            result.userData.networkId = actorId;
-        }
-        console.log(`[SPAWN] Spawn result:`, result ? 'success' : 'failed');
-        break;
-    }
-    case 'step-turn':
-        if (!isLocalCombatAuthority()) return;
-        stepTurn();
-        break;
-    case 'end-turn':
-        if (!isLocalCombatAuthority()) return;
-        endTurn();
-        break;
-    case 'rewind-turn':
-        if (!isLocalCombatAuthority()) return;
-        rewindTurn();
-        break;
-    case 'replay-last-action':
-        if (!isLocalCombatAuthority()) return;
-        void replayLastAction();
-        break;
-    case 'possess':
-    case 'possess-actor': {
-        if (!isLocalCombatAuthority()) return;
-        const actorId = String(payload.actorId || '').trim();
-        if (!actorId) return;
-        const actor = resolveCombatActorForDm(actorId);
-        if (!actor) return;
-        possessActor(actor);
-        break;
-    }
-    case 'release-possession':
-        if (!isLocalCombatAuthority()) return;
-        releasePossession();
-        break;
-    case 'set-hp':
-        if (!isLocalCombatAuthority()) return;
-        setActorHpById(payload.actorId, payload.value);
-        break;
-    case 'apply-damage':
-        if (!isLocalCombatAuthority()) return;
-        applyDamageToActorById(payload.actorId, payload.amount);
-        break;
-    case 'toggle-ai': {
-        if (!isLocalCombatAuthority()) return;
-        const actor = resolveCombatActorForDm(payload.actorId);
-        if (!actor || actor === playerState) return;
-        actor.userData.aiEnabled = payload.enabled !== false;
-        break;
-    }
-    case 'despawn-actor': {
-        if (!isLocalCombatAuthority()) return;
-        const actor = resolveCombatActorForDm(payload.actorId);
-        if (!actor || actor === playerState) return;
-        removeTrainingDummy(actor);
-        break;
-    }
-    case 'inject-input':
-        if (!isLocalCombatAuthority()) return;
-        handleDmInjectedInput(payload);
-        break;
-    case 'save-snapshot':
-        if (!isLocalCombatAuthority()) return;
-        saveSnapshot(String(payload.reason || 'dm-manual-snapshot'));
-        break;
-    case 'restore-snapshot': {
-        if (!isLocalCombatAuthority()) return;
-        const index = Number(payload.index);
-        const targetIndex = Number.isFinite(index)
-            ? THREE.MathUtils.clamp(index, 0, Math.max(0, combatTimeline.length - 1))
-            : Math.max(0, combatTimeline.length - 1);
-        const snapshot = combatTimeline[targetIndex] || null;
-        if (snapshot) restoreCombatSnapshot(snapshot, { restoreTimelineState: true, setCursor: false });
-        break;
-    }
-    case 'set-simulation-authority': {
-        if (modeManager.current !== MODE.DM) return;
-        const authority = String(payload.authority || '').toLowerCase();
-        setSimulationAuthority(authority);
-        syncDmAuthorityLayerFromState();
-        break;
-    }
-    case 'force-roll': {
-        if (!isLocalCombatAuthority()) return;
-        const sides = Math.max(2, Math.floor(Number(payload.sides) || 20));
-        const raw = 1 + Math.floor(Math.random() * sides);
-        const mod = Number(payload.mod) || 0;
-        emitDiceRollEvent({
-            sides,
-            label: String(payload.label || 'DM FORCE ROLL'),
-            raw,
-            total: raw + mod,
-            mod,
-        });
-        break;
-    }
-    case 'trigger-event':
-        addDmEvent(String(payload.message || 'DM event triggered'), 'system');
-        break;
-    default:
-        break;
-    }
+    return dmCommandApplier.applyDmCommandFromServer(packet);
 }
 
 function forceGodModeForDiagnostics() {
-    modeManager.setMode(MODE.DM);
-    setDmAuthorityLayer(DM_AUTHORITY_LAYER.SIMULATOR);
-    setSimulationAuthority(SIMULATION_AUTHORITY.LOCAL_DM);
-    startLocalSimulation();
-    traceDmPipeline('FORCED GOD MODE', {
-        mode: modeManager.current,
-        layer: dmAuthorityLayer,
-        authority: simulationAuthority,
-    });
-    appendConsoleHistory('DM diagnostics: forced GOD simulator + local command execution', 'ok');
+    return dmAuthorityManager.forceGodModeForDiagnostics();
 }
 
 window.forceGodModeForDiagnostics = forceGodModeForDiagnostics;
@@ -19544,382 +17682,39 @@ fetch('/static/everything_.gltf', { method: 'HEAD' })
 
 // --- Save/Load Scene State ---
 
-// --- Improved serialization using stable mesh IDs for persistence ---
-const MATERIALS_STATE_SCHEMA_VERSION = 'materials.v1';
-
-function sanitizePersistToken(value) {
-    return String(value || '')
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9_\-]+/g, '_')
-        .replace(/^_+|_+$/g, '');
-}
-
-function getMeshPersistentId(mesh) {
-    const existing = mesh?.userData?.persistId;
-    if (typeof existing === 'string' && existing.trim()) return existing.trim();
-    return null;
-}
-
-function ensurePersistentMeshIds() {
-    let autoIndex = 0;
-    scene.traverse((obj) => {
-        if (!obj || !obj.isMesh) return;
-        const existing = getMeshPersistentId(obj);
-        if (existing) return;
-        const fromName = sanitizePersistToken(obj.name);
-        const id = fromName || `mesh_auto_${autoIndex++}`;
-        obj.userData.persistId = id;
-    });
-}
-
-function getPersistableTextureMapUrl(mat) {
-    const src = mat?.map?.image?.src;
-    if (typeof src !== 'string') return null;
-    const value = src.trim();
-    if (!value) return null;
-    if (value.startsWith('blob:') || value.startsWith('data:')) return null;
-    return value;
-}
-
-function serializeMaterial(mat) {
-    if (!mat) return null;
-    const textureAnim = getMaterialTextureAnim(mat);
-    return {
-        type: mat.type,
-        color: mat.color ? mat.color.getHex() : null,
-        emissive: mat.emissive ? mat.emissive.getHex() : null,
-        metalness: typeof mat.metalness === 'number' ? mat.metalness : undefined,
-        roughness: typeof mat.roughness === 'number' ? mat.roughness : undefined,
-        opacity: typeof mat.opacity === 'number' ? mat.opacity : undefined,
-        wireframe: typeof mat.wireframe === 'boolean' ? mat.wireframe : undefined,
-        map: getPersistableTextureMapUrl(mat),
-        textureAnim,
-    };
-}
-
-function emitMaterialChange(obj, materialIndex = 0) {
-    if (!socket || !obj || !obj.isMesh) return;
-    let mat = Array.isArray(obj.material)
-        ? obj.material[materialIndex]
-        : obj.material;
-    const objectId = getMeshPersistentId(obj) || (obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id);
-    socket.emit('scene-update', {
-        type: 'material',
-        objectId,
-        name: obj.name,
-        materialIndex,
-        materialState: serializeMaterial(mat)
-    });
-}
-
-function findMeshByPersistentId(objectId) {
-    let found = null;
-    scene.traverse((obj) => {
-        if (obj.isMesh) {
-            if (getMeshPersistentId(obj) === objectId) found = obj;
-        }
-    });
-    return found;
-}
-
-function findMeshByName(name) {
-    let found = null;
-    scene.traverse((obj) => {
-        if (!obj.isMesh) return;
-        const n = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
-        if (n === name) found = obj;
-    });
-    return found;
-}
-
-function serializeObject(obj) {
-    if (!obj.isMesh) return null;
-    const name = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
-    const objectId = getMeshPersistentId(obj) || name;
-    let materials = null;
-    if (Array.isArray(obj.material)) {
-        materials = obj.material.map(m => serializeMaterial(m));
-    } else if (obj.material) {
-        materials = [serializeMaterial(obj.material)];
-    }
-    return {
-        objectId,
-        name,
-        position: { x: obj.position.x, y: obj.position.y, z: obj.position.z },
-        rotation: { x: obj.rotation.x, y: obj.rotation.y, z: obj.rotation.z },
-        scale: { x: obj.scale.x, y: obj.scale.y, z: obj.scale.z },
-        materials
-    };
-}
-
-function serializeScene() {
-    ensurePersistentMeshIds();
-    const objects = {};
-    const lights = {};
-    scene.traverse(obj => {
-        const data = serializeObject(obj);
-        if (data) objects[data.objectId] = data;
-
-        const lightData = serializeLight(obj);
-        if (lightData) lights[lightData.name] = lightData;
-    });
-    return { objects, lights };
-}
-
-function applyMaterialState(mat, state, mesh) {
-    if (!mat || !state) return;
-    // If material type differs, replace it
-    if (mat.type !== state.type && THREE[state.type]) {
-        const newMat = new THREE[state.type]();
-        if (Array.isArray(mesh.material)) {
-            const index = mesh.material.indexOf(mat);
-            if (index !== -1) mesh.material[index] = newMat;
-        } else {
-            mesh.material = newMat;
-        }
-        mat = newMat;
-    }
-    if (state.color !== null && state.color !== undefined && mat.color) mat.color.setHex(state.color);
-    if (state.emissive !== null && state.emissive !== undefined && mat.emissive) mat.emissive.setHex(state.emissive);
-    if (typeof state.metalness === 'number') mat.metalness = state.metalness;
-    if (typeof state.roughness === 'number') mat.roughness = state.roughness;
-    if (typeof state.opacity === 'number') mat.opacity = state.opacity;
-    if (typeof state.wireframe === 'boolean') mat.wireframe = state.wireframe;
-    if (state.textureAnim) {
-        setMaterialTextureAnimAxis(mat, 'x', state.textureAnim.x);
-        setMaterialTextureAnimAxis(mat, 'y', state.textureAnim.y);
-        setMaterialTextureAnimAxis(mat, 'z', state.textureAnim.z);
-    }
-    const mapUrl = typeof state.map === 'string' ? state.map.trim() : '';
-    if (mapUrl && mapUrl !== 'undefined' && mapUrl !== 'null') {
-        new THREE.TextureLoader().load(mapUrl, (tex) => {
-            mat.map = tex;
-            mat.needsUpdate = true;
-        });
-    }
-    mat.needsUpdate = true;
-}
-
-function serializeMaterialOverrides() {
-    ensurePersistentMeshIds();
-    const materials = {};
-    scene.traverse((obj) => {
-        if (!obj || !obj.isMesh || !obj.material) return;
-        const objectId = getMeshPersistentId(obj);
-        if (!objectId) return;
-        const rows = Array.isArray(obj.material)
-            ? obj.material.map((mat, materialIndex) => ({ materialIndex, materialState: serializeMaterial(mat) }))
-            : [{ materialIndex: 0, materialState: serializeMaterial(obj.material) }];
-        materials[objectId] = {
-            name: obj.name || '',
-            materials: rows,
-        };
-    });
-    return {
-        schemaVersion: MATERIALS_STATE_SCHEMA_VERSION,
-        updatedAt: new Date().toISOString(),
-        worldId: 'map3d',
-        materials,
-    };
-}
-
-function applyMaterialOverrides(payload) {
-    if (!payload || typeof payload !== 'object') return;
-    const materials = payload.materials;
-    if (!materials || typeof materials !== 'object') return;
-    ensurePersistentMeshIds();
-
-    for (const objectId in materials) {
-        const row = materials[objectId];
-        if (!row || typeof row !== 'object') continue;
-        const mesh = findMeshByPersistentId(objectId) || (row.name ? findMeshByName(row.name) : null);
-        if (!mesh || !mesh.material) continue;
-        const entries = Array.isArray(row.materials) ? row.materials : [];
-        for (const item of entries) {
-            const idx = Number.isInteger(item?.materialIndex) ? item.materialIndex : 0;
-            const state = item?.materialState;
-            if (!state) continue;
-            if (Array.isArray(mesh.material)) {
-                if (mesh.material[idx]) applyMaterialState(mesh.material[idx], state, mesh);
-            } else if (idx === 0) {
-                applyMaterialState(mesh.material, state, mesh);
-            }
-        }
-    }
-}
-
-function applyStateToObject(obj, state) {
-    if (!obj.isMesh) return;
-    if (state.position) obj.position.set(state.position.x, state.position.y, state.position.z);
-    if (state.rotation) obj.rotation.set(state.rotation.x, state.rotation.y, state.rotation.z);
-    if (state.scale) obj.scale.set(state.scale.x, state.scale.y, state.scale.z);
-    if (state.materials && obj.material) {
-        if (Array.isArray(obj.material)) {
-            for (let i = 0; i < obj.material.length; ++i) {
-                if (state.materials[i]) applyMaterialState(obj.material[i], state.materials[i], obj);
-            }
-        } else if (state.materials[0]) {
-            applyMaterialState(obj.material, state.materials[0], obj);
-        }
-    }
-}
-
-function applySceneState(state) {
-    if (!state || !state.objects) return;
-    if (!isSceneReadyForWorldState()) {
-        pendingSceneState = state;
-        traceDmPipeline('SCENE STATE QUEUED', {
-            objectCount: Object.keys(state.objects || {}).length,
-        });
-        return;
-    }
-    ensurePersistentMeshIds();
-    const meshById = {};
-    const meshByName = {};
-    scene.traverse(obj => {
-        if (obj.isMesh) {
-            const name = obj.name && obj.name.trim() ? obj.name : obj.type + '_' + obj.id;
-            const objectId = getMeshPersistentId(obj) || name;
-            meshById[objectId] = obj;
-            meshByName[name] = obj;
-        }
-    });
-    for (const objectKey in state.objects) {
-        const objectState = state.objects[objectKey];
-        const objectId = objectState?.objectId || objectKey;
-        const mesh = meshById[objectId] || (objectState?.name ? meshByName[objectState.name] : null);
-        if (mesh) {
-            applyStateToObject(mesh, objectState);
-        }
-    }
-
-    // Sync user-created point lights from persisted state.
-    const lightMap = {};
-    scene.traverse(obj => {
-        if (obj.isPointLight && obj.userData.isUserLight) {
-            lightMap[obj.name] = obj;
-        }
-    });
-    if (state.lights) {
-        for (const name in state.lights) {
-            if (lightMap[name]) {
-                applyStateToLight(lightMap[name], state.lights[name]);
-            } else {
-                const newLight = createUserPointLight(state.lights[name]);
-                scene.add(newLight);
-            }
-        }
-    }
-
-    // (updateHierarchyMenu removed)
-    updateInspectorMenu();
-}
-// (Old floating save/load button code removed; now handled in inspector menu only)
-
-// Add save/load buttons to inspector menu
-function addSaveLoadButtonsToInspector() {
-    // Remove any existing button container
-    const old = inspectorMenu.querySelector('.inspector-save-load');
-    if (old) old.remove();
-    const btnContainer = document.createElement('div');
-    btnContainer.className = 'inspector-save-load';
-    btnContainer.style.display = 'flex';
-    btnContainer.style.flexDirection = 'column';
-    btnContainer.style.gap = '12px';
-    btnContainer.style.position = 'absolute';
-    btnContainer.style.bottom = '24px';
-    btnContainer.style.left = '0';
-    btnContainer.style.width = '100%';
-    btnContainer.style.alignItems = 'center';
-    btnContainer.style.pointerEvents = 'auto';
-
-    // Save button
-    const saveBtn = document.createElement('button');
-    saveBtn.textContent = 'Save Scene State';
-    saveBtn.style.padding = '10px 18px';
-    saveBtn.style.background = '#1976d2';
-    saveBtn.style.color = '#fff';
-    saveBtn.style.border = 'none';
-    saveBtn.style.borderRadius = '6px';
-    saveBtn.style.fontSize = '17px';
-    saveBtn.style.cursor = 'pointer';
-    saveBtn.style.width = '85%';
-    saveBtn.onclick = () => {
-        const state = serializeScene();
-        const materialState = serializeMaterialOverrides();
-        Promise.all([
-            fetch('/scene_state', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(state)
-            }),
-            fetch('/materials_state', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(materialState)
-            }),
-        ])
-        .then(async ([sceneRes, materialRes]) => {
-            const sceneData = await sceneRes.json();
-            const materialData = await materialRes.json();
-            if (sceneRes.ok && materialRes.ok && sceneData.ok && materialData.ok) {
-                alert('Scene and material state saved!');
-            } else {
-                alert('Failed to save scene/material state.');
-            }
-        })
-        .catch((err) => {
-            console.warn('Save failed:', err);
-            alert('Failed to save scene/material state.');
-        });
-    };
-    btnContainer.appendChild(saveBtn);
-
-    // Load button
-    const loadBtn = document.createElement('button');
-    loadBtn.textContent = 'Load Scene State';
-    loadBtn.style.padding = '10px 18px';
-    loadBtn.style.background = '#388e3c';
-    loadBtn.style.color = '#fff';
-    loadBtn.style.border = 'none';
-    loadBtn.style.borderRadius = '6px';
-    loadBtn.style.fontSize = '17px';
-    loadBtn.style.cursor = 'pointer';
-    loadBtn.style.width = '85%';
-    loadBtn.onclick = () => {
-        Promise.all([
-            fetch('/scene_state').then((r) => {
-                if (!r.ok) throw new Error(`Scene state unavailable (${r.status})`);
-                const contentType = r.headers.get('content-type') || '';
-                if (!contentType.includes('application/json')) {
-                    throw new Error('Scene state endpoint did not return JSON');
-                }
-                return r.json();
-            }),
-            fetch('/materials_state').then((r) => {
-                if (!r.ok) throw new Error(`Materials state unavailable (${r.status})`);
-                const contentType = r.headers.get('content-type') || '';
-                if (!contentType.includes('application/json')) {
-                    throw new Error('Materials state endpoint did not return JSON');
-                }
-                return r.json();
-            }),
-        ])
-            .then(([sceneState, materialState]) => {
-                hydrateWorld(sceneState);
-                applyMaterialOverrides(materialState);
-                alert('Scene and material state loaded!');
-            })
-            .catch((err) => {
-                console.warn('Could not load scene state from button:', err);
-                alert('Scene/material state is unavailable on this server.');
-            });
-    };
-    btnContainer.appendChild(loadBtn);
-
-    inspectorMenu.appendChild(btnContainer);
-}
+const {
+    sanitizePersistToken,
+    getMeshPersistentId,
+    ensurePersistentMeshIds,
+    getPersistableTextureMapUrl,
+    serializeMaterial,
+    emitMaterialChange,
+    findMeshByPersistentId,
+    findMeshByName,
+    serializeObject,
+    serializeScene,
+    applyMaterialState,
+    serializeMaterialOverrides,
+    applyMaterialOverrides,
+    applyStateToObject,
+    applySceneState,
+    addSaveLoadButtonsToInspector,
+} = createScenePersistenceManager({
+    THREE,
+    scene,
+    getSocket: () => socket,
+    getMaterialTextureAnim,
+    setMaterialTextureAnimAxis,
+    serializeLight,
+    applyStateToLight,
+    createUserPointLight,
+    isSceneReadyForWorldState,
+    traceDmPipeline,
+    setPendingSceneState: (state) => { pendingSceneState = state; },
+    updateInspectorMenu,
+    hydrateWorld,
+    getInspectorMenu: () => inspectorMenu,
+});
 
 // Render loop
 let lastTime = performance.now();

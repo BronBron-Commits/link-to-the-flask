@@ -3,12 +3,15 @@ from pathlib import Path
 
 
 MAP3D_JS = Path(__file__).resolve().parents[1] / 'static' / 'map3d.js'
+MAP3D_NET_COMBAT_SESSION = Path(__file__).resolve().parents[1] / 'static' / 'map3d' / 'net' / 'combatAndSessionSocketHandlers.js'
 
 
 class FrontendMultiplayerClientParityTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.source = MAP3D_JS.read_text(encoding='utf-8')
+        cls.combat_session_source = MAP3D_NET_COMBAT_SESSION.read_text(encoding='utf-8')
+        cls.combined_source = cls.source + '\n' + cls.combat_session_source
 
     def test_clients_are_not_background_downgraded(self) -> None:
         self.assertIn('function isPrimaryClient() {\n    return true;\n}', self.source)
@@ -37,7 +40,7 @@ class FrontendMultiplayerClientParityTests(unittest.TestCase):
 
     def test_attack_preview_is_requested_from_server(self) -> None:
         self.assertIn("socket.emit('combat-action-preview'", self.source)
-        self.assertIn("socket.on('combat-action-preview'", self.source)
+        self.assertIn("socket.on('combat-action-preview'", self.combined_source)
         self.assertNotIn("combatInteraction.preview = getAttackPreview(playerState, target, 'melee');", self.source)
 
 
