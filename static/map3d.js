@@ -2461,7 +2461,7 @@ function registerDefaultConsoleCommands() {
         SIMULATION_AUTHORITY,
         DM_AUTHORITY_LAYER,
         THREE,
-        camera,
+        getCamera: () => camera,
         combatState,
         playerState,
         combatTimeline,

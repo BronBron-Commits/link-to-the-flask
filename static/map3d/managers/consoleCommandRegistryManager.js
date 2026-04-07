@@ -8,7 +8,7 @@ export function registerDefaultConsoleCommandsFromManager(deps = {}) {
         SIMULATION_AUTHORITY,
         DM_AUTHORITY_LAYER,
         THREE,
-        camera,
+        getCamera,
         combatState,
         playerState,
         combatTimeline,
@@ -495,8 +495,12 @@ export function registerDefaultConsoleCommandsFromManager(deps = {}) {
 
     const runtimeTunables = {
         'camera.fov': {
-            get: () => Number(camera?.fov) || 0,
+            get: () => Number(getCamera?.()?.fov) || 0,
             set: (value) => {
+                const camera = getCamera?.();
+                if (!camera) {
+                    return 0;
+                }
                 const next = THREE.MathUtils.clamp(Number(value) || 58, 5, 120);
                 camera.fov = next;
                 camera.updateProjectionMatrix();
