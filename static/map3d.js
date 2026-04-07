@@ -137,6 +137,34 @@ function createSimulationPanel() {
     speedWrap.appendChild(speedSelect);
     panel.appendChild(speedWrap);
 
+    const tickWrap = document.createElement('label');
+    tickWrap.textContent = 'Tick '; 
+    const tickSlider = document.createElement('input');
+    tickSlider.type = 'range';
+    tickSlider.min = '0';
+    tickSlider.max = '0';
+    tickSlider.value = '0';
+    tickSlider.style.width = '220px';
+    tickWrap.appendChild(tickSlider);
+    panel.appendChild(tickWrap);
+
+    const tickText = document.createElement('div');
+    tickText.textContent = 'Tick -';
+    panel.appendChild(tickText);
+
+    const eventText = document.createElement('div');
+    eventText.textContent = 'Event: -';
+    panel.appendChild(eventText);
+
+    const roster = document.createElement('pre');
+    roster.textContent = 'Actors: -';
+    roster.style.margin = '0';
+    roster.style.maxHeight = '120px';
+    roster.style.overflow = 'auto';
+    roster.style.background = 'rgba(5, 9, 16, 0.52)';
+    roster.style.padding = '6px';
+    panel.appendChild(roster);
+
     const status = document.createElement('div');
     status.textContent = 'Idle';
     panel.appendChild(status);
@@ -150,6 +178,10 @@ function createSimulationPanel() {
         pauseBtn,
         resetBtn,
         speedSelect,
+        tickSlider,
+        tickText,
+        eventText,
+        roster,
         status,
     };
 }
@@ -345,8 +377,13 @@ function applySimulationTick(index) {
     const safeIdx = Math.max(0, Math.min(index, simulationReplay.tickStates.length - 1));
     simulationReplay.currentIndex = safeIdx;
     const tickState = simulationReplay.tickStates[safeIdx] || {};
+    const tick = Number.isFinite(tickState.tick) ? tickState.tick : safeIdx;
     const actorsById = tickState.actors && typeof tickState.actors === 'object' ? tickState.actors : {};
     const actorIds = Object.keys(actorsById);
+    const events = Array.isArray(simulationReplay.data?.events)
+        ? simulationReplay.data.events.filter((evt) => Number(evt.tick) === Number(tick))
+        : [];
+    const leadEvent = events[0] || null;
 
     const actors = actorIds.map((id, idx) => {
         const state = actorsById[id] || {};
@@ -371,14 +408,33 @@ function applySimulationTick(index) {
 
     runtime.applySnapshot({
         actors,
+        currentTurnActorId: leadEvent && leadEvent.source ? String(leadEvent.source) : null,
+        selectedTargetId: leadEvent && leadEvent.targetId ? String(leadEvent.targetId) : null,
         canMove: false,
         canAttack: false,
         canEndTurn: false,
     });
 
     if (simulationReplay.ui) {
-        const tick = Number.isFinite(tickState.tick) ? tickState.tick : safeIdx;
         simulationReplay.ui.status.textContent = `Tick ${tick} (${safeIdx + 1}/${simulationReplay.tickStates.length})`;
+        simulationReplay.ui.tickSlider.max = String(Math.max(0, simulationReplay.tickStates.length - 1));
+        simulationReplay.ui.tickSlider.value = String(safeIdx);
+        simulationReplay.ui.tickText.textContent = `Tick ${tick} (${safeIdx + 1}/${simulationReplay.tickStates.length})`;
+        simulationReplay.ui.eventText.textContent = leadEvent
+            ? `Event: ${String(leadEvent.type || 'event')} ${leadEvent.source || '-'} -> ${leadEvent.targetId || '-'}`
+            : 'Event: -';
+
+        const rosterLines = actorIds
+            .map((id) => {
+                const s = actorsById[id] || {};
+                const hp = numberOr(s.hp, 0);
+                const alive = s.alive !== false;
+                return `${id}  HP ${Math.max(0, Math.round(hp))}${alive ? '' : ' (dead)'}`;
+            })
+            .sort();
+        simulationReplay.ui.roster.textContent = rosterLines.length
+            ? `Actors (${rosterLines.length})\n${rosterLines.join('\n')}`
+            : 'Actors: -';
     }
 }
 
@@ -428,6 +484,8 @@ async function loadSimulationArtifact(artifactPath = simulationArtifactPath) {
     applySimulationTick(0);
     if (simulationReplay.ui) {
         simulationReplay.ui.status.textContent = `Loaded ${simulationReplay.tickStates.length} ticks`; 
+        simulationReplay.ui.tickSlider.max = String(Math.max(0, simulationReplay.tickStates.length - 1));
+        simulationReplay.ui.tickSlider.value = '0';
     }
 }
 
@@ -588,6 +646,11 @@ if (simulationMode) {
     simulationReplay.ui.resetBtn.addEventListener('click', () => resetSimulationReplay());
     simulationReplay.ui.speedSelect.addEventListener('change', () => {
         simulationReplay.speed = Math.max(0.1, Number(simulationReplay.ui.speedSelect.value) || 1);
+    });
+    simulationReplay.ui.tickSlider.addEventListener('input', () => {
+        const index = Math.max(0, Number.parseInt(simulationReplay.ui.tickSlider.value, 10) || 0);
+        pauseSimulationReplay();
+        applySimulationTick(index);
     });
 
     loadSimulationArtifact(simulationArtifactPath)

@@ -12,8 +12,16 @@ function clampNumber(value, fallback) {
 }
 
 export function createMap3dRuntime({ scene, camera, renderer }) {
+    const canRenderActorLabels =
+        typeof document !== 'undefined'
+        && typeof document.createElement === 'function'
+        && !!THREE.CanvasTexture
+        && !!THREE.SpriteMaterial
+        && !!THREE.Sprite;
+
     const actorMeshes = new Map();
     const actorLabels = new Map();
+    const actorLabelSprites = new Map();
     const intentListeners = new Set();
     const actorHitObjects = [];
 
@@ -47,6 +55,72 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         mesh.userData.actorId = actor.id;
     }
 
+    function drawActorLabel(sprite, actor) {
+        const canvas = sprite?.userData?.canvas;
+        const ctx = sprite?.userData?.ctx;
+        if (!canvas || !ctx) return;
+
+        const width = canvas.width;
+        const height = canvas.height;
+        const hp = clampNumber(actor?.hp, 0);
+        const maxHp = Math.max(1, clampNumber(actor?.maxHp, hp || 1));
+        const alive = hp > 0;
+        const label = String(actor?.label || actor?.id || 'actor');
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.fillStyle = 'rgba(8, 11, 20, 0.78)';
+        ctx.fillRect(0, 0, width, height);
+        ctx.strokeStyle = alive ? 'rgba(133, 180, 255, 0.95)' : 'rgba(255, 120, 120, 0.95)';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(0, 0, width, height);
+
+        ctx.fillStyle = '#f1f6ff';
+        ctx.font = 'bold 22px monospace';
+        ctx.textBaseline = 'top';
+        ctx.fillText(label, 8, 6);
+
+        ctx.fillStyle = alive ? '#9be48f' : '#ff8b8b';
+        ctx.font = '18px monospace';
+        ctx.fillText(`HP ${Math.max(0, Math.round(hp))}/${Math.round(maxHp)}`, 8, 34);
+
+        if (sprite.material && sprite.material.map) {
+            sprite.material.map.needsUpdate = true;
+        }
+    }
+
+    function ensureActorLabelSprite(actorId) {
+        if (!canRenderActorLabels) return null;
+
+        let sprite = actorLabelSprites.get(actorId);
+        if (sprite) return sprite;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 72;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+
+        const texture = new THREE.CanvasTexture(canvas);
+        if (THREE.LinearFilter) {
+            texture.minFilter = THREE.LinearFilter;
+            texture.magFilter = THREE.LinearFilter;
+        }
+
+        const material = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+        });
+
+        sprite = new THREE.Sprite(material);
+        sprite.scale.set(3.6, 1.0, 1);
+        sprite.position.set(0, 1.3, 0);
+        sprite.userData.canvas = canvas;
+        sprite.userData.ctx = ctx;
+        actorLabelSprites.set(actorId, sprite);
+        return sprite;
+    }
+
     function ensureActorMesh(actor) {
         const actorId = String(actor.id || '').trim();
         if (!actorId) return null;
@@ -62,7 +136,16 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
             actorMeshes.set(actorId, mesh);
             actorHitObjects.push(mesh);
         }
+
+        const labelSprite = ensureActorLabelSprite(actorId);
+        if (labelSprite && labelSprite.parent !== mesh) {
+            mesh.add(labelSprite);
+        }
+
         setActorAppearance(mesh, actor);
+        if (labelSprite) {
+            drawActorLabel(labelSprite, actor);
+        }
         return mesh;
     }
 
@@ -99,6 +182,48 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         if (mesh.material) mesh.material.dispose();
         actorMeshes.delete(id);
         actorLabels.delete(id);
+
+        const sprite = actorLabelSprites.get(id);
+        if (sprite) {
+            if (sprite.parent) {
+                sprite.parent.remove(sprite);
+            }
+            if (sprite.material && sprite.material.map) {
+                sprite.material.map.dispose();
+            }
+            if (sprite.material) {
+                sprite.material.dispose();
+            }
+            actorLabelSprites.delete(id);
+        }
+    }
+
+    function applyActorHighlights() {
+        const turnActorId = String(snapshotMeta.currentTurnActorId || '').trim();
+        const targetActorId = String(snapshotMeta.selectedTargetId || '').trim();
+
+        actorMeshes.forEach((mesh, actorId) => {
+            if (!mesh.material) return;
+
+            const isTurnActor = !!turnActorId && actorId === turnActorId;
+            const isTargetActor = !!targetActorId && actorId === targetActorId;
+
+            if (mesh.material.emissive && typeof mesh.material.emissive.setHex === 'function') {
+                if (isTurnActor && isTargetActor) {
+                    mesh.material.emissive.setHex(0xffc107);
+                    mesh.material.emissiveIntensity = 0.95;
+                } else if (isTurnActor) {
+                    mesh.material.emissive.setHex(0xffe082);
+                    mesh.material.emissiveIntensity = 0.8;
+                } else if (isTargetActor) {
+                    mesh.material.emissive.setHex(0xff6f61);
+                    mesh.material.emissiveIntensity = 0.9;
+                } else {
+                    mesh.material.emissive.setHex(0x000000);
+                    mesh.material.emissiveIntensity = 0;
+                }
+            }
+        });
     }
 
     function applySnapshot(snapshot) {
@@ -127,6 +252,8 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
                 removeActor(existingId);
             }
         }
+
+        applyActorHighlights();
     }
 
     function applyEvent(event) {
