@@ -28,18 +28,18 @@ scene.add(keyLight);
 const grid = new THREE.GridHelper(20, 20, 0x3a4a74, 0x22314d);
 if (Array.isArray(grid.material)) {
     grid.material.forEach((mat) => {
-        mat.depthTest = false;
+        mat.depthTest = true;
         mat.depthWrite = false;
         mat.transparent = true;
         mat.opacity = 0.58;
     });
 } else if (grid.material) {
-    grid.material.depthTest = false;
+    grid.material.depthTest = true;
     grid.material.depthWrite = false;
     grid.material.transparent = true;
     grid.material.opacity = 0.58;
 }
-grid.position.y = 0.02;
+grid.position.y = 0.05;
 grid.renderOrder = 80;
 scene.add(grid);
 
