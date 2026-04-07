@@ -67,7 +67,11 @@ const rawDesign = String(urlSearch.get('design') || 'tactical').trim().toLowerCa
 const globalView = typeof window.__MAP3D_VIEW__ === 'string'
     ? String(window.__MAP3D_VIEW__).trim().toLowerCase()
     : '';
+const globalScene = typeof window.__MAP3D_SCENE__ === 'string'
+    ? String(window.__MAP3D_SCENE__).trim().toLowerCase()
+    : '';
 const rawView = String(urlSearch.get('view') || globalView || '').trim().toLowerCase();
+const rawScene = String(urlSearch.get('scene') || globalScene || '').trim().toLowerCase();
 const VIEW_ALIAS = {
     t: 'top',
     iso: 'isometric',
@@ -92,6 +96,7 @@ const VIEW_PRESETS = {
     },
 };
 const viewKey = VIEW_ALIAS[rawView] || (VIEW_PRESETS[rawView] ? rawView : '');
+const sceneKey = rawScene === 'forest' ? 'forest' : 'default';
 const DESIGN_ALIAS = {
     a: 'tactical',
     b: 'cinematic',
@@ -169,6 +174,85 @@ const simulationMode = urlSearch.get('sim') === '1';
 const simulationArtifactPath = urlSearch.get('simPath') || '/artifacts/timeline-debug.json';
 const SIMULATION_REPLAY_SLOWDOWN = 10;
 
+function buildSeededRandom(seedInput) {
+    let seed = 0;
+    const text = String(seedInput || 'forest-seed');
+    for (let i = 0; i < text.length; i += 1) {
+        seed = (seed * 31 + text.charCodeAt(i)) >>> 0;
+    }
+    if (seed === 0) seed = 0x9e3779b9;
+    return () => {
+        seed ^= seed << 13;
+        seed ^= seed >>> 17;
+        seed ^= seed << 5;
+        return ((seed >>> 0) % 1_000_000) / 1_000_000;
+    };
+}
+
+function buildProceduralForest() {
+    const rng = buildSeededRandom(urlSearch.get('seed') || 'forest');
+    const treeCount = Math.max(80, Math.min(500, Number.parseInt(urlSearch.get('trees') || '240', 10) || 240));
+    const forest = new THREE.Group();
+    forest.name = 'procedural-forest';
+
+    const trunkGeometry = new THREE.CylinderGeometry(0.12, 0.22, 1.6, 8);
+    const canopyGeometry = new THREE.ConeGeometry(0.9, 1.8, 8);
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+        color: 0x5f4128,
+        roughness: 0.95,
+        metalness: 0.02,
+    });
+    const canopyMaterial = new THREE.MeshStandardMaterial({
+        color: 0x1f6b2f,
+        roughness: 0.85,
+        metalness: 0.02,
+    });
+
+    for (let i = 0; i < treeCount; i += 1) {
+        const angle = rng() * Math.PI * 2;
+        const radius = 8 + (rng() * 14);
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+
+        const tree = new THREE.Group();
+
+        const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+        trunk.position.y = 0.8;
+
+        const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+        canopy.position.y = 2.05;
+        canopy.scale.setScalar(0.75 + (rng() * 0.7));
+
+        tree.add(trunk);
+        tree.add(canopy);
+
+        const jitter = 0.6;
+        tree.position.set(
+            x + ((rng() * 2 - 1) * jitter),
+            0,
+            z + ((rng() * 2 - 1) * jitter)
+        );
+        tree.rotation.y = rng() * Math.PI * 2;
+        const scale = 0.9 + (rng() * 1.2);
+        tree.scale.set(scale, 0.9 + (rng() * 0.8), scale);
+
+        forest.add(tree);
+    }
+
+    const moonLight = new THREE.DirectionalLight(0x88b5ff, 0.55);
+    moonLight.position.set(-10, 16, -8);
+    scene.add(moonLight);
+
+    scene.fog = new THREE.FogExp2(0x0d1410, 0.03);
+    grid.visible = false;
+    floor.material.color.setHex(0x182317);
+    floor.material.roughness = 1.0;
+    floor.material.metalness = 0.0;
+    testMesh.material.color.setHex(0x7cffb0);
+
+    scene.add(forest);
+}
+
 function applyDesignPreset(preset) {
     if (!preset) return;
     scene.background = new THREE.Color(preset.background);
@@ -219,6 +303,10 @@ if (simulationMode && !viewKey) {
 
 if (viewKey) {
     applyViewPreset(viewKey);
+}
+
+if (sceneKey === 'forest') {
+    buildProceduralForest();
 }
 
 function debugLog(...args) {
@@ -1086,6 +1174,7 @@ window.__MAP3D_BOOTSTRAP__ = {
     renderer,
     designKey,
     viewKey,
+    sceneKey,
     runtime,
     controls,
     applySnapshot: (snapshot) => runtime.applySnapshot(snapshot),
