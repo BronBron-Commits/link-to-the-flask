@@ -890,7 +890,7 @@ function hydrateWorld(payload) {
             setPendingWorldHydrationPayload: (value) => { pendingWorldHydrationPayload = value; },
             setPendingSceneState: (value) => { pendingSceneState = value; },
             traceDmPipeline,
-            applySceneState,
+            applySceneState: (...args) => applySceneState(...args),
             combatDomainStore,
             combatDomainAction: COMBAT_DOMAIN_ACTION,
             getScene: () => scene,
@@ -1646,6 +1646,14 @@ function isSimulationOwner() {
     }
     if (!socket) return true;
     return isLocalCombatAuthority();
+}
+
+const CLIENT_MODE_FULL = 'full';
+const CLIENT_MODE_OBSERVER = 'observer';
+let CLIENT_MODE = CLIENT_MODE_FULL;
+
+function isObserverClient() {
+    return CLIENT_MODE === CLIENT_MODE_OBSERVER;
 }
 
 function updateClientRuntimeModeFromAuthority() {
@@ -3407,6 +3415,7 @@ async function initDataDrivenLayer(staticWorldRoot) {
 
 function upsertPlayerAvatar(player) {
     if (!player || !player.id) return;
+    if (!isSceneReadyForWorldState()) return;
 
     if (!scene.userData.playerAvatarStates) scene.userData.playerAvatarStates = {};
     scene.userData.playerAvatarStates[player.id] = player;
@@ -8139,6 +8148,20 @@ function applyCombatState(snapshot) {
 function loadSnapshot(index) {
     if (!Number.isInteger(index) || index < 0 || index >= combatTimeline.length) return false;
     return applyCombatState(cloneJsonSafe(combatTimeline[index]));
+}
+
+function restoreCombatSnapshot(snapshot, options = {}) {
+    if (!snapshot) return false;
+    const restored = applyCombatState(cloneJsonSafe(snapshot));
+    if (!restored) return false;
+
+    if (options.restoreTimelineState === true) {
+        const idx = combatTimeline.findIndex((entry) => entry === snapshot);
+        if (idx >= 0) {
+            combatActionHistoryCursor = options.setCursor === false ? combatActionHistoryCursor : idx;
+        }
+    }
+    return true;
 }
 
 function rewindTurn() {
