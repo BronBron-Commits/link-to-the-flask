@@ -509,6 +509,23 @@ function classifyTeamFromId(id, data) {
     return 'neutral';
 }
 
+function getSimulationLivingCounts(actorsById, data) {
+    const counts = {
+        playersAlive: 0,
+        enemiesAlive: 0,
+    };
+
+    Object.entries(actorsById || {}).forEach(([id, state]) => {
+        const alive = state && state.alive !== false && numberOr(state.hp, 0) > 0;
+        if (!alive) return;
+        const team = classifyTeamFromId(String(id), data);
+        if (team === 'player') counts.playersAlive += 1;
+        if (team === 'enemy') counts.enemiesAlive += 1;
+    });
+
+    return counts;
+}
+
 function applySimulationTick(index) {
     if (!simulationReplay.data || !simulationReplay.tickStates.length) return;
     const safeIdx = Math.max(0, Math.min(index, simulationReplay.tickStates.length - 1));
@@ -517,6 +534,7 @@ function applySimulationTick(index) {
     const tick = Number.isFinite(tickState.tick) ? tickState.tick : safeIdx;
     const actorsById = tickState.actors && typeof tickState.actors === 'object' ? tickState.actors : {};
     const actorIds = Object.keys(actorsById);
+    const livingCounts = getSimulationLivingCounts(actorsById, simulationReplay.data);
     const events = Array.isArray(simulationReplay.data?.events)
         ? simulationReplay.data.events.filter((evt) => Number(evt.tick) === Number(tick))
         : [];
@@ -569,7 +587,15 @@ function applySimulationTick(index) {
     });
 
     if (simulationReplay.ui) {
-        simulationReplay.ui.status.textContent = `Tick ${tick} (${safeIdx + 1}/${simulationReplay.tickStates.length})`;
+        const combatOver = livingCounts.playersAlive <= 0 || livingCounts.enemiesAlive <= 0;
+        const winner = livingCounts.enemiesAlive <= 0
+            ? 'Players win'
+            : livingCounts.playersAlive <= 0
+                ? 'Enemies win'
+                : null;
+        simulationReplay.ui.status.textContent = combatOver
+            ? `${winner} at tick ${tick}`
+            : `Tick ${tick} (${safeIdx + 1}/${simulationReplay.tickStates.length})`;
         simulationReplay.ui.tickSlider.max = String(Math.max(0, simulationReplay.tickStates.length - 1));
         simulationReplay.ui.tickSlider.value = String(safeIdx);
         simulationReplay.ui.tickText.textContent = `Tick ${tick} (${safeIdx + 1}/${simulationReplay.tickStates.length})`;
@@ -588,6 +614,10 @@ function applySimulationTick(index) {
         simulationReplay.ui.roster.textContent = rosterLines.length
             ? `Actors (${rosterLines.length})\n${rosterLines.join('\n')}`
             : 'Actors: -';
+    }
+
+    if (livingCounts.playersAlive <= 0 || livingCounts.enemiesAlive <= 0) {
+        stopSimulationReplay();
     }
 }
 

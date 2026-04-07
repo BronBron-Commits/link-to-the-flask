@@ -32,6 +32,21 @@ function diffActorState(prevState, nextState) {
   return changed;
 }
 
+function summarizeAliveActors(state) {
+  const actors = state && state.actors ? state.actors : {};
+  let playersAlive = 0;
+  let enemiesAlive = 0;
+
+  Object.values(actors).forEach((actor) => {
+    if (!actor || actor.alive === false || Number(actor.hp || 0) <= 0) return;
+    const team = String(actor.team || '').toLowerCase();
+    if (team === 'player') playersAlive += 1;
+    if (team === 'enemy') enemiesAlive += 1;
+  });
+
+  return { playersAlive, enemiesAlive };
+}
+
 function generateArtifact() {
   const workspaceRoot = path.resolve(__dirname, '..');
   const outDir = path.join(workspaceRoot, 'artifacts');
@@ -62,10 +77,25 @@ function generateArtifact() {
     });
   });
 
+  const terminalIndex = snapshots.findIndex((snapshot) => {
+    const counts = summarizeAliveActors(snapshot.state);
+    return counts.playersAlive <= 0 || counts.enemiesAlive <= 0;
+  });
+
+  const trimmedSnapshots = terminalIndex >= 0
+    ? snapshots.slice(0, terminalIndex + 1)
+    : snapshots;
+  const maxTick = trimmedSnapshots.length > 0
+    ? trimmedSnapshots[trimmedSnapshots.length - 1].tick
+    : null;
+  const trimmedEvents = Number.isFinite(maxTick)
+    ? full.timeline.events.filter((evt) => Number(evt.tick) <= Number(maxTick))
+    : full.timeline.events.slice();
+
   const diffs = [];
-  for (let i = 1; i < snapshots.length; i += 1) {
-    const prev = snapshots[i - 1];
-    const next = snapshots[i];
+  for (let i = 1; i < trimmedSnapshots.length; i += 1) {
+    const prev = trimmedSnapshots[i - 1];
+    const next = trimmedSnapshots[i];
     const changedActors = diffActorState(prev.state, next.state);
     if (changedActors.length > 0) {
       diffs.push({
@@ -80,16 +110,16 @@ function generateArtifact() {
     seed: 4242,
     players,
     enemies,
-    eventCount: full.timeline.events.length,
-    events: full.timeline.events,
+    eventCount: trimmedEvents.length,
+    events: trimmedEvents,
     diffs,
-    initialState: snapshots.length > 0
+    initialState: trimmedSnapshots.length > 0
       ? {
-          tick: snapshots[0].tick,
-          actors: snapshots[0].state.actors,
+          tick: trimmedSnapshots[0].tick,
+          actors: trimmedSnapshots[0].state.actors,
         }
       : null,
-    stateByTick: snapshots.map((snapshot) => ({
+    stateByTick: trimmedSnapshots.map((snapshot) => ({
       tick: snapshot.tick,
       actors: snapshot.state.actors,
       combat: snapshot.state.combat,
