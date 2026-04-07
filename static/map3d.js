@@ -67,6 +67,13 @@ const mapDebug = urlSearch.get('mapdebug') === '1';
 const simulationMode = urlSearch.get('sim') === '1';
 const simulationArtifactPath = urlSearch.get('simPath') || '/artifacts/timeline-debug.json';
 
+if (simulationMode) {
+    // Top-down tactical framing for simulation playback.
+    camera.position.set(0, 28, 0.001);
+    camera.up.set(0, 0, -1);
+    camera.lookAt(0, 0, 0);
+}
+
 function debugLog(...args) {
     if (!mapDebug) return;
     console.log(...args);
