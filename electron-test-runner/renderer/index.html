@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Link to the Flask - Test Runner</title>
+    <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+    <div class="bg-gradient"></div>
+    <main class="shell">
+        <header class="topbar">
+            <div>
+                <h1>Link to the Flask</h1>
+                <p>Native Windows Electron test console for Jest</p>
+            </div>
+            <span id="status-pill" class="pill idle">Idle</span>
+        </header>
+
+        <section class="controls">
+            <button id="run-all" class="btn btn-primary">Run All Tests</button>
+            <button id="run-watch" class="btn">Watch Mode</button>
+            <div class="file-runner">
+                <input id="test-file" type="text" placeholder="tests/js/combat-system.test.js" />
+                <button id="run-file" class="btn">Run File</button>
+            </div>
+            <button id="stop" class="btn btn-danger">Stop</button>
+            <button id="clear" class="btn btn-ghost">Clear Log</button>
+        </section>
+
+        <section class="summary" id="summary">
+            <div class="summary-item"><span>Suites</span><strong id="summary-suites">-</strong></div>
+            <div class="summary-item"><span>Tests</span><strong id="summary-tests">-</strong></div>
+            <div class="summary-item"><span>Exit Code</span><strong id="summary-code">-</strong></div>
+            <div class="summary-item"><span>Command</span><strong id="summary-command">-</strong></div>
+        </section>
+
+        <section class="insight-grid">
+            <article class="panel">
+                <div class="panel-head">
+                    <h2>Timeline Debugger</h2>
+                    <div class="panel-actions">
+                        <button id="timeline-generate" class="btn">Generate</button>
+                        <button id="timeline-load" class="btn">Load</button>
+                    </div>
+                </div>
+                <div class="timeline-controls">
+                    <label for="timeline-slider">Tick</label>
+                    <input id="timeline-slider" type="range" min="0" max="0" value="0" />
+                    <strong id="timeline-tick">tick -</strong>
+                </div>
+                <div id="timeline-markers" class="timeline-markers" aria-label="Timeline markers"></div>
+                <div id="timeline-phase-strip" class="timeline-phase-strip">No phase sequence.</div>
+                <pre id="timeline-event" class="mini-log">No timeline loaded.</pre>
+                <pre id="timeline-diff" class="mini-log">State diff unavailable.</pre>
+                <pre id="timeline-state" class="mini-log">State snapshot unavailable.</pre>
+
+                <div class="timeline-compare">
+                    <input id="compare-path-a" type="text" placeholder="Path A (defaults to artifacts/timeline-debug.json)" />
+                    <input id="compare-path-b" type="text" placeholder="Path B (defaults to artifacts/timeline-debug.json)" />
+                    <button id="timeline-compare" class="btn">Compare</button>
+                </div>
+                <pre id="timeline-divergence" class="mini-log">No divergence comparison yet.</pre>
+            </article>
+
+            <article class="panel">
+                <div class="panel-head">
+                    <h2>Live Simulation Inspector</h2>
+                    <div class="panel-actions">
+                        <button id="inspector-start" class="btn">Attach</button>
+                        <button id="inspector-stop" class="btn btn-ghost">Detach</button>
+                    </div>
+                </div>
+                <div class="inspector-metrics">
+                    <div><span>Source</span><strong id="inspector-source">-</strong></div>
+                    <div><span>Tick</span><strong id="inspector-tick">-</strong></div>
+                    <div><span>Authority</span><strong id="inspector-authority">-</strong></div>
+                    <div><span>Queue</span><strong id="inspector-queue">-</strong></div>
+                    <div><span>Pending</span><strong id="inspector-pending">-</strong></div>
+                    <div><span>Events</span><strong id="inspector-events">-</strong></div>
+                </div>
+                <pre id="inspector-raw" class="mini-log">Inspector detached.</pre>
+            </article>
+        </section>
+
+        <section class="terminal-wrap">
+            <pre id="terminal" class="terminal"></pre>
+        </section>
+    </main>
+
+    <script src="./renderer.js"></script>
+</body>
+</html>

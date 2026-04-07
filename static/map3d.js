@@ -1055,7 +1055,10 @@ import { createScenePersistenceManager } from '/static/map3d/managers/scenePersi
 import { createDmCommandBus } from '/static/map3d/managers/dmCommandBus.js';
 import { createDmCommandApplier } from '/static/map3d/managers/dmCommandApplier.js';
 import { createDmAuthorityManager } from '/static/map3d/managers/dmAuthorityManager.js';
+import { createInputFeedbackManager } from '/static/map3d/managers/inputFeedbackManager.js';
+import { createInputPresentationManager } from '/static/map3d/managers/inputPresentationManager.js';
 import { createMobileTouchControlsManager } from '/static/map3d/managers/mobileTouchControlsManager.js';
+import { createUnifiedInputManager } from '/static/map3d/managers/unifiedInputManager.js';
 import { createCommandConsoleUiManager } from '/static/map3d/managers/commandConsoleUiManager.js';
 import { createLoadingOverlayRuntimeManager } from '/static/map3d/managers/loadingOverlayRuntimeManager.js';
 import { createLoadingMusicManager } from '/static/map3d/managers/loadingMusicManager.js';
@@ -5013,6 +5016,9 @@ const orbitPreviewSensitivity = 0.006;
 const orbitPreviewMaxYaw = Math.PI * 0.7;
 const orbitPreviewMaxPitch = 1.2;
 let mobileTouchControlsManager = null;
+let unifiedInputManager = null;
+let inputFeedbackManager = null;
+let inputPresentationManager = null;
 
 function ensureMobileTouchControlsManager() {
     if (mobileTouchControlsManager) return mobileTouchControlsManager;
@@ -5083,6 +5089,97 @@ function setTouchPadAxisFromEvent(padEl, stickEl, touch, axisVec) {
 
 function createMobileTouchControls() {
     ensureMobileTouchControlsManager().createMobileTouchControls();
+}
+
+function ensureUnifiedInputManager() {
+    if (unifiedInputManager) return unifiedInputManager;
+    unifiedInputManager = createUnifiedInputManager({
+        setMovementFlags: ({ forward, backward, left, right }) => {
+            moveForward = !!forward;
+            moveBackward = !!backward;
+            moveLeft = !!left;
+            moveRight = !!right;
+        },
+        setDmFreeMovementFlags: ({ forward, backward, left, right, up, down, fast }) => {
+            dmFreeMoveForward = !!forward;
+            dmFreeMoveBackward = !!backward;
+            dmFreeMoveLeft = !!left;
+            dmFreeMoveRight = !!right;
+            dmFreeMoveUp = !!up;
+            dmFreeMoveDown = !!down;
+            dmFreeMoveFast = !!fast;
+        },
+        setTurnFlags: ({ left, right }) => {
+            turnLeft = !!left;
+            turnRight = !!right;
+        },
+        setSprint: (value) => {
+            playerSprinting = !!value;
+        },
+        setFlightVerticalFlags: ({ up, down }) => {
+            playerFlyUp = !!up;
+            playerFlyDown = !!down;
+        },
+        queueJump: () => {
+            playerState.jumpQueued = true;
+        },
+        onCommand: (command) => {
+            handleUnifiedGameplayCommand(command);
+        },
+    });
+    return unifiedInputManager;
+}
+
+function ensureInputFeedbackManager() {
+    if (inputFeedbackManager) return inputFeedbackManager;
+    window.__INPUT_ACK__ = window.__INPUT_ACK__ || {
+        history: [],
+        lastByKind: {},
+    };
+    inputFeedbackManager = createInputFeedbackManager({
+        setIntentStatus: uxSetIntentStatus,
+        showFloatingText,
+        appendConsoleHistory,
+        pushTimeline: (entry) => {
+            pushDebugTick({
+                tick: window.__SIM_DEBUG__.currentTick,
+                source: 'input-feedback',
+                event: entry,
+            });
+        },
+        presentFeedback: (entry, presentation) => {
+            ensureInputPresentationManager().present(entry, presentation);
+        },
+        getHistoryStore: () => window.__INPUT_ACK__,
+    });
+    return inputFeedbackManager;
+}
+
+function ensureInputPresentationManager() {
+    if (inputPresentationManager) return inputPresentationManager;
+    inputPresentationManager = createInputPresentationManager({
+        showFloatingText,
+        focusCameraOnAction,
+        playConfirmAttackSnap,
+        triggerCombatFlash,
+        shakeScreen,
+        setCombatUiPhase,
+        onPhaseTransition: (phaseEvent) => {
+            pushDebugTick({
+                tick: window.__SIM_DEBUG__.currentTick,
+                source: 'presentation-phase',
+                event: {
+                    type: 'presentation:phase',
+                    ...phaseEvent,
+                },
+            });
+        },
+    });
+    return inputPresentationManager;
+}
+
+function recordInputFeedback(kind, outcome, reason = '', options = {}) {
+    return ensureInputFeedbackManager().record(kind, outcome, reason, options);
 }
 
 // Auto-orbit during animations (dance, flip)
@@ -8042,6 +8139,35 @@ function rewindTurn() {
     return loadSnapshot(combatTimeline.length - 1);
 }
 
+async function runActionPresentationPhase(kind, phase, replayTiming, options = {}) {
+    const manager = ensureInputPresentationManager();
+    const contract = manager.beginActionPhase(kind, phase, options);
+    const hitStopWaitMs = contract.hitStopMs > 0
+        ? Math.max(20, Math.min(70, Number(contract.hitStopMs) || 0))
+        : 0;
+
+    try {
+        if (typeof options.onEnter === 'function') {
+            await options.onEnter(contract);
+        }
+
+        if (contract.hitStopMs > 0) {
+            await hitStop(contract.hitStopMs);
+        }
+
+        const delayMs = Math.max(0, contract.durationMs - hitStopWaitMs);
+        if (delayMs > 0) {
+            await timelineDelay(delayMs, replayTiming);
+        }
+
+        if (typeof options.onExit === 'function') {
+            await options.onExit(contract);
+        }
+    } finally {
+        manager.endActionPhase(contract, options.payload || null);
+    }
+}
+
 async function playRecordedCombatAction(actionRecord, options = {}) {
     if (!actionRecord || actionRecord.type !== 'attack') return false;
 
@@ -8065,118 +8191,208 @@ async function playRecordedCombatAction(actionRecord, options = {}) {
 
     try {
         if (actionRecord.attackType === 'melee') {
-            beginDiceCinematic(8200);
-            focusCameraOnAction(playerState, { strength: 1.45, durationMs: 1300 });
-            await tweenCameraFov(43, 220);
-            showFloatingText('CHARGE UP', '#ffd166', true, { anchorObject: playerRig });
-            await timelineDelay(MELEE_TIMELINE_MS.windup, replayTiming);
+            await runActionPresentationPhase('attack', 'anticipation', replayTiming, {
+                durationMs: 120,
+                animationMs: 220,
+                payload: { attackType: 'melee' },
+                onEnter: async () => {
+                    beginDiceCinematic(8200);
+                    focusCameraOnAction(playerState, { strength: 1.45, durationMs: 1300 });
+                    await tweenCameraFov(43, 220);
+                    showFloatingText('CHARGE UP', '#ffd166', true, { anchorObject: playerRig });
+                },
+            });
 
-            triggerSharedDiceRoll({ sides: 20, label: 'ATTACK', mod: resolution.attackBonus, raw: resolution.roll, total: resolution.total });
-            if (target) spawnVisualDice(resolution.roll, 20, target, 'ATTACK ROLL');
-            showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: target || playerRig });
-            await timelineDelay(MELEE_TIMELINE_MS.rollHold, replayTiming);
+            await runActionPresentationPhase('attack', 'windup', replayTiming, {
+                durationMs: MELEE_TIMELINE_MS.windup + MELEE_TIMELINE_MS.rollHold,
+                animationMs: 260,
+                payload: { attackType: 'melee' },
+                onEnter: () => {
+                    triggerSharedDiceRoll({ sides: 20, label: 'ATTACK', mod: resolution.attackBonus, raw: resolution.roll, total: resolution.total });
+                    if (target) spawnVisualDice(resolution.roll, 20, target, 'ATTACK ROLL');
+                    showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: target || playerRig });
+                },
+            });
 
-            if (target) {
-                focusCameraOnAction(target, { strength: 1.85, durationMs: 1350 });
-                triggerLocalHammerAttackSwing();
-            }
-            await timelineDelay(MELEE_TIMELINE_MS.impactHold, replayTiming);
-            await hitStop(120);
-            if (target) displayAttackResult(resolution, target, true);
-            await timelineDelay(MELEE_TIMELINE_MS.resultHold, replayTiming);
+            await runActionPresentationPhase('attack', 'impact', replayTiming, {
+                durationMs: MELEE_TIMELINE_MS.impactHold,
+                animationMs: 220,
+                hitStopMs: 120,
+                payload: { attackType: 'melee', hit: !!resolution.hit },
+                onEnter: () => {
+                    if (target) {
+                        focusCameraOnAction(target, { strength: 1.85, durationMs: 1350 });
+                        triggerLocalHammerAttackSwing();
+                    }
+                },
+            });
 
-            if (resolution.hit && target) {
-                triggerSharedDiceRoll({ sides: 8, label: 'DAMAGE', mod: resolution.damageBonus, raw: resolution.damageRoll, total: resolution.totalDamage });
-                spawnVisualDice(resolution.damageRoll, 8, target, 'DAMAGE');
-                showFloatingText(`-${resolution.totalDamage}`, '#ff6b6b', true, { anchorObject: target });
-                triggerEnemyFlinch(target);
-                spawnImpactBurst(target.position, 0x00ff00, 24);
-                triggerCombatFlash('#00ff00', 0.12, 300);
-                shakeScreen(0.22, 420);
-                playCombatSfxCue('melee-hit');
-                if (actionRecord.targetDefeated) {
-                    await playKillSequence(target);
-                }
-            } else if (target) {
-                spawnImpactBurst(target.position, 0xff7878, 12);
-                triggerCombatFlash('#ff3333', 0.08, 240);
-                shakeScreen(0.06, 150);
-                playCombatSfxCue('miss');
-            }
-            await timelineDelay(MELEE_TIMELINE_MS.damageHold, replayTiming);
+            await runActionPresentationPhase('attack', 'recovery', replayTiming, {
+                durationMs: MELEE_TIMELINE_MS.resultHold,
+                animationMs: 240,
+                payload: { attackType: 'melee', resultType: resolution.resultType || 'normal' },
+                onEnter: async () => {
+                    if (target) displayAttackResult(resolution, target, true);
+                    if (resolution.hit && target) {
+                        triggerSharedDiceRoll({ sides: 8, label: 'DAMAGE', mod: resolution.damageBonus, raw: resolution.damageRoll, total: resolution.totalDamage });
+                        spawnVisualDice(resolution.damageRoll, 8, target, 'DAMAGE');
+                        showFloatingText(`-${resolution.totalDamage}`, '#ff6b6b', true, { anchorObject: target });
+                        triggerEnemyFlinch(target);
+                        spawnImpactBurst(target.position, 0x00ff00, 24);
+                        triggerCombatFlash('#00ff00', 0.12, 300);
+                        shakeScreen(0.22, 420);
+                        playCombatSfxCue('melee-hit');
+                        if (actionRecord.targetDefeated) {
+                            await playKillSequence(target);
+                        }
+                    } else if (target) {
+                        spawnImpactBurst(target.position, 0xff7878, 12);
+                        triggerCombatFlash('#ff3333', 0.08, 240);
+                        shakeScreen(0.06, 150);
+                        playCombatSfxCue('miss');
+                    }
+                },
+            });
+
+            await runActionPresentationPhase('attack', 'settle', replayTiming, {
+                durationMs: MELEE_TIMELINE_MS.damageHold,
+                animationMs: 160,
+                payload: { attackType: 'melee' },
+            });
         } else if (actionRecord.attackType === 'ranged') {
-            beginDiceCinematic(8000);
-            focusCameraOnAction(playerState, { strength: 1.35, durationMs: 1250 });
-            await tweenCameraFov(44, 220);
-            showFloatingText('CHANNELING', '#66ccff', true, { anchorObject: playerRig });
-            await timelineDelay(RANGED_TIMELINE_MS.windup, replayTiming);
+            let shot = null;
+            await runActionPresentationPhase('attack', 'anticipation', replayTiming, {
+                durationMs: 120,
+                animationMs: 220,
+                payload: { attackType: 'ranged' },
+                onEnter: async () => {
+                    beginDiceCinematic(8000);
+                    focusCameraOnAction(playerState, { strength: 1.35, durationMs: 1250 });
+                    await tweenCameraFov(44, 220);
+                    showFloatingText('CHANNELING', '#66ccff', true, { anchorObject: playerRig });
+                },
+            });
 
-            if (target) {
-                focusOutcomeText('ARCANE SHOT', '#66ccff', 1400);
-                showFloatingText('ARCANE SHOT', '#66ccff', true, { anchorObject: target });
-            }
-            const shot = target
-                ? createTargetingLine(playerState.position.clone(), target.position.clone(), 0x66ccff, 1, { alwaysOnTop: true, opacity: 0.98 })
-                : null;
-            if (shot) scene.add(shot);
-            await timelineDelay(RANGED_TIMELINE_MS.launchHold, replayTiming);
-            if (shot && shot.parent) shot.parent.remove(shot);
+            await runActionPresentationPhase('attack', 'windup', replayTiming, {
+                durationMs: RANGED_TIMELINE_MS.windup + RANGED_TIMELINE_MS.launchHold,
+                animationMs: 260,
+                payload: { attackType: 'ranged' },
+                onEnter: () => {
+                    if (target) {
+                        focusOutcomeText('ARCANE SHOT', '#66ccff', 1400);
+                        showFloatingText('ARCANE SHOT', '#66ccff', true, { anchorObject: target });
+                    }
+                    shot = target
+                        ? createTargetingLine(playerState.position.clone(), target.position.clone(), 0x66ccff, 1, { alwaysOnTop: true, opacity: 0.98 })
+                        : null;
+                    if (shot) scene.add(shot);
+                },
+                onExit: () => {
+                    if (shot && shot.parent) shot.parent.remove(shot);
+                },
+            });
 
-            if (target) {
-                focusCameraOnAction(target, { strength: 1.75, durationMs: 1300 });
-                triggerEnemyFlinch(target);
-                spawnImpactBurst(target.position, 0x66ccff, 26);
-            }
-            triggerCombatFlash('#66ccff', 0.12, 320);
-            shakeScreen(0.18, 360);
-            playCombatSfxCue('ranged-hit');
-            await timelineDelay(RANGED_TIMELINE_MS.impactHold, replayTiming);
-            await hitStop(120);
+            await runActionPresentationPhase('attack', 'impact', replayTiming, {
+                durationMs: RANGED_TIMELINE_MS.impactHold,
+                animationMs: 220,
+                hitStopMs: 120,
+                payload: { attackType: 'ranged', hit: !!resolution.hit },
+                onEnter: () => {
+                    if (target) {
+                        focusCameraOnAction(target, { strength: 1.75, durationMs: 1300 });
+                        triggerEnemyFlinch(target);
+                        spawnImpactBurst(target.position, 0x66ccff, 26);
+                    }
+                    triggerCombatFlash('#66ccff', 0.12, 320);
+                    shakeScreen(0.18, 360);
+                    playCombatSfxCue('ranged-hit');
+                },
+            });
 
-            focusOutcomeText(resolution.hit ? 'HIT' : 'MISS', resolution.hit ? '#00ff00' : '#ff4444', 1500);
-            showFloatingText(resolution.hit ? 'HIT' : 'MISS', resolution.hit ? '#00ff00' : '#ff4444', true, { anchorObject: target || playerRig });
-            await timelineDelay(RANGED_TIMELINE_MS.resultHold, replayTiming);
+            await runActionPresentationPhase('attack', 'recovery', replayTiming, {
+                durationMs: RANGED_TIMELINE_MS.resultHold,
+                animationMs: 220,
+                payload: { attackType: 'ranged', resultType: resolution.resultType || 'normal' },
+                onEnter: async () => {
+                    focusOutcomeText(resolution.hit ? 'HIT' : 'MISS', resolution.hit ? '#00ff00' : '#ff4444', 1500);
+                    showFloatingText(resolution.hit ? 'HIT' : 'MISS', resolution.hit ? '#00ff00' : '#ff4444', true, { anchorObject: target || playerRig });
 
-            if (resolution.hit && target) {
-                showFloatingText(`-${resolution.totalDamage}`, '#ff6b6b', true, { anchorObject: target });
-                logCombatEvent(`Replay: ranged hit ${target.userData.name || 'target'} for ${resolution.totalDamage}`, 'hit');
-                if (actionRecord.targetDefeated) {
-                    await playKillSequence(target);
-                }
-            } else {
-                playCombatSfxCue('miss');
-            }
-            await timelineDelay(RANGED_TIMELINE_MS.damageHold, replayTiming);
+                    if (resolution.hit && target) {
+                        showFloatingText(`-${resolution.totalDamage}`, '#ff6b6b', true, { anchorObject: target });
+                        logCombatEvent(`Replay: ranged hit ${target.userData.name || 'target'} for ${resolution.totalDamage}`, 'hit');
+                        if (actionRecord.targetDefeated) {
+                            await playKillSequence(target);
+                        }
+                    } else {
+                        playCombatSfxCue('miss');
+                    }
+                },
+            });
+
+            await runActionPresentationPhase('attack', 'settle', replayTiming, {
+                durationMs: RANGED_TIMELINE_MS.damageHold,
+                animationMs: 160,
+                payload: { attackType: 'ranged' },
+            });
         } else if (actionRecord.attackType === 'enemy-melee') {
-            beginDiceCinematic(7600);
-            if (actor) focusCameraOnAction(actor, { strength: 1.45, durationMs: 1300 });
-            await tweenCameraFov(44, 240);
-            showFloatingText(`${String(actionRecord.actorId || 'ENEMY').toUpperCase()} PREPARES`, '#ffb3a7', true, { anchorObject: actor || playerRig });
-            playConfirmAttackSnap();
-            await timelineDelay(ENEMY_TIMELINE_MS.windup, replayTiming);
+            await runActionPresentationPhase('enemy-attack', 'anticipation', replayTiming, {
+                durationMs: 130,
+                animationMs: 240,
+                payload: { attackType: 'enemy-melee' },
+                onEnter: async () => {
+                    beginDiceCinematic(7600);
+                    if (actor) focusCameraOnAction(actor, { strength: 1.45, durationMs: 1300 });
+                    await tweenCameraFov(44, 240);
+                    showFloatingText(`${String(actionRecord.actorId || 'ENEMY').toUpperCase()} PREPARES`, '#ffb3a7', true, { anchorObject: actor || playerRig });
+                    playConfirmAttackSnap();
+                },
+            });
 
-            triggerSharedDiceRoll({ sides: 20, label: `${String(actionRecord.actorId || 'ENEMY').toUpperCase()} ATTACK`, mod: resolution.attackBonus, raw: resolution.roll, total: resolution.total });
-            spawnVisualDice(resolution.roll, 20, playerRig, `${String(actionRecord.actorId || 'ENEMY').toUpperCase()} ATTACK`);
-            showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: playerRig });
-            await timelineDelay(ENEMY_TIMELINE_MS.rollHold, replayTiming);
+            await runActionPresentationPhase('enemy-attack', 'windup', replayTiming, {
+                durationMs: ENEMY_TIMELINE_MS.windup + ENEMY_TIMELINE_MS.rollHold,
+                animationMs: 240,
+                payload: { attackType: 'enemy-melee' },
+                onEnter: () => {
+                    triggerSharedDiceRoll({ sides: 20, label: `${String(actionRecord.actorId || 'ENEMY').toUpperCase()} ATTACK`, mod: resolution.attackBonus, raw: resolution.roll, total: resolution.total });
+                    spawnVisualDice(resolution.roll, 20, playerRig, `${String(actionRecord.actorId || 'ENEMY').toUpperCase()} ATTACK`);
+                    showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: playerRig });
+                },
+            });
 
-            focusCameraOnAction(playerState, { strength: 1.8, durationMs: 1350 });
-            await timelineDelay(ENEMY_TIMELINE_MS.impactHold, replayTiming);
-            await hitStop(130);
-            displayAttackResult(resolution, playerRig, true);
-            await timelineDelay(ENEMY_TIMELINE_MS.resultHold, replayTiming);
+            await runActionPresentationPhase('enemy-attack', 'impact', replayTiming, {
+                durationMs: ENEMY_TIMELINE_MS.impactHold,
+                animationMs: 220,
+                hitStopMs: 130,
+                payload: { attackType: 'enemy-melee', hit: !!resolution.hit },
+                onEnter: () => {
+                    focusCameraOnAction(playerState, { strength: 1.8, durationMs: 1350 });
+                    displayAttackResult(resolution, playerRig, true);
+                },
+            });
 
-            if (resolution.hit) {
-                showFloatingText(`-${resolution.totalDamage}`, '#ff6b6b', true, { anchorObject: playerRig });
-                spawnImpactBurst(playerState.position, 0xff4444, 28);
-                shakeScreen(0.2, 320);
-                triggerCombatFlash('#ff2d2d', 0.22, 380);
-                playCombatSfxCue('enemy-hit-player');
-                playConfirmAttackSnap();
-            } else {
-                playCombatSfxCue('miss');
-            }
-            await timelineDelay(ENEMY_TIMELINE_MS.damageHold, replayTiming);
+            await runActionPresentationPhase('enemy-attack', 'recovery', replayTiming, {
+                durationMs: ENEMY_TIMELINE_MS.resultHold,
+                animationMs: 200,
+                payload: { attackType: 'enemy-melee', resultType: resolution.resultType || 'normal' },
+                onEnter: () => {
+                    if (resolution.hit) {
+                        showFloatingText(`-${resolution.totalDamage}`, '#ff6b6b', true, { anchorObject: playerRig });
+                        spawnImpactBurst(playerState.position, 0xff4444, 28);
+                        shakeScreen(0.2, 320);
+                        triggerCombatFlash('#ff2d2d', 0.22, 380);
+                        playCombatSfxCue('enemy-hit-player');
+                        playConfirmAttackSnap();
+                    } else {
+                        playCombatSfxCue('miss');
+                    }
+                },
+            });
+
+            await runActionPresentationPhase('enemy-attack', 'settle', replayTiming, {
+                durationMs: ENEMY_TIMELINE_MS.damageHold,
+                animationMs: 160,
+                payload: { attackType: 'enemy-melee' },
+            });
         }
     } finally {
         await tweenCameraFov(startFov, 320);
@@ -11881,17 +12097,26 @@ function showMovementPreview(tile) {
 
 function executeAttack(target) {
     if (!target || !target.userData || !target.userData.isTargetable) {
+        recordInputFeedback('attack', 'blocked', 'invalid-target', { showFloating: false });
         cancelAction();
         return;
     }
-    if (isInputLockedForCombat('ACTION')) return;
-    if (combatState.timelineBusy) return;
+    if (isInputLockedForCombat('ACTION')) {
+        recordInputFeedback('attack', 'blocked', 'combat-locked', { showFloating: false });
+        return;
+    }
+    if (combatState.timelineBusy) {
+        recordInputFeedback('attack', 'queued', 'timeline-busy', { showFloating: false });
+        return;
+    }
     if (!isLocalCombatAuthority()) {
+        recordInputFeedback('attack', 'blocked', 'authority-remote', { showFloating: false });
         showFloatingText('Combat authority is on player client', '#ff8a8a', true);
         return;
     }
     
     if (!canAttack()) {
+        recordInputFeedback('attack', 'blocked', 'action-already-used', { showFloating: false });
         console.info('No action available. End turn to refresh action.');
         showFloatingText('Action already used', '#ff8a8a');
         logCombatEvent('Melee failed: no action left', 'miss');
@@ -11900,6 +12125,7 @@ function executeAttack(target) {
     }
 
     if (!canTarget(playerState, target, DND_RANGES.melee, true)) {
+        recordInputFeedback('attack', 'blocked', 'out-of-range', { showFloating: false });
         console.info('Out of range or no line of sight');
         showFloatingText('Out of range', '#ff8a8a', true);
         cancelAction();
@@ -11907,6 +12133,7 @@ function executeAttack(target) {
     }
 
     if (!socket || !socket.connected) {
+        recordInputFeedback('attack', 'blocked', 'no-server-connection', { showFloating: false });
         showFloatingText('No server connection', '#ff8a8a', true);
         cancelAction();
         return;
@@ -11914,6 +12141,7 @@ function executeAttack(target) {
 
     const targetId = String(getCombatActorId(target) || '').trim();
     if (!targetId) {
+        recordInputFeedback('attack', 'blocked', 'invalid-target-id', { showFloating: false });
         showFloatingText('Invalid target', '#ff8a8a', true);
         cancelAction();
         return;
@@ -11928,6 +12156,15 @@ function executeAttack(target) {
         attackType: 'melee',
     });
 
+    recordInputFeedback('attack', 'queued', 'server', {
+        showFloating: false,
+        presentation: {
+            anchorObject: target,
+            uiPhase: COMBAT_UI_PHASE.RESOLVING,
+            action: 'attack',
+            color: '#ffd166',
+        },
+    });
     showFloatingText('Attack sent to server', '#8dd694', true, { anchorObject: target });
     logCombatEvent(`Attack intent sent (${target.userData.name || targetId})`, 'system');
     setCombatUiPhase(COMBAT_UI_PHASE.RESOLVING, { action: 'attack' });
@@ -11985,14 +12222,25 @@ function attackTarget(target) {
 }
 
 function rangedAttack(target) {
-    if (!target || !target.userData || !target.userData.isTargetable) return;
-    if (isInputLockedForCombat('ACTION')) return;
-    if (combatState.timelineBusy) return;
+    if (!target || !target.userData || !target.userData.isTargetable) {
+        recordInputFeedback('attack', 'blocked', 'invalid-target', { showFloating: false });
+        return;
+    }
+    if (isInputLockedForCombat('ACTION')) {
+        recordInputFeedback('attack', 'blocked', 'combat-locked', { showFloating: false });
+        return;
+    }
+    if (combatState.timelineBusy) {
+        recordInputFeedback('attack', 'queued', 'timeline-busy', { showFloating: false });
+        return;
+    }
     if (!isLocalCombatAuthority()) {
+        recordInputFeedback('attack', 'blocked', 'authority-remote', { showFloating: false });
         showFloatingText('Combat authority is on player client', '#ff8a8a', true);
         return;
     }
     if (!canAttack()) {
+        recordInputFeedback('attack', 'blocked', 'action-already-used', { showFloating: false });
         console.info('No action available. Press Enter to end turn and refresh.');
         showFloatingText('Action already used', '#ff8a8a');
         logCombatEvent('Ranged failed: no action left', 'miss');
@@ -12000,6 +12248,7 @@ function rangedAttack(target) {
     }
 
     if (!canTarget(playerState, target, DND_RANGES.spellRange30, true)) {
+        recordInputFeedback('attack', 'blocked', 'out-of-range', { showFloating: false });
         console.info('Out of ranged attack distance or no line of sight.');
         showFloatingText('MISS', '#ff8a8a');
         spawnImpactBurst(target.position, 0xff7878, 10);
@@ -12011,12 +12260,14 @@ function rangedAttack(target) {
     }
 
     if (!socket || !socket.connected) {
+        recordInputFeedback('attack', 'blocked', 'no-server-connection', { showFloating: false });
         showFloatingText('No server connection', '#ff8a8a', true);
         return;
     }
 
     const targetId = String(getCombatActorId(target) || '').trim();
     if (!targetId) {
+        recordInputFeedback('attack', 'blocked', 'invalid-target-id', { showFloating: false });
         showFloatingText('Invalid target', '#ff8a8a', true);
         return;
     }
@@ -12029,6 +12280,15 @@ function rangedAttack(target) {
         attackType: 'ranged',
     });
 
+    recordInputFeedback('attack', 'queued', 'server', {
+        showFloating: false,
+        presentation: {
+            anchorObject: target,
+            uiPhase: COMBAT_UI_PHASE.RESOLVING,
+            action: 'ranged',
+            color: '#66ccff',
+        },
+    });
     showFloatingText('Ranged attack sent to server', '#8dd694', true, { anchorObject: target });
     logCombatEvent(`Ranged intent sent (${target.userData.name || targetId})`, 'system');
 }
@@ -12074,14 +12334,17 @@ function startPlayerTurn() {
 
 function endTurn() {
     if (!socket || !socket.connected) {
+        recordInputFeedback('end-turn', 'blocked', 'no-server-connection', { showFloating: false });
         console.warn('[END-TURN] blocked: no connection');
         return;
     }
     if (endTurnPending) {
+        recordInputFeedback('end-turn', 'queued', 'already-pending', { showFloating: false, pushTimeline: false });
         console.log('[END-TURN] blocked: already pending');
         return;
     }
     if (currentGameMode !== GAME_MODE.COMBAT) {
+        recordInputFeedback('end-turn', 'blocked', 'not-in-combat', { showFloating: false, pushTimeline: false });
         console.log('[END-TURN] endTurn: not in combat mode');
         return;
     }
@@ -12095,6 +12358,7 @@ function endTurn() {
         if (!endTurnPending) return;
         endTurnPending = false;
         uxSetIntentStatus('endTurn', 'failed', 'timeout');
+        recordInputFeedback('end-turn', 'rejected', 'timeout', { showFloating: false });
         console.warn('[END-TURN] watchdog timeout: no server response; pending cleared');
         showFloatingText('Turn sync timeout, retrying allowed', '#ffd166', true);
     }, 3500);
@@ -12110,9 +12374,17 @@ function endTurn() {
     console.log('[END-TURN] emitting once');
     if (uxTelemetry.enabled) uxTelemetry.marks.endTurnSentAt = performance.now();
     uxSetIntentStatus('endTurn', 'sent', 'end-turn');
+    recordInputFeedback('end-turn', 'queued', 'server', {
+        showFloating: false,
+        presentation: {
+            anchorObject: playerRig || playerState,
+            color: '#8dd694',
+        },
+    });
     socket.emit('end-turn', { clientTs: Date.now() }, (ack) => {
         console.log('[END-TURN] server ack:', ack);
         if (!ack || ack.ok === true) {
+            recordInputFeedback('end-turn', 'accepted', 'server-ack', { showFloating: false, pushTimeline: false });
             return;
         }
         endTurnPending = false;
@@ -12122,6 +12394,7 @@ function endTurn() {
         }
         const reason = String(ack.reason || 'unknown');
         console.warn('[END-TURN] ack reported failure:', reason);
+        recordInputFeedback('end-turn', 'rejected', reason, { showFloating: false });
         uxSetIntentStatus('endTurn', 'failed', reason);
     });
 }
@@ -13291,63 +13564,18 @@ function getActiveViewCamera() {
 }
 
 function getPrimaryStickAxes(gamepad) {
-    if (!gamepad || !gamepad.axes || gamepad.axes.length < 2) return { x: 0, y: 0 };
-    const ax0 = gamepad.axes[0] ?? 0;
-    const ay0 = gamepad.axes[1] ?? 0;
-    const mag0 = Math.hypot(ax0, ay0);
-    if (gamepad.axes.length >= 4) {
-        const ax1 = gamepad.axes[2] ?? 0;
-        const ay1 = gamepad.axes[3] ?? 0;
-        const mag1 = Math.hypot(ax1, ay1);
-        if (mag1 > mag0) {
-            return { x: applyDeadzone(ax1), y: applyDeadzone(ay1) };
-        }
-    }
-    return { x: applyDeadzone(ax0), y: applyDeadzone(ay0) };
+    return ensureUnifiedInputManager().getPrimaryStickAxes(gamepad);
 }
 
 function applyXRFlightControls(delta) {
     if (!renderer.xr.isPresenting) return false;
     const session = renderer.xr.getSession();
     if (!session) return false;
-
-    let leftX = 0;
-    let leftY = 0;
-    let rightX = 0;
-    let leftTrigger = 0;
-    let rightTrigger = 0;
-    let fallbackStickCount = 0;
-    let fallbackTriggerCount = 0;
-
-    for (const source of session.inputSources) {
-        if (!source || !source.gamepad) continue;
-        const stick = getPrimaryStickAxes(source.gamepad);
-        const triggerValue = source.gamepad.buttons && source.gamepad.buttons[0]
-            ? Number(source.gamepad.buttons[0].value) || 0
-            : 0;
-        if (source.handedness === 'left') {
-            leftX = stick.x;
-            leftY = stick.y;
-            leftTrigger = triggerValue;
-        } else if (source.handedness === 'right') {
-            rightX = stick.x;
-            rightTrigger = triggerValue;
-        } else {
-            if (fallbackStickCount === 0) {
-                leftX = stick.x;
-                leftY = stick.y;
-            } else if (fallbackStickCount === 1) {
-                rightX = stick.x;
-            }
-            fallbackStickCount++;
-            if (fallbackTriggerCount === 0) {
-                leftTrigger = triggerValue;
-            } else if (fallbackTriggerCount === 1) {
-                rightTrigger = triggerValue;
-            }
-            fallbackTriggerCount++;
-        }
-    }
+    const xrInput = ensureUnifiedInputManager().getXrFlightState(session.inputSources);
+    const leftX = Number(xrInput.moveX) || 0;
+    const leftY = Number(xrInput.moveY) || 0;
+    const rightX = Number(xrInput.turnX) || 0;
+    const verticalInput = Number(xrInput.vertical) || 0;
 
     const xrCamera = renderer.xr.getCamera(camera);
     xrCamera.getWorldDirection(xrForward);
@@ -13367,7 +13595,6 @@ function applyXRFlightControls(delta) {
 
     if (!playerRig) return false;
     playerState.position.addScaledVector(xrMove, xrMoveSpeed * delta);
-    const verticalInput = rightTrigger - leftTrigger;
     playerState.position.y += verticalInput * xrVerticalSpeed * delta;
     playerState.velocity.set(0, 0, 0);
     playerState.onGround = false;
@@ -13385,6 +13612,153 @@ function getColliderBoxAndSize(obj) {
     const box = new THREE.Box3().setFromObject(obj);
     const size = box.getSize(new THREE.Vector3());
     return { box, size };
+}
+
+function buildUnifiedInputContext() {
+    return {
+        canUseStandardMovementControls: canUseStandardMovementControls(),
+        isDmFreeCamera: isDmFreeCamera(),
+        combatMode: currentGameMode === GAME_MODE.COMBAT,
+        playerFlying,
+        movementLocked: turnEndRequired || isInputLockedForCombat('MOVE'),
+    };
+}
+
+function handleUnifiedGameplayCommand(command) {
+    switch (command) {
+        case 'confirm':
+            if (turnEndRequired) {
+                recordInputFeedback('end-turn', 'accepted', 'confirm-end-turn', { showFloating: false });
+                confirmEndTurn();
+                return true;
+            }
+            if (isInputLockedForCombat('END_TURN')) {
+                recordInputFeedback('confirm', 'blocked', 'end-turn-locked', { showFloating: false });
+                return true;
+            }
+            if (combatInteraction.awaitingConfirm) {
+                recordInputFeedback(String(combatInteraction.action || 'action'), 'accepted', 'confirm', { showFloating: false });
+                confirmAction();
+            } else if (currentGameMode === GAME_MODE.COMBAT) {
+                recordInputFeedback('end-turn', 'accepted', 'manual-end-turn', { showFloating: false });
+                endTurn();
+            } else {
+                recordInputFeedback('turn', 'accepted', 'reset-local-resources', { showFloating: false, pushTimeline: false });
+                resetLocalTurnResources();
+            }
+            return true;
+        case 'cancel':
+            if (hasDmPossessionControl()) {
+                recordInputFeedback('camera', 'accepted', 'release-possession', { showFloating: false });
+                releasePossession();
+                showFloatingText('POSSESSION RELEASED', '#9ec9ff', true);
+                return true;
+            }
+            if (isInputLockedForCombat('ACTION')) {
+                recordInputFeedback('action', 'blocked', 'combat-locked', { showFloating: false });
+                return true;
+            }
+            if (combatInteraction.awaitingConfirm) {
+                recordInputFeedback(String(combatInteraction.action || 'action'), 'accepted', 'cancel', { showFloating: false });
+                cancelAction();
+            } else {
+                recordInputFeedback('action', 'blocked', 'nothing-pending', { showFloating: false, pushTimeline: false });
+            }
+            return true;
+        case 'toggle-movement-radius':
+            if (isInputLockedForCombat('MOVE')) {
+                recordInputFeedback('move', 'blocked', 'movement-locked', { showFloating: false });
+                return true;
+            }
+            if (activeMovementCircle && activeMovementCircle.parent) {
+                activeMovementCircle.parent.remove(activeMovementCircle);
+                activeMovementCircle = null;
+                recordInputFeedback('move', 'accepted', 'preview-hidden', { showFloating: false, pushTimeline: false });
+            } else {
+                activeMovementCircle = createMovementRadius(playerState.position, combatState.player.movementRemaining, 0x3388ff, 0.18);
+                activeMovementCircle.userData.baseFeet = Math.max(combatState.player.movementRemaining, 0.01);
+                scene.add(activeMovementCircle);
+                recordInputFeedback('move', 'accepted', 'preview-shown', { showFloating: false, pushTimeline: false });
+            }
+            return true;
+        case 'toggle-combat': {
+            if (!hasModePermission('combat.control')) {
+                recordInputFeedback('combat', 'blocked', 'permission-denied', { showFloating: false });
+                return false;
+            }
+            const enableCombat = currentGameMode !== GAME_MODE.COMBAT;
+            clearTurnEndState();
+            currentGameMode = enableCombat ? GAME_MODE.COMBAT : GAME_MODE.FREE;
+            combatState.inCombat = enableCombat;
+            syncSkyboxWithGameMode();
+            if (enableCombat) {
+                setCombatPhase('PLAYER');
+                setCombatLock(false);
+                combatCenter.copy(playerState.position);
+                combatRadius = Math.max(combatRadius, 12);
+                activateCombatCamera();
+                resetLocalTurnResources();
+            } else {
+                setCombatPhase('TRANSITION');
+                setCombatLock(false);
+                deactivateCombatCamera();
+                combatState.turnOrder = [];
+                combatState.currentTurnIndex = 0;
+            }
+            recordInputFeedback('combat', 'accepted', enableCombat ? 'combat-enabled' : 'combat-disabled', { showFloating: false });
+            return true;
+        }
+        case 'toggle-flying':
+            if (isInputLockedForCombat('MOVE')) {
+                recordInputFeedback('move', 'blocked', 'movement-locked', { showFloating: false });
+                return true;
+            }
+            playerFlying = !playerFlying;
+            if (playerFlying) {
+                playerState.jumpCount = 0;
+            } else {
+                playerFlyUp = false;
+                playerFlyDown = false;
+            }
+            recordInputFeedback('move', 'accepted', playerFlying ? 'flight-enabled' : 'flight-disabled', { showFloating: false, pushTimeline: false });
+            return true;
+        case 'focus-target': {
+            const target = getMostRelevantActor();
+            if (target) {
+                recordInputFeedback('camera', 'accepted', 'focus-target', { showFloating: false, pushTimeline: false });
+                focusDmCameraOnTarget(target);
+            } else {
+                recordInputFeedback('camera', 'blocked', 'no-target', { showFloating: false });
+            }
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+function getPrimaryConnectedGamepad() {
+    if (rendererReady && renderer && renderer.xr && renderer.xr.isPresenting) {
+        return null;
+    }
+    if (!navigator || typeof navigator.getGamepads !== 'function') return null;
+    const gamepads = navigator.getGamepads();
+    if (!gamepads) return null;
+    for (const gamepad of gamepads) {
+        if (gamepad && gamepad.connected) {
+            return gamepad;
+        }
+    }
+    return null;
+}
+
+function pollUnifiedGamepadInput() {
+    const manager = ensureUnifiedInputManager();
+    if (consoleState.open) {
+        manager.clearGamepadState();
+        return null;
+    }
+    return manager.syncGamepad(getPrimaryConnectedGamepad(), buildUnifiedInputContext());
 }
 
 function normalizeColliderName(value) {
@@ -15870,9 +16244,18 @@ function setCurrentAction(action) {
 }
 
 function confirmAction() {
-    if (isInputLockedForCombat('ACTION')) return;
-    if (combatState.timelineBusy) return;
-    if (!combatInteraction.awaitingConfirm || !combatInteraction.target) return;
+    if (isInputLockedForCombat('ACTION')) {
+        recordInputFeedback('action', 'blocked', 'combat-locked', { showFloating: false });
+        return;
+    }
+    if (combatState.timelineBusy) {
+        recordInputFeedback('action', 'queued', 'timeline-busy', { showFloating: false });
+        return;
+    }
+    if (!combatInteraction.awaitingConfirm || !combatInteraction.target) {
+        recordInputFeedback('action', 'blocked', 'nothing-to-confirm', { showFloating: false, pushTimeline: false });
+        return;
+    }
 
     if (combatInteraction.action === 'auto-move-attack-choice') {
         const targetForAuto = combatInteraction.target;
@@ -15891,6 +16274,7 @@ function confirmAction() {
             : buildAutoApproachPreview(targetForAuto);
 
         if (!previewData || !previewData.valid) {
+            recordInputFeedback('move', 'blocked', 'auto-approach-invalid', { showFloating: false });
             showFloatingText('Cannot auto-move into attack range', '#ff8a8a', true);
             showMovementTilesForApproach(targetForAuto);
             return;
@@ -15906,6 +16290,7 @@ function confirmAction() {
         resetCombatInteraction();
     } else if (combatInteraction.action === 'move-and-attack') {
         if (!combatInteraction.preview || !combatInteraction.preview.valid) {
+            recordInputFeedback('move', 'blocked', 'invalid-move', { showFloating: false });
             showFloatingText('Invalid move', '#ff8a8a', true);
             return;
         }
@@ -15917,10 +16302,12 @@ function confirmAction() {
         resetCombatInteraction();
     } else if (combatInteraction.action === 'move' || combatInteraction.action === 'dash' || combatInteraction.action === 'disengage' || combatInteraction.action === 'move-to-approach') {
         if (!combatInteraction.preview || !combatInteraction.preview.valid) {
+            recordInputFeedback('move', 'blocked', 'invalid-move', { showFloating: false });
             showFloatingText('Invalid move', '#ff8a8a', true);
             return;
         }
         if (!socket || !socket.connected) {
+            recordInputFeedback('move', 'blocked', 'no-server-connection', { showFloating: false });
             showFloatingText('No server connection', '#ff8a8a', true);
             return;
         }
@@ -15937,12 +16324,30 @@ function confirmAction() {
                 z: Number(targetPos.z) || 0,
             },
         });
+        recordInputFeedback('move', 'queued', actionType, {
+            showFloating: false,
+            presentation: {
+                anchorObject: playerRig || playerState,
+                uiPhase: COMBAT_UI_PHASE.RESOLVING,
+                action: actionType,
+                color: '#66b3ff',
+            },
+        });
         setCombatUiPhase(COMBAT_UI_PHASE.RESOLVING, { action: actionType });
         resetCombatInteraction({ keepPhase: true });
     } else if (combatInteraction.action === 'attack') {
         if (uxTelemetry.enabled) uxTelemetry.marks.attackSentAt = performance.now();
         uxSetIntentStatus('attack', 'sent', 'attack');
         playConfirmAttackSnap();
+        recordInputFeedback('attack', 'accepted', 'confirm', {
+            showFloating: false,
+            presentation: {
+                anchorObject: combatInteraction.target || playerRig || playerState,
+                uiPhase: COMBAT_UI_PHASE.RESOLVING,
+                action: 'attack',
+                color: '#ffd166',
+            },
+        });
         executeAttack(combatInteraction.target);
     }
     if (uxTelemetry.enabled) uxTelemetry.counters.confirms += 1;
@@ -16171,6 +16576,11 @@ document.addEventListener('mousemove', (event) => {
 
 document.addEventListener('keydown', (event) => {
     if (consoleState.open) return;
+
+    if (ensureUnifiedInputManager().handleKeyboardEvent(event, 'down', buildUnifiedInputContext())) {
+        event.preventDefault();
+        return;
+    }
 
     const tagName = event.target && event.target.tagName ? event.target.tagName : '';
     const isTextInput = tagName === 'INPUT' || tagName === 'TEXTAREA';
@@ -16515,6 +16925,11 @@ document.addEventListener('keydown', (event) => {
     }
 });
 document.addEventListener('keyup', (event) => {
+    if (ensureUnifiedInputManager().handleKeyboardEvent(event, 'up', buildUnifiedInputContext())) {
+        event.preventDefault();
+        return;
+    }
+
     if (isDmFreeCamera()) {
         if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
             dmFreeMoveFast = false;
@@ -16583,6 +16998,8 @@ document.addEventListener('keyup', (event) => {
 });
 
 function updateFlyControls(delta) {
+    pollUnifiedGamepadInput();
+
     if (applyXRFlightControls(delta)) {
         return;
     }

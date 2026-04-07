@@ -1,0 +1,77 @@
+=== ENGINE VERIFICATION MATRIX ===
+
+[SYSTEM COVERAGE]
+[MISSING] Combat system (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Networking (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Authority (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] UI (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Simulation (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[BEHAVIORAL GUARANTEES]
+[MISSING] Determinism (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Multiplayer conflict resolution (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Chaos resilience (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Performance invariants (0 tests)
+  ! No passing test found for requirement-1, requirement-2
+
+[FLOW VALIDATION]
+[MISSING] Network -> state -> UI (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Mode -> authority -> commands (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[COMBAT ENGINE]
+[MISSING] Timeline initialization (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Turn state machine (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Action validation (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[NETWORKING]
+[MISSING] Event emission (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Deduplication (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Timeline alignment (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[AUTHORITY]
+[MISSING] Mode permissions (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] DM capability mapping (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Authority escalation blocked (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[SIMULATION GUARANTEES]
+[MISSING] Determinism (same input -> same output) (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Replay correctness (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Order independence (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[CHAOS RESILIENCE]
+[MISSING] Out-of-order packets (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Duplicate packets (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Dropped packets (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+[PERFORMANCE]
+[MISSING] 100 actions < 16ms (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Queue growth capped (0 tests)
+  ! No passing test matched this guarantee in this run.
+
+RESULT: 0/28 VERIFIED (0%)

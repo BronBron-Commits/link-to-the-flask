@@ -1,0 +1,25 @@
+{
+  "name": "link-to-the-flask-frontend",
+  "version": "1.0.0",
+  "description": "Unit tests for the 3D multiplayer D&D game engine frontend",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:verbose": "jest --verbose",
+    "test:ui": "electron electron-test-runner/main.js",
+    "sim:timeline": "node scripts/generate_timeline_artifact.js"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "jest": "^29.7.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "keywords": [
+    "dnd",
+    "3d",
+    "game",
+    "webgl",
+    "multiplayer"
+  ]
+}
