@@ -115,6 +115,8 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         sprite = new THREE.Sprite(material);
         sprite.scale.set(3.6, 1.0, 1);
         sprite.position.set(0, 1.3, 0);
+        // Keep stat labels above world overlays like the move-grid.
+        sprite.renderOrder = 220;
         sprite.userData.canvas = canvas;
         sprite.userData.ctx = ctx;
         actorLabelSprites.set(actorId, sprite);
@@ -132,6 +134,8 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
                 new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.7, metalness: 0.1 })
             );
             mesh.userData.actorId = actorId;
+            // Keep actors in front of the floor move-grid overlay.
+            mesh.renderOrder = 160;
             scene.add(mesh);
             actorMeshes.set(actorId, mesh);
             actorHitObjects.push(mesh);
