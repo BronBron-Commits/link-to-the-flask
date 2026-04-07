@@ -533,7 +533,6 @@ function render() {
             <div class="stage-foam"></div>
 
             <header class="combat-header">
-                <div class="header-badge ${guidance === 'status' ? 'guide-pulse' : ''}">Combat UI Live Dock</div>
                 <div class="turn-track ${guidance === 'turn' ? 'guide-pulse' : ''}">${renderTurnOrder()}</div>
             </header>
 
@@ -999,13 +998,13 @@ style.textContent = `
         left: 22px;
         right: 22px;
         display: flex;
-        justify-content: space-between;
+        justify-content: flex-end;
         align-items: center;
         gap: 18px;
         z-index: 2;
+        pointer-events: none;
     }
 
-    .header-badge,
     .turn-track,
     .battle-log-panel,
     .party-card,
@@ -1014,22 +1013,13 @@ style.textContent = `
         backdrop-filter: blur(12px);
     }
 
-    .header-badge {
-        padding: 10px 14px;
-        border: 1px solid var(--line);
-        background: linear-gradient(180deg, rgba(20, 25, 34, 0.86), rgba(9, 12, 18, 0.75));
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
-        font-size: 11px;
-        color: var(--gold-bright);
-    }
-
     .turn-track {
         display: flex;
         gap: 8px;
         padding: 10px;
         border: 1px solid var(--line);
         background: rgba(7, 11, 18, 0.74);
+        pointer-events: auto;
     }
 
     .turn-pill {
@@ -1155,9 +1145,9 @@ style.textContent = `
     .battle-log-panel {
         position: absolute;
         left: 22px;
-        bottom: 232px;
+        bottom: 170px;
         width: 320px;
-        max-height: calc(100vh - 360px);
+        max-height: calc(50vh - 80px);
         padding: 16px;
         border: 1px solid var(--line);
         background: linear-gradient(180deg, rgba(12, 16, 23, 0.84), rgba(7, 10, 16, 0.68));
@@ -1206,8 +1196,8 @@ style.textContent = `
     .party-rail {
         position: absolute;
         left: 22px;
-        right: 420px;
-        bottom: 76px;
+        right: 22px;
+        bottom: 22px;
         display: flex;
         gap: 14px;
         z-index: 2;
@@ -1278,8 +1268,8 @@ style.textContent = `
 
     .command-dock {
         position: absolute;
-        right: 22px;
-        bottom: 22px;
+        top: 20px;
+        left: 22px;
         width: 380px;
         z-index: 3;
     }
@@ -1458,13 +1448,7 @@ style.textContent = `
     @media (max-width: 1200px) {
         .battle-log-panel {
             width: 280px;
-            bottom: 22px;
-            max-height: 290px;
-        }
-
-        .party-rail {
-            right: 22px;
-            bottom: 356px;
+            max-height: 240px;
         }
     }
 
@@ -1498,9 +1482,9 @@ style.textContent = `
         }
 
         .command-dock {
+            top: 12px;
             left: 12px;
             right: 12px;
-            bottom: 72px;
             width: auto;
         }
 
