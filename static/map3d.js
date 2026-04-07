@@ -2860,7 +2860,16 @@ function showRuntimeModeSelectionOverlay() {
 }
 
 function initializeCommandConsole() {
-    registerDefaultConsoleCommands();
+    let commandsRegistered = false;
+    const ensureConsoleCommandsRegistered = () => {
+        if (commandsRegistered) return;
+        commandsRegistered = true;
+        registerDefaultConsoleCommands();
+    };
+
+    // Defer registration one tick so late-declared constants (e.g. GAME_MODE)
+    // are initialized before command registry captures them.
+    window.setTimeout(ensureConsoleCommandsRegistered, 0);
     // Debug escape hatch for cases where browser/input layers swallow hotkeys.
     window.__openCommandConsole = () => setConsoleOpen(true);
     window.__closeCommandConsole = () => setConsoleOpen(false);
@@ -12568,6 +12577,114 @@ function findDummyTargetForDummy(actorDummy) {
     return validTargets[Math.floor(Math.random() * validTargets.length)];
 }
 
+async function playEnemyMeleeActionSequence({
+    enemy,
+    enemyName,
+    combatTarget,
+    targetRig,
+    resolution,
+    replayTiming = null,
+    prepText = null,
+    sourceLabel = null,
+}) {
+    if (!enemy || !targetRig || !resolution) return;
+    const timing = replayTiming || { remainingOffsetMs: 0 };
+    const startFov = camera ? camera.fov : 58;
+    const isPlayerTarget = combatTarget === playerState;
+    const resolvedEnemyName = String(enemyName || enemy.userData?.name || 'Enemy');
+    const attackLabel = String(sourceLabel || resolvedEnemyName).toUpperCase();
+
+    const sequenceStart = performance.now();
+    try {
+        setCombatMessageLock(true);
+        await runActionPresentationPhase('enemy-attack', 'anticipation', timing, {
+            durationMs: 130,
+            animationMs: 240,
+            payload: { attackType: 'enemy-melee', actorId: getCombatActorId(enemy) },
+            onEnter: async () => {
+                beginDiceCinematic(7600);
+                focusCameraOnAction(enemy, { strength: 1.45, durationMs: 1300 });
+                await tweenCameraFov(44, 240);
+                showFloatingText(prepText || `${attackLabel} PREPARES`, '#ffb3a7', true, { anchorObject: enemy });
+                playConfirmAttackSnap();
+                triggerEnemySwingAnim(enemy);
+            },
+        });
+
+        await runActionPresentationPhase('enemy-attack', 'windup', timing, {
+            durationMs: ENEMY_TIMELINE_MS.windup + ENEMY_TIMELINE_MS.rollHold,
+            animationMs: 240,
+            payload: { attackType: 'enemy-melee', actorId: getCombatActorId(enemy) },
+            onEnter: () => {
+                triggerSharedDiceRoll({
+                    sides: 20,
+                    label: `${attackLabel} ATTACK`,
+                    mod: resolution.attackBonus,
+                    raw: resolution.roll,
+                    total: resolution.total,
+                });
+                spawnVisualDice(resolution.roll, 20, targetRig, `${attackLabel} ATTACK`);
+                showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: targetRig });
+            },
+        });
+
+        await runActionPresentationPhase('enemy-attack', 'impact', timing, {
+            durationMs: ENEMY_TIMELINE_MS.impactHold,
+            animationMs: 220,
+            hitStopMs: 130,
+            payload: { attackType: 'enemy-melee', actorId: getCombatActorId(enemy), hit: !!resolution.hit },
+            onEnter: () => {
+                focusCameraOnAction(targetRig, { strength: 1.8, durationMs: 1350 });
+                displayAttackResult(resolution, targetRig, isPlayerTarget);
+            },
+        });
+
+        await runActionPresentationPhase('enemy-attack', 'recovery', timing, {
+            durationMs: ENEMY_TIMELINE_MS.resultHold,
+            animationMs: 200,
+            payload: { attackType: 'enemy-melee', actorId: getCombatActorId(enemy), resultType: resolution.resultType || 'normal' },
+            onEnter: () => {
+                if (resolution.hit) {
+                    let dealt = 0;
+                    if (isPlayerTarget) {
+                        dealt = applyPlayerDamage(resolution.totalDamage, resolvedEnemyName);
+                        showFloatingText(`-${dealt}`, '#ff6b6b', true, { anchorObject: playerRig });
+                        playCombatSfxCue('enemy-hit-player');
+                        logCombatEvent(`${resolvedEnemyName} hits you for ${dealt}`, 'miss');
+                    } else {
+                        dealt = applyDummyDamage(combatTarget, resolution.totalDamage);
+                        showFloatingText(`-${dealt}`, '#ff6b6b', true, { anchorObject: targetRig });
+                        logCombatEvent(`${resolvedEnemyName} hits ${combatTarget.userData?.name || 'target'} for ${dealt}`, 'info');
+                        playCombatSfxCue('hit');
+                    }
+                    spawnImpactBurst(targetRig.position, 0xff4444, 28);
+                    shakeScreen(0.2, 320);
+                    triggerCombatFlash('#ff2d2d', 0.22, 380);
+                    playConfirmAttackSnap();
+                } else {
+                    playCombatSfxCue('miss');
+                    const targetName = isPlayerTarget ? 'you' : (combatTarget.userData?.name || 'the target');
+                    logCombatEvent(`${resolvedEnemyName} misses ${targetName}`, 'info');
+                }
+            },
+        });
+
+        await runActionPresentationPhase('enemy-attack', 'settle', timing, {
+            durationMs: ENEMY_TIMELINE_MS.damageHold,
+            animationMs: 160,
+            payload: { attackType: 'enemy-melee', actorId: getCombatActorId(enemy) },
+        });
+    } finally {
+        const elapsedMs = performance.now() - sequenceStart;
+        if (elapsedMs < COMBAT_PRESENTATION_MIN_MS) {
+            await delay(COMBAT_PRESENTATION_MIN_MS - elapsedMs);
+        }
+        await tweenCameraFov(startFov, 320);
+        setCombatMessageLock(false);
+        endDiceCinematic();
+    }
+}
+
 async function runEnemyTurn(enemyActor = null) {
     if (!isLocalCombatAuthority()) return;
     if (currentGameMode !== GAME_MODE.COMBAT) return;
@@ -12653,87 +12770,32 @@ async function runEnemyTurn(enemyActor = null) {
         if (newDist <= DND_RANGES.melee && tryUseEnemyAction(enemy)) {
             const actionSnapshotBefore = createCombatSnapshot('action-before-enemy-melee');
             const resolution = resolveEnemyAttack(enemy, combatTarget);
-            const sequenceStart = performance.now();
-            const startFov = camera ? camera.fov : 58;
             const targetRig = combatTarget === playerState ? playerRig : combatTarget;
             const isPlayerTarget = combatTarget === playerState;
-            
-            try {
-                setCombatMessageLock(true);
-                beginDiceCinematic(7600);
 
-                focusCameraOnAction(enemy, { strength: 1.45, durationMs: 1300 });
-                await tweenCameraFov(44, 240);
-                showFloatingText(`${enemyName.toUpperCase()} PREPARES`, '#ffb3a7', true, { anchorObject: enemy });
-                playConfirmAttackSnap();
-                triggerEnemySwingAnim(enemy);
-                await delay(ENEMY_TIMELINE_MS.windup);
+            await playEnemyMeleeActionSequence({
+                enemy,
+                enemyName,
+                combatTarget,
+                targetRig,
+                resolution,
+            });
 
-                triggerSharedDiceRoll({
-                    sides: 20,
-                    label: `${enemyName.toUpperCase()} ATTACK`,
-                    mod: resolution.attackBonus,
-                    raw: resolution.roll,
-                    total: resolution.total,
+            const actionSnapshotAfter = createCombatSnapshot('action-after-enemy-melee');
+            if (actionSnapshotBefore && actionSnapshotAfter) {
+                recordCombatAction({
+                    type: 'attack',
+                    attackType: 'enemy-melee',
+                    actorId: getCombatActorId(enemy),
+                    targetId: isPlayerTarget ? 'player' : getCombatActorId(combatTarget),
+                    resolution,
+                    result: resolution.hit ? 'hit' : 'miss',
+                    damage: resolution.totalDamage,
+                    targetDefeated: isPlayerTarget ? playerState.hp <= 0 : (combatTarget.userData?.hp || 0) <= 0,
+                    timestamp: Date.now(),
+                    snapshotBefore: actionSnapshotBefore,
+                    snapshotAfter: actionSnapshotAfter,
                 });
-                spawnVisualDice(resolution.roll, 20, targetRig, `${enemyName.toUpperCase()} ATTACK`);
-                showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: targetRig });
-                await delay(ENEMY_TIMELINE_MS.rollHold);
-
-                focusCameraOnAction(targetRig, { strength: 1.8, durationMs: 1350 });
-                await delay(ENEMY_TIMELINE_MS.impactHold);
-                await hitStop(130);
-
-                displayAttackResult(resolution, targetRig, isPlayerTarget);
-                await delay(ENEMY_TIMELINE_MS.resultHold);
-
-                if (resolution.hit) {
-                    let dealt = 0;
-                    if (isPlayerTarget) {
-                        dealt = applyPlayerDamage(resolution.totalDamage, enemyName);
-                        showFloatingText(`-${dealt}`, '#ff6b6b', true, { anchorObject: playerRig });
-                        playCombatSfxCue('enemy-hit-player');
-                        logCombatEvent(`${enemyName} hits you for ${dealt}`, 'miss');
-                    } else {
-                        dealt = applyDummyDamage(combatTarget, resolution.totalDamage);
-                        showFloatingText(`-${dealt}`, '#ff6b6b', true, { anchorObject: targetRig });
-                        logCombatEvent(`${enemyName} hits ${combatTarget.userData?.name || 'target'} for ${dealt}`, 'info');
-                        playCombatSfxCue('hit');
-                    }
-                    spawnImpactBurst(targetRig.position, 0xff4444, 28);
-                    shakeScreen(0.2, 320);
-                    triggerCombatFlash('#ff2d2d', 0.22, 380);
-                    playConfirmAttackSnap();
-                } else {
-                    playCombatSfxCue('miss');
-                    const targetName = isPlayerTarget ? 'you' : (combatTarget.userData?.name || 'the target');
-                    logCombatEvent(`${enemyName} misses ${targetName}`, 'info');
-                }
-                await delay(ENEMY_TIMELINE_MS.damageHold);
-            } finally {
-                const elapsedMs = performance.now() - sequenceStart;
-                if (elapsedMs < COMBAT_PRESENTATION_MIN_MS) {
-                    await delay(COMBAT_PRESENTATION_MIN_MS - elapsedMs);
-                }
-                await tweenCameraFov(startFov, 320);
-                setCombatMessageLock(false);
-                endDiceCinematic();
-                const actionSnapshotAfter = createCombatSnapshot('action-after-enemy-melee');
-                if (actionSnapshotBefore && actionSnapshotAfter) {
-                    recordCombatAction({
-                        type: 'attack',
-                        attackType: 'enemy-melee',
-                        actorId: getCombatActorId(enemy),
-                        targetId: 'player',
-                        resolution,
-                        result: resolution.hit ? 'hit' : 'miss',
-                        damage: resolution.totalDamage,
-                        targetDefeated: playerState.hp <= 0,
-                        timestamp: Date.now(),
-                        snapshotBefore: actionSnapshotBefore,
-                        snapshotAfter: actionSnapshotAfter,
-                    });
-                }
             }
         } else {
             showFloatingText(`${enemyName.toUpperCase()} HOLDS`, '#b9c0cf', true, { anchorObject: enemy });
@@ -12892,58 +12954,16 @@ function runPossessedEnemyAttack(enemy) {
     tryUseEnemyAction(enemy);
 
     (async () => {
-        const sequenceStart = performance.now();
-        const startFov = camera ? camera.fov : 58;
         try {
-            setCombatMessageLock(true);
-            beginDiceCinematic(7600);
-
-            focusCameraOnAction(enemy, { strength: 1.45, durationMs: 1300 });
-            await tweenCameraFov(44, 240);
-            showFloatingText(`${enemyName.toUpperCase()} (DM)`, '#ffb3a7', true, { anchorObject: enemy });
-            playConfirmAttackSnap();
-            await delay(ENEMY_TIMELINE_MS.windup);
-
-            triggerSharedDiceRoll({
-                sides: 20,
-                label: `${enemyName.toUpperCase()} ATTACK`,
-                mod: resolution.attackBonus,
-                raw: resolution.roll,
-                total: resolution.total,
+            await playEnemyMeleeActionSequence({
+                enemy,
+                enemyName: `${enemyName} (DM)`,
+                combatTarget: playerState,
+                targetRig: playerRig,
+                resolution,
+                prepText: `${enemyName.toUpperCase()} (DM)`,
             });
-            spawnVisualDice(resolution.roll, 20, playerRig, `${enemyName.toUpperCase()} ATTACK`);
-            showFloatingText(`Roll: ${resolution.total}`, '#ffe08a', true, { anchorObject: playerRig });
-            await delay(ENEMY_TIMELINE_MS.rollHold);
-
-            focusCameraOnAction(playerState, { strength: 1.8, durationMs: 1350 });
-            await delay(ENEMY_TIMELINE_MS.impactHold);
-            await hitStop(130);
-
-            displayAttackResult(resolution, playerRig, true);
-            await delay(ENEMY_TIMELINE_MS.resultHold);
-
-            if (resolution.hit) {
-                const dealt = applyPlayerDamage(resolution.totalDamage, `${enemyName} (DM)`);
-                showFloatingText(`-${dealt}`, '#ff6b6b', true, { anchorObject: playerRig });
-                spawnImpactBurst(playerState.position, 0xff4444, 28);
-                shakeScreen(0.2, 320);
-                triggerCombatFlash('#ff2d2d', 0.22, 380);
-                playCombatSfxCue('enemy-hit-player');
-                playConfirmAttackSnap();
-                logCombatEvent(`${enemyName} (DM) hits you for ${dealt}`, 'miss');
-            } else {
-                playCombatSfxCue('miss');
-                logCombatEvent(`${enemyName} (DM) misses you`, 'info');
-            }
-            await delay(ENEMY_TIMELINE_MS.damageHold);
         } finally {
-            const elapsedMs = performance.now() - sequenceStart;
-            if (elapsedMs < COMBAT_PRESENTATION_MIN_MS) {
-                await delay(COMBAT_PRESENTATION_MIN_MS - elapsedMs);
-            }
-            await tweenCameraFov(startFov, 320);
-            setCombatMessageLock(false);
-            endDiceCinematic();
             setCombatTimelineBusy(false);
             setCombatLock(false);
             const actionSnapshotAfter = createCombatSnapshot('action-after-possessed-enemy-melee');
