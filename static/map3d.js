@@ -1,5 +1,4 @@
 import * as THREE from './three.module.js';
-import { OrbitControls } from './OrbitControls.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x10141f);
@@ -16,11 +15,6 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio || 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
-
-const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true;
-controls.target.set(0, 1, 0);
-controls.update();
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
@@ -61,8 +55,6 @@ function animate(timeMs) {
     const t = Number(timeMs) * 0.001;
     testMesh.rotation.y = t * 0.8;
     testMesh.rotation.x = Math.sin(t * 0.7) * 0.2;
-
-    controls.update();
     renderer.render(scene, camera);
 }
 
@@ -72,5 +64,4 @@ window.__MAP3D_BOOTSTRAP__ = {
     scene,
     camera,
     renderer,
-    controls,
 };
