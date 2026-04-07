@@ -15,8 +15,6 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
     const actorMeshes = new Map();
     const actorLabels = new Map();
     const intentListeners = new Set();
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
     const actorHitObjects = [];
 
     let snapshotMeta = {
@@ -152,60 +150,12 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         }
     }
 
-    function onPointerDown(domEvent) {
-        const rect = renderer.domElement.getBoundingClientRect();
-        pointer.x = ((domEvent.clientX - rect.left) / rect.width) * 2 - 1;
-        pointer.y = -((domEvent.clientY - rect.top) / rect.height) * 2 + 1;
-        raycaster.setFromCamera(pointer, camera);
-
-        const actorHits = raycaster.intersectObjects(actorHitObjects, false);
-        if (actorHits.length > 0) {
-            const picked = actorHits[0].object;
-            const targetId = picked?.userData?.actorId;
-            if (!targetId) return;
-
-            emitIntent('select-target', { targetId });
-            if (snapshotMeta.canAttack) {
-                emitIntent('attack', { targetId });
-            }
-            return;
-        }
-
-        const floorPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-        const world = new THREE.Vector3();
-        if (raycaster.ray.intersectPlane(floorPlane, world) && snapshotMeta.canMove) {
-            emitIntent('move', {
-                x: Number(world.x.toFixed(3)),
-                y: 0,
-                z: Number(world.z.toFixed(3)),
-            });
-        }
-    }
-
-    function onKeyDown(event) {
-        if (event.repeat) return;
-
-        const moveDelta = 1;
-        if (snapshotMeta.canMove) {
-            if (event.code === 'KeyW') emitIntent('move-relative', { x: 0, z: -moveDelta });
-            if (event.code === 'KeyS') emitIntent('move-relative', { x: 0, z: moveDelta });
-            if (event.code === 'KeyA') emitIntent('move-relative', { x: -moveDelta, z: 0 });
-            if (event.code === 'KeyD') emitIntent('move-relative', { x: moveDelta, z: 0 });
-        }
-
-        if ((event.code === 'Enter' || event.code === 'NumpadEnter') && snapshotMeta.canEndTurn) {
-            emitIntent('end-turn', {});
-        }
-    }
-
     function start() {
-        renderer.domElement.addEventListener('pointerdown', onPointerDown);
-        window.addEventListener('keydown', onKeyDown);
+        // Runtime intentionally stays side-effect free for input wiring.
     }
 
     function stop() {
-        renderer.domElement.removeEventListener('pointerdown', onPointerDown);
-        window.removeEventListener('keydown', onKeyDown);
+        // Runtime intentionally stays side-effect free for input wiring.
     }
 
     function onIntent(handler) {
@@ -222,8 +172,15 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         start,
         stop,
         onIntent,
+        emitIntent,
         applySnapshot,
         applyEvent,
+        getActorHitObjects() {
+            return actorHitObjects;
+        },
+        getInputFlags() {
+            return { ...snapshotMeta };
+        },
         getDebugState() {
             return {
                 actorCount: actorMeshes.size,

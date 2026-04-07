@@ -1,5 +1,6 @@
 import * as THREE from './three.module.js';
 import { createMap3dRuntime } from './map3d_runtime.js';
+import { createMap3dControls } from './map3d_controls.js';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x10141f);
@@ -51,7 +52,15 @@ const runtime = createMap3dRuntime({
     camera,
     renderer,
 });
-runtime.start();
+
+const controls = createMap3dControls({
+    camera,
+    renderer,
+    getActorHitObjects: () => runtime.getActorHitObjects(),
+    getInputFlags: () => runtime.getInputFlags(),
+    emitIntent: (type, payload) => runtime.emitIntent(type, payload),
+});
+controls.start();
 
 const mapDebug = new URLSearchParams(window.location.search || '').get('mapdebug') === '1';
 
@@ -405,6 +414,7 @@ window.__MAP3D_BOOTSTRAP__ = {
     camera,
     renderer,
     runtime,
+    controls,
     applySnapshot: (snapshot) => runtime.applySnapshot(snapshot),
     applyEvent: (event) => runtime.applyEvent(event),
     onIntent: (handler) => runtime.onIntent(handler),
