@@ -65,13 +65,34 @@ function isSceneReadyForWorldState() {
     }
 }
 
+function getSceneSafe() {
+    try {
+        return scene;
+    } catch (_err) {
+        return null;
+    }
+}
+
+function applySceneStateSafe(state) {
+    try {
+        if (typeof applySceneState === 'function') {
+            applySceneState(state);
+            return true;
+        }
+    } catch (_err) {
+        // Scene persistence may initialize after early socket events.
+    }
+    pendingSceneState = state;
+    return false;
+}
+
 function flushPendingWorldState() {
     if (!isSceneReadyForWorldState()) return;
 
     if (pendingSceneState && pendingSceneState.objects) {
         const queuedState = pendingSceneState;
         pendingSceneState = null;
-        applySceneState(queuedState);
+        applySceneStateSafe(queuedState);
     }
 
     if (pendingWorldHydrationPayload) {
@@ -890,10 +911,13 @@ function hydrateWorld(payload) {
             setPendingWorldHydrationPayload: (value) => { pendingWorldHydrationPayload = value; },
             setPendingSceneState: (value) => { pendingSceneState = value; },
             traceDmPipeline,
-            applySceneState: (...args) => applySceneState(...args),
+            applySceneState: (...args) => {
+                if (!args.length) return false;
+                return applySceneStateSafe(args[0]);
+            },
             combatDomainStore,
             combatDomainAction: COMBAT_DOMAIN_ACTION,
-            getScene: () => scene,
+            getScene: () => getSceneSafe(),
             getSocket: () => socket,
             getLocalPlayerId: () => localPlayerId,
             upsertPlayerAvatar,
@@ -970,7 +994,10 @@ function registerSocketHandlers() {
         findMeshByPersistentId: (...args) => findMeshByPersistentId(...args),
         findMeshByName: (...args) => findMeshByName(...args),
         applyMaterialState: (...args) => applyMaterialState(...args),
-        applySceneState: (...args) => applySceneState(...args),
+        applySceneState: (...args) => {
+            if (!args.length) return false;
+            return applySceneStateSafe(args[0]);
+        },
         traceDmPipeline,
         applyDmCommandFromServer,
         alignNetworkCombatTimeline,
@@ -1659,7 +1686,13 @@ function isObserverClient() {
 function updateClientRuntimeModeFromAuthority() {
     // Online multiplayer should not auto-degrade non-authoritative clients.
     // Keep observer mode as an explicit dev/testing override only.
-    const nextMode = CLIENT_MODE_FULL;
+    const nextMode = (() => {
+        try {
+            return CLIENT_MODE_FULL;
+        } catch (_err) {
+            return 'full';
+        }
+    })();
     if (CLIENT_MODE === nextMode) return false;
     CLIENT_MODE = nextMode;
     applySettings();
@@ -2460,6 +2493,20 @@ async function runUxMacro(cycles = 3) {
 }
 
 function registerDefaultConsoleCommands() {
+    const getClientModeFullSafe = () => {
+        try {
+            return CLIENT_MODE_FULL;
+        } catch (_err) {
+            return 'full';
+        }
+    };
+    const isObserverClientSafe = () => {
+        try {
+            return isObserverClient();
+        } catch (_err) {
+            return false;
+        }
+    };
     registerDefaultConsoleCommandsFromManager({
         registerConsoleCommand,
         CONSOLE_MODE,
@@ -2482,10 +2529,10 @@ function registerDefaultConsoleCommands() {
         appendConsoleHistory,
         renderConsoleHistory,
         setQuality,
-        isObserverClient,
+        isObserverClient: isObserverClientSafe,
 
         updateClientRuntimeModeFromAuthority,
-        getClientModeFull: () => CLIENT_MODE_FULL,
+        getClientModeFull: getClientModeFullSafe,
         setClientMode: (value) => { CLIENT_MODE = value; },
         applySettings,
         getCurrentGameMode: () => currentGameMode,
@@ -3278,9 +3325,10 @@ function isLocalPlayerPayload(player) {
 }
 
 function purgeLocalEchoAvatars() {
-    if (!scene || !scene.userData || !scene.userData.playerAvatars) return;
+    const sceneRef = getSceneSafe();
+    if (!sceneRef || !sceneRef.userData || !sceneRef.userData.playerAvatars) return;
 
-    const avatarEntries = Object.entries(scene.userData.playerAvatars);
+    const avatarEntries = Object.entries(sceneRef.userData.playerAvatars);
     for (const [playerId, avatarRoot] of avatarEntries) {
         const candidate = {
             id: playerId,
@@ -3292,9 +3340,9 @@ function purgeLocalEchoAvatars() {
         }
     }
 
-    if (!scene.userData.playerAvatarStates) return;
-    Object.keys(scene.userData.playerAvatarStates).forEach((playerId) => {
-        const state = scene.userData.playerAvatarStates[playerId];
+    if (!sceneRef.userData.playerAvatarStates) return;
+    Object.keys(sceneRef.userData.playerAvatarStates).forEach((playerId) => {
+        const state = sceneRef.userData.playerAvatarStates[playerId];
         const candidate = {
             id: playerId,
             networkId: state && typeof state === 'object' ? state.networkId : null,
@@ -3415,7 +3463,9 @@ async function initDataDrivenLayer(staticWorldRoot) {
 
 function upsertPlayerAvatar(player) {
     if (!player || !player.id) return;
-    if (!isSceneReadyForWorldState()) return;
+    const sceneRef = getSceneSafe();
+    if (!sceneRef || typeof sceneRef.traverse !== 'function') return;
+    const scene = sceneRef;
 
     if (!scene.userData.playerAvatarStates) scene.userData.playerAvatarStates = {};
     scene.userData.playerAvatarStates[player.id] = player;
@@ -13358,7 +13408,16 @@ const dmCommandApplier = createDmCommandApplier({
     handleDmInjectedInput,
     saveSnapshot,
     getCombatTimeline: () => combatTimeline,
-    restoreCombatSnapshot,
+    restoreCombatSnapshot: (...args) => {
+        try {
+            if (typeof restoreCombatSnapshot === 'function') {
+                return restoreCombatSnapshot(...args);
+            }
+        } catch (_err) {
+            // Combat snapshot helpers initialize later in startup.
+        }
+        return false;
+    },
     THREE,
     MODE,
     setSimulationAuthority,
