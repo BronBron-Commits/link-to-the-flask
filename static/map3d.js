@@ -437,6 +437,179 @@ function updateDmCommandButtonStates() {
     });
 }
 
+window.__SIM_DEBUG_ENABLED__ = window.__SIM_DEBUG_ENABLED__ === true;
+window.__SIM_DEBUG__ = window.__SIM_DEBUG__ || {
+    timeline: [],
+    currentTick: 0,
+    listeners: new Set(),
+};
+
+const SIM_DEBUG_MAX_TICKS = 2000;
+let simDebugOverlayEl = null;
+
+function isSimDebugEnabled() {
+    return window.__SIM_DEBUG_ENABLED__ === true;
+}
+
+function getActorsFromCombatState(state) {
+    if (!state || typeof state !== 'object') return {};
+    if (state.actors && typeof state.actors === 'object') return state.actors;
+    if (state.combat && typeof state.combat.actors === 'object') return state.combat.actors;
+    if (state.world && typeof state.world.actors === 'object') return state.world.actors;
+    return {};
+}
+
+function normalizeActorState(actorState) {
+    if (!actorState || typeof actorState !== 'object') {
+        return {
+            hp: null,
+            maxHp: null,
+            alive: null,
+        };
+    }
+    const hpRaw = Number(actorState.hp);
+    const maxHpRaw = Number(actorState.maxHp ?? actorState.max_hp);
+    return {
+        hp: Number.isFinite(hpRaw) ? hpRaw : null,
+        maxHp: Number.isFinite(maxHpRaw) ? maxHpRaw : null,
+        alive: typeof actorState.alive === 'boolean' ? actorState.alive : null,
+    };
+}
+
+function computeActorDiff(prevState, nextState) {
+    const prevActors = getActorsFromCombatState(prevState);
+    const nextActors = getActorsFromCombatState(nextState);
+    const actorIds = Array.from(new Set([...Object.keys(prevActors), ...Object.keys(nextActors)])).sort();
+    const changedActors = [];
+
+    actorIds.forEach((id) => {
+        const prev = normalizeActorState(prevActors[id]);
+        const next = normalizeActorState(nextActors[id]);
+        if (prev.hp !== next.hp || prev.maxHp !== next.maxHp || prev.alive !== next.alive) {
+            changedActors.push({ id, prev, next });
+        }
+    });
+
+    return changedActors;
+}
+
+function getSimDebugOverlayEl() {
+    if (simDebugOverlayEl && simDebugOverlayEl.isConnected) return simDebugOverlayEl;
+    if (!dmRightPanelEl) return null;
+
+    simDebugOverlayEl = document.createElement('div');
+    simDebugOverlayEl.id = 'sim-debug-overlay';
+    simDebugOverlayEl.style.pointerEvents = 'none';
+    simDebugOverlayEl.style.border = '1px solid rgba(138, 182, 255, 0.36)';
+    simDebugOverlayEl.style.background = 'rgba(7, 14, 29, 0.85)';
+    simDebugOverlayEl.style.borderRadius = '10px';
+    simDebugOverlayEl.style.padding = '10px';
+    simDebugOverlayEl.style.color = '#d9e9ff';
+    simDebugOverlayEl.style.fontFamily = 'Consolas, "Segoe UI", monospace';
+    simDebugOverlayEl.style.fontSize = '12px';
+    simDebugOverlayEl.style.lineHeight = '1.35';
+    simDebugOverlayEl.style.display = 'none';
+    dmRightPanelEl.appendChild(simDebugOverlayEl);
+    return simDebugOverlayEl;
+}
+
+function formatActorDiffLine(change) {
+    const id = String(change && change.id ? change.id : '?');
+    const prevHp = Number.isFinite(change?.prev?.hp) ? change.prev.hp : null;
+    const nextHp = Number.isFinite(change?.next?.hp) ? change.next.hp : null;
+    const prevAlive = change?.prev?.alive;
+    const nextAlive = change?.next?.alive;
+    let statusTag = '';
+    if (prevAlive === true && nextAlive === false) {
+        statusTag = ' DEAD';
+    } else if (prevAlive === false && nextAlive === true) {
+        statusTag = ' REVIVED';
+    }
+
+    if (Number.isFinite(prevHp) && Number.isFinite(nextHp)) {
+        const delta = nextHp - prevHp;
+        const deltaText = delta === 0 ? '0' : (delta > 0 ? `+${delta}` : `${delta}`);
+        const color = delta < 0 ? '#ff9e9e' : (delta > 0 ? '#9ff2b4' : '#c8d9ef');
+        return `<div><span style="color:#9fb6d8">${id}</span>: ${prevHp} -> ${nextHp} <span style="color:${color}">(${deltaText})</span>${statusTag}</div>`;
+    }
+
+    return `<div><span style="color:#9fb6d8">${id}</span>: state changed${statusTag}</div>`;
+}
+
+function renderDebugOverlay(tickData) {
+    const overlayEl = getSimDebugOverlayEl();
+    if (!overlayEl) return;
+
+    if (!isSimDebugEnabled() || modeManager.current !== MODE.DM) {
+        overlayEl.style.display = 'none';
+        return;
+    }
+
+    const changedActors = Array.isArray(tickData?.changedActors) ? tickData.changedActors : [];
+    const actorRows = changedActors.length > 0
+        ? changedActors.slice(0, 8).map(formatActorDiffLine).join('')
+        : '<div style="color:#7f96b8">No actor diffs on this tick.</div>';
+
+    const eventType = String(tickData?.event?.type || tickData?.action?.type || '-');
+    const source = String(tickData?.source || tickData?.event?.source || '-');
+    const authority = String(simulationAuthority || '-').toUpperCase();
+    const mode = String(modeManager.current || '-').toUpperCase();
+    const divergence = tickData?.divergence;
+    const divergenceHtml = divergence
+        ? `<div style="margin-top:8px;color:#ffb4b4">DIVERGENCE: ${String(divergence)}</div>`
+        : '';
+
+    overlayEl.style.display = 'block';
+    overlayEl.innerHTML = `
+        <div style="font-weight:700;color:#f4fbff;letter-spacing:0.03em">SIM DEBUG</div>
+        <div style="margin-top:4px;color:#9ec1eb">Tick ${Number.isFinite(tickData?.tick) ? tickData.tick : '-'}</div>
+        <div style="margin-top:4px;color:#9ec1eb">Event ${eventType}</div>
+        <div style="color:#9ec1eb">Source ${source}</div>
+        <div style="color:#9ec1eb">Authority ${authority} | Mode ${mode}</div>
+        <div style="margin-top:8px;border-top:1px solid rgba(138,182,255,0.25);padding-top:7px">${actorRows}</div>
+        ${divergenceHtml}
+    `;
+}
+
+function pushDebugTick(tickData) {
+    if (!isSimDebugEnabled()) return;
+
+    const bus = window.__SIM_DEBUG__;
+    if (!bus || !Array.isArray(bus.timeline) || !(bus.listeners instanceof Set)) return;
+
+    const normalized = {
+        tick: Number.isFinite(tickData?.tick) ? tickData.tick : bus.currentTick,
+        timestamp: Number.isFinite(tickData?.timestamp) ? tickData.timestamp : performance.now(),
+        ...tickData,
+    };
+    bus.timeline.push(normalized);
+    if (bus.timeline.length > SIM_DEBUG_MAX_TICKS) {
+        bus.timeline.splice(0, bus.timeline.length - SIM_DEBUG_MAX_TICKS);
+    }
+
+    bus.listeners.forEach((listener) => {
+        try {
+            listener(normalized);
+        } catch (_err) {
+            // Keep debug listeners isolated from runtime logic.
+        }
+    });
+}
+
+if (!(window.__SIM_DEBUG__.listeners instanceof Set)) {
+    window.__SIM_DEBUG__.listeners = new Set();
+}
+if (window.__SIM_DEBUG__.listeners instanceof Set && !window.__SIM_DEBUG__.__overlayListenerInstalled) {
+    window.__SIM_DEBUG__.listeners.add(renderDebugOverlay);
+    window.__SIM_DEBUG__.__overlayListenerInstalled = true;
+}
+
+window.exportDebugTimeline = () => {
+    const bus = window.__SIM_DEBUG__;
+    const payload = Array.isArray(bus && bus.timeline) ? bus.timeline : [];
+    return JSON.stringify(payload, null, 2);
+};
+
 function queueNetworkCombatAction(record, eventTimeMsRaw) {
     if (!record) return;
     const eventTimeMs = Number(eventTimeMsRaw);
@@ -500,11 +673,23 @@ function processNetworkCombatTimeline(nowPerfMs) {
         const queued = pendingNetworkCombatEvents[nextIdx];
         pendingNetworkCombatEvents.splice(nextIdx, 1);
         const lateMs = Math.max(0, Math.round(nowPerfMs - queued.duePerfMs));
+        const debugTick = window.__SIM_DEBUG__.currentTick;
         void replayRemoteCombatActionRecord(queued.record, {
             offsetMs: lateMs,
             instant: !isOwner,
             allowAsyncPresentation: false,
         });
+        pushDebugTick({
+            tick: debugTick,
+            source: 'network',
+            event: cloneJsonSafe(queued.record),
+            timing: {
+                duePerfMs: queued.duePerfMs,
+                nowPerfMs,
+                lateMs,
+            },
+        });
+        window.__SIM_DEBUG__.currentTick = debugTick + 1;
         processed += 1;
     }
 }
@@ -512,11 +697,19 @@ function processNetworkCombatTimeline(nowPerfMs) {
 function emitCombatActionRecord(actionRecord) {
     if (!socket || !actionRecord) return;
     beginLocalCombatTimeline();
+    const debugTick = window.__SIM_DEBUG__.currentTick;
     socket.emit('combat-action-record', {
         record: cloneJsonSafe(actionRecord),
         startTimeMs: Date.now(),
         timelineId: localCombatTimelineId || activeNetworkCombatTimeline?.id || null,
     });
+    pushDebugTick({
+        tick: debugTick,
+        source: 'local',
+        event: cloneJsonSafe(actionRecord),
+        timelineId: localCombatTimelineId || activeNetworkCombatTimeline?.id || null,
+    });
+    window.__SIM_DEBUG__.currentTick = debugTick + 1;
 }
 
 function emitDiceRollEvent(rollPayload) {
@@ -651,6 +844,19 @@ function applyCombatDomainTransition(prevState, nextState, action) {
             updateLobbyOverlayFromState,
         });
     }
+    const debugTick = window.__SIM_DEBUG__.currentTick;
+    const changedActors = computeActorDiff(prevState, nextState);
+    const combatActionType = String(action && (action.type || action.kind) ? (action.type || action.kind) : '').toLowerCase();
+    const divergence = (action && action.divergence) || (combatActionType.includes('divergence') ? 'combat-state-mismatch' : null);
+    pushDebugTick({
+        tick: debugTick,
+        source: 'state-transition',
+        action: cloneJsonSafe(action),
+        changedActors,
+        snapshot: cloneJsonSafe(nextState),
+        divergence,
+    });
+    window.__SIM_DEBUG__.currentTick = debugTick + 1;
     _combatRenderTransitionAdapter(prevState, nextState, action);
 }
 
