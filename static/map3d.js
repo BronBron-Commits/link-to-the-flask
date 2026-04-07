@@ -268,7 +268,26 @@ function buildOceanScene() {
     oceanGroup.name = 'ocean-scene';
 
     scene.fog = new THREE.FogExp2(0x091827, 0.024);
-    grid.visible = false;
+    grid.visible = true;
+    if (Array.isArray(grid.material)) {
+        if (grid.material[0]) {
+            grid.material[0].opacity = 0.7;
+            if (grid.material[0].color) {
+                grid.material[0].color.setHex(0x9fe8ff);
+            }
+        }
+        if (grid.material[1]) {
+            grid.material[1].opacity = 0.42;
+            if (grid.material[1].color) {
+                grid.material[1].color.setHex(0x3a8fb0);
+            }
+        }
+    } else if (grid.material) {
+        grid.material.opacity = 0.62;
+        if (grid.material.color) {
+            grid.material.color.setHex(0x9fe8ff);
+        }
+    }
 
     floor.material.color.setHex(0xe4cf9d);
     floor.material.roughness = 0.96;
