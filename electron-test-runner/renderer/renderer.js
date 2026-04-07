@@ -25,6 +25,11 @@ const comparePathAEl = document.getElementById('compare-path-a');
 const comparePathBEl = document.getElementById('compare-path-b');
 const timelineCompareBtn = document.getElementById('timeline-compare');
 const timelineDivergenceEl = document.getElementById('timeline-divergence');
+const timelinePlayBtn = document.getElementById('timeline-play');
+const timelinePauseBtn = document.getElementById('timeline-pause');
+const timelineResetBtn = document.getElementById('timeline-reset');
+const timelineSpeedEl = document.getElementById('timeline-speed');
+const timelineLoopEl = document.getElementById('timeline-loop');
 
 const inspectorStartBtn = document.getElementById('inspector-start');
 const inspectorStopBtn = document.getElementById('inspector-stop');
@@ -38,6 +43,8 @@ const inspectorRawEl = document.getElementById('inspector-raw');
 
 let busy = false;
 let timelineData = null;
+let timelinePlaybackTimer = null;
+let timelinePlaying = false;
 
 function append(text, isError = false) {
     const safeText = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -162,6 +169,62 @@ function renderTimelineAt(index) {
         : 'No state snapshot at this tick.';
 }
 
+function stopTimelinePlayback() {
+    if (timelinePlaybackTimer) {
+        clearTimeout(timelinePlaybackTimer);
+        timelinePlaybackTimer = null;
+    }
+    timelinePlaying = false;
+}
+
+function getTimelinePlaybackDelay(index) {
+    const events = Array.isArray(timelineData?.events) ? timelineData.events : [];
+    if (!events.length) return 300;
+    const evt = events[Math.max(0, Math.min(index, events.length - 1))] || {};
+    const duration = Number.isFinite(evt.durationMs)
+        ? evt.durationMs
+        : (Number.isFinite(evt.startMs) && Number.isFinite(evt.endMs)
+            ? Math.max(0, evt.endMs - evt.startMs)
+            : 320);
+    const speed = Math.max(0.1, Number.parseFloat(timelineSpeedEl?.value || '1') || 1);
+    return Math.max(60, Math.min(2000, Math.floor(duration / speed)));
+}
+
+function scheduleTimelinePlaybackStep() {
+    if (!timelinePlaying) return;
+
+    const max = Number.parseInt(timelineSlider.max, 10) || 0;
+    const current = Number.parseInt(timelineSlider.value, 10) || 0;
+    let next = current + 1;
+
+    if (next > max) {
+        if (timelineLoopEl && timelineLoopEl.checked) {
+            next = 0;
+        } else {
+            stopTimelinePlayback();
+            return;
+        }
+    }
+
+    const delay = getTimelinePlaybackDelay(current);
+    timelinePlaybackTimer = setTimeout(() => {
+        timelineSlider.value = String(next);
+        renderTimelineAt(next);
+        scheduleTimelinePlaybackStep();
+    }, delay);
+}
+
+function startTimelinePlayback() {
+    const count = Array.isArray(timelineData?.events) ? timelineData.events.length : 0;
+    if (count <= 1) {
+        append('\n[timeline] Load a timeline with at least 2 events before playback.\n');
+        return;
+    }
+    stopTimelinePlayback();
+    timelinePlaying = true;
+    scheduleTimelinePlaybackStep();
+}
+
 function getTimelineMarkerClass(evt) {
     const type = String(evt?.type || '').toLowerCase();
     if (type.startsWith('input:ack') || evt?.inputAck || evt?.ack) return 'ack';
@@ -236,6 +299,28 @@ timelineSlider.addEventListener('input', () => {
     renderTimelineAt(idx);
 });
 
+timelinePlayBtn?.addEventListener('click', () => {
+    startTimelinePlayback();
+});
+
+timelinePauseBtn?.addEventListener('click', () => {
+    stopTimelinePlayback();
+});
+
+timelineResetBtn?.addEventListener('click', () => {
+    stopTimelinePlayback();
+    timelineSlider.value = '0';
+    renderTimelineAt(0);
+});
+
+timelineSpeedEl?.addEventListener('change', () => {
+    if (!timelinePlaying) return;
+    // Re-schedule at new speed.
+    stopTimelinePlayback();
+    timelinePlaying = true;
+    scheduleTimelinePlaybackStep();
+});
+
 timelineGenerateBtn.addEventListener('click', async () => {
     const result = await window.testRunnerApi.generateTimeline();
     if (!result.ok) {
@@ -246,6 +331,7 @@ timelineGenerateBtn.addEventListener('click', async () => {
 });
 
 timelineLoadBtn.addEventListener('click', async () => {
+    stopTimelinePlayback();
     const result = await window.testRunnerApi.loadTimeline();
     if (!result.ok) {
         append(`\n[timeline:error] ${result.error}\n`, true);

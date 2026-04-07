@@ -62,11 +62,89 @@ const controls = createMap3dControls({
 });
 controls.start();
 
-const mapDebug = new URLSearchParams(window.location.search || '').get('mapdebug') === '1';
+const urlSearch = new URLSearchParams(window.location.search || '');
+const mapDebug = urlSearch.get('mapdebug') === '1';
+const simulationMode = urlSearch.get('sim') === '1';
+const simulationArtifactPath = urlSearch.get('simPath') || '/artifacts/timeline-debug.json';
 
 function debugLog(...args) {
     if (!mapDebug) return;
     console.log(...args);
+}
+
+function createSimulationPanel() {
+    const panel = document.createElement('div');
+    panel.style.position = 'fixed';
+    panel.style.left = '12px';
+    panel.style.bottom = '12px';
+    panel.style.padding = '10px';
+    panel.style.background = 'rgba(11,15,26,0.86)';
+    panel.style.color = '#d9e2f0';
+    panel.style.font = '12px/1.3 monospace';
+    panel.style.border = '1px solid rgba(120,150,220,0.35)';
+    panel.style.borderRadius = '8px';
+    panel.style.zIndex = '20';
+    panel.style.display = 'flex';
+    panel.style.flexDirection = 'column';
+    panel.style.gap = '8px';
+
+    const title = document.createElement('strong');
+    title.textContent = 'Simulation Replay';
+    panel.appendChild(title);
+
+    const controlsWrap = document.createElement('div');
+    controlsWrap.style.display = 'flex';
+    controlsWrap.style.gap = '6px';
+
+    const loadBtn = document.createElement('button');
+    loadBtn.textContent = 'Load';
+    const playBtn = document.createElement('button');
+    playBtn.textContent = 'Play';
+    const pauseBtn = document.createElement('button');
+    pauseBtn.textContent = 'Pause';
+    const resetBtn = document.createElement('button');
+    resetBtn.textContent = 'Reset';
+
+    [loadBtn, playBtn, pauseBtn, resetBtn].forEach((btn) => {
+        btn.style.cursor = 'pointer';
+        btn.style.border = '1px solid rgba(136,168,240,0.5)';
+        btn.style.background = '#15233c';
+        btn.style.color = '#d9e2f0';
+        btn.style.padding = '4px 8px';
+        btn.style.borderRadius = '6px';
+        controlsWrap.appendChild(btn);
+    });
+
+    panel.appendChild(controlsWrap);
+
+    const speedWrap = document.createElement('label');
+    speedWrap.textContent = 'Speed '; 
+    const speedSelect = document.createElement('select');
+    ['0.5', '1', '2', '4'].forEach((value) => {
+        const opt = document.createElement('option');
+        opt.value = value;
+        opt.textContent = `${value}x`;
+        if (value === '1') opt.selected = true;
+        speedSelect.appendChild(opt);
+    });
+    speedWrap.appendChild(speedSelect);
+    panel.appendChild(speedWrap);
+
+    const status = document.createElement('div');
+    status.textContent = 'Idle';
+    panel.appendChild(status);
+
+    document.body.appendChild(panel);
+
+    return {
+        panel,
+        loadBtn,
+        playBtn,
+        pauseBtn,
+        resetBtn,
+        speedSelect,
+        status,
+    };
 }
 
 function installAudioUnlock() {
@@ -113,6 +191,17 @@ const networkState = {
     enemiesById: new Map(),
     currentTurn: null,
     inCombat: false,
+};
+
+const simulationReplay = {
+    data: null,
+    tickStates: [],
+    currentIndex: 0,
+    timer: null,
+    playing: false,
+    speed: 1,
+    actorLayout: new Map(),
+    ui: null,
 };
 
 function numberOr(value, fallback) {
@@ -207,6 +296,148 @@ function publishSnapshot() {
         canAttack: canInput,
         canEndTurn: canInput,
     });
+}
+
+function stopSimulationReplay() {
+    if (simulationReplay.timer) {
+        clearTimeout(simulationReplay.timer);
+        simulationReplay.timer = null;
+    }
+    simulationReplay.playing = false;
+}
+
+function ensureActorLayout(id, team, indexHint) {
+    if (simulationReplay.actorLayout.has(id)) {
+        return simulationReplay.actorLayout.get(id);
+    }
+    const idx = Number.isFinite(indexHint) ? indexHint : simulationReplay.actorLayout.size;
+    const isEnemy = team === 'enemy';
+    const column = idx % 5;
+    const row = Math.floor(idx / 5);
+    const pos = {
+        x: -8 + (column * 4),
+        y: 0.7,
+        z: (isEnemy ? 6 : -6) + (row * (isEnemy ? 2 : -2)),
+    };
+    simulationReplay.actorLayout.set(id, pos);
+    return pos;
+}
+
+function classifyTeamFromId(id, data) {
+    const players = Array.isArray(data?.players) ? data.players : [];
+    const enemies = Array.isArray(data?.enemies) ? data.enemies : [];
+    if (players.some((p) => String(p.id) === id)) return 'player';
+    if (enemies.some((e) => String(e.id) === id)) return 'enemy';
+    if (id.startsWith('p')) return 'player';
+    if (id.startsWith('e')) return 'enemy';
+    return 'neutral';
+}
+
+function applySimulationTick(index) {
+    if (!simulationReplay.data || !simulationReplay.tickStates.length) return;
+    const safeIdx = Math.max(0, Math.min(index, simulationReplay.tickStates.length - 1));
+    simulationReplay.currentIndex = safeIdx;
+    const tickState = simulationReplay.tickStates[safeIdx] || {};
+    const actorsById = tickState.actors && typeof tickState.actors === 'object' ? tickState.actors : {};
+    const actorIds = Object.keys(actorsById);
+
+    const actors = actorIds.map((id, idx) => {
+        const state = actorsById[id] || {};
+        const team = classifyTeamFromId(id, simulationReplay.data);
+        const basePos = ensureActorLayout(id, team, idx);
+        const alive = state.alive !== false;
+        return {
+            id,
+            team,
+            label: id,
+            hp: numberOr(state.hp, 0),
+            maxHp: numberOr(state.maxHp, Math.max(1, numberOr(state.hp, 1))),
+            alive,
+            position: {
+                x: basePos.x,
+                y: alive ? basePos.y : -20,
+                z: basePos.z,
+            },
+            rotation: { y: 0 },
+        };
+    });
+
+    runtime.applySnapshot({
+        actors,
+        canMove: false,
+        canAttack: false,
+        canEndTurn: false,
+    });
+
+    if (simulationReplay.ui) {
+        const tick = Number.isFinite(tickState.tick) ? tickState.tick : safeIdx;
+        simulationReplay.ui.status.textContent = `Tick ${tick} (${safeIdx + 1}/${simulationReplay.tickStates.length})`;
+    }
+}
+
+function getSimulationStepDelayMs(currentTick) {
+    const events = Array.isArray(simulationReplay.data?.events) ? simulationReplay.data.events : [];
+    const speed = Math.max(0.1, Number(simulationReplay.speed) || 1);
+    const perTickDuration = events
+        .filter((evt) => Number(evt.tick) === Number(currentTick))
+        .reduce((sum, evt) => sum + Math.max(1, numberOr(evt.durationMs, 1)), 0);
+    const base = perTickDuration > 0 ? perTickDuration : 180;
+    return Math.max(60, Math.floor(base / speed));
+}
+
+function scheduleSimulationReplay() {
+    if (!simulationReplay.playing) return;
+    const ticks = simulationReplay.tickStates;
+    if (!ticks.length) return;
+
+    const current = ticks[simulationReplay.currentIndex] || {};
+    const tick = Number.isFinite(current.tick) ? current.tick : simulationReplay.currentIndex;
+    const delay = getSimulationStepDelayMs(tick);
+
+    simulationReplay.timer = setTimeout(() => {
+        const next = simulationReplay.currentIndex + 1;
+        if (next >= ticks.length) {
+            stopSimulationReplay();
+            return;
+        }
+        applySimulationTick(next);
+        scheduleSimulationReplay();
+    }, delay);
+}
+
+async function loadSimulationArtifact(artifactPath = simulationArtifactPath) {
+    stopSimulationReplay();
+    simulationReplay.actorLayout.clear();
+
+    const response = await fetch(artifactPath, { cache: 'no-store' });
+    if (!response.ok) {
+        throw new Error(`Failed to load artifact: ${response.status}`);
+    }
+    const data = await response.json();
+    simulationReplay.data = data;
+    simulationReplay.tickStates = Array.isArray(data.stateByTick) ? data.stateByTick.slice() : [];
+    simulationReplay.currentIndex = 0;
+
+    applySimulationTick(0);
+    if (simulationReplay.ui) {
+        simulationReplay.ui.status.textContent = `Loaded ${simulationReplay.tickStates.length} ticks`; 
+    }
+}
+
+function playSimulationReplay() {
+    if (!simulationReplay.tickStates.length) return;
+    stopSimulationReplay();
+    simulationReplay.playing = true;
+    scheduleSimulationReplay();
+}
+
+function pauseSimulationReplay() {
+    stopSimulationReplay();
+}
+
+function resetSimulationReplay() {
+    stopSimulationReplay();
+    applySimulationTick(0);
 }
 
 function ingestPlayersState(playersPayload) {
@@ -334,11 +565,37 @@ function createSocketBridge() {
     return socket;
 }
 
-const socket = createSocketBridge();
+const socket = simulationMode ? null : createSocketBridge();
+
+if (simulationMode) {
+    simulationReplay.ui = createSimulationPanel();
+    simulationReplay.ui.loadBtn.addEventListener('click', async () => {
+        try {
+            await loadSimulationArtifact(simulationArtifactPath);
+        } catch (err) {
+            simulationReplay.ui.status.textContent = `Load failed: ${err.message || err}`;
+        }
+    });
+    simulationReplay.ui.playBtn.addEventListener('click', () => playSimulationReplay());
+    simulationReplay.ui.pauseBtn.addEventListener('click', () => pauseSimulationReplay());
+    simulationReplay.ui.resetBtn.addEventListener('click', () => resetSimulationReplay());
+    simulationReplay.ui.speedSelect.addEventListener('change', () => {
+        simulationReplay.speed = Math.max(0.1, Number(simulationReplay.ui.speedSelect.value) || 1);
+    });
+
+    loadSimulationArtifact(simulationArtifactPath)
+        .then(() => playSimulationReplay())
+        .catch((err) => {
+            if (simulationReplay.ui) {
+                simulationReplay.ui.status.textContent = `Auto-load failed: ${err.message || err}`;
+            }
+        });
+}
 
 runtime.onIntent((intent) => {
     debugLog('[MAP3D INTENT]', intent);
 
+    if (simulationMode) return;
     if (!socket || !socket.connected) return;
     const payload = intent && intent.payload ? intent.payload : {};
 
@@ -418,6 +675,19 @@ window.__MAP3D_BOOTSTRAP__ = {
     applySnapshot: (snapshot) => runtime.applySnapshot(snapshot),
     applyEvent: (event) => runtime.applyEvent(event),
     onIntent: (handler) => runtime.onIntent(handler),
+    simulationMode,
+    simulationReplay: {
+        load: (path) => loadSimulationArtifact(path || simulationArtifactPath),
+        play: () => playSimulationReplay(),
+        pause: () => pauseSimulationReplay(),
+        reset: () => resetSimulationReplay(),
+        setSpeed: (speed) => {
+            simulationReplay.speed = Math.max(0.1, Number(speed) || 1);
+            if (simulationReplay.ui) {
+                simulationReplay.ui.speedSelect.value = String(simulationReplay.speed);
+            }
+        },
+    },
 };
 
 window.dispatchMapSnapshot = (snapshot) => runtime.applySnapshot(snapshot);

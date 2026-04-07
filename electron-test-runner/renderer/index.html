@@ -49,6 +49,22 @@
                     <input id="timeline-slider" type="range" min="0" max="0" value="0" />
                     <strong id="timeline-tick">tick -</strong>
                 </div>
+                <div class="timeline-controls">
+                    <button id="timeline-play" class="btn">Play</button>
+                    <button id="timeline-pause" class="btn btn-ghost">Pause</button>
+                    <button id="timeline-reset" class="btn btn-ghost">Reset</button>
+                    <label for="timeline-speed">Speed</label>
+                    <select id="timeline-speed">
+                        <option value="0.5">0.5x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="2">2x</option>
+                        <option value="4">4x</option>
+                    </select>
+                    <label>
+                        <input id="timeline-loop" type="checkbox" />
+                        Loop
+                    </label>
+                </div>
                 <div id="timeline-markers" class="timeline-markers" aria-label="Timeline markers"></div>
                 <div id="timeline-phase-strip" class="timeline-phase-strip">No phase sequence.</div>
                 <pre id="timeline-event" class="mini-log">No timeline loaded.</pre>
