@@ -602,6 +602,23 @@ for (let i = 0; i < 18; i++) {
   scene.add(ember);
 }
 
+// Floor-only lobby mode: keep player platforms/avatars and remove room/fireplace visuals.
+const FLOOR_ONLY_PLAYERS_MODE = true;
+if (FLOOR_ONLY_PLAYERS_MODE) {
+  backWall.visible = false;
+  leftWall.visible = false;
+  rightWall.visible = false;
+  hearth.visible = false;
+  opening.visible = false;
+  mantle.visible = false;
+  rug.visible = false;
+  flameCore.visible = false;
+  flameOuter.visible = false;
+  embers.forEach((ember) => {
+    ember.visible = false;
+  });
+}
+
 function createAxisLabelSprite(text, color = '#ffffff') {
   const canvas = document.createElement('canvas');
   canvas.width = 96;
