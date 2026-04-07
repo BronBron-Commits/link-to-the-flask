@@ -245,6 +245,91 @@ class MultiplayerSystemTests(unittest.TestCase):
         self.assertEqual(gs.world_state["entities"]["enemy_1"]["hp"], 14.0)
         broadcast_mock.assert_called_once_with(include_scene=False)
 
+    @patch("action_handler.emit")
+    def test_handle_combat_action_attack_denies_melee_target_out_of_range(self, emit_mock) -> None:
+        sid = "p1"
+        gs.players[sid] = {
+            "id": sid,
+            "actorId": "player_1",
+            "role": "player",
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "inventory": {
+                "items": [
+                    {"instanceId": "inv_001", "itemId": "longsword", "qty": 1, "equipped": True}
+                ]
+            },
+        }
+        gs.client_roles[sid] = "player"
+        gs.world_state["combat"] = {
+            "turn": 0,
+            "order": [{"id": "player_1", "type": "player", "ownerSid": sid}],
+            "state": {"inCombat": True},
+        }
+        gs.world_state["entities"] = {
+            "enemy_1": {
+                "id": "enemy_1",
+                "ac": 10,
+                "hp": 20,
+                "maxHp": 20,
+                "position": {"x": 12.0, "y": 0.0, "z": 0.0},
+            }
+        }
+
+        action_handler.handle_combat_action(sid, {"type": "attack", "targetId": "enemy_1"})
+
+        emit_mock.assert_called_with("combat-action-denied", {
+            "reason": "target-out-of-range",
+            "targetId": "enemy_1",
+            "distanceFt": 12.0,
+            "reachFt": 5.0,
+            "rangeFt": 0.0,
+            "longRangeFt": 0.0,
+        })
+
+    @patch("action_handler.broadcast_world")
+    @patch("action_handler.socketio.emit")
+    @patch("action_handler.emit")
+    @patch("action_handler.random.randint")
+    def test_handle_combat_action_attack_allows_thrown_javelin_at_range(self, randint_mock, emit_mock, socket_emit_mock, broadcast_mock) -> None:
+        sid = "p1"
+        gs.players[sid] = {
+            "id": sid,
+            "actorId": "player_1",
+            "role": "player",
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "inventory": {
+                "items": [
+                    {"instanceId": "inv_001", "itemId": "javelin", "qty": 1, "equipped": True}
+                ]
+            },
+        }
+        gs.client_roles[sid] = "player"
+        gs.world_state["combat"] = {
+            "turn": 0,
+            "order": [{"id": "player_1", "type": "player", "ownerSid": sid}],
+            "state": {"inCombat": True},
+        }
+        gs.world_state["entities"] = {
+            "enemy_1": {
+                "id": "enemy_1",
+                "ac": 10,
+                "hp": 20,
+                "maxHp": 20,
+                "position": {"x": 20.0, "y": 0.0, "z": 0.0},
+            }
+        }
+
+        randint_mock.side_effect = [15, 5]
+
+        action_handler.handle_combat_action(sid, {"type": "attack", "targetId": "enemy_1"})
+
+        payload = socket_emit_mock.call_args[0][1]
+        self.assertEqual(payload["weapon"]["itemId"], "javelin")
+        self.assertEqual(payload["rangeBand"], "normal")
+        self.assertFalse(payload["attackDisadvantage"])
+        self.assertEqual(payload["damage"], 5)
+        broadcast_mock.assert_called_once_with(include_scene=False)
+
     @patch("action_handler.broadcast_world")
     @patch("action_handler.socketio.emit")
     @patch("action_handler.emit")

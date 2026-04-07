@@ -56,6 +56,67 @@ def _movement_budget_for(action_type: str, entry: dict) -> float:
     return base
 
 
+def _attack_range_profile(weapon: dict, attacker_pos: dict, target_pos: dict) -> dict:
+    attack_mode = str(weapon.get("attackMode") or "melee").strip().lower()
+    reach_ft = max(5.0, gs.safe_float(weapon.get("reachFt", 5.0), 5.0))
+    range_ft = max(0.0, gs.safe_float(weapon.get("rangeFt", 0.0), 0.0))
+    long_range_ft = max(range_ft, gs.safe_float(weapon.get("longRangeFt", range_ft), range_ft))
+    distance_ft = _distance_2d(attacker_pos, target_pos)
+
+    if attack_mode == "melee":
+        return {
+            "distanceFt": distance_ft,
+            "reachFt": reach_ft,
+            "rangeFt": range_ft,
+            "longRangeFt": long_range_ft,
+            "rangeBand": "melee" if distance_ft <= reach_ft else "out-of-range",
+            "allowed": distance_ft <= reach_ft,
+            "disadvantage": False,
+        }
+
+    if attack_mode == "thrown":
+        if distance_ft <= reach_ft:
+            return {
+                "distanceFt": distance_ft,
+                "reachFt": reach_ft,
+                "rangeFt": range_ft,
+                "longRangeFt": long_range_ft,
+                "rangeBand": "melee",
+                "allowed": True,
+                "disadvantage": False,
+            }
+        if range_ft > 0.0 and distance_ft <= range_ft:
+            return {
+                "distanceFt": distance_ft,
+                "reachFt": reach_ft,
+                "rangeFt": range_ft,
+                "longRangeFt": long_range_ft,
+                "rangeBand": "normal",
+                "allowed": True,
+                "disadvantage": False,
+            }
+        if long_range_ft > 0.0 and distance_ft <= long_range_ft:
+            return {
+                "distanceFt": distance_ft,
+                "reachFt": reach_ft,
+                "rangeFt": range_ft,
+                "longRangeFt": long_range_ft,
+                "rangeBand": "long",
+                "allowed": True,
+                "disadvantage": True,
+            }
+
+    return {
+        "distanceFt": distance_ft,
+        "reachFt": reach_ft,
+        "rangeFt": range_ft,
+        "longRangeFt": long_range_ft,
+        "rangeBand": "out-of-range",
+        "allowed": False,
+        "disadvantage": False,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Turn actions
 # ---------------------------------------------------------------------------
@@ -176,16 +237,42 @@ def handle_combat_action_preview(sid: str, data: dict) -> None:
     damage_roll = max(1, int(gs.safe_float(weapon.get("damageRoll", 3), 3)))
     damage_bonus = int(gs.safe_float(weapon.get("damageBonus", 0), 0))
     target_ac = int(gs.safe_float(target_entity.get("ac", 10), 10))
+    attacker_pos = _actor_position(str(order[idx].get("id") or ""), "player", sid=sid)
+    target_pos = _actor_position(target_id, "enemy")
+    range_profile = _attack_range_profile(weapon, attacker_pos, target_pos)
+
+    if not range_profile["allowed"]:
+        emit("combat-preview-denied", {
+            "reason": "target-out-of-range",
+            "requestId": request_id or None,
+            "targetId": target_id,
+            "distanceFt": round(range_profile["distanceFt"], 3),
+            "reachFt": range_profile["reachFt"],
+            "rangeFt": range_profile["rangeFt"],
+            "longRangeFt": range_profile["longRangeFt"],
+        }, to=sid)
+        return
 
     # Deterministic combat preview from authoritative server stats.
-    success_count = 0
-    for roll in range(1, 21):
-        if roll == 1:
-            continue
-        if roll == 20 or (roll + attack_bonus) >= target_ac:
-            success_count += 1
+    if range_profile["disadvantage"]:
+        success_count = 0
+        for first_roll in range(1, 21):
+            for second_roll in range(1, 21):
+                hit_roll = min(first_roll, second_roll)
+                if hit_roll == 1:
+                    continue
+                if hit_roll == 20 or (hit_roll + attack_bonus) >= target_ac:
+                    success_count += 1
+        hit_chance = success_count / 400.0
+    else:
+        success_count = 0
+        for roll in range(1, 21):
+            if roll == 1:
+                continue
+            if roll == 20 or (roll + attack_bonus) >= target_ac:
+                success_count += 1
+        hit_chance = success_count / 20.0
 
-    hit_chance = success_count / 20.0
     emit("combat-action-preview", {
         "requestId": request_id or None,
         "type": "attack",
@@ -197,9 +284,16 @@ def handle_combat_action_preview(sid: str, data: dict) -> None:
             "hitChancePct": int(round(hit_chance * 100.0)),
             "damageMin": max(0, 1 + damage_bonus),
             "damageMax": max(0, damage_roll + damage_bonus),
+            "distanceFt": round(range_profile["distanceFt"], 3),
+            "reachFt": range_profile["reachFt"],
+            "rangeFt": range_profile["rangeFt"],
+            "longRangeFt": range_profile["longRangeFt"],
+            "rangeBand": range_profile["rangeBand"],
+            "disadvantage": bool(range_profile["disadvantage"]),
             "weapon": {
                 "itemId": weapon.get("itemId"),
                 "name": weapon.get("name"),
+                "attackMode": weapon.get("attackMode"),
                 "damageRoll": damage_roll,
                 "damageBonus": damage_bonus,
                 "damageType": weapon.get("damageType"),
@@ -271,6 +365,20 @@ def handle_combat_action(sid: str, data: dict) -> None:
         dmg_bonus = int(gs.safe_float(weapon.get("damageBonus", 0), 0))
         target_entity = entities[target_id]
         target_ac = int(gs.safe_float(target_entity.get("ac", 10), 10))
+        attacker_pos = _actor_position(str(current.get("id") or ""), "player", sid=sid)
+        target_pos = _actor_position(target_id, "enemy")
+        range_profile = _attack_range_profile(weapon, attacker_pos, target_pos)
+
+        if not range_profile["allowed"]:
+            emit("combat-action-denied", {
+                "reason": "target-out-of-range",
+                "targetId": target_id,
+                "distanceFt": round(range_profile["distanceFt"], 3),
+                "reachFt": range_profile["reachFt"],
+                "rangeFt": range_profile["rangeFt"],
+                "longRangeFt": range_profile["longRangeFt"],
+            })
+            return
 
         _ = reaction_system.trigger_reactions("attack_declared", {
             "attackerActorId": str(current.get("id") or ""),
@@ -278,7 +386,9 @@ def handle_combat_action(sid: str, data: dict) -> None:
             "targetId": target_id,
         })
 
-        hit_roll = random.randint(1, 20)
+        first_roll = random.randint(1, 20)
+        second_roll = random.randint(1, 20) if range_profile["disadvantage"] else None
+        hit_roll = min(first_roll, second_roll) if second_roll is not None else first_roll
         total = hit_roll + atk_bonus
         is_hit = hit_roll == 20 or (hit_roll != 1 and total >= target_ac)
         damage = max(0, random.randint(1, dmg_roll) + dmg_bonus) if is_hit else 0
@@ -293,14 +403,22 @@ def handle_combat_action(sid: str, data: dict) -> None:
         result.update({
             "targetId": target_id,
             "hitRoll": hit_roll,
+            "hitRolls": [first_roll, second_roll] if second_roll is not None else [first_roll],
             "attackBonus": atk_bonus,
             "toHit": total,
             "targetAC": target_ac,
             "hit": is_hit,
             "damage": damage,
+            "distanceFt": round(range_profile["distanceFt"], 3),
+            "reachFt": range_profile["reachFt"],
+            "rangeFt": range_profile["rangeFt"],
+            "longRangeFt": range_profile["longRangeFt"],
+            "rangeBand": range_profile["rangeBand"],
+            "attackDisadvantage": bool(range_profile["disadvantage"]),
             "weapon": {
                 "itemId": weapon.get("itemId"),
                 "name": weapon.get("name"),
+                "attackMode": weapon.get("attackMode"),
                 "damageRoll": dmg_roll,
                 "damageBonus": dmg_bonus,
                 "damageType": weapon.get("damageType"),

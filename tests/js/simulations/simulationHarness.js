@@ -28,7 +28,47 @@ function defaultActor(id, team, hp) {
     maxHp: hp,
     alive: true,
     actedOnTurn: 0,
+    position: { x: 0, y: 0, z: 0 },
   };
+}
+
+function distance2d(a, b) {
+  const dx = Number(a && a.x) - Number(b && b.x);
+  const dz = Number(a && a.z) - Number(b && b.z);
+  return Math.hypot(dx || 0, dz || 0);
+}
+
+function assignDefaultPositions(players, enemies, actors) {
+  const laneCount = Math.max(1, Math.min(players.length || 1, enemies.length || 1));
+  const xForLane = (lane) => ((lane - ((laneCount - 1) / 2)) * 4);
+
+  players.forEach((p, idx) => {
+    if (!actors[p.id]) return;
+    if (p && p.position) {
+      actors[p.id].position = {
+        x: Number.isFinite(p.position.x) ? p.position.x : 0,
+        y: Number.isFinite(p.position.y) ? p.position.y : 0,
+        z: Number.isFinite(p.position.z) ? p.position.z : 0,
+      };
+      return;
+    }
+    const lane = idx % laneCount;
+    actors[p.id].position = { x: xForLane(lane), y: 0, z: -2 };
+  });
+
+  enemies.forEach((e, idx) => {
+    if (!actors[e.id]) return;
+    if (e && e.position) {
+      actors[e.id].position = {
+        x: Number.isFinite(e.position.x) ? e.position.x : 0,
+        y: Number.isFinite(e.position.y) ? e.position.y : 0,
+        z: Number.isFinite(e.position.z) ? e.position.z : 0,
+      };
+      return;
+    }
+    const lane = idx % laneCount;
+    actors[e.id].position = { x: xForLane(lane), y: 0, z: 2 };
+  });
 }
 
 function defaultTimeline() {
@@ -129,6 +169,12 @@ function processAttack(state, action, rng) {
   const target = state.actors[action.targetId];
   if (!source || !target || !source.alive || !target.alive) {
     pushTimelineEvent(state, action, 1, ['skip']);
+    return;
+  }
+
+  if (distance2d(source.position, target.position) > 5) {
+    state.ui.lastCombatMessage = `${source.id} could not reach ${target.id}`;
+    pushTimelineEvent(state, action, 1, ['out-of-range']);
     return;
   }
 
@@ -294,6 +340,7 @@ function runSimulation(config = {}) {
   enemies.forEach((e) => {
     actors[e.id] = defaultActor(e.id, 'enemy', Number.isFinite(e.hp) ? e.hp : 18);
   });
+  assignDefaultPositions(players, enemies, actors);
 
   const state = {
     inCombat: false,

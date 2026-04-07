@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-07T03:58:13.632Z",
+  "generatedAt": "2026-04-07T04:11:15.847Z",
   "seed": 4242,
   "players": [
     {
@@ -590,7 +590,12 @@
         "hp": 28,
         "maxHp": 28,
         "alive": true,
-        "actedOnTurn": 0
+        "actedOnTurn": 0,
+        "position": {
+          "x": -2,
+          "y": 0,
+          "z": -2
+        }
       },
       "p2": {
         "id": "p2",
@@ -598,7 +603,12 @@
         "hp": 24,
         "maxHp": 24,
         "alive": true,
-        "actedOnTurn": 0
+        "actedOnTurn": 0,
+        "position": {
+          "x": 2,
+          "y": 0,
+          "z": -2
+        }
       },
       "p3": {
         "id": "p3",
@@ -606,7 +616,12 @@
         "hp": 22,
         "maxHp": 22,
         "alive": true,
-        "actedOnTurn": 0
+        "actedOnTurn": 0,
+        "position": {
+          "x": -2,
+          "y": 0,
+          "z": -2
+        }
       },
       "e1": {
         "id": "e1",
@@ -614,7 +629,12 @@
         "hp": 26,
         "maxHp": 26,
         "alive": true,
-        "actedOnTurn": 0
+        "actedOnTurn": 0,
+        "position": {
+          "x": -2,
+          "y": 0,
+          "z": 2
+        }
       },
       "e2": {
         "id": "e2",
@@ -622,7 +642,12 @@
         "hp": 22,
         "maxHp": 22,
         "alive": true,
-        "actedOnTurn": 0
+        "actedOnTurn": 0,
+        "position": {
+          "x": 2,
+          "y": 0,
+          "z": 2
+        }
       }
     }
   },
@@ -636,7 +661,12 @@
           "hp": 28,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -644,7 +674,12 @@
           "hp": 24,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -652,7 +687,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -660,7 +700,12 @@
           "hp": 26,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -668,7 +713,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -691,7 +741,12 @@
           "hp": 28,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -699,7 +754,12 @@
           "hp": 24,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -707,7 +767,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -715,7 +780,12 @@
           "hp": 21,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -723,7 +793,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -746,7 +821,12 @@
           "hp": 28,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -754,7 +834,12 @@
           "hp": 24,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -762,7 +847,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -770,7 +860,12 @@
           "hp": 21,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -778,7 +873,12 @@
           "hp": 17,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -801,7 +901,12 @@
           "hp": 28,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -809,7 +914,12 @@
           "hp": 24,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -817,7 +927,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -825,7 +940,12 @@
           "hp": 15,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -833,7 +953,12 @@
           "hp": 17,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -856,7 +981,12 @@
           "hp": 24,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -864,7 +994,12 @@
           "hp": 24,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -872,7 +1007,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -880,7 +1020,12 @@
           "hp": 15,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -888,7 +1033,12 @@
           "hp": 17,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 0
+          "actedOnTurn": 0,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -911,7 +1061,12 @@
           "hp": 24,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -919,7 +1074,12 @@
           "hp": 18,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -927,7 +1087,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -935,7 +1100,12 @@
           "hp": 15,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -943,7 +1113,12 @@
           "hp": 17,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -966,7 +1141,12 @@
           "hp": 24,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -974,7 +1154,12 @@
           "hp": 18,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -982,7 +1167,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -990,7 +1180,12 @@
           "hp": 15,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -998,7 +1193,12 @@
           "hp": 17,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1021,7 +1221,12 @@
           "hp": 24,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1029,7 +1234,12 @@
           "hp": 18,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1037,7 +1247,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1045,7 +1260,12 @@
           "hp": 10,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1053,7 +1273,12 @@
           "hp": 17,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1076,7 +1301,12 @@
           "hp": 24,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1084,7 +1314,12 @@
           "hp": 18,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1092,7 +1327,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1100,7 +1340,12 @@
           "hp": 10,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1108,7 +1353,12 @@
           "hp": 13,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1131,7 +1381,12 @@
           "hp": 24,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1139,7 +1394,12 @@
           "hp": 18,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1147,7 +1407,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1155,7 +1420,12 @@
           "hp": 4,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1163,7 +1433,12 @@
           "hp": 13,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1186,7 +1461,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1194,7 +1474,12 @@
           "hp": 18,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1202,7 +1487,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1210,7 +1500,12 @@
           "hp": 4,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1218,7 +1513,12 @@
           "hp": 13,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 1
+          "actedOnTurn": 1,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1241,7 +1541,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1249,7 +1554,12 @@
           "hp": 14,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1257,7 +1567,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1265,7 +1580,12 @@
           "hp": 4,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1273,7 +1593,12 @@
           "hp": 13,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1296,7 +1621,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1304,7 +1634,12 @@
           "hp": 14,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1312,7 +1647,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1320,7 +1660,12 @@
           "hp": 4,
           "maxHp": 26,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1328,7 +1673,12 @@
           "hp": 13,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1351,7 +1701,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1359,7 +1714,12 @@
           "hp": 14,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1367,7 +1727,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1375,7 +1740,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1383,7 +1753,12 @@
           "hp": 13,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1406,7 +1781,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1414,7 +1794,12 @@
           "hp": 14,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1422,7 +1807,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1430,7 +1820,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1438,7 +1833,12 @@
           "hp": 6,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1461,7 +1861,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1469,7 +1874,12 @@
           "hp": 14,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1477,7 +1887,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1485,7 +1900,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1493,7 +1913,12 @@
           "hp": 6,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1516,7 +1941,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1524,7 +1954,12 @@
           "hp": 14,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1532,7 +1967,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1540,7 +1980,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1548,7 +1993,12 @@
           "hp": 6,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1571,7 +2021,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1579,7 +2034,12 @@
           "hp": 9,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1587,7 +2047,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1595,7 +2060,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1603,7 +2073,12 @@
           "hp": 6,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1626,7 +2101,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1634,7 +2114,12 @@
           "hp": 9,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1642,7 +2127,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1650,7 +2140,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1658,7 +2153,12 @@
           "hp": 6,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1681,7 +2181,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1689,7 +2194,12 @@
           "hp": 9,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1697,7 +2207,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1705,7 +2220,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1713,7 +2233,12 @@
           "hp": 6,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {
@@ -1736,7 +2261,12 @@
           "hp": 19,
           "maxHp": 28,
           "alive": true,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p2": {
           "id": "p2",
@@ -1744,7 +2274,12 @@
           "hp": 9,
           "maxHp": 24,
           "alive": true,
-          "actedOnTurn": 4
+          "actedOnTurn": 4,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": -2
+          }
         },
         "p3": {
           "id": "p3",
@@ -1752,7 +2287,12 @@
           "hp": 22,
           "maxHp": 22,
           "alive": true,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": -2
+          }
         },
         "e1": {
           "id": "e1",
@@ -1760,7 +2300,12 @@
           "hp": 0,
           "maxHp": 26,
           "alive": false,
-          "actedOnTurn": 2
+          "actedOnTurn": 2,
+          "position": {
+            "x": -2,
+            "y": 0,
+            "z": 2
+          }
         },
         "e2": {
           "id": "e2",
@@ -1768,7 +2313,12 @@
           "hp": 0,
           "maxHp": 22,
           "alive": false,
-          "actedOnTurn": 3
+          "actedOnTurn": 3,
+          "position": {
+            "x": 2,
+            "y": 0,
+            "z": 2
+          }
         }
       },
       "combat": {

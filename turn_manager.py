@@ -288,7 +288,7 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
 
     # Step 2: only attack if now in melee range.
     remaining = ((px - new_x) ** 2 + (pz - new_z) ** 2) ** 0.5
-    if remaining >= 6.0:
+    if remaining > 5.0:
         print(f"[ENEMY] {actor_id} out of range ({remaining:.1f} ft), ending turn after move", flush=True)
         socketio.emit("combat-action-record", {
             "record": {

@@ -60,4 +60,21 @@ describe('Simulation: Full Combat Truth Tests', () => {
       expect(timeline.events[i].startMs).toBeGreaterThanOrEqual(timeline.events[i - 1].endMs);
     }
   });
+
+  test('out-of-range attack does not apply damage in simulation harness', () => {
+    const actions = [
+      { id: 'start', source: 'dm', type: 'network:combat-start', logicalTick: 0, timelineId: 'combat-range' },
+      { id: 'p1-a', source: 'p1', targetId: 'e1', type: 'action:attack', logicalTick: 1, initiative: 10, baseDamage: 4 },
+    ];
+
+    const { state, timeline } = runSimulation({
+      seed: 99,
+      players: [{ id: 'p1', hp: 25, position: { x: 0, y: 0, z: 0 } }],
+      enemies: [{ id: 'e1', hp: 22, position: { x: 20, y: 0, z: 0 } }],
+      actions,
+    });
+
+    expect(state.actors.e1.hp).toBe(22);
+    expect(timeline.events[1].phaseSequence).toEqual(['out-of-range']);
+  });
 });

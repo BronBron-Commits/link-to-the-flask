@@ -66,6 +66,7 @@ const urlSearch = new URLSearchParams(window.location.search || '');
 const mapDebug = urlSearch.get('mapdebug') === '1';
 const simulationMode = urlSearch.get('sim') === '1';
 const simulationArtifactPath = urlSearch.get('simPath') || '/artifacts/timeline-debug.json';
+const SIMULATION_REPLAY_SLOWDOWN = 10;
 
 if (simulationMode) {
     // Top-down tactical framing for simulation playback.
@@ -628,7 +629,7 @@ function getSimulationStepDelayMs(currentTick) {
         .filter((evt) => Number(evt.tick) === Number(currentTick))
         .reduce((sum, evt) => sum + Math.max(1, numberOr(evt.durationMs, 1)), 0);
     const base = perTickDuration > 0 ? perTickDuration : 180;
-    return Math.max(60, Math.floor(base / speed));
+    return Math.max(600, Math.floor((base * SIMULATION_REPLAY_SLOWDOWN) / speed));
 }
 
 function scheduleSimulationReplay() {
