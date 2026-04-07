@@ -1659,6 +1659,16 @@ function canUseStandardMovementControls() {
 function isLocalCombatAuthority() {
     if (modeManager.current === MODE.DM) return true;
     if (modeManager.current !== MODE.PLAYER) return false;
+
+    // During combat, the active turn owner should always be allowed to act,
+    // even if authoritativePlayerId lags behind role/mode changes.
+    if (currentGameMode === GAME_MODE.COMBAT) {
+        const currentEntry = getCurrentCombatQueueEntry();
+        if (currentEntry && currentEntry.type === 'player' && isLocalPlayerTurnEntry(currentEntry)) {
+            return true;
+        }
+    }
+
     if (!socket) return true;
     if (!localPlayerId) return false;
     // Server decides authority; default to local-only in single-player fallback.
