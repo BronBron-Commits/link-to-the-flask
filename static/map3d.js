@@ -53,6 +53,51 @@ const runtime = createMap3dRuntime({
 });
 runtime.start();
 
+const mapDebug = new URLSearchParams(window.location.search || '').get('mapdebug') === '1';
+
+function debugLog(...args) {
+    if (!mapDebug) return;
+    console.log(...args);
+}
+
+function installAudioUnlock() {
+    let unlocked = false;
+
+    const cleanup = () => {
+        window.removeEventListener('pointerdown', unlockOnGesture, true);
+        window.removeEventListener('keydown', unlockOnGesture, true);
+        window.removeEventListener('touchstart', unlockOnGesture, true);
+    };
+
+    const unlockOnGesture = async () => {
+        if (unlocked) return;
+        unlocked = true;
+        cleanup();
+
+        try {
+            if (window.Tone && typeof window.Tone.start === 'function') {
+                await window.Tone.start();
+            }
+            const toneCtx = window.Tone && window.Tone.context;
+            if (toneCtx && typeof toneCtx.resume === 'function') {
+                await toneCtx.resume();
+            }
+            const rawCtx = toneCtx && toneCtx.rawContext;
+            if (rawCtx && rawCtx.state === 'suspended' && typeof rawCtx.resume === 'function') {
+                await rawCtx.resume();
+            }
+        } catch (err) {
+            debugLog('[MAP3D] Audio unlock skipped', err);
+        }
+    };
+
+    window.addEventListener('pointerdown', unlockOnGesture, true);
+    window.addEventListener('keydown', unlockOnGesture, true);
+    window.addEventListener('touchstart', unlockOnGesture, true);
+}
+
+installAudioUnlock();
+
 const networkState = {
     localSid: null,
     playersById: new Map(),
@@ -283,7 +328,7 @@ function createSocketBridge() {
 const socket = createSocketBridge();
 
 runtime.onIntent((intent) => {
-    console.log('[MAP3D INTENT]', intent);
+    debugLog('[MAP3D INTENT]', intent);
 
     if (!socket || !socket.connected) return;
     const payload = intent && intent.payload ? intent.payload : {};
