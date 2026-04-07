@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map 3D Ocean Combat</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #071220; }
+        canvas { display: block; }
+
+        #combat-ui-root {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 800;
+            pointer-events: none;
+        }
+        #combat-ui-root * {
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        const params = new URLSearchParams(window.location.search || '');
+        if (!params.has('sim')) params.set('sim', '1');
+        if (!params.has('view')) params.set('view', 'isometric');
+        if (!params.has('scene')) params.set('scene', 'ocean');
+        const nextUrl = `${window.location.pathname}?${params.toString()}`;
+        if (nextUrl !== window.location.pathname + window.location.search) {
+            window.history.replaceState(null, '', nextUrl);
+        }
+    </script>
+
+    <!-- Combat UI overlay -->
+    <div id="combat-ui-root"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module" src="/static/map3d.js"></script>
+    <script type="module" src="/static/combat-ui.js"></script>
+</body>
+</html>
