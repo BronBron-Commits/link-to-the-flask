@@ -40,13 +40,6 @@ floor.rotation.x = -Math.PI / 2;
 floor.position.y = -0.001;
 scene.add(floor);
 
-const testMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(1, 1, 1),
-    new THREE.MeshStandardMaterial({ color: 0x5cb8ff })
-);
-testMesh.position.y = 0.5;
-scene.add(testMesh);
-
 const runtime = createMap3dRuntime({
     scene,
     camera,
@@ -96,7 +89,7 @@ const VIEW_PRESETS = {
     },
 };
 const viewKey = VIEW_ALIAS[rawView] || (VIEW_PRESETS[rawView] ? rawView : '');
-const sceneKey = rawScene === 'forest' ? 'forest' : 'default';
+const sceneKey = (rawScene === 'forest' || rawScene === 'ocean') ? rawScene : 'default';
 const DESIGN_ALIAS = {
     a: 'tactical',
     b: 'cinematic',
@@ -173,6 +166,9 @@ const mapDebug = urlSearch.get('mapdebug') === '1';
 const simulationMode = urlSearch.get('sim') === '1';
 const simulationArtifactPath = urlSearch.get('simPath') || '/artifacts/timeline-debug.json';
 const SIMULATION_REPLAY_SLOWDOWN = 10;
+const sceneEffects = {
+    ocean: null,
+};
 
 function buildSeededRandom(seedInput) {
     let seed = 0;
@@ -248,9 +244,84 @@ function buildProceduralForest() {
     floor.material.color.setHex(0x182317);
     floor.material.roughness = 1.0;
     floor.material.metalness = 0.0;
-    testMesh.material.color.setHex(0x7cffb0);
 
     scene.add(forest);
+}
+
+function buildOceanScene() {
+    const oceanGroup = new THREE.Group();
+    oceanGroup.name = 'ocean-scene';
+
+    scene.fog = new THREE.FogExp2(0x091827, 0.024);
+    grid.visible = false;
+
+    floor.material.color.setHex(0xe4cf9d);
+    floor.material.roughness = 0.96;
+    floor.material.metalness = 0.01;
+
+    const oceanGeometry = new THREE.PlaneGeometry(180, 180, 80, 80);
+    const oceanMaterial = new THREE.MeshStandardMaterial({
+        color: 0x2a8bb5,
+        roughness: 0.28,
+        metalness: 0.12,
+        transparent: true,
+        opacity: 0.92,
+    });
+    const oceanMesh = new THREE.Mesh(oceanGeometry, oceanMaterial);
+    oceanMesh.rotation.x = -Math.PI / 2;
+    oceanMesh.position.y = -0.58;
+    oceanGroup.add(oceanMesh);
+
+    const arenaRing = new THREE.Mesh(
+        new THREE.TorusGeometry(12.5, 1.8, 16, 64),
+        new THREE.MeshStandardMaterial({
+            color: 0xc8b27d,
+            roughness: 0.95,
+            metalness: 0.03,
+        })
+    );
+    arenaRing.rotation.x = Math.PI / 2;
+    arenaRing.position.y = -0.05;
+    oceanGroup.add(arenaRing);
+
+    const rng = buildSeededRandom(urlSearch.get('seed') || 'ocean-reef');
+    const rockGeometry = new THREE.DodecahedronGeometry(0.75, 0);
+    const rockMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6a737f,
+        roughness: 0.92,
+        metalness: 0.04,
+    });
+    for (let i = 0; i < 110; i += 1) {
+        const angle = rng() * Math.PI * 2;
+        const radius = 15 + (rng() * 55);
+        const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+        const scale = 0.55 + (rng() * 1.75);
+        rock.scale.set(scale, 0.45 + (rng() * 1.25), scale);
+        rock.position.set(
+            Math.cos(angle) * radius,
+            -0.18 + (rng() * 0.45),
+            Math.sin(angle) * radius
+        );
+        rock.rotation.set(rng() * Math.PI, rng() * Math.PI, rng() * Math.PI);
+        oceanGroup.add(rock);
+    }
+
+    const moonLight = new THREE.DirectionalLight(0x9ed7ff, 0.65);
+    moonLight.position.set(-14, 18, 9);
+    scene.add(moonLight);
+
+    scene.add(oceanGroup);
+
+    const posAttr = oceanGeometry.getAttribute('position');
+    const baseY = new Float32Array(posAttr.count);
+    for (let i = 0; i < posAttr.count; i += 1) {
+        baseY[i] = posAttr.getY(i);
+    }
+    sceneEffects.ocean = {
+        mesh: oceanMesh,
+        position: posAttr,
+        baseY,
+    };
 }
 
 function applyDesignPreset(preset) {
@@ -281,9 +352,6 @@ function applyDesignPreset(preset) {
         floor.material.roughness = preset.floorRoughness;
         floor.material.metalness = preset.floorMetalness;
     }
-    if (testMesh.material && testMesh.material.color) {
-        testMesh.material.color.setHex(preset.cubeColor);
-    }
 }
 
 applyDesignPreset(designPreset);
@@ -307,6 +375,10 @@ if (viewKey) {
 
 if (sceneKey === 'forest') {
     buildProceduralForest();
+}
+
+if (sceneKey === 'ocean') {
+    buildOceanScene();
 }
 
 function debugLog(...args) {
@@ -1150,9 +1222,18 @@ window.addEventListener('resize', () => {
 });
 
 function animate(timeMs) {
-    const t = Number(timeMs) * 0.001;
-    testMesh.rotation.y = t * 0.8;
-    testMesh.rotation.x = Math.sin(t * 0.7) * 0.2;
+    if (sceneEffects.ocean && sceneEffects.ocean.mesh) {
+        const t = Number(timeMs) * 0.001;
+        const posAttr = sceneEffects.ocean.position;
+        for (let i = 0; i < posAttr.count; i += 1) {
+            const x = posAttr.getX(i);
+            const z = posAttr.getZ(i);
+            const wave = (Math.sin((x * 0.14) + (t * 1.1)) + Math.cos((z * 0.11) - (t * 1.35))) * 0.08;
+            posAttr.setY(i, sceneEffects.ocean.baseY[i] + wave);
+        }
+        posAttr.needsUpdate = true;
+        sceneEffects.ocean.mesh.material.opacity = 0.86 + (Math.sin(t * 0.9) * 0.05);
+    }
 
     if (simulationReplay.attackLine && simulationReplay.attackLine.visible) {
         const remaining = simulationReplay.attackLineUntilMs - performance.now();
