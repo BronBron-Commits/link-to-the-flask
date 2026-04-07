@@ -30,6 +30,11 @@ const root = document.getElementById('combat-ui-root');
 if (!root) throw new Error('Missing #combat-ui-root');
 root.style.display = 'none';
 
+const PLAYER_NAME = (typeof window.__COMBAT_PLAYER_NAME__ === 'string' && window.__COMBAT_PLAYER_NAME__.trim())
+    || null;
+const PLAYER_SIDE = (typeof window.__COMBAT_PLAYER_SIDE__ === 'string' && window.__COMBAT_PLAYER_SIDE__.trim())
+    || null;
+
 const liveState = {
     connected: false,
     localSid: null,
@@ -51,7 +56,7 @@ const uiState = {
     guidedOverride: null,
     status: 'Connecting to combat state...',
     log: [
-        'Combat UI attached.',
+        PLAYER_NAME ? `Joined as ${PLAYER_NAME}${PLAYER_SIDE ? ` · ${PLAYER_SIDE}` : ''}.` : 'Combat UI attached.',
         'Waiting for live combat state.',
     ],
     previewRequestId: null,

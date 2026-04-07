@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combat — Join</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: #060c15;
+            font-family: 'Courier New', monospace;
+            color: #d4e8f5;
+        }
+
+        canvas { display: block; }
+
+        /* ── Lobby screen ── */
+        #lobby-screen {
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(ellipse at 50% 60%, rgba(10, 30, 55, 0.98) 0%, rgba(4, 8, 16, 1) 100%);
+        }
+
+        #lobby-screen.hidden {
+            display: none;
+        }
+
+        .lobby-card {
+            width: min(420px, calc(100vw - 40px));
+            border: 1px solid rgba(100, 180, 240, 0.25);
+            background: linear-gradient(180deg, rgba(8, 18, 34, 0.96), rgba(4, 10, 20, 0.98));
+            padding: 40px 36px 36px;
+            box-shadow: 0 0 80px rgba(60, 140, 220, 0.08);
+        }
+
+        .lobby-title {
+            font-size: 11px;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: #4a9ed6;
+            margin: 0 0 6px;
+        }
+
+        .lobby-heading {
+            font-size: 28px;
+            font-weight: 300;
+            letter-spacing: 0.06em;
+            color: #e8f4ff;
+            margin: 0 0 32px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .lobby-label {
+            font-size: 10px;
+            letter-spacing: 0.18em;
+            text-transform: uppercase;
+            color: rgba(160, 210, 240, 0.65);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .lobby-input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid rgba(100, 170, 220, 0.28);
+            color: #d8eeff;
+            font-family: 'Courier New', monospace;
+            font-size: 15px;
+            padding: 12px 14px;
+            outline: none;
+            margin-bottom: 24px;
+            transition: border-color 150ms ease;
+        }
+
+        .lobby-input:focus {
+            border-color: rgba(80, 180, 255, 0.65);
+        }
+
+        .side-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+
+        .side-btn {
+            padding: 18px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.03);
+            color: rgba(220, 235, 250, 0.65);
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            letter-spacing: 0.12em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 150ms ease;
+            text-align: center;
+        }
+
+        .side-btn:hover {
+            border-color: rgba(255, 255, 255, 0.22);
+            color: #e8f4ff;
+        }
+
+        .side-btn.is-selected.heroes {
+            border-color: rgba(100, 200, 130, 0.6);
+            background: rgba(80, 180, 110, 0.1);
+            color: #8fefb0;
+            box-shadow: 0 0 24px rgba(80, 200, 120, 0.12);
+        }
+
+        .side-btn.is-selected.villains {
+            border-color: rgba(220, 80, 80, 0.6);
+            background: rgba(200, 60, 60, 0.1);
+            color: #ff9090;
+            box-shadow: 0 0 24px rgba(220, 70, 70, 0.12);
+        }
+
+        .side-icon {
+            display: block;
+            font-size: 22px;
+            margin-bottom: 8px;
+        }
+
+        .join-btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(180deg, rgba(60, 140, 220, 0.22), rgba(30, 80, 160, 0.18));
+            border: 1px solid rgba(80, 160, 240, 0.45);
+            color: #a8d8ff;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 150ms ease;
+        }
+
+        .join-btn:hover:not(:disabled) {
+            background: linear-gradient(180deg, rgba(70, 160, 255, 0.28), rgba(40, 100, 200, 0.22));
+            border-color: rgba(100, 180, 255, 0.65);
+            color: #d4eeff;
+        }
+
+        .join-btn:disabled {
+            opacity: 0.38;
+            cursor: default;
+        }
+
+        .lobby-error {
+            font-size: 11px;
+            color: #ff8080;
+            margin-top: 12px;
+            min-height: 16px;
+        }
+
+        /* ── Combat UI overlay ── */
+        #combat-ui-root {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 800;
+            pointer-events: none;
+        }
+
+        #combat-ui-root * {
+            pointer-events: auto;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Join lobby ── -->
+    <div id="lobby-screen">
+        <div class="lobby-card">
+            <p class="lobby-title">Session Active</p>
+            <h1 class="lobby-heading">Enter Combat</h1>
+
+            <label class="lobby-label" for="name-input">Your name</label>
+            <input
+                id="name-input"
+                class="lobby-input"
+                type="text"
+                maxlength="28"
+                placeholder="Enter name..."
+                autocomplete="off"
+                spellcheck="false"
+            >
+
+            <label class="lobby-label">Choose your side</label>
+            <div class="side-row">
+                <button class="side-btn heroes" data-side="heroes" type="button">
+                    <span class="side-icon">⚔</span>
+                    Heroes
+                </button>
+                <button class="side-btn villains" data-side="villains" type="button">
+                    <span class="side-icon">💀</span>
+                    Villains
+                </button>
+            </div>
+
+            <button id="join-btn" class="join-btn" type="button" disabled>Join Combat</button>
+            <p class="lobby-error" id="lobby-error"></p>
+        </div>
+    </div>
+
+    <!-- ── Combat UI overlay (populated by combat-ui.js) ── -->
+    <div id="combat-ui-root"></div>
+
+    <script>
+        // ── Lobby interaction logic ──
+        const nameInput = document.getElementById('name-input');
+        const joinBtn   = document.getElementById('join-btn');
+        const errorEl   = document.getElementById('lobby-error');
+        let selectedSide = null;
+
+        function validate() {
+            const hasName = nameInput.value.trim().length >= 2;
+            const hasSide = selectedSide !== null;
+            joinBtn.disabled = !(hasName && hasSide);
+        }
+
+        nameInput.addEventListener('input', validate);
+
+        document.querySelectorAll('.side-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('is-selected'));
+                btn.classList.add('is-selected');
+                selectedSide = btn.dataset.side;
+                validate();
+            });
+        });
+
+        nameInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click();
+        });
+
+        joinBtn.addEventListener('click', () => {
+            const name = nameInput.value.trim();
+            if (name.length < 2) { errorEl.textContent = 'Name must be at least 2 characters.'; return; }
+            if (!selectedSide)   { errorEl.textContent = 'Pick a side.'; return; }
+
+            // Expose to combat-ui.js and map3d.js via globals
+            window.__COMBAT_PLAYER_NAME__ = name;
+            window.__COMBAT_PLAYER_SIDE__ = selectedSide;
+
+            document.getElementById('lobby-screen').classList.add('hidden');
+            loadGame();
+        });
+
+        function loadGame() {
+            // Load Socket.IO then the two modules in order
+            const sio = document.createElement('script');
+            sio.src = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
+            sio.onload = () => {
+                const m1 = document.createElement('script');
+                m1.type = 'module';
+                m1.src = '/static/map3d.js';
+                document.body.appendChild(m1);
+
+                const m2 = document.createElement('script');
+                m2.type = 'module';
+                m2.src = '/static/combat-ui.js';
+                document.body.appendChild(m2);
+            };
+            document.body.appendChild(sio);
+        }
+    </script>
+</body>
+</html>
