@@ -64,6 +64,34 @@ controls.start();
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const rawDesign = String(urlSearch.get('design') || 'tactical').trim().toLowerCase();
+const globalView = typeof window.__MAP3D_VIEW__ === 'string'
+    ? String(window.__MAP3D_VIEW__).trim().toLowerCase()
+    : '';
+const rawView = String(urlSearch.get('view') || globalView || '').trim().toLowerCase();
+const VIEW_ALIAS = {
+    t: 'top',
+    iso: 'isometric',
+    i: 'isometric',
+    s: 'side',
+};
+const VIEW_PRESETS = {
+    top: {
+        position: [0, 28, 0.001],
+        up: [0, 0, -1],
+        lookAt: [0, 0, 0],
+    },
+    isometric: {
+        position: [16, 12, 16],
+        up: [0, 1, 0],
+        lookAt: [0, 0, 0],
+    },
+    side: {
+        position: [24, 8, 0],
+        up: [0, 1, 0],
+        lookAt: [0, 0, 0],
+    },
+};
+const viewKey = VIEW_ALIAS[rawView] || (VIEW_PRESETS[rawView] ? rawView : '');
 const DESIGN_ALIAS = {
     a: 'tactical',
     b: 'cinematic',
@@ -176,11 +204,21 @@ function applyDesignPreset(preset) {
 
 applyDesignPreset(designPreset);
 
-if (simulationMode) {
+function applyViewPreset(presetKey) {
+    const preset = VIEW_PRESETS[presetKey];
+    if (!preset) return;
+    camera.position.set(preset.position[0], preset.position[1], preset.position[2]);
+    camera.up.set(preset.up[0], preset.up[1], preset.up[2]);
+    camera.lookAt(preset.lookAt[0], preset.lookAt[1], preset.lookAt[2]);
+}
+
+if (simulationMode && !viewKey) {
     // Top-down tactical framing for simulation playback.
-    camera.position.set(0, 28, 0.001);
-    camera.up.set(0, 0, -1);
-    camera.lookAt(0, 0, 0);
+    applyViewPreset('top');
+}
+
+if (viewKey) {
+    applyViewPreset(viewKey);
 }
 
 function debugLog(...args) {
@@ -1047,6 +1085,7 @@ window.__MAP3D_BOOTSTRAP__ = {
     camera,
     renderer,
     designKey,
+    viewKey,
     runtime,
     controls,
     applySnapshot: (snapshot) => runtime.applySnapshot(snapshot),
