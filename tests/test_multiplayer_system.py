@@ -557,6 +557,67 @@ class MultiplayerSystemTests(unittest.TestCase):
         self.assertEqual(gs.world_state["mode"], "exploration")
         broadcast_mock.assert_called_once_with(include_scene=False)
 
+    @patch("turn_manager.reaction_system.trigger_reactions")
+    @patch("turn_manager.socketio.emit")
+    @patch("turn_manager.gevent.sleep")
+    def test_run_enemy_turn_stops_when_last_enemy_is_downed_by_reaction(self, sleep_mock, socket_emit_mock, trigger_reactions_mock) -> None:
+        gs.players["p1"] = {
+            "id": "p1",
+            "actorId": "player_1",
+            "networkId": "player_1",
+            "role": "player",
+            "hp": 20.0,
+            "max_hp": 20.0,
+            "ac": 14,
+            "position": {"x": 0.0, "y": 0.0, "z": 0.0},
+        }
+        gs.world_state["mode"] = "combat"
+        gs.world_state["entities"] = {
+            "enemy_1": {
+                "id": "enemy_1",
+                "networkId": "enemy_1",
+                "type": "enemy",
+                "name": "Runner",
+                "position": {"x": 4.0, "y": 0.0, "z": 0.0},
+                "hp": 2.0,
+                "maxHp": 2.0,
+                "ac": 10,
+                "attackBonus": 5,
+                "damageRoll": 4,
+                "damageBonus": 0,
+                "canDisengage": False,
+            }
+        }
+        gs.world_state["combat"] = {
+            "turn": 0,
+            "order": [
+                {"id": "enemy_1", "type": "enemy"},
+                {"id": "player_1", "type": "player", "ownerSid": "p1"},
+            ],
+            "state": {"inCombat": True, "roundNumber": 1, "initiator": "p1"},
+        }
+
+        def _kill_enemy(*_args, **_kwargs):
+            enemy = gs.world_state["entities"]["enemy_1"]
+            enemy["hp"] = 0.0
+            enemy["state"] = "downed"
+            return [{"attacker": "player_1", "type": "opportunity-attack", "targetId": "enemy_1", "hit": True, "damage": 3}]
+
+        trigger_reactions_mock.side_effect = _kill_enemy
+
+        result = turn_manager.run_enemy_turn({"id": "enemy_1", "type": "enemy"})
+        outcome = turn_manager.conclude_combat_if_needed("p1")
+
+        emitted = [call.args[0] for call in socket_emit_mock.call_args_list]
+
+        self.assertEqual(result["reason"], "downed-by-reaction")
+        self.assertEqual(outcome, "players_victorious")
+        self.assertIn("combat-ended", emitted)
+        self.assertIn("combat-reset", emitted)
+        self.assertFalse(gs.world_state["combat"]["state"]["inCombat"])
+        self.assertEqual(gs.world_state["mode"], "exploration")
+        self.assertNotIn("combat-action-result", emitted)
+
     @patch("state_sync.socketio.emit")
     @patch("state_sync.gs.build_world_payload")
     def test_state_sync_broadcast_world_uses_payload_builder(self, payload_mock, socket_emit_mock) -> None:

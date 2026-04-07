@@ -252,6 +252,15 @@ def run_enemy_turn(enemy_actor: dict) -> dict:
     })
     gevent.sleep(0.5)
 
+    if gs.is_enemy_downed(enemy):
+        print(f"[ENEMY] {actor_id} was downed by reactions; ending turn early", flush=True)
+        return {
+            "attacker": actor_id,
+            "type": "none",
+            "reason": "downed-by-reaction",
+            "reactionCount": len(reactions),
+        }
+
     if low_hp and threatened:
         socketio.emit("combat-action-record", {
             "record": {
