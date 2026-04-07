@@ -26,6 +26,20 @@ keyLight.position.set(5, 10, 7);
 scene.add(keyLight);
 
 const grid = new THREE.GridHelper(20, 20, 0x3a4a74, 0x22314d);
+if (Array.isArray(grid.material)) {
+    grid.material.forEach((mat) => {
+        mat.depthTest = true;
+        mat.depthWrite = false;
+        mat.transparent = true;
+        mat.opacity = 0.85;
+    });
+} else if (grid.material) {
+    grid.material.depthTest = true;
+    grid.material.depthWrite = false;
+    grid.material.transparent = true;
+    grid.material.opacity = 0.85;
+}
+grid.renderOrder = 2;
 scene.add(grid);
 
 const floor = new THREE.Mesh(

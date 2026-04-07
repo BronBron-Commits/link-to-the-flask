@@ -20,6 +20,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         && !!THREE.Sprite;
 
     const actorMeshes = new Map();
+    const actorOverlays = new Map();
     const actorLabels = new Map();
     const actorLabelSprites = new Map();
     const intentListeners = new Set();
@@ -143,10 +144,45 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         }
 
         setActorAppearance(mesh, actor);
+        ensureActorOverlay(mesh, actor);
         if (labelSprite) {
             drawActorLabel(labelSprite, actor);
         }
         return mesh;
+    }
+
+    function ensureActorOverlay(mesh, actor) {
+        if (!mesh || !mesh.geometry) return;
+        const actorId = String(actor?.id || mesh.userData?.actorId || '').trim();
+        if (!actorId) return;
+
+        let overlay = actorOverlays.get(actorId);
+        if (!overlay) {
+            overlay = new THREE.LineSegments(
+                new THREE.WireframeGeometry(mesh.geometry),
+                new THREE.LineBasicMaterial({
+                    color: 0x8fbfff,
+                    transparent: true,
+                    opacity: 0.3,
+                    depthTest: false,
+                    depthWrite: false,
+                })
+            );
+            overlay.renderOrder = 60;
+            mesh.add(overlay);
+            actorOverlays.set(actorId, overlay);
+        }
+
+        const team = String(actor?.team || 'neutral').toLowerCase();
+        if (overlay.material && overlay.material.color) {
+            if (team === 'enemy') {
+                overlay.material.color.setHex(0xff8f8f);
+            } else if (team === 'player') {
+                overlay.material.color.setHex(0x8fbfff);
+            } else {
+                overlay.material.color.setHex(0xbac6d3);
+            }
+        }
     }
 
     function updateActorFromState(actor) {
@@ -182,6 +218,20 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         if (mesh.material) mesh.material.dispose();
         actorMeshes.delete(id);
         actorLabels.delete(id);
+
+        const overlay = actorOverlays.get(id);
+        if (overlay) {
+            if (overlay.parent) {
+                overlay.parent.remove(overlay);
+            }
+            if (overlay.geometry) {
+                overlay.geometry.dispose();
+            }
+            if (overlay.material) {
+                overlay.material.dispose();
+            }
+            actorOverlays.delete(id);
+        }
 
         const sprite = actorLabelSprites.get(id);
         if (sprite) {
