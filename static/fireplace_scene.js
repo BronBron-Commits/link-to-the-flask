@@ -244,17 +244,111 @@ rug.rotation.x = -Math.PI / 2;
 rug.position.set(0, 0.01, -1.2);
 scene.add(rug);
 
-// Character pedestal + preview avatar in the center of the chamber.
+// Team staging platforms: heroes and villains face each other.
+const lobbySlotLayouts = {
+  heroes: [
+    { x: -2.8, z: -0.35 },
+    { x: -2.8, z: -1.05 },
+    { x: -2.8, z: -1.75 },
+    { x: -2.8, z: -2.45 },
+  ],
+  villains: [
+    { x: 2.8, z: -0.35 },
+    { x: 2.8, z: -1.05 },
+    { x: 2.8, z: -1.75 },
+    { x: 2.8, z: -2.45 },
+  ],
+};
+
+function createNameplateSprite(initialText) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+  const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(0.95, 0.24, 1);
+  sprite.userData.canvas = canvas;
+  sprite.userData.ctx = ctx;
+  sprite.userData.texture = texture;
+  updateNameplateSprite(sprite, initialText, '#9aa7d8');
+  return sprite;
+}
+
+function updateNameplateSprite(sprite, text, color = '#9aa7d8') {
+  const ctx = sprite?.userData?.ctx;
+  const canvas = sprite?.userData?.canvas;
+  const texture = sprite?.userData?.texture;
+  if (!ctx || !canvas || !texture) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(7, 10, 20, 0.78)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 4;
+  ctx.strokeRect(2, 2, canvas.width - 4, canvas.height - 4);
+  ctx.font = 'bold 44px Consolas';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = color;
+  ctx.fillText(String(text || '').slice(0, 22), canvas.width / 2, canvas.height / 2 + 2);
+  texture.needsUpdate = true;
+}
+
+function createTeamSlot(team, index, pos) {
+  const isHero = team === 'heroes';
+  const root = new THREE.Group();
+  root.position.set(pos.x, 0, pos.z);
+
+  const baseMat = new THREE.MeshStandardMaterial({
+    color: isHero ? 0x334547 : 0x4a3336,
+    roughness: 0.84,
+    metalness: 0.08,
+  });
+  const base = new THREE.Mesh(new THREE.CylinderGeometry(0.54, 0.64, 0.26, 26), baseMat);
+  base.position.y = 0.13;
+  root.add(base);
+
+  const ringMat = new THREE.MeshBasicMaterial({
+    color: isHero ? 0x67d7a2 : 0xf08a8a,
+    transparent: true,
+    opacity: 0.42,
+  });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.48, 0.018, 10, 48), ringMat);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.27;
+  root.add(ring);
+
+  const plate = createNameplateSprite(`${team.toUpperCase()}-${index + 1}`);
+  plate.position.set(0, 0.6, 0);
+  root.add(plate);
+
+  scene.add(root);
+  return { team, index, root, ringMat, plate, occupantSid: null };
+}
+
+const lobbyTeamSlots = [
+  ...lobbySlotLayouts.heroes.map((pos, i) => createTeamSlot('heroes', i, pos)),
+  ...lobbySlotLayouts.villains.map((pos, i) => createTeamSlot('villains', i, pos)),
+];
+
+const localPreviewAnchor = new THREE.Group();
+scene.add(localPreviewAnchor);
+
 const pedestal = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.95, 1.08, 0.36, 28),
+  new THREE.CylinderGeometry(0.34, 0.4, 0.24, 22),
   new THREE.MeshStandardMaterial({ color: 0x3a2f33, roughness: 0.86, metalness: 0.08 })
 );
-pedestal.position.set(0, 0.18, -1.1);
-scene.add(pedestal);
+pedestal.position.set(0, 0.12, 0);
+localPreviewAnchor.add(pedestal);
 
 const avatar = new THREE.Group();
-avatar.position.set(0, 0.36, -1.1);
-scene.add(avatar);
+avatar.position.set(0, 0.24, 0);
+localPreviewAnchor.add(avatar);
+
+localPreviewAnchor.position.set(-2.8, 0, -0.35);
+localPreviewAnchor.rotation.y = -Math.PI / 2;
 
 const avatarBodyMat = new THREE.MeshStandardMaterial({ color: 0x7f6bff, roughness: 0.62, metalness: 0.08, emissive: 0x121320 });
 const avatarClothMat = new THREE.MeshStandardMaterial({ color: 0x2a2f4d, roughness: 0.9, metalness: 0.03 });
@@ -330,18 +424,18 @@ const dummyPedestal = new THREE.Mesh(
   new THREE.CylinderGeometry(0.52, 0.62, 0.22, 24),
   new THREE.MeshStandardMaterial({ color: 0x433033, roughness: 0.88, metalness: 0.06 })
 );
-dummyPedestal.position.set(2.25, 0.11, -1.55);
+dummyPedestal.position.set(4.15, 0.11, 1.75);
 scene.add(dummyPedestal);
 
 const handsPedestal = new THREE.Mesh(
   new THREE.CylinderGeometry(0.52, 0.62, 0.22, 24),
   new THREE.MeshStandardMaterial({ color: 0x2f3648, roughness: 0.8, metalness: 0.18 })
 );
-handsPedestal.position.set(-2.25, 0.11, -1.55);
+handsPedestal.position.set(-4.15, 0.11, 1.75);
 scene.add(handsPedestal);
 
 const proceduralHandsPreview = new THREE.Group();
-proceduralHandsPreview.position.set(-2.25, 0.24, -1.55);
+proceduralHandsPreview.position.set(-4.15, 0.24, 1.75);
 scene.add(proceduralHandsPreview);
 
 const handsGlowMat = new THREE.MeshStandardMaterial({
@@ -404,7 +498,7 @@ proceduralHandsPreview.add(proceduralHandRight);
 const proceduralHands = [proceduralHandLeft, proceduralHandRight];
 
 const trainingDummyPreview = new THREE.Group();
-trainingDummyPreview.position.set(2.25, 0.22, -1.55);
+trainingDummyPreview.position.set(4.15, 0.22, 1.75);
 trainingDummyPreview.rotation.y = Math.PI;
 scene.add(trainingDummyPreview);
 
@@ -446,6 +540,27 @@ trainingDummyBase.position.y = 0.1;
 trainingDummyFallbackRoot.add(trainingDummyBase);
 
 const trainingDummyPoseRoot = trainingDummyFallbackRoot;
+
+// NPC corner: a small cluster near the back-left wall.
+const npcCornerRoot = new THREE.Group();
+npcCornerRoot.position.set(-4.45, 0, -3.1);
+scene.add(npcCornerRoot);
+
+for (let i = 0; i < 3; i++) {
+  const npcStand = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.22, 0.27, 0.16, 18),
+    new THREE.MeshStandardMaterial({ color: 0x3a3c46, roughness: 0.84, metalness: 0.08 })
+  );
+  npcStand.position.set((i % 2) * 0.72, 0.08, Math.floor(i / 2) * 0.7);
+  npcCornerRoot.add(npcStand);
+
+  const npcToken = new THREE.Mesh(
+    new THREE.SphereGeometry(0.13, 16, 14),
+    new THREE.MeshStandardMaterial({ color: 0xc8b17e, roughness: 0.6, metalness: 0.1, emissive: 0x241f16, emissiveIntensity: 0.45 })
+  );
+  npcToken.position.set(npcStand.position.x, 0.29, npcStand.position.z);
+  npcCornerRoot.add(npcToken);
+}
 
 const flameCore = new THREE.Mesh(
   new THREE.SphereGeometry(0.36, 20, 18),
@@ -4310,9 +4425,67 @@ function setLobbyStatus(text) {
   lobbyStatusEl.textContent = text;
 }
 
+function normalizeLobbySide(value) {
+  const side = String(value || '').trim().toLowerCase();
+  return side === 'villains' ? 'villains' : 'heroes';
+}
+
+function refreshTeamPlatformAssignments() {
+  const rows = Object.entries(fireplaceLobbyRoster || {});
+  const heroes = [];
+  const villains = [];
+
+  for (const [sid, entry] of rows) {
+    const side = normalizeLobbySide(entry?.side);
+    const payload = {
+      sid,
+      name: escapeLobbyText(entry?.name || `Player-${String(sid).slice(0, 6)}`),
+      side,
+    };
+    if (side === 'villains') villains.push(payload);
+    else heroes.push(payload);
+  }
+
+  heroes.sort((a, b) => a.name.localeCompare(b.name));
+  villains.sort((a, b) => a.name.localeCompare(b.name));
+
+  const byTeam = { heroes, villains };
+  let localSlot = null;
+
+  for (const slot of lobbyTeamSlots) {
+    const arr = byTeam[slot.team] || [];
+    const occupant = arr[slot.index] || null;
+    slot.occupantSid = occupant ? occupant.sid : null;
+
+    if (occupant) {
+      const isYou = String(occupant.sid) === String(fireplaceLobbyLocalSid || '');
+      const baseColor = slot.team === 'heroes' ? '#8fe8bd' : '#ff9b9b';
+      const text = `${occupant.name}${isYou ? ' (You)' : ''}`;
+      updateNameplateSprite(slot.plate, text, baseColor);
+      slot.ringMat.opacity = isYou ? 0.82 : 0.58;
+      if (isYou) localSlot = slot;
+    } else {
+      const emptyText = `${slot.team.toUpperCase()}-${slot.index + 1}`;
+      updateNameplateSprite(slot.plate, emptyText, '#8d95b7');
+      slot.ringMat.opacity = 0.22;
+    }
+  }
+
+  if (!localSlot) {
+    const fallbackTeam = normalizeLobbySide(profile.side);
+    localSlot = lobbyTeamSlots.find((slot) => slot.team === fallbackTeam && slot.index === 0) || null;
+  }
+
+  if (localSlot) {
+    localPreviewAnchor.position.copy(localSlot.root.position);
+    localPreviewAnchor.rotation.y = localSlot.team === 'heroes' ? -Math.PI / 2 : Math.PI / 2;
+  }
+}
+
 function renderLobbyRoster() {
   if (!lobbyRosterEl) return;
   const rows = Object.entries(fireplaceLobbyRoster || {});
+  refreshTeamPlatformAssignments();
   if (!rows.length) {
     lobbyRosterEl.textContent = 'Lobby roster will appear here.';
     return;
@@ -4502,6 +4675,7 @@ if (dummyPoseEl) {
 }
 refreshPreview();
 syncLobbyButtons();
+renderLobbyRoster();
 connectFireplaceLobby();
 loadAvailableCharacterModels();
 
