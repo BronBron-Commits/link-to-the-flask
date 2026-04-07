@@ -170,6 +170,25 @@
       color: #6a739f;
       letter-spacing: 0.04em;
     }
+    #lobby-status {
+      margin-top: 10px;
+      font-size: 11px;
+      color: #98a1cf;
+      letter-spacing: 0.03em;
+    }
+    #lobby-roster {
+      margin-top: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 8px;
+      background: rgba(255,255,255,0.03);
+      font-size: 11px;
+      line-height: 1.45;
+      color: #a7b0d8;
+      max-height: 140px;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -265,6 +284,22 @@
       </label>
 
       <label class="creator-field full">
+        <span class="creator-label">Faction Side</span>
+        <select id="cc-side" class="creator-select">
+          <option value="heroes">Heroes</option>
+          <option value="villains">Villains</option>
+        </select>
+      </label>
+
+      <label class="creator-field full">
+        <span class="creator-label">Character Model From Game Folder</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <select id="cc-model-select" class="creator-select" style="flex:1 1 auto;"></select>
+          <button id="cc-model-refresh" class="creator-btn" type="button" style="flex:0 0 auto;padding:8px 10px;">Refresh</button>
+        </div>
+      </label>
+
+      <label class="creator-field full">
         <span class="creator-label">Character Model (.glb/.gltf)</span>
         <div style="display:flex;gap:8px;">
           <input id="cc-model-file" class="creator-input" type="file" accept=".glb,.gltf,.bin,image/*,model/gltf-binary,model/gltf+json" multiple />
@@ -306,11 +341,16 @@
 
     <div class="creator-actions">
       <button id="cc-random" class="creator-btn">Randomize</button>
-      <button id="cc-begin" class="creator-btn primary">Begin Adventure</button>
+      <button id="cc-begin" class="creator-btn primary">Join Fireplace Lobby</button>
+      <button id="cc-start-combat" class="creator-btn primary" type="button" style="display:none;">Start Combat</button>
     </div>
 
-    <div id="creator-note">Stored locally as character_profile_v1.</div>
+    <div id="lobby-status">Not connected to lobby.</div>
+    <div id="lobby-roster">Lobby roster will appear here.</div>
+
+    <div id="creator-note">Stored locally as character_profile_v1. Lobby runs in this fireplace scene.</div>
   </aside>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
   <script type="module" src="/static/fireplace_scene.js"></script>
 </body>

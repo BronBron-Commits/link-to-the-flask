@@ -700,6 +700,7 @@ scene.add(axisCompass);
 
 const profile = {
   name: 'Ashen Wanderer',
+  side: 'heroes',
   species: 'Human',
   className: 'Wizard',
   origin: 'Arcane Academy',
@@ -717,6 +718,11 @@ const gltfLoader = new GLTFLoader();
 let uploadedAvatarRoot = null;
 let uploadedRigHelper = null;
 let uploadedTrainingDummyRoot = null;
+let fireplaceLobbySocket = null;
+let fireplaceLobbyConnected = false;
+let fireplaceLobbyLocalSid = null;
+let fireplaceLobbyJoined = false;
+let fireplaceLobbyRoster = {};
 
 const moveState = {
   forward: false,
@@ -805,6 +811,7 @@ document.addEventListener('keyup', (e) => {
 });
 
 const nameEl = document.getElementById('cc-name');
+const sideEl = document.getElementById('cc-side');
 const speciesEl = document.getElementById('cc-species');
 const speciesOtherEl = document.getElementById('cc-species-other');
 const classEl = document.getElementById('cc-class');
@@ -815,6 +822,8 @@ const voiceEl = document.getElementById('cc-voice');
 const voiceOtherEl = document.getElementById('cc-voice-other');
 const colorEl = document.getElementById('cc-color');
 const modelFileEl = document.getElementById('cc-model-file');
+const modelSelectEl = document.getElementById('cc-model-select');
+const modelRefreshBtn = document.getElementById('cc-model-refresh');
 const modelUploadBtn = document.getElementById('cc-model-upload');
 const modelStatusEl = document.getElementById('cc-model-status');
 const rigReportEl = document.getElementById('cc-rig-report');
@@ -825,6 +834,9 @@ const dummyPoseEl = document.getElementById('cc-dummy-pose');
 const previewEl = document.getElementById('creator-preview');
 const randomBtn = document.getElementById('cc-random');
 const beginBtn = document.getElementById('cc-begin');
+const startCombatBtn = document.getElementById('cc-start-combat');
+const lobbyStatusEl = document.getElementById('lobby-status');
+const lobbyRosterEl = document.getElementById('lobby-roster');
 const backLinkEl = document.getElementById('back-link');
 const rigFrontFlipBtn = document.getElementById('cc-rig-backflip');
 const rigIdleBtn = document.getElementById('cc-rig-idle');
@@ -4236,6 +4248,7 @@ function updateClassProp(_className) {
 
 function refreshPreview() {
   profile.name = (nameEl.value || '').trim() || 'Unnamed Hero';
+  profile.side = String(sideEl?.value || profile.side || 'heroes').toLowerCase();
   profile.species = resolvedSelectValue(speciesEl, speciesOtherEl, 'Custom Species');
   profile.className = resolvedSelectValue(classEl, classOtherEl, 'Custom Class');
   profile.origin = resolvedSelectValue(originEl, originOtherEl, 'Unknown Origin');
@@ -4254,6 +4267,7 @@ function refreshPreview() {
 
   previewEl.textContent = [
     `Name: ${profile.name}`,
+    `Side: ${profile.side}`,
     `Class: ${profile.className}`,
     `Species: ${profile.species}`,
     `Origin: ${profile.origin}`,
@@ -4287,16 +4301,175 @@ function randomizeProfile() {
   refreshPreview();
 }
 
-function saveAndBegin() {
+function escapeLobbyText(value) {
+  return String(value || '').replace(/[\r\n]+/g, ' ').trim();
+}
+
+function setLobbyStatus(text) {
+  if (!lobbyStatusEl) return;
+  lobbyStatusEl.textContent = text;
+}
+
+function renderLobbyRoster() {
+  if (!lobbyRosterEl) return;
+  const rows = Object.entries(fireplaceLobbyRoster || {});
+  if (!rows.length) {
+    lobbyRosterEl.textContent = 'Lobby roster will appear here.';
+    return;
+  }
+  const lines = rows.map(([sid, entry]) => {
+    const name = escapeLobbyText(entry?.name || `Player-${String(sid).slice(0, 6)}`);
+    const side = escapeLobbyText(entry?.side || 'unknown');
+    const you = String(sid) === String(fireplaceLobbyLocalSid || '') ? ' (You)' : '';
+    return `${name} [${side}]${you}`;
+  });
+  lobbyRosterEl.textContent = lines.join('\n');
+}
+
+function syncLobbyButtons() {
+  if (startCombatBtn) startCombatBtn.style.display = fireplaceLobbyJoined ? '' : 'none';
+  if (beginBtn) beginBtn.disabled = fireplaceLobbyJoined;
+}
+
+async function loadAvailableCharacterModels() {
+  if (!modelSelectEl) return;
+  modelSelectEl.innerHTML = '';
+  const base = document.createElement('option');
+  base.value = '';
+  base.textContent = 'Procedural Avatar (no model file)';
+  modelSelectEl.appendChild(base);
+
+  try {
+    const res = await fetch('/api/character-models');
+    const payload = await res.json();
+    const models = Array.isArray(payload?.models) ? payload.models : [];
+    for (const row of models) {
+      const url = String(row?.url || '').trim();
+      if (!url) continue;
+      const opt = document.createElement('option');
+      opt.value = url;
+      const label = String(row?.label || url).trim();
+      const src = String(row?.source || '').trim();
+      opt.textContent = src ? `${label} (${src})` : label;
+      modelSelectEl.appendChild(opt);
+    }
+  } catch (error) {
+    modelStatusEl.textContent = `Unable to load model list: ${error}`;
+  }
+
+  if (profile.modelUrl) {
+    const existing = Array.from(modelSelectEl.options).find((o) => o.value === profile.modelUrl);
+    if (!existing) {
+      const custom = document.createElement('option');
+      custom.value = profile.modelUrl;
+      custom.textContent = `${profile.modelUrl.split('/').pop() || profile.modelUrl} (selected)`;
+      modelSelectEl.appendChild(custom);
+    }
+    modelSelectEl.value = profile.modelUrl;
+  }
+}
+
+function connectFireplaceLobby() {
+  if (fireplaceLobbySocket || typeof window.io !== 'function') {
+    if (typeof window.io !== 'function') setLobbyStatus('Socket.IO unavailable; lobby offline.');
+    return;
+  }
+
+  fireplaceLobbySocket = window.io();
+
+  fireplaceLobbySocket.on('connect', () => {
+    fireplaceLobbyConnected = true;
+    fireplaceLobbyLocalSid = fireplaceLobbySocket.id || null;
+    setLobbyStatus('Connected to fireplace lobby.');
+    renderLobbyRoster();
+    if (fireplaceLobbyJoined) {
+      fireplaceLobbySocket.emit('player-update', {
+        name: profile.name,
+        side: profile.side,
+        avatar: { modelUrl: profile.modelUrl || 'fallback' },
+      });
+    }
+  });
+
+  fireplaceLobbySocket.on('disconnect', () => {
+    fireplaceLobbyConnected = false;
+    setLobbyStatus('Disconnected from lobby. Reconnecting...');
+  });
+
+  fireplaceLobbySocket.on('player-id', (payload) => {
+    if (payload && payload.id) {
+      fireplaceLobbyLocalSid = String(payload.id);
+      renderLobbyRoster();
+    }
+  });
+
+  fireplaceLobbySocket.on('players-state', (players) => {
+    fireplaceLobbyRoster = (players && typeof players === 'object') ? players : {};
+    renderLobbyRoster();
+  });
+
+  fireplaceLobbySocket.on('player-update', (entry) => {
+    if (!entry || !entry.id) return;
+    fireplaceLobbyRoster[entry.id] = entry;
+    renderLobbyRoster();
+  });
+
+  fireplaceLobbySocket.on('player-joined', (entry) => {
+    if (!entry || !entry.id) return;
+    fireplaceLobbyRoster[entry.id] = entry;
+    renderLobbyRoster();
+  });
+
+  fireplaceLobbySocket.on('player-left', (payload) => {
+    const sid = String(payload?.id || '').trim();
+    if (!sid) return;
+    delete fireplaceLobbyRoster[sid];
+    renderLobbyRoster();
+  });
+
+  fireplaceLobbySocket.on('combat-state', (packet) => {
+    if (packet && packet.active) {
+      stopFireplaceMusic();
+      window.location.href = '/map3d?view=isometric';
+    }
+  });
+}
+
+function joinFireplaceLobby() {
   refreshPreview();
   profile.rigSettings = buildSavedRigSettings();
   try {
     localStorage.setItem('character_profile_v1', JSON.stringify(profile));
   } catch (_) {
-    // Best effort only; continue navigation if storage is unavailable.
+    // Best effort only.
   }
-  stopFireplaceMusic();
-  window.location.href = '/map3d';
+
+  connectFireplaceLobby();
+  fireplaceLobbyJoined = true;
+  syncLobbyButtons();
+
+  if (fireplaceLobbyConnected && fireplaceLobbySocket) {
+    fireplaceLobbySocket.emit('player-update', {
+      name: profile.name,
+      side: profile.side,
+      avatar: { modelUrl: profile.modelUrl || 'fallback' },
+    });
+  }
+
+  setLobbyStatus(`Joined lobby as ${profile.name} (${profile.side}).`);
+}
+
+function requestCombatStartFromLobby() {
+  if (!fireplaceLobbySocket) {
+    setLobbyStatus('Lobby is not connected yet.');
+    return;
+  }
+  fireplaceLobbySocket.emit('combat-start', {});
+  setLobbyStatus('Combat start requested...');
+}
+
+function saveAndBegin() {
+  joinFireplaceLobby();
 }
 
 try {
@@ -4316,6 +4489,8 @@ try {
 }
 
 nameEl.value = profile.name;
+profile.side = String(profile.side || 'heroes').toLowerCase() === 'villains' ? 'villains' : 'heroes';
+if (sideEl) sideEl.value = profile.side;
 setSelectOrOther(speciesEl, speciesOtherEl, profile.species);
 setSelectOrOther(classEl, classOtherEl, profile.className);
 setSelectOrOther(originEl, originOtherEl, profile.origin);
@@ -4326,8 +4501,11 @@ if (dummyPoseEl) {
   dummyPoseEl.value = allowedPoses.has(profile.trainingDummy.pose) ? profile.trainingDummy.pose : 'idle';
 }
 refreshPreview();
+syncLobbyButtons();
+connectFireplaceLobby();
+loadAvailableCharacterModels();
 
-[nameEl, speciesEl, classEl, originEl, voiceEl, colorEl].forEach((el) => {
+[nameEl, sideEl, speciesEl, classEl, originEl, voiceEl, colorEl].filter(Boolean).forEach((el) => {
   el.addEventListener('input', refreshPreview);
   el.addEventListener('change', refreshPreview);
 });
@@ -4354,12 +4532,30 @@ toggleOtherInput(voiceEl, voiceOtherEl);
 
 randomBtn.addEventListener('click', randomizeProfile);
 beginBtn.addEventListener('click', saveAndBegin);
+if (startCombatBtn) startCombatBtn.addEventListener('click', requestCombatStartFromLobby);
 if (backLinkEl) {
   backLinkEl.addEventListener('click', () => {
     stopFireplaceMusic();
   });
 }
 modelUploadBtn.addEventListener('click', uploadModelFile);
+if (modelRefreshBtn) modelRefreshBtn.addEventListener('click', loadAvailableCharacterModels);
+if (modelSelectEl) {
+  modelSelectEl.addEventListener('change', async () => {
+    const selected = String(modelSelectEl.value || '').trim();
+    profile.modelUrl = selected || null;
+    if (!profile.modelUrl) {
+      clearUploadedAvatar();
+      setProceduralAvatarVisible(true);
+      renderRigReport(null);
+      modelStatusEl.textContent = 'Using procedural avatar from fireplace preview.';
+      refreshPreview();
+      return;
+    }
+    await applyUploadedAvatar(profile.modelUrl);
+    refreshPreview();
+  });
+}
 if (dummyModelUploadBtn) dummyModelUploadBtn.addEventListener('click', uploadTrainingDummyModelFile);
 if (dummyPoseEl) {
   dummyPoseEl.addEventListener('change', () => {

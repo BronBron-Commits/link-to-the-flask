@@ -80,6 +80,39 @@ def _discover_selectable_character_sheets() -> list[dict]:
     return sheets
 
 
+def _discover_available_glb_models() -> list[dict]:
+    rows: list[dict] = []
+
+    if gs.STATIC_DIR.exists():
+        for path in sorted(gs.STATIC_DIR.glob("*.glb")):
+            if not path.is_file():
+                continue
+            rows.append(
+                {
+                    "label": path.name,
+                    "url": f"/static/{path.name}",
+                    "source": "static",
+                }
+            )
+
+    user_models_root = gs.CHARACTER_MODELS_DIR
+    if user_models_root.exists():
+        for path in sorted(user_models_root.rglob("*.glb")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(gs.STATIC_DIR).as_posix()
+            rows.append(
+                {
+                    "label": path.name,
+                    "url": f"/static/{rel}",
+                    "source": "user_models",
+                }
+            )
+
+    rows.sort(key=lambda row: (str(row.get("label") or "").lower(), str(row.get("url") or "").lower()))
+    return rows
+
+
 def _resolve_selectable_pdf(sheet_id: str) -> Path | None:
     raw = str(sheet_id or "").strip()
     if not raw:
@@ -345,6 +378,11 @@ def player_info_api():
         },
         master=master,
     )
+
+
+@app.route("/api/character-models", methods=["GET"])
+def character_models_api():
+    return jsonify(ok=True, models=_discover_available_glb_models())
 
 
 # ---------------------------------------------------------------------------
