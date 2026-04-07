@@ -1,98 +1,68 @@
-const SAMPLE_PARTY = [
-    {
-        id: 'tidus',
-        name: 'Bronson',
-        role: 'Vanguard',
-        hp: 842,
-        maxHp: 999,
-        mp: 36,
-        maxMp: 48,
-        atb: 0.94,
-        overdrive: 0.42,
-        portraitHue: 195,
-        commands: ['Attack', 'Skills', 'Items', 'Defend'],
-    },
-    {
-        id: 'yuna',
-        name: 'Sarah',
-        role: 'White Mage',
-        hp: 601,
-        maxHp: 730,
-        mp: 88,
-        maxMp: 112,
-        atb: 0.72,
-        overdrive: 0.85,
-        portraitHue: 28,
-        commands: ['Attack', 'Magic', 'Items', 'Defend'],
-    },
-    {
-        id: 'auron',
-        name: 'Tat',
-        role: 'Breaker',
-        hp: 1124,
-        maxHp: 1275,
-        mp: 18,
-        maxMp: 28,
-        atb: 0.58,
-        overdrive: 0.93,
-        portraitHue: 8,
-        commands: ['Attack', 'Skills', 'Guard', 'Items'],
-    },
+const FALLBACK_PARTY = [
+    { id: 'bronson', name: 'Bronson', role: 'Vanguard', hp: 842, maxHp: 999, mp: 36, maxMp: 48, position: { x: -4, y: 0, z: -5 } },
+    { id: 'sarah', name: 'Sarah', role: 'Invoker', hp: 601, maxHp: 730, mp: 88, maxMp: 112, position: { x: 0, y: 0, z: -5 } },
+    { id: 'tat', name: 'Tat', role: 'Breaker', hp: 1124, maxHp: 1275, mp: 18, maxMp: 28, position: { x: 4, y: 0, z: -5 } },
 ];
 
-const SAMPLE_ENEMIES = [
-    { id: 'e1', name: 'Blimp', hp: 480, maxHp: 640, weakness: 'Lightning' },
-    { id: 'e2', name: '6Eclipse', hp: 910, maxHp: 910, weakness: 'Pierce' },
-    { id: 'e3', name: 'Clover', hp: 320, maxHp: 470, weakness: 'Silence' },
+const FALLBACK_ENEMIES = [
+    { id: 'blimp', name: 'Blimp', hp: 480, maxHp: 640, position: { x: -4, y: 0, z: 6 } },
+    { id: 'eclipse', name: '6Eclipse', hp: 910, maxHp: 910, position: { x: 0, y: 0, z: 6 } },
+    { id: 'clover', name: 'Clover', hp: 320, maxHp: 470, position: { x: 4, y: 0, z: 6 } },
 ];
 
-const COMMAND_TREE = {
-    root: [
-        { id: 'attack', label: 'Attack', type: 'target' },
-        { id: 'skills', label: 'Skills', type: 'submenu', next: 'skills' },
-        { id: 'magic', label: 'Magic', type: 'submenu', next: 'magic' },
-        { id: 'items', label: 'Items', type: 'submenu', next: 'items' },
-        { id: 'defend', label: 'Defend', type: 'instant', log: 'Tightens stance and braces for impact.' },
-    ],
-    skills: [
-        { id: 'delay', label: 'Delay Strike', type: 'target', detail: 'Delay a single enemy turn.' },
-        { id: 'pierce', label: 'Piercing Arc', type: 'target', detail: 'Armor-breaking crescent slash.' },
-        { id: 'cheer', label: 'Cheer', type: 'instant', log: 'Raises party morale and attack.' },
-    ],
-    magic: [
-        { id: 'cure', label: 'Cure', type: 'ally' },
-        { id: 'watera', label: 'Watera', type: 'target', detail: 'Heavy water damage to one foe.' },
-        { id: 'shell', label: 'Shell', type: 'ally' },
-    ],
-    items: [
-        { id: 'potion', label: 'Potion x12', type: 'ally' },
-        { id: 'phoenix', label: 'Phoenix Down x3', type: 'ally' },
-        { id: 'grenade', label: 'Grenade x4', type: 'target' },
-    ],
-};
+const COMMANDS = [
+    { id: 'attack', label: 'Attack', kind: 'target-enemy' },
+    { id: 'move', label: 'Move', kind: 'move', stepFt: 5 },
+    { id: 'dash', label: 'Dash', kind: 'move', stepFt: 10 },
+    { id: 'disengage', label: 'Disengage', kind: 'move', stepFt: 5 },
+    { id: 'dodge', label: 'Dodge', kind: 'instant' },
+    { id: 'end-turn', label: 'End Turn', kind: 'end-turn' },
+];
+
+const MOVE_CHOICES = [
+    { id: 'north', label: 'North 5ft', dx: 0, dz: -1 },
+    { id: 'south', label: 'South 5ft', dx: 0, dz: 1 },
+    { id: 'west', label: 'West 5ft', dx: -1, dz: 0 },
+    { id: 'east', label: 'East 5ft', dx: 1, dz: 0 },
+];
 
 const root = document.getElementById('combat-ui-root');
+if (!root) throw new Error('Missing #combat-ui-root');
 
-if (!root) {
-    throw new Error('Missing #combat-ui-root');
-}
+const liveState = {
+    connected: false,
+    localSid: null,
+    inCombat: false,
+    currentTurn: null,
+    playersById: new Map(),
+    enemiesById: new Map(),
+};
 
-const state = {
-    activeActorIndex: 0,
-    menuKey: 'root',
-    menuIndex: 0,
-    targetIndex: 0,
-    targetMode: false,
-    allyTargetMode: false,
+const uiState = {
+    commandIndex: 0,
+    stage: 'command',
+    selectedTargetId: null,
+    selectedMoveId: null,
+    pendingAction: false,
+    preview: null,
+    previewDenied: null,
+    actionCommittedActorId: null,
+    guidedOverride: null,
+    status: 'Connecting to combat state...',
     log: [
-        'Deep Warden surges from the surf.',
-        'Party formation locked.',
-        'Tidus is ready to act.',
+        'Combat UI attached.',
+        'Waiting for live combat state.',
     ],
+    previewRequestId: null,
 };
 
 function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+}
+
+function numberOr(value, fallback) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
 }
 
 function pct(current, max) {
@@ -100,175 +70,345 @@ function pct(current, max) {
     return clamp((current / max) * 100, 0, 100);
 }
 
-function getActiveActor() {
-    return SAMPLE_PARTY[state.activeActorIndex];
-}
-
-function getMenuEntries() {
-    const actor = getActiveActor();
-    const baseEntries = COMMAND_TREE[state.menuKey] || COMMAND_TREE.root;
-    if (state.menuKey !== 'root') return baseEntries;
-    return baseEntries.filter((entry) => actor.commands.includes(entry.label));
-}
-
-function getCurrentSelection() {
-    const entries = getMenuEntries();
-    return entries[state.menuIndex] || entries[0] || null;
-}
-
-function getTargetPool() {
-    return state.allyTargetMode ? SAMPLE_PARTY : SAMPLE_ENEMIES;
-}
-
-function resetMenuPosition() {
-    state.menuIndex = 0;
+function nextId(prefix) {
+    return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 }
 
 function pushLog(message) {
     if (!message) return;
-    state.log.unshift(message);
-    state.log = state.log.slice(0, 8);
+    uiState.log.unshift(message);
+    uiState.log = uiState.log.slice(0, 8);
 }
 
-function cycleActor(direction) {
-    state.activeActorIndex = (state.activeActorIndex + direction + SAMPLE_PARTY.length) % SAMPLE_PARTY.length;
-    state.menuKey = 'root';
-    state.targetMode = false;
-    state.allyTargetMode = false;
-    resetMenuPosition();
-    pushLog(`${getActiveActor().name} steps into command focus.`);
+function toPlayerActor(entry, fallbackId) {
+    if (!entry || typeof entry !== 'object') return null;
+    const actorId = String(entry.actorId || entry.networkId || entry.id || fallbackId || '').trim();
+    if (!actorId) return null;
+    const pos = (entry.position && typeof entry.position === 'object') ? entry.position : {};
+    const maxHp = numberOr(entry.maxHp ?? entry.max_hp, numberOr(entry.hp ?? entry.currentHp ?? entry.current_hp, 20));
+    const hp = numberOr(entry.hp ?? entry.currentHp ?? entry.current_hp, maxHp);
+    return {
+        id: actorId,
+        type: 'player',
+        ownerSid: fallbackId || null,
+        name: String(entry.name || entry.label || actorId),
+        role: String(entry.class || entry.role || 'Player'),
+        hp,
+        maxHp,
+        mp: numberOr(entry.mp, 0),
+        maxMp: numberOr(entry.maxMp, numberOr(entry.mp, 0)),
+        position: {
+            x: numberOr(pos.x, 0),
+            y: numberOr(pos.y, 0),
+            z: numberOr(pos.z, 0),
+        },
+    };
 }
 
-function commitAction(selection, target) {
-    const actor = getActiveActor();
-    const targetLabel = target ? target.name : 'the field';
-    pushLog(`${actor.name}: ${selection.label} -> ${targetLabel}`);
-
-    if (selection.id === 'attack' && target) {
-        target.hp = clamp(target.hp - 118, 0, target.maxHp);
-    }
-    if (selection.id === 'watera' && target) {
-        target.hp = clamp(target.hp - 182, 0, target.maxHp);
-    }
-    if (selection.id === 'grenade' && target) {
-        target.hp = clamp(target.hp - 140, 0, target.maxHp);
-    }
-    if (selection.id === 'cure' && target) {
-        target.hp = clamp(target.hp + 180, 0, target.maxHp);
-    }
-    if (selection.id === 'potion' && target) {
-        target.hp = clamp(target.hp + 120, 0, target.maxHp);
-    }
-    if (selection.id === 'phoenix' && target && target.hp <= 0) {
-        target.hp = Math.round(target.maxHp * 0.34);
-    }
-
-    state.targetMode = false;
-    state.allyTargetMode = false;
-    state.menuKey = 'root';
-    resetMenuPosition();
-    cycleActor(1);
+function toEnemyActor(entry, fallbackId) {
+    if (!entry || typeof entry !== 'object') return null;
+    const actorId = String(entry.actorId || entry.networkId || entry.id || fallbackId || '').trim();
+    if (!actorId) return null;
+    const pos = (entry.position && typeof entry.position === 'object') ? entry.position : {};
+    const maxHp = numberOr(entry.maxHp, numberOr(entry.hp, 30));
+    const hp = numberOr(entry.hp, maxHp);
+    return {
+        id: actorId,
+        type: 'enemy',
+        name: String(entry.name || entry.label || actorId),
+        hp,
+        maxHp,
+        ac: numberOr(entry.ac, 10),
+        position: {
+            x: numberOr(pos.x, 0),
+            y: numberOr(pos.y, 0),
+            z: numberOr(pos.z, 0),
+        },
+    };
 }
 
-function activateSelection() {
-    const selection = getCurrentSelection();
-    if (!selection) return;
+function getTurnPacketFromCombatFullState(packet) {
+    const safe = packet && typeof packet === 'object' ? packet : {};
+    const order = Array.isArray(safe.order) ? safe.order : [];
+    const idxRaw = safe.turn;
+    const idx = Number.isFinite(Number(idxRaw)) ? Number(idxRaw) : 0;
+    return {
+        order,
+        turnIndex: order.length ? clamp(idx, 0, order.length - 1) : 0,
+        roundNumber: numberOr(safe.state?.roundNumber, 1),
+        currentActor: order.length ? order[clamp(idx, 0, order.length - 1)] : null,
+    };
+}
 
-    if (selection.type === 'submenu') {
-        state.menuKey = selection.next;
-        resetMenuPosition();
-        render();
+function getOrderedActors(type) {
+    const map = type === 'player' ? liveState.playersById : liveState.enemiesById;
+    const fallback = type === 'player' ? FALLBACK_PARTY : FALLBACK_ENEMIES;
+    const ordered = [];
+    const seen = new Set();
+    const turnOrder = Array.isArray(liveState.currentTurn?.order) ? liveState.currentTurn.order : [];
+
+    turnOrder.forEach((entry) => {
+        if (!entry || String(entry.type || '').toLowerCase() !== type) return;
+        const actorId = String(entry.id || '').trim();
+        if (!actorId || seen.has(actorId)) return;
+        const actor = map.get(actorId);
+        ordered.push(actor ? { ...actor, ...entry } : {
+            id: actorId,
+            type,
+            ownerSid: entry.ownerSid || null,
+            name: String(entry.name || actorId),
+            role: type === 'player' ? 'Player' : 'Enemy',
+            hp: type === 'player' ? 20 : 30,
+            maxHp: type === 'player' ? 20 : 30,
+            mp: 0,
+            maxMp: 0,
+            position: { x: 0, y: 0, z: 0 },
+        });
+        seen.add(actorId);
+    });
+
+    map.forEach((actor, actorId) => {
+        if (seen.has(actorId)) return;
+        ordered.push(actor);
+        seen.add(actorId);
+    });
+
+    if (!ordered.length) {
+        return fallback.map((entry) => ({ ...entry, type }));
+    }
+    return ordered;
+}
+
+function getCurrentActor() {
+    const current = liveState.currentTurn?.currentActor;
+    if (!current || typeof current !== 'object') return null;
+    const actorId = String(current.id || '').trim();
+    if (!actorId) return current;
+    const map = String(current.type || '').toLowerCase() === 'enemy' ? liveState.enemiesById : liveState.playersById;
+    return map.get(actorId) || current;
+}
+
+function isLocalPlayersTurn() {
+    const current = liveState.currentTurn?.currentActor;
+    if (!current || typeof current !== 'object') return false;
+    if (String(current.type || '').toLowerCase() !== 'player') return false;
+    const ownerSid = String(current.ownerSid || '').trim();
+    if (!ownerSid) return true;
+    if (!liveState.localSid) return false;
+    return ownerSid === liveState.localSid;
+}
+
+function getSelectedCommand() {
+    return COMMANDS[clamp(uiState.commandIndex, 0, COMMANDS.length - 1)] || COMMANDS[0];
+}
+
+function currentActorChanged() {
+    const current = getCurrentActor();
+    const actorId = String(current?.id || '');
+    if (!actorId) return;
+    if (uiState.actionCommittedActorId && uiState.actionCommittedActorId !== actorId) {
+        uiState.actionCommittedActorId = null;
+        uiState.stage = 'command';
+        uiState.selectedTargetId = null;
+        uiState.selectedMoveId = null;
+        uiState.preview = null;
+        uiState.previewDenied = null;
+        uiState.pendingAction = false;
+    }
+}
+
+function selectCommand(index) {
+    uiState.commandIndex = clamp(index, 0, COMMANDS.length - 1);
+    const command = getSelectedCommand();
+    uiState.preview = null;
+    uiState.previewDenied = null;
+    uiState.guidedOverride = null;
+    if (command.kind === 'target-enemy') {
+        const enemies = getOrderedActors('enemy');
+        uiState.stage = 'target';
+        uiState.selectedTargetId = enemies[0]?.id || null;
+        if (uiState.selectedTargetId) requestAttackPreview(uiState.selectedTargetId);
+    } else if (command.kind === 'move') {
+        uiState.stage = 'move';
+        uiState.selectedMoveId = uiState.selectedMoveId || MOVE_CHOICES[0].id;
+    } else {
+        uiState.stage = 'command';
+        uiState.selectedTargetId = null;
+        uiState.selectedMoveId = null;
+    }
+}
+
+function requestAttackPreview(targetId) {
+    if (!socket || !socket.connected || !targetId) return;
+    const requestId = nextId('preview');
+    uiState.previewRequestId = requestId;
+    socket.emit('combat-action-preview', {
+        requestId,
+        type: 'attack',
+        targetId,
+    });
+}
+
+function submitCombatAction(payload) {
+    if (!socket || !socket.connected || uiState.pendingAction) return;
+    uiState.pendingAction = true;
+    uiState.guidedOverride = 'status';
+    socket.emit('combat-action', {
+        id: nextId(payload.type || 'action'),
+        ...payload,
+    });
+}
+
+function submitEndTurn() {
+    if (!socket || !socket.connected || uiState.pendingAction) return;
+    uiState.pendingAction = true;
+    uiState.guidedOverride = 'status';
+    socket.emit('end-turn', { source: 'combat-ui' });
+}
+
+function confirmSelection() {
+    const command = getSelectedCommand();
+    if (!isLocalPlayersTurn() || !liveState.inCombat || !command) return;
+
+    if (command.kind === 'target-enemy') {
+        if (!uiState.selectedTargetId) return;
+        submitCombatAction({ type: 'attack', targetId: uiState.selectedTargetId });
         return;
     }
 
-    if (selection.type === 'instant') {
-        pushLog(`${getActiveActor().name}: ${selection.log || selection.label}`);
-        state.menuKey = 'root';
-        resetMenuPosition();
-        cycleActor(1);
-        render();
+    if (command.kind === 'move') {
+        const actor = getCurrentActor();
+        const choice = MOVE_CHOICES.find((entry) => entry.id === uiState.selectedMoveId) || MOVE_CHOICES[0];
+        if (!actor || !actor.position || !choice) return;
+        const distance = numberOr(command.stepFt, 5);
+        submitCombatAction({
+            type: command.id,
+            position: {
+                x: Number((numberOr(actor.position.x, 0) + (choice.dx * distance)).toFixed(3)),
+                y: numberOr(actor.position.y, 0),
+                z: Number((numberOr(actor.position.z, 0) + (choice.dz * distance)).toFixed(3)),
+            },
+        });
         return;
     }
 
-    if (selection.type === 'target' || selection.type === 'ally') {
-        state.targetMode = true;
-        state.allyTargetMode = selection.type === 'ally';
-        state.targetIndex = 0;
-        render();
+    if (command.kind === 'instant') {
+        submitCombatAction({ type: command.id });
+        return;
+    }
+
+    if (command.kind === 'end-turn') {
+        submitEndTurn();
     }
 }
 
 function cancelSelection() {
-    if (state.targetMode) {
-        state.targetMode = false;
-        state.allyTargetMode = false;
-        render();
+    uiState.guidedOverride = null;
+    uiState.previewDenied = null;
+    if (uiState.stage === 'target' || uiState.stage === 'move') {
+        uiState.stage = 'command';
         return;
     }
-    if (state.menuKey !== 'root') {
-        state.menuKey = 'root';
-        resetMenuPosition();
-        render();
-    }
+    uiState.commandIndex = 0;
 }
 
-function moveMenu(direction) {
-    if (state.targetMode) {
-        const pool = getTargetPool();
-        state.targetIndex = (state.targetIndex + direction + pool.length) % pool.length;
-        render();
+function moveSelection(direction) {
+    if (uiState.stage === 'target') {
+        const enemies = getOrderedActors('enemy');
+        if (!enemies.length) return;
+        const currentIndex = Math.max(0, enemies.findIndex((enemy) => enemy.id === uiState.selectedTargetId));
+        const nextIndex = (currentIndex + direction + enemies.length) % enemies.length;
+        uiState.selectedTargetId = enemies[nextIndex].id;
+        requestAttackPreview(uiState.selectedTargetId);
         return;
     }
 
-    const entries = getMenuEntries();
-    if (!entries.length) return;
-    state.menuIndex = (state.menuIndex + direction + entries.length) % entries.length;
-    render();
-}
-
-function confirmTarget() {
-    const selection = getCurrentSelection();
-    const pool = getTargetPool();
-    const target = pool[state.targetIndex] || null;
-    if (!selection || !target) return;
-    commitAction(selection, target);
-    render();
-}
-
-function getSelectionHint() {
-    const selection = getCurrentSelection();
-    if (!selection) return 'No command selected.';
-    if (state.targetMode) {
-        const target = getTargetPool()[state.targetIndex];
-        return state.allyTargetMode
-            ? `Choose an ally for ${selection.label}.`
-            : `Choose a target for ${selection.label}. ${target?.weakness ? `Weak: ${target.weakness}.` : ''}`;
+    if (uiState.stage === 'move') {
+        const currentIndex = Math.max(0, MOVE_CHOICES.findIndex((choice) => choice.id === uiState.selectedMoveId));
+        const nextIndex = (currentIndex + direction + MOVE_CHOICES.length) % MOVE_CHOICES.length;
+        uiState.selectedMoveId = MOVE_CHOICES[nextIndex].id;
+        return;
     }
-    return selection.detail || `${selection.label} ready.`;
+
+    selectCommand(uiState.commandIndex + direction);
+}
+
+function getGuidance() {
+    if (uiState.guidedOverride) {
+        return uiState.guidedOverride;
+    }
+    if (!liveState.connected) return 'status';
+    if (!liveState.inCombat) return 'status';
+    if (!liveState.currentTurn?.currentActor) return 'turn';
+    if (!isLocalPlayersTurn()) return 'turn';
+    if (uiState.pendingAction) return 'status';
+    if (uiState.actionCommittedActorId && uiState.actionCommittedActorId === String(getCurrentActor()?.id || '')) {
+        return 'end-turn';
+    }
+    if (uiState.stage === 'target' || uiState.stage === 'move') return 'targets';
+    return 'commands';
+}
+
+function getStatusText() {
+    if (!liveState.connected) return 'Connecting to Socket.IO...';
+    if (!liveState.inCombat) return 'Waiting for active combat. Start a combat encounter to drive this UI live.';
+    if (!liveState.currentTurn?.currentActor) return 'Combat is active, waiting for turn payload.';
+    if (!isLocalPlayersTurn()) {
+        const actor = getCurrentActor();
+        return `${actor?.name || 'Another actor'} is acting. Watch the turn rail until control returns to you.`;
+    }
+    if (uiState.pendingAction) return 'Action sent to server. Waiting for authoritative result...';
+    if (uiState.actionCommittedActorId === String(getCurrentActor()?.id || '')) {
+        return 'Your action resolved. End your turn when you are done.';
+    }
+    if (uiState.stage === 'target') return 'Pick the enemy to attack next.';
+    if (uiState.stage === 'move') return 'Pick the direction to move next.';
+    return 'Choose a combat action from the command box.';
+}
+
+function getCommandHint() {
+    const command = getSelectedCommand();
+    if (!command) return 'No command selected.';
+    if (command.id === 'attack') {
+        const preview = uiState.preview?.preview;
+        if (preview) {
+            const disadvantage = preview.disadvantage ? ' with disadvantage' : '';
+            return `${preview.weapon?.name || 'Weapon'} ${preview.rangeBand || 'range'} attack${disadvantage}. ${preview.hitChancePct}% hit, ${preview.damageMin}-${preview.damageMax} damage.`;
+        }
+        if (uiState.previewDenied?.reason === 'target-out-of-range') {
+            return `Target is out of range at ${uiState.previewDenied.distanceFt}ft. Move first.`;
+        }
+        return 'Attack a selected enemy with server-authoritative preview.';
+    }
+    if (command.id === 'move') return 'Move 5ft in one direction.';
+    if (command.id === 'dash') return 'Move farther using your Dash action.';
+    if (command.id === 'disengage') return 'Reposition without provoking melee reactions.';
+    if (command.id === 'dodge') return 'Apply Dodge until your next turn.';
+    if (command.id === 'end-turn') return 'Advance combat to the next actor.';
+    return `${command.label} ready.`;
 }
 
 function renderPartyCards() {
-    return SAMPLE_PARTY.map((actor, index) => {
-        const active = index === state.activeActorIndex;
+    const players = getOrderedActors('player');
+    const currentActorId = String(getCurrentActor()?.id || '');
+    return players.map((actor, index) => {
+        const active = String(actor.id) === currentActorId;
+        const owned = String(actor.ownerSid || '') === String(liveState.localSid || '');
         return `
             <article class="party-card ${active ? 'is-active' : ''}">
-                <div class="party-portrait" style="--portrait-hue:${actor.portraitHue}deg"></div>
+                <div class="party-portrait" style="--portrait-hue:${(index * 53) + 18}deg"></div>
                 <div class="party-main">
                     <div class="party-head">
                         <div>
                             <h3>${actor.name}</h3>
-                            <p>${actor.role}</p>
+                            <p>${owned ? 'You' : actor.role || 'Ally'}</p>
                         </div>
-                        <div class="atb-ring ${actor.atb >= 0.9 ? 'is-ready' : ''}">
-                            <span>${Math.round(actor.atb * 100)}</span>
-                        </div>
+                        <div class="atb-ring ${active ? 'is-ready' : ''}"><span>${active ? 'ACT' : 'RDY'}</span></div>
                     </div>
-                    <div class="meter-label"><span>HP</span><strong>${actor.hp}/${actor.maxHp}</strong></div>
+                    <div class="meter-label"><span>HP</span><strong>${Math.round(numberOr(actor.hp, 0))}/${Math.round(numberOr(actor.maxHp, 1))}</strong></div>
                     <div class="meter"><div class="meter-fill hp" style="width:${pct(actor.hp, actor.maxHp)}%"></div></div>
-                    <div class="meter-label"><span>MP</span><strong>${actor.mp}/${actor.maxMp}</strong></div>
-                    <div class="meter"><div class="meter-fill mp" style="width:${pct(actor.mp, actor.maxMp)}%"></div></div>
-                    <div class="meter-label"><span>OD</span><strong>${Math.round(actor.overdrive * 100)}%</strong></div>
-                    <div class="meter"><div class="meter-fill od" style="width:${pct(actor.overdrive, 1)}%"></div></div>
+                    <div class="meter-label"><span>MP</span><strong>${Math.round(numberOr(actor.mp, 0))}/${Math.round(numberOr(actor.maxMp, Math.max(1, actor.mp || 0)))} </strong></div>
+                    <div class="meter"><div class="meter-fill mp" style="width:${pct(actor.mp, actor.maxMp || Math.max(1, actor.mp || 0))}%"></div></div>
                 </div>
             </article>
         `;
@@ -276,14 +416,17 @@ function renderPartyCards() {
 }
 
 function renderEnemies() {
-    return SAMPLE_ENEMIES.map((enemy, index) => {
-        const targeted = state.targetMode && !state.allyTargetMode && index === state.targetIndex;
+    const enemies = getOrderedActors('enemy');
+    const currentActorId = String(getCurrentActor()?.id || '');
+    return enemies.map((enemy) => {
+        const targeted = uiState.stage === 'target' && enemy.id === uiState.selectedTargetId;
+        const active = String(enemy.id) === currentActorId;
         return `
-            <article class="enemy-card ${targeted ? 'is-targeted' : ''}">
+            <article class="enemy-card ${targeted ? 'is-targeted' : ''} ${active ? 'is-active-turn' : ''}" data-enemy-id="${enemy.id}">
                 <div class="enemy-shell"></div>
                 <div class="enemy-meta">
                     <h3>${enemy.name}</h3>
-                    <p>Weak: ${enemy.weakness}</p>
+                    <p>AC ${Math.round(numberOr(enemy.ac, 10))}</p>
                     <div class="enemy-hp"><div class="enemy-hp-fill" style="width:${pct(enemy.hp, enemy.maxHp)}%"></div></div>
                 </div>
             </article>
@@ -292,55 +435,94 @@ function renderEnemies() {
 }
 
 function renderTurnOrder() {
-    const order = [
-        ...SAMPLE_PARTY.map((actor) => actor.name),
-        ...SAMPLE_ENEMIES.map((enemy) => enemy.name),
-    ];
-    return order.slice(0, 6).map((name, index) => {
-        const current = index === 0;
-        return `<div class="turn-pill ${current ? 'is-current' : ''}">${name}</div>`;
+    const order = Array.isArray(liveState.currentTurn?.order) && liveState.currentTurn.order.length
+        ? liveState.currentTurn.order
+        : [...getOrderedActors('player'), ...getOrderedActors('enemy')];
+    const turnIndex = numberOr(liveState.currentTurn?.turnIndex, 0);
+    return order.slice(0, 8).map((entry, index) => {
+        const isCurrent = index === turnIndex;
+        const label = String(entry.name || entry.id || `slot-${index + 1}`);
+        return `<div class="turn-pill ${isCurrent ? 'is-current' : ''}">${label}</div>`;
     }).join('');
 }
 
-function renderCommandMenu() {
-    const entries = getMenuEntries();
-    return entries.map((entry, index) => {
-        const selected = index === state.menuIndex && !state.targetMode;
+function renderCommandMenu(guidance) {
+    return COMMANDS.map((command, index) => {
+        const selected = index === uiState.commandIndex && uiState.stage === 'command';
+        const guided = guidance === 'commands' && index === uiState.commandIndex;
+        const nextMarker = command.kind === 'end-turn' ? '>>' : command.kind === 'instant' ? '!' : '•';
         return `
-            <button class="command-btn ${selected ? 'is-selected' : ''}" data-command-index="${index}" type="button">
-                <span>${entry.label}</span>
-                <small>${entry.type === 'submenu' ? '>' : entry.type === 'instant' ? '!' : '•'}</small>
+            <button class="command-btn ${selected ? 'is-selected' : ''} ${guided ? 'guide-pulse' : ''}" data-command-index="${index}" type="button">
+                <span>${command.label}</span>
+                <small>${nextMarker}</small>
             </button>
         `;
     }).join('');
 }
 
-function renderTargetStrip() {
-    if (!state.targetMode) {
-        return '<div class="target-strip muted">No target selection active.</div>';
+function renderTargetStrip(guidance) {
+    if (uiState.stage === 'target') {
+        return getOrderedActors('enemy').map((target) => {
+            const active = target.id === uiState.selectedTargetId;
+            return `
+                <button class="target-chip ${active ? 'is-selected' : ''} ${(guidance === 'targets' && active) ? 'guide-pulse' : ''}" data-target-id="${target.id}" type="button">
+                    <span>${target.name}</span>
+                    <small>${Math.round(numberOr(target.hp, 0))}/${Math.round(numberOr(target.maxHp, 1))} HP</small>
+                </button>
+            `;
+        }).join('');
     }
 
-    return getTargetPool().map((target, index) => {
-        const active = index === state.targetIndex;
-        const hpText = target.maxHp ? `${target.hp}/${target.maxHp}` : '';
+    if (uiState.stage === 'move') {
+        const command = getSelectedCommand();
+        const distance = numberOr(command.stepFt, 5);
+        return MOVE_CHOICES.map((choice) => {
+            const active = choice.id === uiState.selectedMoveId;
+            return `
+                <button class="target-chip ${active ? 'is-selected' : ''} ${(guidance === 'targets' && active) ? 'guide-pulse' : ''}" data-move-id="${choice.id}" type="button">
+                    <span>${choice.label.replace('5ft', `${distance}ft`)}</span>
+                    <small>${command.id}</small>
+                </button>
+            `;
+        }).join('');
+    }
+
+    return '<div class="target-strip muted">No target or direction step active.</div>';
+}
+
+function renderPreview() {
+    const command = getSelectedCommand();
+    const preview = uiState.preview?.preview;
+    if (command.id === 'attack' && preview) {
         return `
-            <button class="target-chip ${active ? 'is-selected' : ''}" data-target-index="${index}" type="button">
-                <span>${target.name}</span>
-                <small>${hpText}</small>
-            </button>
+            <div class="panel-kicker">Preview</div>
+            <div class="preview-title">${preview.weapon?.name || 'Attack'}</div>
+            <p>${preview.hitChancePct}% hit chance, ${preview.damageMin}-${preview.damageMax} damage, ${preview.distanceFt}ft away.</p>
         `;
-    }).join('');
+    }
+    if (uiState.previewDenied) {
+        return `
+            <div class="panel-kicker">Preview</div>
+            <div class="preview-title">Denied</div>
+            <p>${String(uiState.previewDenied.reason || 'Action unavailable').replace(/-/g, ' ')}.</p>
+        `;
+    }
+    return `
+        <div class="panel-kicker">Preview</div>
+        <div class="preview-title">${command.label}</div>
+        <p>${getCommandHint()}</p>
+    `;
 }
 
 function renderLog() {
-    return state.log.map((entry, index) => {
-        return `<li class="log-row ${index === 0 ? 'is-fresh' : ''}">${entry}</li>`;
-    }).join('');
+    return uiState.log.map((entry, index) => `<li class="log-row ${index === 0 ? 'is-fresh' : ''}">${entry}</li>`).join('');
 }
 
 function render() {
-    const actor = getActiveActor();
-    const selection = getCurrentSelection();
+    currentActorChanged();
+    const currentActor = getCurrentActor();
+    const guidance = getGuidance();
+    const round = numberOr(liveState.currentTurn?.roundNumber, 1);
 
     root.innerHTML = `
         <div class="combat-stage">
@@ -351,14 +533,15 @@ function render() {
             <div class="stage-foam"></div>
 
             <header class="combat-header">
-                <div class="header-badge">Combat UI Playground</div>
-                <div class="turn-track">${renderTurnOrder()}</div>
+                <div class="header-badge ${guidance === 'status' ? 'guide-pulse' : ''}">Combat UI Live Dock</div>
+                <div class="turn-track ${guidance === 'turn' ? 'guide-pulse' : ''}">${renderTurnOrder()}</div>
             </header>
 
-            <section class="enemy-rail">${renderEnemies()}</section>
+            <section class="enemy-rail ${guidance === 'targets' && uiState.stage === 'target' ? 'guide-zone' : ''}">${renderEnemies()}</section>
 
-            <aside class="battle-log-panel">
+            <aside class="battle-log-panel ${guidance === 'status' ? 'guide-pulse' : ''}">
                 <div class="panel-kicker">Combat Log</div>
+                <div class="status-banner">${getStatusText()}</div>
                 <ol class="battle-log">${renderLog()}</ol>
             </aside>
 
@@ -368,36 +551,31 @@ function render() {
                 <div class="command-frame">
                     <div class="command-topline">
                         <div>
-                            <div class="panel-kicker">Active Unit</div>
-                            <h2>${actor.name}</h2>
+                            <div class="panel-kicker">Round ${Math.max(1, round)}</div>
+                            <h2>${currentActor?.name || 'No Active Actor'}</h2>
                         </div>
-                        <div class="command-mode">${state.targetMode ? 'Targeting' : state.menuKey.toUpperCase()}</div>
+                        <div class="command-mode">${isLocalPlayersTurn() ? 'YOUR TURN' : 'OBSERVE'}</div>
                     </div>
 
-                    <div class="command-hint">${getSelectionHint()}</div>
+                    <div class="command-hint">${getCommandHint()}</div>
 
-                    <div class="target-zone">${renderTargetStrip()}</div>
+                    <div class="target-zone ${guidance === 'targets' ? 'guide-zone' : ''}">${renderTargetStrip(guidance)}</div>
 
-                    <div class="command-list">${renderCommandMenu()}</div>
+                    <div class="command-list ${guidance === 'commands' ? 'guide-zone' : ''}">${renderCommandMenu(guidance)}</div>
 
-                    <div class="command-preview">
-                        <div class="panel-kicker">Preview</div>
-                        <div class="preview-title">${selection ? selection.label : 'None'}</div>
-                        <p>${getSelectionHint()}</p>
-                    </div>
+                    <div class="command-preview">${renderPreview()}</div>
 
                     <div class="command-footer">
-                        <button class="footer-btn" data-action="prev-actor" type="button">Prev Actor</button>
                         <button class="footer-btn" data-action="confirm" type="button">Confirm</button>
                         <button class="footer-btn" data-action="cancel" type="button">Back</button>
-                        <button class="footer-btn" data-action="next-actor" type="button">Next Actor</button>
+                        <button class="footer-btn ${guidance === 'end-turn' ? 'guide-pulse' : ''}" data-action="end-turn" type="button">End Turn</button>
                     </div>
                 </div>
             </section>
 
             <footer class="help-bar">
                 <span>Up/Down: Navigate</span>
-                <span>Left/Right: Change actor or target</span>
+                <span>Left/Right: Cycle target or direction</span>
                 <span>Enter: Confirm</span>
                 <span>Esc: Back</span>
             </footer>
@@ -410,30 +588,44 @@ function render() {
 function bindInteractions() {
     root.querySelectorAll('[data-command-index]').forEach((button) => {
         button.addEventListener('click', () => {
-            state.menuIndex = Number(button.dataset.commandIndex);
-            if (!state.targetMode) {
-                activateSelection();
-            }
+            if (!isLocalPlayersTurn()) return;
+            selectCommand(Number(button.dataset.commandIndex));
+            render();
         });
     });
 
-    root.querySelectorAll('[data-target-index]').forEach((button) => {
+    root.querySelectorAll('[data-target-id]').forEach((button) => {
         button.addEventListener('click', () => {
-            state.targetIndex = Number(button.dataset.targetIndex);
-            confirmTarget();
+            if (!isLocalPlayersTurn()) return;
+            uiState.selectedTargetId = String(button.dataset.targetId || '');
+            requestAttackPreview(uiState.selectedTargetId);
+            render();
+        });
+    });
+
+    root.querySelectorAll('[data-move-id]').forEach((button) => {
+        button.addEventListener('click', () => {
+            if (!isLocalPlayersTurn()) return;
+            uiState.selectedMoveId = String(button.dataset.moveId || '');
+            render();
+        });
+    });
+
+    root.querySelectorAll('[data-enemy-id]').forEach((card) => {
+        card.addEventListener('click', () => {
+            if (!isLocalPlayersTurn() || uiState.stage !== 'target') return;
+            uiState.selectedTargetId = String(card.dataset.enemyId || '');
+            requestAttackPreview(uiState.selectedTargetId);
+            render();
         });
     });
 
     root.querySelectorAll('[data-action]').forEach((button) => {
         button.addEventListener('click', () => {
-            const action = button.dataset.action;
-            if (action === 'prev-actor') cycleActor(-1);
-            if (action === 'next-actor') cycleActor(1);
-            if (action === 'confirm') {
-                if (state.targetMode) confirmTarget();
-                else activateSelection();
-            }
+            const action = String(button.dataset.action || '');
+            if (action === 'confirm') confirmSelection();
             if (action === 'cancel') cancelSelection();
+            if (action === 'end-turn') submitEndTurn();
             render();
         });
     });
@@ -442,42 +634,273 @@ function bindInteractions() {
 function handleKeydown(event) {
     if (event.key === 'ArrowUp') {
         event.preventDefault();
-        moveMenu(-1);
+        moveSelection(-1);
+        render();
         return;
     }
     if (event.key === 'ArrowDown') {
         event.preventDefault();
-        moveMenu(1);
+        moveSelection(1);
+        render();
         return;
     }
     if (event.key === 'ArrowLeft') {
         event.preventDefault();
-        if (state.targetMode) moveMenu(-1);
-        else {
-            cycleActor(-1);
+        if (uiState.stage === 'target' || uiState.stage === 'move') {
+            moveSelection(-1);
             render();
         }
         return;
     }
     if (event.key === 'ArrowRight') {
         event.preventDefault();
-        if (state.targetMode) moveMenu(1);
-        else {
-            cycleActor(1);
+        if (uiState.stage === 'target' || uiState.stage === 'move') {
+            moveSelection(1);
             render();
         }
         return;
     }
     if (event.key === 'Enter') {
         event.preventDefault();
-        if (state.targetMode) confirmTarget();
-        else activateSelection();
+        confirmSelection();
+        render();
         return;
     }
     if (event.key === 'Escape' || event.key === 'Backspace') {
         event.preventDefault();
         cancelSelection();
+        render();
     }
+}
+
+function syncPlayers(playersPayload) {
+    liveState.playersById.clear();
+    const safe = playersPayload && typeof playersPayload === 'object' ? playersPayload : {};
+    Object.entries(safe).forEach(([sid, entry]) => {
+        const actor = toPlayerActor(entry, sid);
+        if (!actor) return;
+        liveState.playersById.set(actor.id, actor);
+    });
+}
+
+function syncWorld(worldPayload) {
+    const safe = worldPayload && typeof worldPayload === 'object' ? worldPayload : {};
+    syncPlayers(safe.players || {});
+    liveState.enemiesById.clear();
+    const enemies = Array.isArray(safe.enemies) ? safe.enemies : [];
+    enemies.forEach((entry, index) => {
+        const actor = toEnemyActor(entry, `enemy-${index}`);
+        if (!actor) return;
+        liveState.enemiesById.set(actor.id, actor);
+    });
+    const combatMeta = safe.combat?.state && typeof safe.combat.state === 'object' ? safe.combat.state : {};
+    liveState.inCombat = !!combatMeta.inCombat;
+}
+
+function resetForNewTurn() {
+    uiState.pendingAction = false;
+    uiState.preview = null;
+    uiState.previewDenied = null;
+    uiState.guidedOverride = null;
+    uiState.selectedTargetId = null;
+    uiState.selectedMoveId = null;
+    uiState.stage = 'command';
+    if (!uiState.actionCommittedActorId || uiState.actionCommittedActorId !== String(getCurrentActor()?.id || '')) {
+        uiState.commandIndex = 0;
+    }
+}
+
+const socket = typeof window.io === 'function' ? window.io() : null;
+
+if (socket) {
+    socket.on('connect', () => {
+        liveState.connected = true;
+        liveState.localSid = socket.id || null;
+        uiState.status = 'Connected.';
+        pushLog('Connected to combat socket.');
+        socket.emit('request-combat-state', {});
+        render();
+    });
+
+    socket.on('disconnect', () => {
+        liveState.connected = false;
+        pushLog('Disconnected from combat socket.');
+        render();
+    });
+
+    socket.on('player-id', (payload) => {
+        if (payload && typeof payload === 'object' && payload.id) {
+            liveState.localSid = String(payload.id);
+            render();
+        }
+    });
+
+    socket.on('world-init', (payload) => {
+        syncWorld(payload);
+        render();
+    });
+
+    socket.on('world-update', (payload) => {
+        syncWorld(payload);
+        render();
+    });
+
+    socket.on('players-state', (payload) => {
+        syncPlayers(payload);
+        render();
+    });
+
+    socket.on('player-update', (entry) => {
+        const actor = toPlayerActor(entry, entry?.id);
+        if (actor) liveState.playersById.set(actor.id, actor);
+        render();
+    });
+
+    socket.on('player-joined', (entry) => {
+        const actor = toPlayerActor(entry, entry?.id);
+        if (actor) liveState.playersById.set(actor.id, actor);
+        render();
+    });
+
+    socket.on('player-left', (payload) => {
+        const value = String(payload?.id || '').trim();
+        for (const [actorId, actor] of liveState.playersById.entries()) {
+            if (actorId === value || String(actor.ownerSid || '') === value) {
+                liveState.playersById.delete(actorId);
+            }
+        }
+        render();
+    });
+
+    socket.on('entity-move', (packet) => {
+        const actorId = String(packet?.id || '').trim();
+        const pos = packet?.position;
+        if (!actorId || !pos) return;
+        const actor = liveState.playersById.get(actorId) || liveState.enemiesById.get(actorId);
+        if (!actor) return;
+        actor.position = {
+            x: numberOr(pos.x, numberOr(actor.position?.x, 0)),
+            y: numberOr(pos.y, numberOr(actor.position?.y, 0)),
+            z: numberOr(pos.z, numberOr(actor.position?.z, 0)),
+        };
+        render();
+    });
+
+    socket.on('combat-state', (packet) => {
+        liveState.inCombat = !!packet?.active;
+        if (!liveState.inCombat) {
+            liveState.currentTurn = null;
+            resetForNewTurn();
+        }
+        render();
+    });
+
+    socket.on('combat-full-state', (packet) => {
+        liveState.inCombat = !!packet?.state?.inCombat;
+        liveState.currentTurn = getTurnPacketFromCombatFullState(packet);
+        resetForNewTurn();
+        render();
+    });
+
+    socket.on('combat-turn', (packet) => {
+        liveState.currentTurn = packet && typeof packet === 'object' ? packet : null;
+        resetForNewTurn();
+        const actor = getCurrentActor();
+        if (actor) {
+            pushLog(`Turn: ${actor.name}`);
+        }
+        render();
+    });
+
+    socket.on('combat-reset', () => {
+        liveState.inCombat = false;
+        liveState.currentTurn = null;
+        uiState.actionCommittedActorId = null;
+        resetForNewTurn();
+        pushLog('Combat reset.');
+        render();
+    });
+
+    socket.on('combat-action-preview', (packet) => {
+        if (packet?.requestId && uiState.previewRequestId && packet.requestId !== uiState.previewRequestId) return;
+        uiState.preview = packet;
+        uiState.previewDenied = null;
+        render();
+    });
+
+    socket.on('combat-preview-denied', (packet) => {
+        if (packet?.requestId && uiState.previewRequestId && packet.requestId !== uiState.previewRequestId) return;
+        uiState.preview = null;
+        uiState.previewDenied = packet || { reason: 'preview-denied' };
+        if (packet?.reason === 'target-out-of-range') {
+            uiState.commandIndex = COMMANDS.findIndex((entry) => entry.id === 'move');
+            uiState.stage = 'command';
+            uiState.guidedOverride = 'commands';
+        }
+        render();
+    });
+
+    socket.on('combat-action-result', (packet) => {
+        uiState.pendingAction = false;
+        uiState.preview = null;
+        uiState.previewDenied = null;
+        const actorId = String(packet?.attacker || '');
+        const currentActorId = String(getCurrentActor()?.id || '');
+        if (actorId && actorId === currentActorId && isLocalPlayersTurn()) {
+            uiState.actionCommittedActorId = actorId;
+            uiState.stage = 'command';
+            uiState.guidedOverride = 'end-turn';
+        }
+        if (packet?.type === 'attack') {
+            const hitText = packet.hit ? `hit for ${packet.damage}` : 'missed';
+            pushLog(`${packet.attacker} attacked ${packet.targetId}: ${hitText}.`);
+        } else if (packet?.type) {
+            pushLog(`${packet.attacker} used ${packet.type}.`);
+        }
+        render();
+    });
+
+    socket.on('combat-action-denied', (packet) => {
+        uiState.pendingAction = false;
+        uiState.guidedOverride = null;
+        uiState.previewDenied = packet || { reason: 'action-denied' };
+        const reason = String(packet?.reason || 'action-denied').replace(/-/g, ' ');
+        pushLog(`Denied: ${reason}.`);
+        if (packet?.reason === 'missing-target') {
+            uiState.stage = 'target';
+            uiState.guidedOverride = 'targets';
+        } else if (packet?.reason === 'not-your-turn') {
+            uiState.guidedOverride = 'turn';
+        } else if (packet?.reason === 'target-out-of-range') {
+            uiState.commandIndex = COMMANDS.findIndex((entry) => entry.id === 'move');
+            uiState.stage = 'command';
+            uiState.guidedOverride = 'commands';
+        }
+        render();
+    });
+
+    socket.on('combat-error', (packet) => {
+        uiState.pendingAction = false;
+        pushLog(`Combat error: ${String(packet?.reason || 'unknown')}`);
+        render();
+    });
+
+    socket.on('end-turn-accepted', () => {
+        uiState.pendingAction = true;
+        pushLog('End turn accepted.');
+        render();
+    });
+
+    socket.on('end-turn-denied', (packet) => {
+        uiState.pendingAction = false;
+        pushLog(`End turn denied: ${String(packet?.reason || 'unknown')}`);
+        uiState.guidedOverride = packet?.reason === 'not-your-turn' ? 'turn' : 'status';
+        render();
+    });
+} else {
+    liveState.connected = false;
+    liveState.inCombat = false;
+    pushLog('Socket.IO unavailable. Running in visual fallback mode only.');
 }
 
 const style = document.createElement('style');
@@ -653,6 +1076,10 @@ style.textContent = `
         box-shadow: 0 0 0 1px rgba(243, 215, 154, 0.2), 0 24px 52px rgba(0, 0, 0, 0.4);
     }
 
+    .enemy-card.is-active-turn {
+        border-color: rgba(111, 201, 242, 0.42);
+    }
+
     .enemy-shell {
         height: 120px;
         border-radius: 46% 54% 58% 42% / 44% 40% 60% 56%;
@@ -749,6 +1176,14 @@ style.textContent = `
         padding-left: 18px;
         display: grid;
         gap: 8px;
+    }
+
+    .status-banner {
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+        line-height: 1.5;
+        color: rgba(247, 236, 213, 0.72);
+        margin-bottom: 12px;
     }
 
     .log-row {
@@ -947,6 +1382,15 @@ style.textContent = `
         background: linear-gradient(180deg, rgba(243, 215, 154, 0.14), rgba(243, 215, 154, 0.05));
     }
 
+    .guide-zone {
+        border-radius: 12px;
+        box-shadow: 0 0 0 1px rgba(243, 215, 154, 0.22), 0 0 34px rgba(243, 215, 154, 0.08);
+    }
+
+    .guide-pulse {
+        animation: guide-pulse 1.15s ease-in-out infinite;
+    }
+
     .command-preview {
         margin-top: 14px;
         padding: 12px 0 2px;
@@ -993,6 +1437,15 @@ style.textContent = `
     @keyframes drift {
         from { transform: translate3d(-1.5%, 0, 0) scale(1); }
         to { transform: translate3d(1.5%, 1%, 0) scale(1.04); }
+    }
+
+    @keyframes guide-pulse {
+        0%, 100% {
+            box-shadow: 0 0 0 0 rgba(243, 215, 154, 0.0), 0 0 0 1px rgba(243, 215, 154, 0.18);
+        }
+        50% {
+            box-shadow: 0 0 0 8px rgba(243, 215, 154, 0.08), 0 0 0 1px rgba(243, 215, 154, 0.52), 0 0 28px rgba(243, 215, 154, 0.18);
+        }
     }
 
     @media (max-width: 1200px) {
