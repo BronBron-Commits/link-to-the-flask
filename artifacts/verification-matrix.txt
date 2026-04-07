@@ -1,167 +1,77 @@
 === ENGINE VERIFICATION MATRIX ===
 
 [SYSTEM COVERAGE]
-[OK] Combat system (29 tests)
-  - tests/js/combat-system.test.js:108 - Combat System Logic Combat actor management should return null for non-existent actor
-  - tests/js/combat-system.test.js:118 - Combat System Logic Combat actor management should get actor label for display
-  - tests/js/combat-system.test.js:132 - Combat System Logic Combat state management should track whether combat is active
-  - tests/js/combat-system.test.js:140 - Combat System Logic Combat state management should initialize controlled actor as null
-  - tests/js/combat-system.test.js:156 - Combat System Logic Turn and action management should track action usage per turn
-  - tests/js/combat-system.test.js:168 - Combat System Logic Turn and action management should validate action availability
-  - tests/js/combat-system.test.js:189 - Combat System Logic Combat message system should track message priority levels
-  - tests/js/combat-system.test.js:201 - Combat System Logic Combat message system should determine if message should show based on priority
-[OK] Networking (23 tests)
-  - tests/js/networking.test.js:100 - Socket.IO Networking Combat action network flow should handle rapid successive actions without deduplication errors
-  - tests/js/networking.test.js:116 - Socket.IO Networking Combat action network flow should emit dice-roll-event for shared rolls
-  - tests/js/networking.test.js:132 - Socket.IO Networking Combat state synchronization should broadcast combat-start event
-  - tests/js/networking.test.js:143 - Socket.IO Networking Combat state synchronization should broadcast combat-end event
-  - tests/js/networking.test.js:152 - Socket.IO Networking Combat state synchronization should handle combat-start-request approval flow
-  - tests/js/networking.test.js:166 - Socket.IO Networking Network timeline alignment should align combat timeline with server timestamp
-  - tests/js/networking.test.js:183 - Socket.IO Networking Network timeline alignment should handle network event queueing with performance times
-  - tests/js/networking.test.js:204 - Socket.IO Networking Session storage and resume should use sessionStorage for resume keys, not localStorage
-[OK] Authority (34 tests)
-  - tests/js/dm-authority.test.js:118 - DM Authority and Permissions DM command capability mapping Commands should map to correct capability keys
-  - tests/js/dm-authority.test.js:150 - DM Authority and Permissions DM command capability mapping All timeline commands should map to controlTimeline
-  - tests/js/dm-authority.test.js:168 - DM Authority and Permissions Authority layer capabilities Observer should have read-only access
-  - tests/js/dm-authority.test.js:194 - DM Authority and Permissions Authority layer capabilities Puppeteer should allow control but not stat override
-  - tests/js/dm-authority.test.js:22 - DM Authority and Permissions Mode permissions DEV mode should have all permissions
-  - tests/js/dm-authority.test.js:221 - DM Authority and Permissions Authority layer capabilities Simulator should have full control
-  - tests/js/dm-authority.test.js:248 - DM Authority and Permissions Local simulation authority Server authority should be the default
-  - tests/js/dm-authority.test.js:258 - DM Authority and Permissions Local simulation authority Authority should only be LOCAL_DM when explicitly set in DM mode
-[OK] UI (23 tests)
-  - tests/js/ui-state.test.js:103 - UI State Management Camera controls should apply camera smoothing factors
-  - tests/js/ui-state.test.js:122 - UI State Management Camera controls should calculate camera focus offsets
-  - tests/js/ui-state.test.js:142 - UI State Management Loading overlay state should track loading progress
-  - tests/js/ui-state.test.js:166 - UI State Management Loading overlay state should clamp progress between 0 and 1
-  - tests/js/ui-state.test.js:176 - UI State Management Loading overlay state should track loading overlay state
-  - tests/js/ui-state.test.js:198 - UI State Management Loading overlay state should enforce minimum loading display time
-  - tests/js/ui-state.test.js:211 - UI State Management Selection and targeting should track selected combat target
-  - tests/js/ui-state.test.js:22 - UI State Management DM UI zone visibility should track zone collapse state
-[OK] Simulation (42 tests)
-  - tests/js/simulations/chaos-randomized.test.js:20 - Simulation: Chaos and Network Fault Injection should remain deterministic under duplicate, delayed, dropped, and reordered packets
-  - tests/js/simulations/chaos-randomized.test.js:4 - Simulation: Chaos and Network Fault Injection should resolve out-of-order combat events deterministically
-  - tests/js/simulations/combat-full-flow.test.js:24 - Simulation: Combat Full Flow should propagate mode change -> authority change -> command availability
-  - tests/js/simulations/combat-full-flow.test.js:4 - Simulation: Combat Full Flow should propagate combat-start from network -> state -> UI
-  - tests/js/simulations/combat-full-flow.test.js:50 - Simulation: Combat Full Flow should synchronize combat start with camera and timeline under DM mode
-  - tests/js/simulations/combat-truth.test.js:33 - Simulation: Full Combat Truth Tests turn order, sequencing, and timing alignment remain valid
-  - tests/js/simulations/combat-truth.test.js:4 - Simulation: Full Combat Truth Tests 5-round combat produces expected outcome and rich timeline
-  - tests/js/simulations/divergence-diagnostics.test.js:19 - Simulation: Divergence Diagnostics should report actor-level state mismatch context
+[MISSING] Combat system (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Networking (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Authority (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] UI (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Simulation (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [BEHAVIORAL GUARANTEES]
-[OK] Determinism (9 tests)
-  - tests/js/simulations/replay-determinism.test.js:125 - Simulation: Replay Determinism should keep deterministic results for larger entity counts
-  - tests/js/simulations/replay-determinism.test.js:153 - Simulation: Replay Determinism should remain deterministic on edge HP and tie initiative cases
-  - tests/js/simulations/replay-determinism.test.js:46 - Simulation: Replay Determinism should resolve different client arrival order to same deterministic state
-  - tests/js/simulations/replay-determinism.test.js:5 - Simulation: Replay Determinism should produce identical state for identical action sequences
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 1 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 1337 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 42 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 7 for long-run combat
-[OK] Multiplayer conflict resolution (6 tests)
-  - tests/js/simulations/multiplayer-conflict.test.js:102 - Simulation: Multiplayer Conflict and Performance Invariants should reject non-DM authority escalation attempt
-  - tests/js/simulations/multiplayer-conflict.test.js:37 - Simulation: Multiplayer Conflict and Performance Invariants should resolve multi-turn conflicts deterministically across seed 111
-  - tests/js/simulations/multiplayer-conflict.test.js:37 - Simulation: Multiplayer Conflict and Performance Invariants should resolve multi-turn conflicts deterministically across seed 2029
-  - tests/js/simulations/multiplayer-conflict.test.js:37 - Simulation: Multiplayer Conflict and Performance Invariants should resolve multi-turn conflicts deterministically across seed 444
-  - tests/js/simulations/multiplayer-conflict.test.js:5 - Simulation: Multiplayer Conflict and Performance Invariants should resolve simultaneous multi-client actions with stable outcome
-  - tests/js/simulations/multiplayer-conflict.test.js:73 - Simulation: Multiplayer Conflict and Performance Invariants should keep mixed authority transitions stable during multiplayer conflict
-[OK] Chaos resilience (2 tests)
-  - tests/js/simulations/chaos-randomized.test.js:20 - Simulation: Chaos and Network Fault Injection should remain deterministic under duplicate, delayed, dropped, and reordered packets
-  - tests/js/simulations/chaos-randomized.test.js:4 - Simulation: Chaos and Network Fault Injection should resolve out-of-order combat events deterministically
-[OK] Performance invariants (3 tests)
-  - tests/js/simulations/multiplayer-conflict.test.js:124 - Simulation: Multiplayer Conflict and Performance Invariants should handle 100 rapid actions under frame budget invariant
-  - tests/js/simulations/multiplayer-conflict.test.js:138 - Simulation: Multiplayer Conflict and Performance Invariants should cap event queue growth for large bursts
-  - tests/js/simulations/multiplayer-conflict.test.js:190 - Simulation: Multiplayer Conflict and Performance Invariants should avoid degradation drift across sustained windows
+[MISSING] Determinism (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Multiplayer conflict resolution (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Chaos resilience (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Performance invariants (0 tests)
+  ! No passing test found for requirement-1, requirement-2
 
 [FLOW VALIDATION]
-[OK] Network -> state -> UI (1 tests)
-  - tests/js/simulations/combat-full-flow.test.js:4 - Simulation: Combat Full Flow should propagate combat-start from network -> state -> UI
-[OK] Mode -> authority -> commands (1 tests)
-  - tests/js/simulations/combat-full-flow.test.js:24 - Simulation: Combat Full Flow should propagate mode change -> authority change -> command availability
+[MISSING] Network -> state -> UI (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Mode -> authority -> commands (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [COMBAT ENGINE]
-[OK] Timeline initialization (3 tests)
-  - tests/js/combat-system.test.js:28 - Combat System Logic Combat timeline initialization should create valid combat timeline with unique ID
-  - tests/js/combat-system.test.js:43 - Combat System Logic Combat timeline initialization should align network combat timeline from server payload
-  - tests/js/combat-system.test.js:62 - Combat System Logic Combat timeline initialization should reject invalid timeline payload
-[OK] Turn state machine (4 tests)
-  - tests/js/combat-system.test.js:246 - Combat System Logic Turn end state machine should initialize turn end state
-  - tests/js/combat-system.test.js:256 - Combat System Logic Turn end state machine should set turn end required flag
-  - tests/js/combat-system.test.js:267 - Combat System Logic Turn end state machine should clear watchdog timer on turn end
-  - tests/js/combat-system.test.js:280 - Combat System Logic Turn end state machine should not hang if watchdog times out (bug fix test)
-[OK] Action validation (1 tests)
-  - tests/js/combat-system.test.js:168 - Combat System Logic Turn and action management should validate action availability
+[MISSING] Timeline initialization (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Turn state machine (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Action validation (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [NETWORKING]
-[OK] Event emission (5 tests)
-  - tests/js/networking.test.js:116 - Socket.IO Networking Combat action network flow should emit dice-roll-event for shared rolls
-  - tests/js/networking.test.js:235 - Socket.IO Networking Error handling and resilience should handle null emit gracefully
-  - tests/js/networking.test.js:241 - Socket.IO Networking Error handling and resilience should handle socket emit with missing payload
-  - tests/js/networking.test.js:39 - Socket.IO Networking Socket connection lifecycle socket should emit events
-  - tests/js/networking.test.js:82 - Socket.IO Networking Combat action network flow should emit combat-action-record with correct structure
-[OK] Deduplication (3 tests)
-  - tests/js/networking.test.js:100 - Socket.IO Networking Combat action network flow should handle rapid successive actions without deduplication errors
-  - tests/js/networking.test.js:280 - Socket.IO Networking Deduplication and rate limiting should track action IDs for deduplication
-  - tests/js/networking.test.js:296 - Socket.IO Networking Deduplication and rate limiting should reset deduplication state (simulating test fixture cleanup)
-[OK] Timeline alignment (2 tests)
-  - tests/js/networking.test.js:166 - Socket.IO Networking Network timeline alignment should align combat timeline with server timestamp
-  - tests/js/networking.test.js:183 - Socket.IO Networking Network timeline alignment should handle network event queueing with performance times
+[MISSING] Event emission (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Deduplication (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Timeline alignment (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [AUTHORITY]
-[OK] Mode permissions (3 tests)
-  - tests/js/dm-authority.test.js:22 - DM Authority and Permissions Mode permissions DEV mode should have all permissions
-  - tests/js/dm-authority.test.js:55 - DM Authority and Permissions Mode permissions DM mode should not have tool/debug permissions
-  - tests/js/dm-authority.test.js:86 - DM Authority and Permissions Mode permissions PLAYER mode should only have player input permissions
-[OK] DM capability mapping (2 tests)
-  - tests/js/dm-authority.test.js:118 - DM Authority and Permissions DM command capability mapping Commands should map to correct capability keys
-  - tests/js/dm-authority.test.js:150 - DM Authority and Permissions DM command capability mapping All timeline commands should map to controlTimeline
-[OK] Authority escalation blocked (1 tests)
-  - tests/js/simulations/multiplayer-conflict.test.js:102 - Simulation: Multiplayer Conflict and Performance Invariants should reject non-DM authority escalation attempt
+[MISSING] Mode permissions (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] DM capability mapping (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Authority escalation blocked (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [SIMULATION GUARANTEES]
-[OK] Determinism (same input -> same output) (8 tests)
-  - tests/js/simulations/replay-determinism.test.js:125 - Simulation: Replay Determinism should keep deterministic results for larger entity counts
-  - tests/js/simulations/replay-determinism.test.js:153 - Simulation: Replay Determinism should remain deterministic on edge HP and tie initiative cases
-  - tests/js/simulations/replay-determinism.test.js:5 - Simulation: Replay Determinism should produce identical state for identical action sequences
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 1 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 1337 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 42 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 7 for long-run combat
-  - tests/js/simulations/replay-determinism.test.js:68 - Simulation: Replay Determinism should remain deterministic across seed 88 for long-run combat
-[OK] Replay correctness (5 tests)
-  - tests/js/simulations/replay-determinism.test.js:179 - Simulation: Replay Determinism should replay long-run streams identically for seed 19
-  - tests/js/simulations/replay-determinism.test.js:179 - Simulation: Replay Determinism should replay long-run streams identically for seed 2027
-  - tests/js/simulations/replay-determinism.test.js:179 - Simulation: Replay Determinism should replay long-run streams identically for seed 3
-  - tests/js/simulations/replay-determinism.test.js:25 - Simulation: Replay Determinism should reproduce identical final state from replay log
-  - tests/js/simulations/replay-determinism.test.js:94 - Simulation: Replay Determinism should preserve replay correctness with mixed action types
-[OK] Order independence (3 tests)
-  - tests/js/simulations/replay-determinism.test.js:229 - Simulation: Replay Determinism should resolve order independence with 4-client same-tick collisions
-  - tests/js/simulations/replay-determinism.test.js:256 - Simulation: Replay Determinism should resolve order independence with mixed priorities and initiative ties
-  - tests/js/simulations/replay-determinism.test.js:46 - Simulation: Replay Determinism should resolve different client arrival order to same deterministic state
+[MISSING] Determinism (same input -> same output) (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Replay correctness (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Order independence (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [CHAOS RESILIENCE]
-[OK] Out-of-order packets (1 tests)
-  - tests/js/simulations/chaos-randomized.test.js:4 - Simulation: Chaos and Network Fault Injection should resolve out-of-order combat events deterministically
-[OK] Duplicate packets (1 tests)
-  - tests/js/simulations/chaos-randomized.test.js:20 - Simulation: Chaos and Network Fault Injection should remain deterministic under duplicate, delayed, dropped, and reordered packets
-[OK] Dropped packets (1 tests)
-  - tests/js/simulations/chaos-randomized.test.js:20 - Simulation: Chaos and Network Fault Injection should remain deterministic under duplicate, delayed, dropped, and reordered packets
+[MISSING] Out-of-order packets (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Duplicate packets (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Dropped packets (0 tests)
+  ! No passing test matched this guarantee in this run.
 
 [PERFORMANCE]
-[OK] 100 actions < 16ms (2 tests)
-  - tests/js/simulations/multiplayer-conflict.test.js:124 - Simulation: Multiplayer Conflict and Performance Invariants should handle 100 rapid actions under frame budget invariant
-  - tests/js/simulations/multiplayer-conflict.test.js:190 - Simulation: Multiplayer Conflict and Performance Invariants should avoid degradation drift across sustained windows
-[OK] Queue growth capped (1 tests)
-  - tests/js/simulations/multiplayer-conflict.test.js:138 - Simulation: Multiplayer Conflict and Performance Invariants should cap event queue growth for large bursts
+[MISSING] 100 actions < 16ms (0 tests)
+  ! No passing test matched this guarantee in this run.
+[MISSING] Queue growth capped (0 tests)
+  ! No passing test matched this guarantee in this run.
 
-[MANUAL VERIFICATIONS]
-[OK] simulation (29 tests)
-  - tests/js/simulations/long-run-stability.test.js:1 - 100-turn sustained stability
-  - tests/js/simulations/multiplayer-conflict.test.js:1 - simultaneous multi-client stable outcome
-  - tests/js/simulations/multiplayer-conflict.test.js:1 - multi-turn conflict seed 111
-  - tests/js/simulations/multiplayer-conflict.test.js:1 - multi-turn conflict seed 444
-  - tests/js/simulations/replay-determinism.test.js:1 - same input same output
-  - tests/js/simulations/multiplayer-conflict.test.js:1 - multi-turn conflict seed 2029
-  - tests/js/simulations/multiplayer-conflict.test.js:1 - mixed authority multiplayer stability
-  - tests/js/simulations/multiplayer-conflict.test.js:1 - authority escalation blocked
-
-RESULT: 29/29 VERIFIED (100%)
+RESULT: 0/28 VERIFIED (0%)
