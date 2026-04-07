@@ -164,6 +164,12 @@ def socket_player_update(data):
         }
     else:
         entry.pop("movementPreview", None)
+    raw_name = data.get("name")
+    if isinstance(raw_name, str) and raw_name.strip():
+        entry["name"] = raw_name.strip()[:32]
+    raw_side = data.get("side")
+    if isinstance(raw_side, str) and raw_side.strip():
+        entry["side"] = raw_side.strip()[:32]
     gs.save_resume_snapshot(sid)
     emit("player-update", entry, broadcast=True, include_self=False)
     # During combat, player positions are covered by the player-update broadcast above.

@@ -721,7 +721,7 @@ function resetForNewTurn() {
     }
 }
 
-const socket = typeof window.io === 'function' ? window.io() : null;
+const socket = window.__LOBBY_SOCKET__ || (typeof window.io === 'function' ? window.io() : null);
 
 if (socket) {
     socket.on('connect', () => {

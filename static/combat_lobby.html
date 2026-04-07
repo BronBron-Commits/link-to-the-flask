@@ -17,8 +17,8 @@
 
         canvas { display: block; }
 
-        /* ── Lobby screen ── */
-        #lobby-screen {
+        /* ── Shared full-screen panel ── */
+        .screen {
             position: fixed;
             inset: 0;
             z-index: 1000;
@@ -28,36 +28,33 @@
             background: radial-gradient(ellipse at 50% 60%, rgba(10, 30, 55, 0.98) 0%, rgba(4, 8, 16, 1) 100%);
         }
 
-        #lobby-screen.hidden {
-            display: none;
-        }
+        .screen.hidden { display: none; }
 
-        .lobby-card {
-            width: min(420px, calc(100vw - 40px));
+        .card {
+            width: min(460px, calc(100vw - 40px));
             border: 1px solid rgba(100, 180, 240, 0.25);
             background: linear-gradient(180deg, rgba(8, 18, 34, 0.96), rgba(4, 10, 20, 0.98));
             padding: 40px 36px 36px;
             box-shadow: 0 0 80px rgba(60, 140, 220, 0.08);
         }
 
-        .lobby-title {
-            font-size: 11px;
+        .kicker {
+            font-size: 10px;
             letter-spacing: 0.3em;
             text-transform: uppercase;
             color: #4a9ed6;
             margin: 0 0 6px;
         }
 
-        .lobby-heading {
-            font-size: 28px;
+        .heading {
+            font-size: 26px;
             font-weight: 300;
             letter-spacing: 0.06em;
             color: #e8f4ff;
-            margin: 0 0 32px;
-            font-family: 'Courier New', monospace;
+            margin: 0 0 28px;
         }
 
-        .lobby-label {
+        .field-label {
             font-size: 10px;
             letter-spacing: 0.18em;
             text-transform: uppercase;
@@ -66,7 +63,7 @@
             display: block;
         }
 
-        .lobby-input {
+        .text-input {
             width: 100%;
             background: rgba(255, 255, 255, 0.04);
             border: 1px solid rgba(100, 170, 220, 0.28);
@@ -79,9 +76,7 @@
             transition: border-color 150ms ease;
         }
 
-        .lobby-input:focus {
-            border-color: rgba(80, 180, 255, 0.65);
-        }
+        .text-input:focus { border-color: rgba(80, 180, 255, 0.65); }
 
         .side-row {
             display: grid;
@@ -104,10 +99,7 @@
             text-align: center;
         }
 
-        .side-btn:hover {
-            border-color: rgba(255, 255, 255, 0.22);
-            color: #e8f4ff;
-        }
+        .side-btn:hover { border-color: rgba(255,255,255,0.22); color: #e8f4ff; }
 
         .side-btn.is-selected.heroes {
             border-color: rgba(100, 200, 130, 0.6);
@@ -123,13 +115,9 @@
             box-shadow: 0 0 24px rgba(220, 70, 70, 0.12);
         }
 
-        .side-icon {
-            display: block;
-            font-size: 22px;
-            margin-bottom: 8px;
-        }
+        .side-icon { display: block; font-size: 22px; margin-bottom: 8px; }
 
-        .join-btn {
+        .primary-btn {
             width: 100%;
             padding: 16px;
             background: linear-gradient(180deg, rgba(60, 140, 220, 0.22), rgba(30, 80, 160, 0.18));
@@ -143,22 +131,83 @@
             transition: all 150ms ease;
         }
 
-        .join-btn:hover:not(:disabled) {
+        .primary-btn:hover:not(:disabled) {
             background: linear-gradient(180deg, rgba(70, 160, 255, 0.28), rgba(40, 100, 200, 0.22));
             border-color: rgba(100, 180, 255, 0.65);
             color: #d4eeff;
         }
 
-        .join-btn:disabled {
-            opacity: 0.38;
-            cursor: default;
-        }
+        .primary-btn:disabled { opacity: 0.38; cursor: default; }
 
-        .lobby-error {
+        .form-error {
             font-size: 11px;
             color: #ff8080;
             margin-top: 12px;
             min-height: 16px;
+        }
+
+        /* ── Waiting lobby ── */
+        .lobby-status {
+            font-size: 11px;
+            color: rgba(160, 210, 240, 0.7);
+            margin-bottom: 22px;
+            letter-spacing: 0.06em;
+        }
+
+        .roster {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 28px;
+            min-height: 80px;
+        }
+
+        .roster-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border: 1px solid rgba(255,255,255,0.07);
+            background: rgba(255,255,255,0.03);
+            font-size: 13px;
+        }
+
+        .roster-row.you {
+            border-color: rgba(100, 180, 255, 0.3);
+            background: rgba(60, 130, 220, 0.07);
+        }
+
+        .roster-name { flex: 1; color: #e0eeff; }
+
+        .roster-side {
+            font-size: 10px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            padding: 3px 8px;
+        }
+
+        .roster-side.heroes  { color: #8fefb0; border: 1px solid rgba(100,200,130,0.4); }
+        .roster-side.villains { color: #ff9090; border: 1px solid rgba(220,80,80,0.4); }
+        .roster-side.unknown  { color: rgba(200,220,240,0.4); border: 1px solid rgba(200,220,240,0.15); }
+
+        .roster-you-tag {
+            font-size: 9px;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: rgba(100,180,255,0.6);
+        }
+
+        .roster-empty {
+            font-size: 12px;
+            color: rgba(200,220,240,0.25);
+            padding: 12px 0;
+            text-align: center;
+        }
+
+        .start-hint {
+            font-size: 11px;
+            color: rgba(160,210,240,0.5);
+            margin-top: 12px;
+            text-align: center;
         }
 
         /* ── Combat UI overlay ── */
@@ -170,108 +219,220 @@
             pointer-events: none;
         }
 
-        #combat-ui-root * {
-            pointer-events: auto;
-        }
+        #combat-ui-root * { pointer-events: auto; }
     </style>
 </head>
 <body>
 
-    <!-- ── Join lobby ── -->
-    <div id="lobby-screen">
-        <div class="lobby-card">
-            <p class="lobby-title">Session Active</p>
-            <h1 class="lobby-heading">Enter Combat</h1>
+    <!-- Phase 1: name + side -->
+    <div id="screen-join" class="screen">
+        <div class="card">
+            <p class="kicker">Session Active</p>
+            <h1 class="heading">Enter Combat</h1>
 
-            <label class="lobby-label" for="name-input">Your name</label>
-            <input
-                id="name-input"
-                class="lobby-input"
-                type="text"
-                maxlength="28"
-                placeholder="Enter name..."
-                autocomplete="off"
-                spellcheck="false"
-            >
+            <label class="field-label" for="name-input">Your name</label>
+            <input id="name-input" class="text-input" type="text" maxlength="28"
+                   placeholder="Enter name..." autocomplete="off" spellcheck="false">
 
-            <label class="lobby-label">Choose your side</label>
+            <label class="field-label">Choose your side</label>
             <div class="side-row">
                 <button class="side-btn heroes" data-side="heroes" type="button">
-                    <span class="side-icon">⚔</span>
-                    Heroes
+                    <span class="side-icon">&#x2694;</span>Heroes
                 </button>
                 <button class="side-btn villains" data-side="villains" type="button">
-                    <span class="side-icon">💀</span>
-                    Villains
+                    <span class="side-icon">&#x1F480;</span>Villains
                 </button>
             </div>
 
-            <button id="join-btn" class="join-btn" type="button" disabled>Join Combat</button>
-            <p class="lobby-error" id="lobby-error"></p>
+            <button id="join-btn" class="primary-btn" type="button" disabled>Join Lobby</button>
+            <p class="form-error" id="join-error"></p>
         </div>
     </div>
 
-    <!-- ── Combat UI overlay (populated by combat-ui.js) ── -->
+    <!-- Phase 2: waiting lobby -->
+    <div id="screen-lobby" class="screen hidden">
+        <div class="card">
+            <p class="kicker">Waiting Room</p>
+            <h1 class="heading">Combat Lobby</h1>
+
+            <p class="lobby-status" id="lobby-status">Connecting...</p>
+
+            <label class="field-label">Players</label>
+            <div class="roster" id="roster"></div>
+
+            <button id="start-btn" class="primary-btn" type="button">Start Combat</button>
+            <p class="start-hint">Anyone can start. Combat begins for all players.</p>
+        </div>
+    </div>
+
+    <!-- Phase 3: combat overlay (populated by combat-ui.js) -->
     <div id="combat-ui-root"></div>
 
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script>
-        // ── Lobby interaction logic ──
-        const nameInput = document.getElementById('name-input');
-        const joinBtn   = document.getElementById('join-btn');
-        const errorEl   = document.getElementById('lobby-error');
-        let selectedSide = null;
+    (function () {
+        // ── Phase 1: join form ─────────────────────────────────────────────
+        var nameInput  = document.getElementById('name-input');
+        var joinBtn    = document.getElementById('join-btn');
+        var joinError  = document.getElementById('join-error');
+        var selectedSide = null;
 
-        function validate() {
-            const hasName = nameInput.value.trim().length >= 2;
-            const hasSide = selectedSide !== null;
-            joinBtn.disabled = !(hasName && hasSide);
+        function validateJoin() {
+            joinBtn.disabled = !(nameInput.value.trim().length >= 2 && selectedSide);
         }
 
-        nameInput.addEventListener('input', validate);
-
-        document.querySelectorAll('.side-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.side-btn').forEach(b => b.classList.remove('is-selected'));
-                btn.classList.add('is-selected');
-                selectedSide = btn.dataset.side;
-                validate();
-            });
-        });
-
-        nameInput.addEventListener('keydown', e => {
+        nameInput.addEventListener('input', validateJoin);
+        nameInput.addEventListener('keydown', function(e) {
             if (e.key === 'Enter' && !joinBtn.disabled) joinBtn.click();
         });
 
-        joinBtn.addEventListener('click', () => {
-            const name = nameInput.value.trim();
-            if (name.length < 2) { errorEl.textContent = 'Name must be at least 2 characters.'; return; }
-            if (!selectedSide)   { errorEl.textContent = 'Pick a side.'; return; }
-
-            // Expose to combat-ui.js and map3d.js via globals
-            window.__COMBAT_PLAYER_NAME__ = name;
-            window.__COMBAT_PLAYER_SIDE__ = selectedSide;
-
-            document.getElementById('lobby-screen').classList.add('hidden');
-            loadGame();
+        document.querySelectorAll('.side-btn').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.side-btn').forEach(function(b) { b.classList.remove('is-selected'); });
+                btn.classList.add('is-selected');
+                selectedSide = btn.dataset.side;
+                validateJoin();
+            });
         });
 
-        function loadGame() {
-            // Load Socket.IO then the two modules in order
-            const sio = document.createElement('script');
-            sio.src = 'https://cdn.socket.io/4.7.5/socket.io.min.js';
-            sio.onload = () => {
-                const m1 = document.createElement('script');
-                m1.type = 'module';
-                m1.src = '/static/map3d.js';
-                document.body.appendChild(m1);
+        joinBtn.addEventListener('click', function() {
+            var name = nameInput.value.trim();
+            if (name.length < 2) { joinError.textContent = 'Name must be at least 2 characters.'; return; }
+            if (!selectedSide)   { joinError.textContent = 'Pick a side.'; return; }
+            window.__COMBAT_PLAYER_NAME__ = name;
+            window.__COMBAT_PLAYER_SIDE__ = selectedSide;
+            enterLobby(name, selectedSide);
+        });
 
-                const m2 = document.createElement('script');
-                m2.type = 'module';
-                m2.src = '/static/combat-ui.js';
-                document.body.appendChild(m2);
-            };
-            document.body.appendChild(sio);
+        // ── Phase 2: waiting lobby ─────────────────────────────────────────
+        var lobbySocket = null;
+        var localSid    = null;
+        var players     = {};
+
+        function escHtml(str) {
+            return String(str)
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+                .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
         }
+
+        function setStatus(msg) {
+            document.getElementById('lobby-status').textContent = msg;
+        }
+
+        function renderRoster() {
+            var el = document.getElementById('roster');
+            var keys = Object.keys(players);
+            if (keys.length === 0) {
+                el.innerHTML = '<p class="roster-empty">No players yet...</p>';
+                return;
+            }
+            el.innerHTML = keys.map(function(sid) {
+                var p = players[sid];
+                var isYou = sid === localSid;
+                var sideClass = (p.side === 'heroes' || p.side === 'villains') ? p.side : 'unknown';
+                return '<div class="roster-row' + (isYou ? ' you' : '') + '">' +
+                    '<span class="roster-name">' + escHtml(p.name) + '</span>' +
+                    '<span class="roster-side ' + sideClass + '">' + escHtml(p.side) + '</span>' +
+                    (isYou ? '<span class="roster-you-tag">You</span>' : '') +
+                    '</div>';
+            }).join('');
+            var h = keys.length === 1 ? '1 player' : keys.length + ' players';
+            setStatus(h + ' in lobby');
+        }
+
+        function enterLobby(name, side) {
+            document.getElementById('screen-join').classList.add('hidden');
+            document.getElementById('screen-lobby').classList.remove('hidden');
+
+            lobbySocket = window.io();
+
+            lobbySocket.on('connect', function() {
+                localSid = lobbySocket.id;
+                lobbySocket.emit('player-update', { name: name, side: side });
+                setStatus('Connected as ' + name + ' \u00b7 ' + side);
+            });
+
+            lobbySocket.on('disconnect', function() { setStatus('Disconnected \u2014 reconnecting...'); });
+
+            lobbySocket.on('player-id', function(payload) {
+                if (payload && payload.id) localSid = payload.id;
+            });
+
+            lobbySocket.on('players-state', function(data) {
+                players = {};
+                if (data && typeof data === 'object') {
+                    Object.keys(data).forEach(function(sid) {
+                        var p = data[sid];
+                        players[sid] = {
+                            name: p.name || ('Player-' + sid.slice(0,5)),
+                            side: p.side || 'unknown',
+                        };
+                    });
+                }
+                // Make sure our own entry shows our name/side (server may not have it yet)
+                if (localSid && players[localSid]) {
+                    if (!data[localSid] || !data[localSid].name) players[localSid].name = name;
+                    if (!data[localSid] || !data[localSid].side) players[localSid].side = side;
+                }
+                renderRoster();
+            });
+
+            lobbySocket.on('player-joined', function(p) {
+                if (p && p.id) {
+                    players[p.id] = { name: p.name || ('Player-' + p.id.slice(0,5)), side: p.side || 'unknown' };
+                    renderRoster();
+                }
+            });
+
+            lobbySocket.on('player-update', function(p) {
+                if (p && p.id) {
+                    var ex = players[p.id] || {};
+                    players[p.id] = {
+                        name: p.name || ex.name || ('Player-' + p.id.slice(0,5)),
+                        side: p.side || ex.side || 'unknown',
+                    };
+                    renderRoster();
+                }
+            });
+
+            lobbySocket.on('player-left', function(payload) {
+                if (payload && payload.id) { delete players[payload.id]; renderRoster(); }
+            });
+
+            lobbySocket.on('combat-state', function(packet) {
+                if (packet && packet.active) launchGame();
+            });
+
+            lobbySocket.on('combat-full-state', function(packet) {
+                if (packet && (packet.active || (packet.state && packet.state.inCombat))) launchGame();
+            });
+        }
+
+        document.getElementById('start-btn').addEventListener('click', function() {
+            if (lobbySocket) lobbySocket.emit('combat-start', {});
+        });
+
+        // ── Phase 3: load 3D scene ─────────────────────────────────────────
+        var gameLoaded = false;
+        function launchGame() {
+            if (gameLoaded) return;
+            gameLoaded = true;
+            document.getElementById('screen-lobby').classList.add('hidden');
+
+            // Pass the open socket to map3d.js so it reuses it
+            window.__LOBBY_SOCKET__ = lobbySocket;
+
+            var m1 = document.createElement('script');
+            m1.type = 'module';
+            m1.src = '/static/map3d.js';
+            document.body.appendChild(m1);
+
+            var m2 = document.createElement('script');
+            m2.type = 'module';
+            m2.src = '/static/combat-ui.js';
+            document.body.appendChild(m2);
+        }
+    })();
     </script>
 </body>
 </html>
