@@ -241,6 +241,8 @@ const simulationReplay = {
     speed: 1,
     actorLayout: new Map(),
     actorProjectedPos: new Map(),
+    attackLine: null,
+    attackLineUntilMs: 0,
     ui: null,
 };
 
@@ -375,6 +377,81 @@ function getProjectedActorPos(id, fallbackPos) {
     return seed;
 }
 
+function ensureAttackLine() {
+    if (simulationReplay.attackLine) return simulationReplay.attackLine;
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute([
+        0, 0.9, 0,
+        0, 0.9, 0,
+    ], 3));
+    const material = new THREE.LineBasicMaterial({
+        color: 0xffc857,
+        transparent: true,
+        opacity: 0.95,
+        depthWrite: false,
+    });
+    const line = new THREE.Line(geometry, material);
+    line.visible = false;
+    scene.add(line);
+    simulationReplay.attackLine = line;
+    return line;
+}
+
+function hideAttackLine() {
+    if (!simulationReplay.attackLine) return;
+    simulationReplay.attackLine.visible = false;
+    simulationReplay.attackLineUntilMs = 0;
+}
+
+function setAttackLineForEvent(event) {
+    if (!event || typeof event !== 'object') {
+        hideAttackLine();
+        return;
+    }
+
+    const eventType = String(event.type || '').toLowerCase();
+    if (eventType !== 'action:attack') {
+        hideAttackLine();
+        return;
+    }
+
+    const sourceId = String(event.source || '').trim();
+    const targetId = String(event.targetId || '').trim();
+    if (!sourceId || !targetId) {
+        hideAttackLine();
+        return;
+    }
+
+    const src = simulationReplay.actorProjectedPos.get(sourceId);
+    const dst = simulationReplay.actorProjectedPos.get(targetId);
+    if (!src || !dst) {
+        hideAttackLine();
+        return;
+    }
+
+    const line = ensureAttackLine();
+    const posAttr = line.geometry.getAttribute('position');
+    posAttr.setXYZ(0, src.x, 0.9, src.z);
+    posAttr.setXYZ(1, dst.x, 0.9, dst.z);
+    posAttr.needsUpdate = true;
+
+    const srcTeam = classifyTeamFromId(sourceId, simulationReplay.data);
+    if (line.material && line.material.color) {
+        if (srcTeam === 'enemy') {
+            line.material.color.setHex(0xff8a80);
+        } else if (srcTeam === 'player') {
+            line.material.color.setHex(0x80d8ff);
+        } else {
+            line.material.color.setHex(0xffc857);
+        }
+        line.material.opacity = 0.95;
+    }
+
+    line.visible = true;
+    simulationReplay.attackLineUntilMs = performance.now() + 320;
+}
+
 function stepProjectedMovement(events) {
     if (!Array.isArray(events) || events.length === 0) return;
 
@@ -403,9 +480,21 @@ function stepProjectedMovement(events) {
             const dx = dst.x - src.x;
             const dz = dst.z - src.z;
             const len = Math.hypot(dx, dz) || 1;
-            const step = Math.min(1.35, len * 0.22);
-            src.x += (dx / len) * step;
-            src.z += (dz / len) * step;
+            const nx = dx / len;
+            const nz = dz / len;
+
+            if (eventType === 'action:attack') {
+                // Close to a readable melee offset so attacks feel in-range.
+                const desiredGap = 1.25;
+                const approach = Math.max(0, len - desiredGap);
+                const step = Math.min(2.2, Math.max(0.75, approach * 0.75));
+                src.x += nx * step;
+                src.z += nz * step;
+            } else {
+                const step = Math.min(1.35, len * 0.22);
+                src.x += nx * step;
+                src.z += nz * step;
+            }
         }
     });
 }
@@ -446,6 +535,7 @@ function applySimulationTick(index) {
     });
 
     stepProjectedMovement(events);
+    setAttackLineForEvent(leadEvent);
 
     const actors = actorIds.map((id, idx) => {
         const state = actorsById[id] || {};
@@ -535,6 +625,7 @@ async function loadSimulationArtifact(artifactPath = simulationArtifactPath) {
     stopSimulationReplay();
     simulationReplay.actorLayout.clear();
     simulationReplay.actorProjectedPos.clear();
+    hideAttackLine();
 
     const response = await fetch(artifactPath, { cache: 'no-store' });
     if (!response.ok) {
@@ -566,6 +657,7 @@ function pauseSimulationReplay() {
 
 function resetSimulationReplay() {
     stopSimulationReplay();
+    hideAttackLine();
     applySimulationTick(0);
 }
 
@@ -795,6 +887,16 @@ function animate(timeMs) {
     const t = Number(timeMs) * 0.001;
     testMesh.rotation.y = t * 0.8;
     testMesh.rotation.x = Math.sin(t * 0.7) * 0.2;
+
+    if (simulationReplay.attackLine && simulationReplay.attackLine.visible) {
+        const remaining = simulationReplay.attackLineUntilMs - performance.now();
+        if (remaining <= 0) {
+            simulationReplay.attackLine.visible = false;
+        } else if (simulationReplay.attackLine.material) {
+            simulationReplay.attackLine.material.opacity = 0.35 + Math.min(0.6, remaining / 360);
+        }
+    }
+
     renderer.render(scene, camera);
 }
 
