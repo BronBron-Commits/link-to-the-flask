@@ -1155,11 +1155,15 @@ style.textContent = `
     .battle-log-panel {
         position: absolute;
         left: 22px;
-        bottom: 116px;
-        width: 290px;
+        bottom: 232px;
+        width: 320px;
+        max-height: calc(100vh - 360px);
         padding: 16px;
         border: 1px solid var(--line);
         background: linear-gradient(180deg, rgba(12, 16, 23, 0.84), rgba(7, 10, 16, 0.68));
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         z-index: 2;
     }
 
@@ -1176,6 +1180,8 @@ style.textContent = `
         padding-left: 18px;
         display: grid;
         gap: 8px;
+        overflow-y: auto;
+        padding-right: 8px;
     }
 
     .status-banner {
@@ -1184,6 +1190,7 @@ style.textContent = `
         line-height: 1.5;
         color: rgba(247, 236, 213, 0.72);
         margin-bottom: 12px;
+        flex: 0 0 auto;
     }
 
     .log-row {
@@ -1200,7 +1207,7 @@ style.textContent = `
         position: absolute;
         left: 22px;
         right: 420px;
-        bottom: 22px;
+        bottom: 76px;
         display: flex;
         gap: 14px;
         z-index: 2;
@@ -1421,7 +1428,7 @@ style.textContent = `
     .help-bar {
         position: absolute;
         left: 50%;
-        bottom: 22px;
+        bottom: 16px;
         transform: translateX(-50%);
         display: flex;
         gap: 18px;
@@ -1449,13 +1456,15 @@ style.textContent = `
     }
 
     @media (max-width: 1200px) {
+        .battle-log-panel {
+            width: 280px;
+            bottom: 22px;
+            max-height: 290px;
+        }
+
         .party-rail {
             right: 22px;
             bottom: 356px;
-        }
-
-        .battle-log-panel {
-            width: 250px;
         }
     }
 
