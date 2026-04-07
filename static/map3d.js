@@ -60,6 +60,8 @@ const runtime = createMap3dRuntime({
     camera,
     renderer,
 });
+// Expose runtime so the model-picker UI (and other page scripts) can call setModelUrl()
+window.map3dRuntime = runtime;
 
 const controls = createMap3dControls({
     camera,
