@@ -63,10 +63,118 @@ const controls = createMap3dControls({
 controls.start();
 
 const urlSearch = new URLSearchParams(window.location.search || '');
+const rawDesign = String(urlSearch.get('design') || 'tactical').trim().toLowerCase();
+const DESIGN_ALIAS = {
+    a: 'tactical',
+    b: 'cinematic',
+    c: 'debug',
+};
+const DESIGN_PRESETS = {
+    tactical: {
+        background: 0x10141f,
+        ambientIntensity: 0.6,
+        keyIntensity: 1.0,
+        keyColor: 0xffffff,
+        keyPosition: [5, 10, 7],
+        gridMajor: 0x3a4a74,
+        gridMinor: 0x22314d,
+        floorColor: 0x151c2d,
+        floorRoughness: 0.95,
+        floorMetalness: 0.05,
+        cubeColor: 0x5cb8ff,
+        panel: {
+            background: 'rgba(11,15,26,0.86)',
+            text: '#d9e2f0',
+            border: 'rgba(120,150,220,0.35)',
+            buttonBackground: '#15233c',
+            buttonBorder: 'rgba(136,168,240,0.5)',
+            rosterBackground: 'rgba(5, 9, 16, 0.52)',
+        },
+    },
+    cinematic: {
+        background: 0x16100b,
+        ambientIntensity: 0.35,
+        keyIntensity: 1.35,
+        keyColor: 0xffe4b8,
+        keyPosition: [7, 12, 3],
+        gridMajor: 0x7f5a3a,
+        gridMinor: 0x3e2a1c,
+        floorColor: 0x2a1d14,
+        floorRoughness: 0.85,
+        floorMetalness: 0.12,
+        cubeColor: 0xffa35c,
+        panel: {
+            background: 'rgba(30,18,10,0.88)',
+            text: '#f8e6d3',
+            border: 'rgba(232,173,118,0.45)',
+            buttonBackground: '#4b2b17',
+            buttonBorder: 'rgba(235,178,122,0.6)',
+            rosterBackground: 'rgba(20, 12, 6, 0.55)',
+        },
+    },
+    debug: {
+        background: 0x0f1310,
+        ambientIntensity: 0.75,
+        keyIntensity: 1.0,
+        keyColor: 0xd8ffe6,
+        keyPosition: [4, 9, 8],
+        gridMajor: 0x4caf50,
+        gridMinor: 0x1f4d25,
+        floorColor: 0x121a13,
+        floorRoughness: 0.98,
+        floorMetalness: 0.02,
+        cubeColor: 0x79ff9f,
+        panel: {
+            background: 'rgba(8,18,10,0.88)',
+            text: '#dfffe8',
+            border: 'rgba(118,233,141,0.45)',
+            buttonBackground: '#13311a',
+            buttonBorder: 'rgba(132,248,156,0.6)',
+            rosterBackground: 'rgba(6, 14, 8, 0.58)',
+        },
+    },
+};
+const designKey = DESIGN_ALIAS[rawDesign] || (DESIGN_PRESETS[rawDesign] ? rawDesign : 'tactical');
+const designPreset = DESIGN_PRESETS[designKey];
 const mapDebug = urlSearch.get('mapdebug') === '1';
 const simulationMode = urlSearch.get('sim') === '1';
 const simulationArtifactPath = urlSearch.get('simPath') || '/artifacts/timeline-debug.json';
 const SIMULATION_REPLAY_SLOWDOWN = 10;
+
+function applyDesignPreset(preset) {
+    if (!preset) return;
+    scene.background = new THREE.Color(preset.background);
+    ambientLight.intensity = preset.ambientIntensity;
+    keyLight.intensity = preset.keyIntensity;
+    if (keyLight.color && typeof keyLight.color.setHex === 'function') {
+        keyLight.color.setHex(preset.keyColor);
+    }
+    keyLight.position.set(preset.keyPosition[0], preset.keyPosition[1], preset.keyPosition[2]);
+
+    if (Array.isArray(grid.material)) {
+        if (grid.material[0] && grid.material[0].color) {
+            grid.material[0].color.setHex(preset.gridMajor);
+        }
+        if (grid.material[1] && grid.material[1].color) {
+            grid.material[1].color.setHex(preset.gridMinor);
+        }
+    } else if (grid.material && grid.material.color) {
+        grid.material.color.setHex(preset.gridMajor);
+    }
+
+    if (floor.material && floor.material.color) {
+        floor.material.color.setHex(preset.floorColor);
+    }
+    if (floor.material) {
+        floor.material.roughness = preset.floorRoughness;
+        floor.material.metalness = preset.floorMetalness;
+    }
+    if (testMesh.material && testMesh.material.color) {
+        testMesh.material.color.setHex(preset.cubeColor);
+    }
+}
+
+applyDesignPreset(designPreset);
 
 if (simulationMode) {
     // Top-down tactical framing for simulation playback.
@@ -81,15 +189,16 @@ function debugLog(...args) {
 }
 
 function createSimulationPanel() {
+    const panelTheme = designPreset && designPreset.panel ? designPreset.panel : DESIGN_PRESETS.tactical.panel;
     const panel = document.createElement('div');
     panel.style.position = 'fixed';
     panel.style.left = '12px';
     panel.style.bottom = '12px';
     panel.style.padding = '10px';
-    panel.style.background = 'rgba(11,15,26,0.86)';
-    panel.style.color = '#d9e2f0';
+    panel.style.background = panelTheme.background;
+    panel.style.color = panelTheme.text;
     panel.style.font = '12px/1.3 monospace';
-    panel.style.border = '1px solid rgba(120,150,220,0.35)';
+    panel.style.border = `1px solid ${panelTheme.border}`;
     panel.style.borderRadius = '8px';
     panel.style.zIndex = '20';
     panel.style.display = 'flex';
@@ -115,9 +224,9 @@ function createSimulationPanel() {
 
     [loadBtn, playBtn, pauseBtn, resetBtn].forEach((btn) => {
         btn.style.cursor = 'pointer';
-        btn.style.border = '1px solid rgba(136,168,240,0.5)';
-        btn.style.background = '#15233c';
-        btn.style.color = '#d9e2f0';
+        btn.style.border = `1px solid ${panelTheme.buttonBorder}`;
+        btn.style.background = panelTheme.buttonBackground;
+        btn.style.color = panelTheme.text;
         btn.style.padding = '4px 8px';
         btn.style.borderRadius = '6px';
         controlsWrap.appendChild(btn);
@@ -162,7 +271,7 @@ function createSimulationPanel() {
     roster.style.margin = '0';
     roster.style.maxHeight = '120px';
     roster.style.overflow = 'auto';
-    roster.style.background = 'rgba(5, 9, 16, 0.52)';
+    roster.style.background = panelTheme.rosterBackground;
     roster.style.padding = '6px';
     panel.appendChild(roster);
 
@@ -937,6 +1046,7 @@ window.__MAP3D_BOOTSTRAP__ = {
     scene,
     camera,
     renderer,
+    designKey,
     runtime,
     controls,
     applySnapshot: (snapshot) => runtime.applySnapshot(snapshot),
