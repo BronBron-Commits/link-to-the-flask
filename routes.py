@@ -24,6 +24,9 @@ from scripts.pdf_to_tidy_data import (
 )
 
 
+ARTIFACTS_DIR = Path("artifacts")
+
+
 def _resolve_contract(filename: str) -> Path | None:
     for candidate in (gs.CONTRACTS_DIR / filename, gs.STATIC_DIR / filename):
         if candidate.exists():
@@ -256,6 +259,21 @@ def character_tidy_data_files(filename: str):
     if not gs.CONTRACTS_DIR.exists():
         return jsonify(ok=False, error="data/character_tidy not found"), 404
     return send_from_directory(gs.CONTRACTS_DIR, filename)
+
+
+@app.route("/artifacts/<path:filename>")
+def artifact_files(filename: str):
+    artifacts_root = ARTIFACTS_DIR.resolve()
+    candidate = (artifacts_root / Path(filename)).resolve()
+    try:
+        candidate.relative_to(artifacts_root)
+    except ValueError:
+        return jsonify(ok=False, error="invalid artifact path"), 400
+
+    if not candidate.exists() or not candidate.is_file():
+        return jsonify(ok=False, error="artifact not found"), 404
+
+    return send_from_directory(artifacts_root, filename)
 
 
 # ---------------------------------------------------------------------------
