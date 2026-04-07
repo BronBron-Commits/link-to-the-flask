@@ -247,16 +247,16 @@ scene.add(rug);
 // Team staging platforms: heroes and villains face each other.
 const lobbySlotLayouts = {
   heroes: [
-    { x: -4.4, z: 0.1 },
-    { x: -4.4, z: -1.05 },
-    { x: -4.4, z: -2.2 },
-    { x: -4.4, z: -3.35 },
+    { x: -4.4, z: 2.6 },
+    { x: -4.4, z: 0.3 },
+    { x: -4.4, z: -2.0 },
+    { x: -4.4, z: -4.3 },
   ],
   villains: [
-    { x: 4.4, z: 0.1 },
-    { x: 4.4, z: -1.05 },
-    { x: 4.4, z: -2.2 },
-    { x: 4.4, z: -3.35 },
+    { x: 4.4, z: 2.6 },
+    { x: 4.4, z: 0.3 },
+    { x: 4.4, z: -2.0 },
+    { x: 4.4, z: -4.3 },
   ],
 };
 
@@ -347,7 +347,7 @@ const avatar = new THREE.Group();
 avatar.position.set(0, 0.24, 0);
 localPreviewAnchor.add(avatar);
 
-localPreviewAnchor.position.set(-4.4, 0, 0.1);
+localPreviewAnchor.position.set(-4.4, 0, 2.6);
 localPreviewAnchor.rotation.y = -Math.PI / 2;
 
 const avatarBodyMat = new THREE.MeshStandardMaterial({ color: 0x7f6bff, roughness: 0.62, metalness: 0.08, emissive: 0x121320 });
