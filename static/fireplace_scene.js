@@ -333,6 +333,8 @@ const lobbyTeamSlots = [
   ...lobbySlotLayouts.villains.map((pos, i) => createTeamSlot('villains', i, pos)),
 ];
 
+const SHOW_NON_PLAYER_STAGING = false;
+
 const localPreviewAnchor = new THREE.Group();
 scene.add(localPreviewAnchor);
 
@@ -560,6 +562,14 @@ for (let i = 0; i < 3; i++) {
   );
   npcToken.position.set(npcStand.position.x, 0.29, npcStand.position.z);
   npcCornerRoot.add(npcToken);
+}
+
+if (!SHOW_NON_PLAYER_STAGING) {
+  handsPedestal.visible = false;
+  proceduralHandsPreview.visible = false;
+  dummyPedestal.visible = false;
+  trainingDummyPreview.visible = false;
+  npcCornerRoot.visible = false;
 }
 
 const flameCore = new THREE.Mesh(
@@ -4389,8 +4399,6 @@ function refreshPreview() {
     `Voice: ${profile.voice}`,
     `Aura: ${profile.aura.toUpperCase()}`,
     `Model: ${profile.modelUrl ? 'Custom GLTF/GLB' : 'Procedural Avatar'}`,
-    `Training Dummy Model: ${profile.trainingDummy.modelUrl ? 'Custom GLTF/GLB' : 'Default Dummy'}`,
-    `Training Dummy Pose: ${profile.trainingDummy.pose}`,
   ].join('\n');
 }
 
@@ -4768,6 +4776,11 @@ if (profile.trainingDummy?.modelUrl) {
 } else {
   trainingDummyFallbackRoot.visible = true;
   applyTrainingDummyPoseToRoot(trainingDummyPoseRoot, profile.trainingDummy?.pose || 'idle');
+}
+
+if (!SHOW_NON_PLAYER_STAGING) {
+  const dummyModelWrap = dummyModelFileEl?.closest('label');
+  if (dummyModelWrap) dummyModelWrap.style.display = 'none';
 }
 
 window.fireplaceRigRetarget = {
