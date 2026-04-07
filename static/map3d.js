@@ -28,18 +28,19 @@ scene.add(keyLight);
 const grid = new THREE.GridHelper(20, 20, 0x3a4a74, 0x22314d);
 if (Array.isArray(grid.material)) {
     grid.material.forEach((mat) => {
-        mat.depthTest = true;
+        mat.depthTest = false;
         mat.depthWrite = false;
         mat.transparent = true;
-        mat.opacity = 0.85;
+        mat.opacity = 0.58;
     });
 } else if (grid.material) {
-    grid.material.depthTest = true;
+    grid.material.depthTest = false;
     grid.material.depthWrite = false;
     grid.material.transparent = true;
-    grid.material.opacity = 0.85;
+    grid.material.opacity = 0.58;
 }
-grid.renderOrder = 2;
+grid.position.y = 0.02;
+grid.renderOrder = 80;
 scene.add(grid);
 
 const floor = new THREE.Mesh(
