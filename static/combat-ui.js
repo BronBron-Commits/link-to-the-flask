@@ -1,7 +1,7 @@
 const SAMPLE_PARTY = [
     {
         id: 'tidus',
-        name: 'Tidus',
+        name: 'Bronson',
         role: 'Vanguard',
         hp: 842,
         maxHp: 999,
@@ -14,7 +14,7 @@ const SAMPLE_PARTY = [
     },
     {
         id: 'yuna',
-        name: 'Yuna',
+        name: 'Sarah',
         role: 'White Mage',
         hp: 601,
         maxHp: 730,
@@ -27,7 +27,7 @@ const SAMPLE_PARTY = [
     },
     {
         id: 'auron',
-        name: 'Auron',
+        name: 'Tat',
         role: 'Breaker',
         hp: 1124,
         maxHp: 1275,
@@ -41,9 +41,9 @@ const SAMPLE_PARTY = [
 ];
 
 const SAMPLE_ENEMIES = [
-    { id: 'e1', name: 'Deep Warden', hp: 480, maxHp: 640, weakness: 'Lightning' },
-    { id: 'e2', name: 'Mire Shell', hp: 910, maxHp: 910, weakness: 'Pierce' },
-    { id: 'e3', name: 'Storm Eye', hp: 320, maxHp: 470, weakness: 'Silence' },
+    { id: 'e1', name: 'Blimp', hp: 480, maxHp: 640, weakness: 'Lightning' },
+    { id: 'e2', name: '6Eclipse', hp: 910, maxHp: 910, weakness: 'Pierce' },
+    { id: 'e3', name: 'Clover', hp: 320, maxHp: 470, weakness: 'Silence' },
 ];
 
 const COMMAND_TREE = {
