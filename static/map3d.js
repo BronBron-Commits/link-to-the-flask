@@ -269,8 +269,22 @@ function buildOceanScene() {
     });
     const oceanMesh = new THREE.Mesh(oceanGeometry, oceanMaterial);
     oceanMesh.rotation.x = -Math.PI / 2;
-    oceanMesh.position.y = -0.58;
+    oceanMesh.position.y = -0.32;
     oceanGroup.add(oceanMesh);
+
+    const foamRing = new THREE.Mesh(
+        new THREE.TorusGeometry(14.25, 0.34, 10, 64),
+        new THREE.MeshStandardMaterial({
+            color: 0xb5f0ff,
+            roughness: 0.22,
+            metalness: 0.02,
+            transparent: true,
+            opacity: 0.45,
+        })
+    );
+    foamRing.rotation.x = Math.PI / 2;
+    foamRing.position.y = -0.02;
+    oceanGroup.add(foamRing);
 
     const arenaRing = new THREE.Mesh(
         new THREE.TorusGeometry(12.5, 1.8, 16, 64),
@@ -317,10 +331,17 @@ function buildOceanScene() {
     for (let i = 0; i < posAttr.count; i += 1) {
         baseY[i] = posAttr.getY(i);
     }
+    const wavePhase = new Float32Array(posAttr.count);
+    for (let i = 0; i < posAttr.count; i += 1) {
+        wavePhase[i] = rng() * Math.PI * 2;
+    }
     sceneEffects.ocean = {
         mesh: oceanMesh,
         position: posAttr,
         baseY,
+        foamRing,
+        wavePhase,
+        frame: 0,
     };
 }
 
@@ -1224,15 +1245,29 @@ window.addEventListener('resize', () => {
 function animate(timeMs) {
     if (sceneEffects.ocean && sceneEffects.ocean.mesh) {
         const t = Number(timeMs) * 0.001;
-        const posAttr = sceneEffects.ocean.position;
+        const ocean = sceneEffects.ocean;
+        const posAttr = ocean.position;
         for (let i = 0; i < posAttr.count; i += 1) {
             const x = posAttr.getX(i);
             const z = posAttr.getZ(i);
-            const wave = (Math.sin((x * 0.14) + (t * 1.1)) + Math.cos((z * 0.11) - (t * 1.35))) * 0.08;
-            posAttr.setY(i, sceneEffects.ocean.baseY[i] + wave);
+            const p = ocean.wavePhase[i];
+            const waveA = Math.sin((x * 0.11) + (t * 1.35) + p) * 0.12;
+            const waveB = Math.cos((z * 0.09) - (t * 1.6) + (p * 0.7)) * 0.09;
+            const waveC = Math.sin(((x + z) * 0.06) - (t * 0.95) + (p * 1.7)) * 0.07;
+            posAttr.setY(i, ocean.baseY[i] + waveA + waveB + waveC);
         }
         posAttr.needsUpdate = true;
-        sceneEffects.ocean.mesh.material.opacity = 0.86 + (Math.sin(t * 0.9) * 0.05);
+        ocean.frame += 1;
+        if (ocean.frame % 3 === 0) {
+            ocean.mesh.geometry.computeVertexNormals();
+        }
+        ocean.mesh.material.opacity = 0.82 + (Math.sin(t * 1.1) * 0.06);
+
+        if (ocean.foamRing && ocean.foamRing.material) {
+            const pulse = 1.0 + (Math.sin((t * 2.2) + 0.6) * 0.035);
+            ocean.foamRing.scale.set(pulse, pulse, 1);
+            ocean.foamRing.material.opacity = 0.34 + (Math.sin((t * 1.8) - 0.3) * 0.12);
+        }
     }
 
     if (simulationReplay.attackLine && simulationReplay.attackLine.visible) {
