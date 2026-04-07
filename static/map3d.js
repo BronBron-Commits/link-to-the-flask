@@ -240,6 +240,7 @@ const simulationReplay = {
     playing: false,
     speed: 1,
     actorLayout: new Map(),
+    actorProjectedPos: new Map(),
     ui: null,
 };
 
@@ -362,6 +363,53 @@ function ensureActorLayout(id, team, indexHint) {
     return pos;
 }
 
+function getProjectedActorPos(id, fallbackPos) {
+    const existing = simulationReplay.actorProjectedPos.get(id);
+    if (existing) return existing;
+    const seed = {
+        x: numberOr(fallbackPos?.x, 0),
+        y: numberOr(fallbackPos?.y, 0.7),
+        z: numberOr(fallbackPos?.z, 0),
+    };
+    simulationReplay.actorProjectedPos.set(id, seed);
+    return seed;
+}
+
+function stepProjectedMovement(events) {
+    if (!Array.isArray(events) || events.length === 0) return;
+
+    const actorIds = Array.from(simulationReplay.actorProjectedPos.keys());
+    actorIds.forEach((id) => {
+        const pos = simulationReplay.actorProjectedPos.get(id);
+        const home = simulationReplay.actorLayout.get(id);
+        if (!pos || !home) return;
+        // Gentle drift back toward formation baseline each tick.
+        pos.x += (home.x - pos.x) * 0.18;
+        pos.z += (home.z - pos.z) * 0.18;
+    });
+
+    events.forEach((evt) => {
+        const sourceId = String(evt?.source || '').trim();
+        const targetId = String(evt?.targetId || '').trim();
+        const eventType = String(evt?.type || '').toLowerCase();
+        if (!sourceId) return;
+
+        const src = simulationReplay.actorProjectedPos.get(sourceId);
+        if (!src) return;
+
+        if ((eventType.startsWith('action:') || eventType === 'turn:end') && targetId) {
+            const dst = simulationReplay.actorProjectedPos.get(targetId);
+            if (!dst) return;
+            const dx = dst.x - src.x;
+            const dz = dst.z - src.z;
+            const len = Math.hypot(dx, dz) || 1;
+            const step = Math.min(1.35, len * 0.22);
+            src.x += (dx / len) * step;
+            src.z += (dz / len) * step;
+        }
+    });
+}
+
 function classifyTeamFromId(id, data) {
     const players = Array.isArray(data?.players) ? data.players : [];
     const enemies = Array.isArray(data?.enemies) ? data.enemies : [];
@@ -385,10 +433,25 @@ function applySimulationTick(index) {
         : [];
     const leadEvent = events[0] || null;
 
+    actorIds.forEach((id, idx) => {
+        const state = actorsById[id] || {};
+        const team = classifyTeamFromId(id, simulationReplay.data);
+        const basePos = ensureActorLayout(id, team, idx);
+        const projected = getProjectedActorPos(id, basePos);
+        const alive = state.alive !== false;
+        if (!alive) {
+            projected.x = basePos.x;
+            projected.z = basePos.z;
+        }
+    });
+
+    stepProjectedMovement(events);
+
     const actors = actorIds.map((id, idx) => {
         const state = actorsById[id] || {};
         const team = classifyTeamFromId(id, simulationReplay.data);
         const basePos = ensureActorLayout(id, team, idx);
+        const projected = getProjectedActorPos(id, basePos);
         const alive = state.alive !== false;
         return {
             id,
@@ -398,9 +461,9 @@ function applySimulationTick(index) {
             maxHp: numberOr(state.maxHp, Math.max(1, numberOr(state.hp, 1))),
             alive,
             position: {
-                x: basePos.x,
+                x: projected.x,
                 y: alive ? basePos.y : -20,
-                z: basePos.z,
+                z: projected.z,
             },
             rotation: { y: 0 },
         };
@@ -471,6 +534,7 @@ function scheduleSimulationReplay() {
 async function loadSimulationArtifact(artifactPath = simulationArtifactPath) {
     stopSimulationReplay();
     simulationReplay.actorLayout.clear();
+    simulationReplay.actorProjectedPos.clear();
 
     const response = await fetch(artifactPath, { cache: 'no-store' });
     if (!response.ok) {
