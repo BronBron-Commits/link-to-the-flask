@@ -4,7 +4,7 @@
   "description": "Unit tests for the 3D multiplayer D&D game engine frontend",
   "scripts": {
     "test": "jest",
-    "test:watch": "jest --watch",
+    "test:watch": "jest --watchAll",
     "test:coverage": "jest --coverage",
     "test:verbose": "jest --verbose",
     "test:ui": "electron electron-test-runner/main.js",
