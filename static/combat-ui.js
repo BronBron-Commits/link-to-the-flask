@@ -1155,9 +1155,9 @@ style.textContent = `
     .battle-log-panel {
         position: absolute;
         left: 22px;
-        bottom: 232px;
+        top: 72px;
         width: 320px;
-        max-height: calc(100vh - 360px);
+        max-height: calc(100vh - 320px);
         padding: 16px;
         border: 1px solid var(--line);
         background: linear-gradient(180deg, rgba(12, 16, 23, 0.84), rgba(7, 10, 16, 0.68));
@@ -1458,7 +1458,7 @@ style.textContent = `
     @media (max-width: 1200px) {
         .battle-log-panel {
             width: 280px;
-            bottom: 22px;
+            top: 72px;
             max-height: 290px;
         }
 
