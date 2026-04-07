@@ -1702,8 +1702,10 @@ function updateClientRuntimeModeFromAuthority() {
 function setPlayerHudVisible(visible) {
     const hud = document.getElementById('hud');
     if (!hud) return;
-    hud.style.display = visible ? 'block' : 'none';
-    if (!visible) {
+    const inCombat = currentGameMode === GAME_MODE.COMBAT;
+    const shouldShow = !!visible && !inCombat;
+    hud.style.display = shouldShow ? 'block' : 'none';
+    if (!shouldShow) {
         hud.classList.remove('visible');
     }
 }
@@ -10260,6 +10262,7 @@ const combatUiState = {
 
 function updateCombatUI() {
     if (!combatUiEl) return;
+    setPlayerHudVisible(modeManager.current !== MODE.DM);
     if (modeManager.current === MODE.DM) {
         combatUiEl.style.display = 'none';
         return;
