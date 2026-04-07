@@ -28,6 +28,7 @@ const MOVE_CHOICES = [
 
 const root = document.getElementById('combat-ui-root');
 if (!root) throw new Error('Missing #combat-ui-root');
+root.style.display = 'none';
 
 const liveState = {
     connected: false,
@@ -519,6 +520,11 @@ function renderLog() {
 }
 
 function render() {
+    if (!liveState.inCombat) {
+        root.style.display = 'none';
+        return;
+    }
+    root.style.display = '';
     currentActorChanged();
     const currentActor = getCurrentActor();
     const guidance = getGuidance();

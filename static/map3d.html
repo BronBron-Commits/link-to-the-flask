@@ -51,6 +51,17 @@
             outline: none;
             border-color: #4a7aff;
         }
+
+        #combat-ui-root {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 800;
+            pointer-events: none;
+        }
+        #combat-ui-root * {
+            pointer-events: auto;
+        }
     </style>
 </head>
 <body>
@@ -81,9 +92,13 @@
         </select>
     </div>
 
+    <!-- Combat UI overlay -->
+    <div id="combat-ui-root"></div>
+
     <!-- Socket.IO client for multiplayer support -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script type="module" src="/static/map3d.js"></script>
+    <script type="module" src="/static/combat-ui.js"></script>
     <script>
         // Wire dropdowns once map3d.js has had a tick to register window.map3dRuntime
         window.addEventListener('load', () => {
