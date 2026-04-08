@@ -236,6 +236,16 @@ def index():
     )
 
 
+@app.route("/account")
+def account():
+    cfg = _supabase_public_config()
+    return render_template(
+        "account.html",
+        supabase_url=cfg["url"],
+        supabase_anon_key=cfg["anon_key"],
+    )
+
+
 @app.route("/game")
 def game():
     return render_template("game.html")

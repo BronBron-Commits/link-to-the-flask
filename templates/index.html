@@ -528,7 +528,8 @@ async function readBackendSession() {
     return payload;
   }
   if (payload.authenticated && payload.user) {
-    setStatus('Account session active.', 'success');
+    window.location.replace('/account');
+    return payload;
   } else {
     setStatus('Create an account or sign in to manage your player profile.', '');
   }
@@ -567,7 +568,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   if (current.data.session) {
     try {
       await exchangeSession(current.data.session);
-      applyMode('manage');
+      window.location.replace('/account');
     } catch (error) {
       setStatus(`Session restore failed: ${error.message}`, 'error');
     }
@@ -592,7 +593,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     try {
       await exchangeSession(result.data.session);
-      applyMode('manage');
+      window.location.replace('/account');
     } catch (error) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
@@ -632,7 +633,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     if (result.data.session) {
       try {
         await exchangeSession(result.data.session);
-        applyMode('manage');
+        window.location.replace('/account');
       } catch (error) {
         setStatus(`Backend session failed: ${error.message}`, 'error');
       }
@@ -717,7 +718,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     try {
       await exchangeSession(session);
-      applyMode('manage');
+      window.location.replace('/account');
     } catch (error) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
