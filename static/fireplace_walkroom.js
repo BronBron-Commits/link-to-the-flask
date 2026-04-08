@@ -243,6 +243,81 @@ function getBoneByPatterns(root, patterns) {
   return match;
 }
 
+function collectPrimarySkeletonBones(root) {
+  if (!root) return [];
+  let best = [];
+  root.traverse((obj) => {
+    if (!obj || !obj.isSkinnedMesh || !obj.skeleton || !Array.isArray(obj.skeleton.bones)) return;
+    const bones = obj.skeleton.bones.filter((b) => b && b.isBone);
+    if (bones.length > best.length) best = bones;
+  });
+  if (best.length) return best;
+
+  const fallback = [];
+  root.traverse((obj) => {
+    if (obj && obj.isBone) fallback.push(obj);
+  });
+  return fallback;
+}
+
+function inferBonesFromSpatialLayout(root) {
+  const bones = collectPrimarySkeletonBones(root);
+  if (!bones.length) return {};
+
+  root.updateMatrixWorld(true);
+  const rows = bones.map((bone) => {
+    const worldPos = new THREE.Vector3();
+    bone.getWorldPosition(worldPos);
+    return { bone, worldPos };
+  });
+
+  const minY = Math.min(...rows.map((r) => r.worldPos.y));
+  const maxY = Math.max(...rows.map((r) => r.worldPos.y));
+  const spanY = Math.max(0.001, maxY - minY);
+
+  const within = (r, lo, hi) => {
+    const yNorm = (r.worldPos.y - minY) / spanY;
+    return yNorm >= lo && yNorm <= hi;
+  };
+
+  const byY = [...rows].sort((a, b) => a.worldPos.y - b.worldPos.y);
+  const byHeight = [...rows].sort((a, b) => b.worldPos.y - a.worldPos.y);
+
+  const centerCandidates = rows
+    .filter((r) => within(r, 0.35, 0.75))
+    .sort((a, b) => Math.abs(a.worldPos.x) - Math.abs(b.worldPos.x));
+
+  const hips = centerCandidates[0]?.bone || byY[Math.floor(byY.length * 0.45)]?.bone || null;
+  const head = byHeight[0]?.bone || null;
+
+  const upperBand = rows.filter((r) => within(r, 0.45, 0.85));
+  const leftArm = [...upperBand]
+    .filter((r) => r.worldPos.x < 0)
+    .sort((a, b) => a.worldPos.x - b.worldPos.x)[0]?.bone || null;
+  const rightArm = [...upperBand]
+    .filter((r) => r.worldPos.x > 0)
+    .sort((a, b) => b.worldPos.x - a.worldPos.x)[0]?.bone || null;
+
+  const lowerBand = rows.filter((r) => within(r, 0.02, 0.45));
+  const leftLeg = [...lowerBand]
+    .filter((r) => r.worldPos.x < 0)
+    .sort((a, b) => Math.abs(a.worldPos.x) - Math.abs(b.worldPos.x))[0]?.bone || null;
+  const rightLeg = [...lowerBand]
+    .filter((r) => r.worldPos.x > 0)
+    .sort((a, b) => Math.abs(a.worldPos.x) - Math.abs(b.worldPos.x))[0]?.bone || null;
+
+  const inferred = {
+    hips,
+    head,
+    leftUpperArm: leftArm,
+    rightUpperArm: rightArm,
+    leftUpperLeg: leftLeg,
+    rightUpperLeg: rightLeg,
+  };
+
+  return inferred;
+}
+
 function setupImportedRigAnimator(root) {
   importedRigAnimator.active = false;
   importedRigAnimator.bones.clear();
@@ -276,6 +351,16 @@ function setupImportedRigAnimator(root) {
         baseQuat: bone.quaternion.clone(),
       });
     }
+  }
+
+  // Fallback for unnamed/custom rigs: infer key bones from actual armature layout.
+  const inferred = inferBonesFromSpatialLayout(root);
+  for (const [slot, bone] of Object.entries(inferred)) {
+    if (!bone || importedRigAnimator.bones.has(slot)) continue;
+    importedRigAnimator.bones.set(slot, {
+      bone,
+      baseQuat: bone.quaternion.clone(),
+    });
   }
 
   const hasCore = importedRigAnimator.bones.has('hips')
