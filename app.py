@@ -169,8 +169,24 @@ def socket_player_update(data):
         entry["name"] = raw_name.strip()[:32]
     raw_side = data.get("side")
     if isinstance(raw_side, str) and raw_side.strip():
-        entry["side"] = raw_side.strip()[:32]
+        requested_side = raw_side.strip().lower()
+        requested_side = "villains" if requested_side == "villains" else "heroes"
+        team_capacity = 4
+        hero_count = 0
+        villain_count = 0
+        for other_sid, other_entry in gs.players.items():
+            if other_sid == sid or not isinstance(other_entry, dict):
+                continue
+            other_side = str(other_entry.get("side") or "heroes").strip().lower()
+            if other_side == "villains":
+                villain_count += 1
+            else:
+                hero_count += 1
+        if requested_side == "heroes" and hero_count >= team_capacity and villain_count < team_capacity:
+            requested_side = "villains"
+        entry["side"] = requested_side
     gs.save_resume_snapshot(sid)
+    emit("player-update", entry)
     emit("player-update", entry, broadcast=True, include_self=False)
     # During combat, player positions are covered by the player-update broadcast above.
     # Skip the full world broadcast to prevent stale exploration-mode world-updates

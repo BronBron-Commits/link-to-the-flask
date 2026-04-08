@@ -4468,6 +4468,16 @@ function setLobbyStatus(text) {
   lobbyStatusEl.textContent = text;
 }
 
+function syncLocalProfileFromLobbyEntry(entry) {
+  if (!entry || String(entry.id || '') !== String(fireplaceLobbyLocalSid || '')) return;
+  const authoritativeSide = normalizeLobbySide(entry.side);
+  if (profile.side !== authoritativeSide) {
+    profile.side = authoritativeSide;
+    if (sideEl) sideEl.value = authoritativeSide;
+    setLobbyStatus(`Joined lobby as ${profile.name} (${profile.side}) · ${profile.role.toUpperCase()}.`);
+  }
+}
+
 function normalizeLobbySide(value) {
   const side = String(value || '').trim().toLowerCase();
   return side === 'villains' ? 'villains' : 'heroes';
@@ -4884,12 +4894,14 @@ function connectFireplaceLobby() {
 
   fireplaceLobbySocket.on('players-state', (players) => {
     fireplaceLobbyRoster = (players && typeof players === 'object') ? players : {};
+    syncLocalProfileFromLobbyEntry(fireplaceLobbyRoster[fireplaceLobbyLocalSid]);
     renderLobbyRoster();
   });
 
   fireplaceLobbySocket.on('player-update', (entry) => {
     if (!entry || !entry.id) return;
     fireplaceLobbyRoster[entry.id] = entry;
+    syncLocalProfileFromLobbyEntry(entry);
     renderLobbyRoster();
   });
 
