@@ -890,6 +890,8 @@ let pointerLocked = false;
 let yaw = 0;
 let pitch = 0;
 let fireplaceCombatActive = false;
+let thirdPersonYaw = 0;
+let thirdPersonPitch = -0.08;
 
 const baseMoveSpeed = 3.2;
 const boostMultiplier = 2.2;
@@ -901,7 +903,7 @@ const _move = new THREE.Vector3();
 const _thirdPersonAnchorPos = new THREE.Vector3();
 const _thirdPersonAnchorQuat = new THREE.Quaternion();
 const _thirdPersonDesiredPos = new THREE.Vector3();
-const _thirdPersonOffset = new THREE.Vector3(0, 2.35, 5.25);
+const _thirdPersonForward = new THREE.Vector3();
 const _thirdPersonLookAt = new THREE.Vector3();
 const _retargetDeltaPos = new THREE.Vector3();
 const _retargetDeltaQuat = new THREE.Quaternion();
@@ -916,7 +918,17 @@ function updateThirdPersonCamera(dt) {
   localPreviewAnchor.getWorldPosition(_thirdPersonAnchorPos);
   localPreviewAnchor.getWorldQuaternion(_thirdPersonAnchorQuat);
 
-  _thirdPersonDesiredPos.copy(_thirdPersonOffset).applyQuaternion(_thirdPersonAnchorQuat).add(_thirdPersonAnchorPos);
+  _thirdPersonForward.set(0, 0, -1).applyQuaternion(_thirdPersonAnchorQuat);
+  const anchorYaw = Math.atan2(_thirdPersonForward.x, _thirdPersonForward.z);
+  const camYaw = anchorYaw + Math.PI + thirdPersonYaw; // 180 deg behind player
+  const camPitch = THREE.MathUtils.clamp(thirdPersonPitch, -0.75, 0.38);
+  const distance = 5.25;
+  const horizontal = Math.cos(camPitch) * distance;
+  _thirdPersonDesiredPos.set(
+    _thirdPersonAnchorPos.x + Math.sin(camYaw) * horizontal,
+    _thirdPersonAnchorPos.y + 2.1 + Math.sin(camPitch) * distance,
+    _thirdPersonAnchorPos.z + Math.cos(camYaw) * horizontal,
+  );
   _thirdPersonLookAt.copy(_thirdPersonAnchorPos).add(new THREE.Vector3(0, 1.1, 0));
 
   const lerpAlpha = 1 - Math.exp(-7.0 * dt);
@@ -945,7 +957,6 @@ function setMoveStateByCode(code, value) {
 }
 
 renderer.domElement.addEventListener('click', (event) => {
-  if (isThirdPersonCameraActive()) return;
   // Alt+click supports bone selection tooling; regular click enters FPS look mode.
   if (!pointerLocked && event.altKey) {
     handleBoneSelection(event);
@@ -961,8 +972,16 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 document.addEventListener('mousemove', (e) => {
-  if (isThirdPersonCameraActive()) return;
   if (!pointerLocked) return;
+  if (isThirdPersonCameraActive()) {
+    thirdPersonYaw -= e.movementX * lookSensitivity;
+    thirdPersonPitch = THREE.MathUtils.clamp(
+      thirdPersonPitch - (e.movementY * lookSensitivity),
+      -0.75,
+      0.38,
+    );
+    return;
+  }
   yaw -= e.movementX * lookSensitivity;
   pitch -= e.movementY * lookSensitivity;
   pitch = THREE.MathUtils.clamp(pitch, -Math.PI / 2 + 0.02, Math.PI / 2 - 0.02);
@@ -5226,6 +5245,15 @@ function animate() {
   applyRigWalkPreview(nowMs);
   applyRigDancePreview(nowMs);
   applyRigFrontFlipPreview(nowMs);
+
+  if (isThirdPersonCameraActive()) {
+    const keyLookSpeed = 1.8;
+    if (moveState.left) thirdPersonYaw += keyLookSpeed * dt;
+    if (moveState.right) thirdPersonYaw -= keyLookSpeed * dt;
+    if (moveState.forward) thirdPersonPitch -= keyLookSpeed * dt * 0.55;
+    if (moveState.back) thirdPersonPitch += keyLookSpeed * dt * 0.55;
+    thirdPersonPitch = THREE.MathUtils.clamp(thirdPersonPitch, -0.75, 0.38);
+  }
 
   if (isThirdPersonCameraActive()) {
     updateThirdPersonCamera(dt);
