@@ -336,7 +336,13 @@ const lobbyTeamSlots = COMBAT_ARENA_MODE ? [] : [
 ];
 
 const SHOW_NON_PLAYER_STAGING = false;
-const FORCE_PROCEDURAL_PLAYERS = true;
+const FORCE_PROCEDURAL_PLAYERS = false;
+const SOCIAL_MOVE_BOUNDS = {
+  minX: -5.2,
+  maxX: 5.2,
+  minZ: -4.9,
+  maxZ: 3.2,
+};
 
 const localPreviewAnchor = new THREE.Group();
 scene.add(localPreviewAnchor);
@@ -905,13 +911,19 @@ const _thirdPersonAnchorQuat = new THREE.Quaternion();
 const _thirdPersonDesiredPos = new THREE.Vector3();
 const _thirdPersonForward = new THREE.Vector3();
 const _thirdPersonLookAt = new THREE.Vector3();
+const _worldUp = new THREE.Vector3(0, 1, 0);
 const _retargetDeltaPos = new THREE.Vector3();
 const _retargetDeltaQuat = new THREE.Quaternion();
 const _retargetTargetQuat = new THREE.Quaternion();
 const _retargetTargetPos = new THREE.Vector3();
+let fireplaceLastMovementPublishMs = 0;
+
+function isSocialHangoutMode() {
+  return !COMBAT_ARENA_MODE && fireplaceLobbyJoined && !fireplaceCombatActive;
+}
 
 function isThirdPersonCameraActive() {
-  return COMBAT_ARENA_MODE || fireplaceCombatActive;
+  return true;
 }
 
 function updateThirdPersonCamera(dt) {
@@ -4545,6 +4557,19 @@ function getLobbyPlacement(team, index) {
   };
 }
 
+function getPlacementFromLobbyEntry(entry, fallbackTeam, fallbackIndex) {
+  const fallback = getLobbyPlacement(fallbackTeam, fallbackIndex);
+  const pos = entry && typeof entry.position === 'object' ? entry.position : null;
+  const rot = entry && typeof entry.rotation === 'object' ? entry.rotation : null;
+
+  const x = Number.isFinite(Number(pos?.x)) ? Number(pos.x) : fallback.x;
+  const y = Number.isFinite(Number(pos?.y)) ? Number(pos.y) : fallback.y;
+  const z = Number.isFinite(Number(pos?.z)) ? Number(pos.z) : fallback.z;
+  const rotationY = Number.isFinite(Number(rot?.y)) ? Number(rot.y) : fallback.rotationY;
+
+  return { x, y, z, rotationY };
+}
+
 function disposeObject3D(root) {
   if (!root) return;
   root.traverse((child) => {
@@ -4719,7 +4744,7 @@ function syncRosterAvatarVisuals(byTeam) {
     arr.forEach((entry, index) => {
       if (String(entry.sid) === localSid) return;
       desiredSids.add(String(entry.sid));
-      ensureRosterAvatarVisual(String(entry.sid), entry, getLobbyPlacement(team, index));
+      ensureRosterAvatarVisual(String(entry.sid), entry, getPlacementFromLobbyEntry(entry, team, index));
     });
   }
 
@@ -4765,7 +4790,7 @@ function refreshTeamPlatformAssignments() {
       slot.ringMat.opacity = isYou ? 0.82 : 0.58;
       if (isYou) {
         localSlot = slot;
-        localPlacement = getLobbyPlacement(slot.team, slot.index);
+        localPlacement = getPlacementFromLobbyEntry(fireplaceLobbyRoster[String(occupant.sid)] || {}, slot.team, slot.index);
       }
     } else {
       const emptyText = `${slot.team.toUpperCase()}-${slot.index + 1}`;
@@ -4774,7 +4799,7 @@ function refreshTeamPlatformAssignments() {
     }
   }
 
-  if (!localPlacement) {
+  if (!localPlacement && !isSocialHangoutMode()) {
     for (const team of ['heroes', 'villains']) {
       const arr = byTeam[team] || [];
       const index = arr.findIndex((entry) => String(entry.sid) === String(fireplaceLobbyLocalSid || ''));
@@ -4785,13 +4810,23 @@ function refreshTeamPlatformAssignments() {
     }
   }
 
-  if (!localSlot) {
+  if (!localSlot && !isSocialHangoutMode()) {
     const fallbackTeam = normalizeLobbySide(profile.side);
     localSlot = lobbyTeamSlots.find((slot) => slot.team === fallbackTeam && slot.index === 0) || null;
     if (!localPlacement) localPlacement = getLobbyPlacement(fallbackTeam, 0);
   }
 
-  if (localSlot) {
+  if (isSocialHangoutMode()) {
+    const localEntry = fireplaceLobbyRoster[String(fireplaceLobbyLocalSid || '')] || null;
+    if (localEntry) {
+      const side = normalizeLobbySide(localEntry.side || profile.side);
+      const bySide = byTeam[side] || [];
+      const idx = Math.max(0, bySide.findIndex((entry) => String(entry.sid) === String(fireplaceLobbyLocalSid || '')));
+      const placement = getPlacementFromLobbyEntry(localEntry, side, idx);
+      localPreviewAnchor.position.set(placement.x, placement.y, placement.z);
+      localPreviewAnchor.rotation.y = placement.rotationY;
+    }
+  } else if (localSlot) {
     localPreviewAnchor.position.copy(localSlot.root.position);
     localPreviewAnchor.rotation.y = localSlot.team === 'heroes' ? -Math.PI / 2 : Math.PI / 2;
   } else if (localPlacement) {
@@ -4834,9 +4869,19 @@ function publishLocalPresenceToLobby(options = {}) {
     name: profile.name,
     side: normalizeLobbySide(profile.side),
     role: profile.role || 'player',
-    avatar: { modelUrl: 'fallback' },
+    avatar: { modelUrl: profile.modelUrl || 'fallback' },
+    position: {
+      x: Number(localPreviewAnchor.position.x.toFixed(3)),
+      y: Number(localPreviewAnchor.position.y.toFixed(3)),
+      z: Number(localPreviewAnchor.position.z.toFixed(3)),
+    },
+    rotation: {
+      x: 0,
+      y: Number(localPreviewAnchor.rotation.y.toFixed(4)),
+      z: 0,
+    },
   };
-  const key = `${payload.name}|${payload.side}|${payload.role}|${payload.avatar.modelUrl}`;
+  const key = `${payload.name}|${payload.side}|${payload.role}|${payload.avatar.modelUrl}|${payload.position.x},${payload.position.y},${payload.position.z}|${payload.rotation.y}`;
   if (!force && key === fireplaceLobbyLastPresenceKey) return;
   fireplaceLobbyLastPresenceKey = key;
 
@@ -4851,6 +4896,8 @@ function publishLocalPresenceToLobby(options = {}) {
       side: payload.side,
       role: payload.role,
       avatar: payload.avatar,
+      position: payload.position,
+      rotation: payload.rotation,
     };
     renderLobbyRoster();
   }
@@ -4998,6 +5045,9 @@ function joinFireplaceLobby() {
 
   connectFireplaceLobby();
   fireplaceLobbyJoined = true;
+  const spawnPlacement = getLobbyPlacement(normalizeLobbySide(profile.side), 0);
+  localPreviewAnchor.position.set(spawnPlacement.x, spawnPlacement.y, spawnPlacement.z);
+  localPreviewAnchor.rotation.y = spawnPlacement.rotationY;
   syncLobbyButtons();
 
   if (fireplaceLobbyConnected && fireplaceLobbySocket) {
@@ -5277,15 +5327,38 @@ function animate() {
   applyRigFrontFlipPreview(nowMs);
 
   if (isThirdPersonCameraActive()) {
-    const keyLookSpeed = 1.8;
-    if (moveState.left) thirdPersonYaw += keyLookSpeed * dt;
-    if (moveState.right) thirdPersonYaw -= keyLookSpeed * dt;
-    if (moveState.forward) thirdPersonPitch -= keyLookSpeed * dt * 0.55;
-    if (moveState.back) thirdPersonPitch += keyLookSpeed * dt * 0.55;
-    thirdPersonPitch = THREE.MathUtils.clamp(thirdPersonPitch, -0.75, 0.38);
-  }
+    if (isSocialHangoutMode()) {
+      _move.set(0, 0, 0);
+      camera.getWorldDirection(_forward);
+      _forward.y = 0;
+      if (_forward.lengthSq() < 1e-5) {
+        _forward.set(0, 0, -1);
+      } else {
+        _forward.normalize();
+      }
+      _right.crossVectors(_forward, _worldUp).normalize();
 
-  if (isThirdPersonCameraActive()) {
+      if (moveState.forward) _move.add(_forward);
+      if (moveState.back) _move.sub(_forward);
+      if (moveState.right) _move.add(_right);
+      if (moveState.left) _move.sub(_right);
+
+      if (_move.lengthSq() > 0) {
+        _move.normalize();
+        const speed = baseMoveSpeed * (moveState.boost ? boostMultiplier : 1);
+        localPreviewAnchor.position.addScaledVector(_move, speed * dt);
+        localPreviewAnchor.position.x = THREE.MathUtils.clamp(localPreviewAnchor.position.x, SOCIAL_MOVE_BOUNDS.minX, SOCIAL_MOVE_BOUNDS.maxX);
+        localPreviewAnchor.position.z = THREE.MathUtils.clamp(localPreviewAnchor.position.z, SOCIAL_MOVE_BOUNDS.minZ, SOCIAL_MOVE_BOUNDS.maxZ);
+        localPreviewAnchor.rotation.y = Math.atan2(_move.x, _move.z);
+      }
+
+      const now = performance.now();
+      if (now - fireplaceLastMovementPublishMs >= 120) {
+        publishLocalPresenceToLobby({ optimistic: true });
+        fireplaceLastMovementPublishMs = now;
+      }
+    }
+
     updateThirdPersonCamera(dt);
   }
 
