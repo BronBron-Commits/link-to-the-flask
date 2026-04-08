@@ -107,6 +107,32 @@
     .status.error { color: #d58f83; }
     .status.ok { color: #a8c78a; }
 
+    .upload-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .file-input {
+      flex: 1 1 260px;
+      min-width: 240px;
+      border: 1px solid rgba(210,175,70,0.2);
+      background: rgba(15, 19, 31, 0.7);
+      color: #d9cfae;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .upload-note {
+      margin-bottom: 12px;
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.78rem;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -165,6 +191,11 @@
     </div>
 
     <div id="status" class="status">Checking session...</div>
+    <div class="upload-row">
+      <input id="pdf-file" class="file-input" type="file" accept=".pdf" />
+      <button id="pdf-upload-btn" class="btn" type="button">Upload PDF</button>
+    </div>
+    <div class="upload-note">Upload a character sheet PDF here. If Supabase table characters is missing, the hub falls back to uploaded sheets.</div>
     <div id="character-grid" class="grid"></div>
   </section>
 </div>
@@ -205,6 +236,8 @@ const statusEl = document.getElementById('status');
 const gridEl = document.getElementById('character-grid');
 const refreshBtn = document.getElementById('refresh-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
+const pdfFileEl = document.getElementById('pdf-file');
+const pdfUploadBtn = document.getElementById('pdf-upload-btn');
 
 function setStatus(msg, tone = '') {
   statusEl.textContent = msg;
@@ -222,7 +255,7 @@ function escapeHtml(s) {
 
 function renderCharacters(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    gridEl.innerHTML = '<div class="empty">No characters found yet in Supabase.</div>';
+    gridEl.innerHTML = '<div class="empty">No characters found yet.</div>';
     return;
   }
   gridEl.innerHTML = rows.map((row, idx) => {
@@ -235,6 +268,24 @@ function renderCharacters(rows) {
       <article class="card">
         <h3>${escapeHtml(name)}</h3>
         <div class="meta">Class: ${escapeHtml(cls)}\nSpecies: ${escapeHtml(species)}\nLevel: ${escapeHtml(level)}\nUpdated: ${escapeHtml(updated)}</div>
+      </article>
+    `;
+  }).join('');
+}
+
+function renderSheetCharacters(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    gridEl.innerHTML = '<div class="empty">No uploaded character sheets found yet.</div>';
+    return;
+  }
+  gridEl.innerHTML = rows.map((row, idx) => {
+    const name = row.label || row.filename || `Sheet ${idx + 1}`;
+    const source = row.source || '-';
+    const rel = row.relativePath || row.filename || '-';
+    return `
+      <article class="card">
+        <h3>${escapeHtml(name)}</h3>
+        <div class="meta">Source: ${escapeHtml(source)}\nFile: ${escapeHtml(rel)}</div>
       </article>
     `;
   }).join('');
@@ -260,6 +311,14 @@ async function boot() {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   });
 
+  async function loadBackendSheets() {
+    const response = await fetch('/api/character-sheets', { credentials: 'same-origin' });
+    const payload = await response.json().catch(() => ({ ok: false, sheets: [] }));
+    const sheets = Array.isArray(payload.sheets) ? payload.sheets : [];
+    renderSheetCharacters(sheets);
+    setStatus(`Loaded ${sheets.length} uploaded sheet(s) from backend fallback.`, 'ok');
+  }
+
   async function loadCharacters() {
     setStatus('Loading characters from Supabase...');
     const { data, error } = await supabase
@@ -268,8 +327,11 @@ async function boot() {
       .order('updated_at', { ascending: false })
       .limit(50);
     if (error) {
+      if (String(error.message || '').includes("Could not find the table 'public.characters'")) {
+        await loadBackendSheets();
+        return;
+      }
       setStatus(`Could not load characters: ${error.message}`, 'error');
-      renderCharacters([]);
       return;
     }
     renderCharacters(data || []);
@@ -277,6 +339,32 @@ async function boot() {
   }
 
   refreshBtn.addEventListener('click', loadCharacters);
+
+  pdfUploadBtn.addEventListener('click', async () => {
+    const file = pdfFileEl && pdfFileEl.files && pdfFileEl.files[0];
+    if (!file) {
+      setStatus('Choose a PDF file first.', 'error');
+      return;
+    }
+    setStatus('Uploading PDF...', '');
+    const fd = new FormData();
+    fd.append('pdf', file);
+    const response = await fetch('/api/import-pdf', {
+      method: 'POST',
+      body: fd,
+      credentials: 'same-origin',
+    });
+    const payload = await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }));
+    if (!response.ok || payload.ok === false) {
+      setStatus(`PDF upload failed: ${payload.error || response.statusText}`, 'error');
+      return;
+    }
+    setStatus('PDF uploaded and parsed.', 'ok');
+    if (pdfFileEl) {
+      pdfFileEl.value = '';
+    }
+    await loadCharacters();
+  });
 
   signOutBtn.addEventListener('click', async () => {
     await supabase.auth.signOut();
