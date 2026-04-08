@@ -185,6 +185,10 @@ let avatarMixer = null;
 let customIdleAction = null;
 let customWalkAction = null;
 let activeCustomAction = null;
+const importedRigAnimator = {
+  active: false,
+  bones: new Map(),
+};
 
 function disposeObject3D(root) {
   if (!root) return;
@@ -226,6 +230,82 @@ function normalizeAvatarRoot(root) {
   root.position.z += -scaledCenter.z;
 }
 
+function getBoneByPatterns(root, patterns) {
+  if (!root) return null;
+  let match = null;
+  root.traverse((obj) => {
+    if (match || !obj || !obj.isBone) return;
+    const name = String(obj.name || '').toLowerCase();
+    if (patterns.some((rx) => rx.test(name))) {
+      match = obj;
+    }
+  });
+  return match;
+}
+
+function setupImportedRigAnimator(root) {
+  importedRigAnimator.active = false;
+  importedRigAnimator.bones.clear();
+  if (!root) return;
+
+  const slots = {
+    hips: [/(^|[_.])hips?([_.]|$)/i, /pelvis/i, /root/i],
+    spine: [/spine/i, /chest/i, /torso/i],
+    head: [/head/i, /neck/i],
+    leftUpperArm: [/left.*upperarm/i, /upperarm.*left/i, /arm[_ .-]*l/i, /l[_ .-]*arm/i],
+    rightUpperArm: [/right.*upperarm/i, /upperarm.*right/i, /arm[_ .-]*r/i, /r[_ .-]*arm/i],
+    leftUpperLeg: [/left.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(left|_l|\.l| l)/i],
+    rightUpperLeg: [/right.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(right|_r|\.r| r)/i],
+  };
+
+  for (const [slot, patterns] of Object.entries(slots)) {
+    const bone = getBoneByPatterns(root, patterns);
+    if (bone) {
+      importedRigAnimator.bones.set(slot, {
+        bone,
+        baseQuat: bone.quaternion.clone(),
+      });
+    }
+  }
+
+  importedRigAnimator.active = importedRigAnimator.bones.size >= 4;
+}
+
+function applyImportedRigFallbackAnimation(elapsed, isMoving) {
+  if (!importedRigAnimator.active) return;
+
+  const walkPhase = elapsed * (moveState.boost ? 9.2 : 6.1);
+  const stride = Math.sin(walkPhase);
+  const antiStride = Math.sin(walkPhase + Math.PI);
+  const idleBreath = Math.sin(elapsed * 2.0);
+  const makeQ = (x = 0, y = 0, z = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, 'XYZ'));
+
+  const slotRot = isMoving
+    ? {
+      hips: makeQ(0, Math.sin(walkPhase * 0.5) * 0.08, Math.sin(walkPhase) * 0.03),
+      spine: makeQ(Math.sin(walkPhase * 0.5) * 0.04, 0, 0),
+      head: makeQ(0, Math.sin(walkPhase * 0.42) * 0.05, 0),
+      leftUpperArm: makeQ(antiStride * 0.55, 0, 0),
+      rightUpperArm: makeQ(stride * 0.55, 0, 0),
+      leftUpperLeg: makeQ(stride * 0.72, 0, 0),
+      rightUpperLeg: makeQ(antiStride * 0.72, 0, 0),
+    }
+    : {
+      hips: makeQ(0, Math.sin(elapsed * 0.8) * 0.02, 0),
+      spine: makeQ(idleBreath * 0.02, 0, 0),
+      head: makeQ(0, Math.sin(elapsed * 0.6) * 0.03, 0),
+      leftUpperArm: makeQ(Math.sin(elapsed * 1.1 + 0.9) * 0.04, 0, 0),
+      rightUpperArm: makeQ(Math.sin(elapsed * 1.1) * 0.04, 0, 0),
+      leftUpperLeg: makeQ(0, 0, 0),
+      rightUpperLeg: makeQ(0, 0, 0),
+    };
+
+  for (const [slot, record] of importedRigAnimator.bones.entries()) {
+    const offset = slotRot[slot] || makeQ();
+    record.bone.quaternion.copy(record.baseQuat).multiply(offset);
+  }
+}
+
 async function loadSelectedAvatar() {
   if (!selectedModelUrl) return;
   const loader = new GLTFLoader();
@@ -248,18 +328,22 @@ async function loadSelectedAvatar() {
     customIdleAction = null;
     customWalkAction = null;
     activeCustomAction = null;
+    importedRigAnimator.active = false;
+    importedRigAnimator.bones.clear();
 
     normalizeAvatarRoot(root);
     customAvatarRoot = root;
     actor.add(customAvatarRoot);
     fallbackAvatar.visible = false;
 
+    setupImportedRigAnimator(customAvatarRoot);
+
     if (Array.isArray(gltf.animations) && gltf.animations.length) {
       const clips = gltf.animations;
       avatarMixer = new THREE.AnimationMixer(customAvatarRoot);
       const findClip = (matcher) => clips.find((clip) => matcher.test(String(clip.name || '').toLowerCase())) || null;
-      const idleClip = findClip(/idle|stand|breath|rest/);
-      const walkClip = findClip(/walk|locomotion|move|run/);
+      const idleClip = findClip(/idle|stand|breath|rest/) || clips[0] || null;
+      const walkClip = findClip(/walk|locomotion|move|run/) || clips.find((clip) => clip !== idleClip) || idleClip;
 
       if (idleClip) {
         customIdleAction = avatarMixer.clipAction(idleClip);
@@ -280,6 +364,8 @@ async function loadSelectedAvatar() {
     customIdleAction = null;
     customWalkAction = null;
     activeCustomAction = null;
+    importedRigAnimator.active = false;
+    importedRigAnimator.bones.clear();
     fallbackAvatar.visible = true;
   }
 }
@@ -400,13 +486,18 @@ function updatePlayerMovement(dt) {
 }
 
 function updateAvatarAnimation(dt, elapsed, isMoving) {
-  if (avatarMixer) {
+  if (avatarMixer && (customIdleAction || customWalkAction)) {
     if (isMoving && customWalkAction) {
       switchCustomAction(customWalkAction);
     } else if (!isMoving && customIdleAction) {
       switchCustomAction(customIdleAction);
     }
     avatarMixer.update(dt);
+    return;
+  }
+
+  if (customAvatarRoot && importedRigAnimator.active) {
+    applyImportedRigFallbackAnimation(elapsed, isMoving);
     return;
   }
 
