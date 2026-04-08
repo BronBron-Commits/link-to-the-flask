@@ -98,6 +98,12 @@
       flex-wrap: wrap;
       margin-bottom: 12px;
     }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      gap: 14px;
+      align-items: start;
+    }
     .file-input {
       flex: 1 1 260px;
       min-width: 240px;
@@ -155,6 +161,50 @@
       font-family: Consolas, 'Courier New', monospace;
       font-size: 0.86rem;
     }
+    .preview {
+      border: 1px solid rgba(210,175,70,0.16);
+      border-radius: 14px;
+      background: radial-gradient(circle at 50% 20%, rgba(59, 68, 97, 0.34), rgba(13, 17, 29, 0.98) 60%);
+      overflow: hidden;
+      min-height: 300px;
+      position: sticky;
+      top: 0;
+    }
+    .preview-head {
+      border-bottom: 1px solid rgba(210,175,70,0.14);
+      padding: 10px 12px;
+      color: #e4d39b;
+      font-size: 0.74rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+    .preview-viewport {
+      width: 100%;
+      height: 340px;
+      background: linear-gradient(180deg, rgba(26, 32, 50, 0.5), rgba(9, 12, 20, 0.95));
+    }
+    .preview-meta {
+      border-top: 1px solid rgba(210,175,70,0.14);
+      padding: 10px 12px;
+      color: #9e937c;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      word-break: break-word;
+      min-height: 54px;
+    }
+    @media (max-width: 960px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .preview {
+        position: relative;
+      }
+      .preview-viewport {
+        height: 280px;
+      }
+    }
   </style>
 </head>
 <body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
@@ -180,7 +230,14 @@
       <button id="upload-btn" class="btn" type="button">Upload Model</button>
     </div>
 
-    <div id="model-grid" class="grid"></div>
+    <div class="layout">
+      <div id="model-grid" class="grid"></div>
+      <aside class="preview" aria-label="Selected model preview">
+        <div class="preview-head">Live Preview</div>
+        <div id="preview-viewport" class="preview-viewport"></div>
+        <div id="preview-meta" class="preview-meta">Select a model to preview it.</div>
+      </aside>
+    </div>
   </section>
 </div>
 
@@ -213,6 +270,9 @@
 </script>
 
 <script type="module">
+import * as THREE from '/static/three.module.js';
+import { GLTFLoader } from '/static/GLTFLoader.js';
+
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
 
@@ -223,11 +283,21 @@ const refreshBtn = document.getElementById('refresh-btn');
 const enterWorldBtn = document.getElementById('enter-world-btn');
 const modelFileEl = document.getElementById('model-file');
 const uploadBtn = document.getElementById('upload-btn');
+const previewViewportEl = document.getElementById('preview-viewport');
+const previewMetaEl = document.getElementById('preview-meta');
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const selectedCharacterId = String(urlSearch.get('characterId') || '').trim();
 let selectedCharacter = null;
 let selectedModelUrl = '';
+let previewRenderer = null;
+let previewScene = null;
+let previewCamera = null;
+let previewLoader = null;
+let previewModelRoot = null;
+let previewSpinGroup = null;
+let previewFrameHandle = 0;
+let previewRequestId = 0;
 
 function setStatus(msg, tone = '') {
   statusEl.textContent = msg;
@@ -241,6 +311,155 @@ function escapeHtml(s) {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+}
+
+function setPreviewMeta(msg) {
+  if (previewMetaEl) previewMetaEl.textContent = msg || '';
+}
+
+function initPreviewScene() {
+  if (!previewViewportEl || previewRenderer) return;
+
+  previewRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  previewRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  previewRenderer.outputEncoding = THREE.sRGBEncoding;
+  previewRenderer.setClearColor(0x000000, 0);
+  previewViewportEl.appendChild(previewRenderer.domElement);
+
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(38, 1, 0.01, 200);
+  previewCamera.position.set(0, 1.1, 3.2);
+
+  const ambient = new THREE.AmbientLight(0xd9d1b8, 0.9);
+  const key = new THREE.DirectionalLight(0xffefc4, 1.0);
+  key.position.set(2.5, 3.5, 2.5);
+  const rim = new THREE.DirectionalLight(0x94b6ff, 0.55);
+  rim.position.set(-2.5, 1.5, -2.5);
+
+  previewSpinGroup = new THREE.Group();
+  previewScene.add(previewSpinGroup);
+  previewScene.add(ambient, key, rim);
+
+  previewLoader = new GLTFLoader();
+
+  const resize = () => {
+    if (!previewRenderer || !previewCamera || !previewViewportEl) return;
+    const width = Math.max(10, previewViewportEl.clientWidth || 10);
+    const height = Math.max(10, previewViewportEl.clientHeight || 10);
+    previewRenderer.setSize(width, height, false);
+    previewCamera.aspect = width / height;
+    previewCamera.updateProjectionMatrix();
+  };
+
+  if (typeof ResizeObserver !== 'undefined') {
+    const observer = new ResizeObserver(resize);
+    observer.observe(previewViewportEl);
+  } else {
+    window.addEventListener('resize', resize);
+  }
+  resize();
+
+  const animate = () => {
+    previewFrameHandle = requestAnimationFrame(animate);
+    if (previewSpinGroup) previewSpinGroup.rotation.y += 0.005;
+    previewRenderer.render(previewScene, previewCamera);
+  };
+  animate();
+}
+
+function disposeObject3D(root) {
+  if (!root) return;
+  root.traverse((obj) => {
+    if (obj.geometry && typeof obj.geometry.dispose === 'function') {
+      obj.geometry.dispose();
+    }
+    const mat = obj.material;
+    const disposeMat = (m) => {
+      if (!m) return;
+      for (const key in m) {
+        const value = m[key];
+        if (value && value.isTexture && typeof value.dispose === 'function') {
+          value.dispose();
+        }
+      }
+      if (typeof m.dispose === 'function') m.dispose();
+    };
+    if (Array.isArray(mat)) mat.forEach(disposeMat);
+    else disposeMat(mat);
+  });
+}
+
+function fitPreviewCamera(root) {
+  if (!root || !previewCamera) return;
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) {
+    previewCamera.position.set(0, 1.1, 3.2);
+    previewCamera.lookAt(0, 0.9, 0);
+    return;
+  }
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 0.2);
+
+  root.position.sub(center);
+  const fov = THREE.MathUtils.degToRad(previewCamera.fov);
+  const dist = (maxDim * 1.2) / Math.tan(fov * 0.5);
+  previewCamera.position.set(0, maxDim * 0.35, Math.max(dist, 1.5));
+  previewCamera.lookAt(0, Math.max(size.y * 0.2, 0.3), 0);
+}
+
+function previewModel(url) {
+  initPreviewScene();
+  if (!previewLoader || !previewSpinGroup) return;
+  if (!url) {
+    setPreviewMeta('Select a model to preview it.');
+    return;
+  }
+
+  const requestId = ++previewRequestId;
+  setPreviewMeta(`Loading preview: ${url}`);
+  previewLoader.load(
+    url,
+    (gltf) => {
+      if (requestId !== previewRequestId) return;
+      if (previewModelRoot) {
+        previewSpinGroup.remove(previewModelRoot);
+        disposeObject3D(previewModelRoot);
+        previewModelRoot = null;
+      }
+      previewModelRoot = gltf.scene || null;
+      if (!previewModelRoot) {
+        setPreviewMeta('Could not render this model (empty scene).');
+        return;
+      }
+      previewSpinGroup.add(previewModelRoot);
+      fitPreviewCamera(previewModelRoot);
+      setPreviewMeta(`Previewing: ${url}`);
+    },
+    undefined,
+    (err) => {
+      if (requestId !== previewRequestId) return;
+      const message = err && err.message ? err.message : String(err || 'unknown error');
+      setPreviewMeta(`Preview failed: ${message}`);
+    }
+  );
+}
+
+function selectModel(url, cardNodes) {
+  const modelUrl = String(url || '').trim();
+  if (!modelUrl) return;
+  selectedModelUrl = modelUrl;
+  localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
+
+  if (cardNodes && typeof cardNodes.forEach === 'function') {
+    cardNodes.forEach((el) => el.classList.remove('selected'));
+    const targetCard = Array.from(cardNodes).find((el) => String(el.getAttribute('data-model-url') || '').trim() === modelUrl);
+    if (targetCard) targetCard.classList.add('selected');
+  }
+
+  enterWorldBtn.disabled = false;
+  setStatus(`Selected model ${modelUrl}. Enter world when ready.`, 'ok');
+  previewModel(modelUrl);
 }
 
 function loadSelectedCharacter() {
@@ -297,15 +516,13 @@ function renderModels(models) {
   cards.forEach((card) => {
     card.addEventListener('click', () => {
       const url = String(card.getAttribute('data-model-url') || '').trim();
-      if (!url) return;
-      selectedModelUrl = url;
-      localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
-      cards.forEach((el) => el.classList.remove('selected'));
-      card.classList.add('selected');
-      enterWorldBtn.disabled = false;
-      setStatus(`Selected model ${url}. Enter world when ready.`, 'ok');
+      selectModel(url, cards);
     });
   });
+
+  if (selectedModelUrl) {
+    selectModel(selectedModelUrl, cards);
+  }
 }
 
 async function loadModels() {
@@ -322,9 +539,11 @@ async function loadModels() {
   if (selectedModelUrl) {
     enterWorldBtn.disabled = false;
     setStatus(`Loaded ${models.length} model(s).`, 'ok');
+    previewModel(selectedModelUrl);
   } else {
     enterWorldBtn.disabled = true;
     setStatus(`Loaded ${models.length} model(s). Select one to continue.`, '');
+    previewModel('');
   }
 }
 
@@ -351,8 +570,9 @@ async function uploadModelFiles() {
 
   const modelUrl = payload.model_url || (payload.files && payload.files[0] && payload.files[0].url) || '';
   if (modelUrl) {
-    selectedModelUrl = String(modelUrl);
+    selectedModelUrl = String(modelUrl).trim();
     localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
+    previewModel(selectedModelUrl);
   }
 
   if (modelFileEl) modelFileEl.value = '';
