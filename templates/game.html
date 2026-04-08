@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Map — Link to the Flask</title>
+  <style>
+    body { background: #111; color: white; text-align: center; font-family: sans-serif; margin: 0; }
+    canvas { background: #222; display: block; position: fixed; top: 0; left: 0; margin: 0; padding: 0; z-index: 0; }
+    #back-link {
+      position: fixed; top: 14px; left: 14px; z-index: 10;
+      text-decoration: none; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.6); color: #ccc; border-radius: 8px;
+      padding: 7px 12px; font-size: 12px; letter-spacing: 0.04em;
+      font-family: Consolas, monospace; backdrop-filter: blur(4px);
+    }
+    #back-link:hover { background: rgba(30,30,30,0.85); color: #fff; }
+  </style>
+</head>
+<body>
+  <a id="back-link" href="/">&#8592; Back</a>
+  <canvas id="game" width="400" height="400"></canvas>
+  <script>
+    function resizeCanvas() {
+      const canvas = document.getElementById('game');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('DOMContentLoaded', resizeCanvas);
+  </script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <script type="module" src="/static/game.js?v=99"></script>
+</body>
+</html>

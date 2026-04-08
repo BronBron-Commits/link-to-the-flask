@@ -1,35 +1,275 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Engine View</title>
-<style>
-/* Removed invalid CSS properties */
-body{background:#111;color:white;text-align:center;font-family:sans-serif;margin:0}
-canvas{background:#222;display:block;position:fixed;top:0;left:0;margin:0;padding:0;z-index:0;}
-/* Joystick and button styles removed */
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Link to the Flask</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #06090f;
+      color: #e8e0d0;
+      font-family: Georgia, 'Times New Roman', serif;
+      overflow: hidden;
+    }
+
+    /* ── Particle canvas ── */
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Layout shell ── */
+    .shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      padding: 24px;
+      gap: 0;
+    }
+
+    /* ── Crest / logo area ── */
+    .crest {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .crest svg {
+      width: 72px;
+      height: 72px;
+      filter: drop-shadow(0 0 18px rgba(180,140,60,0.55));
+      animation: float 4.8s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-8px); }
+    }
+
+    /* ── Title ── */
+    .title {
+      font-size: clamp(2rem, 5vw, 3.4rem);
+      font-weight: 400;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #f0dfa0;
+      text-shadow: 0 0 40px rgba(210,175,70,0.4), 0 2px 16px rgba(0,0,0,0.7);
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: clamp(0.8rem, 1.6vw, 1rem);
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: #8a7f6a;
+      margin-bottom: 48px;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      width: 240px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(210,175,70,0.45), transparent);
+      margin-bottom: 48px;
+    }
+
+    /* ── Card grid ── */
+    .cards {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 780px;
+    }
+
+    .card {
+      position: relative;
+      width: 220px;
+      background: linear-gradient(155deg, rgba(18,22,36,0.96), rgba(12,15,26,0.98));
+      border: 1px solid rgba(210,175,70,0.2);
+      border-radius: 14px;
+      padding: 28px 22px 22px;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(circle at 60% 20%, rgba(210,175,70,0.06), transparent 60%);
+      pointer-events: none;
+    }
+    .card:hover {
+      border-color: rgba(210,175,70,0.55);
+      box-shadow: 0 12px 44px rgba(0,0,0,0.65), 0 0 22px rgba(180,140,60,0.18);
+      transform: translateY(-4px);
+    }
+    .card:active {
+      transform: translateY(-1px);
+    }
+
+    .card-icon {
+      font-size: 2.2rem;
+      margin-bottom: 14px;
+      display: block;
+      line-height: 1;
+    }
+    .card-title {
+      font-size: 1rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #e8d898;
+      margin-bottom: 8px;
+    }
+    .card-desc {
+      font-size: 0.78rem;
+      line-height: 1.55;
+      color: #7a7468;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .card-badge {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #b8952a;
+      background: rgba(180,140,40,0.12);
+      border: 1px solid rgba(180,140,40,0.25);
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      position: fixed;
+      bottom: 18px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      color: #3a3830;
+      text-transform: uppercase;
+    }
+  </style>
 </head>
 <body>
 
-<canvas id="game" width="400" height="400"></canvas>
+<canvas id="bg-canvas"></canvas>
+
+<div class="shell">
+  <div class="crest">
+    <!-- Flame / flask crest SVG -->
+    <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="36" cy="54" rx="18" ry="7" fill="rgba(180,120,20,0.18)"/>
+      <path d="M28 44 C24 34 18 28 22 18 C25 10 34 8 36 14 C38 8 47 10 50 18 C54 28 48 34 44 44 Z"
+            fill="url(#flameGrad)" opacity="0.9"/>
+      <path d="M31 44 C29 37 26 32 29 24 C31 18 36 18 36 22 C36 18 41 18 43 24 C46 32 43 37 41 44 Z"
+            fill="url(#innerFlame)" opacity="0.85"/>
+      <circle cx="36" cy="46" r="4.5" fill="url(#orbGrad)" opacity="0.95"/>
+      <defs>
+        <linearGradient id="flameGrad" x1="36" y1="8" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#f9d46a"/>
+          <stop offset="60%" stop-color="#e07820"/>
+          <stop offset="100%" stop-color="#8b2a00"/>
+        </linearGradient>
+        <linearGradient id="innerFlame" x1="36" y1="18" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#f9c048" stop-opacity="0.4"/>
+        </linearGradient>
+        <radialGradient id="orbGrad" cx="50%" cy="40%" r="50%">
+          <stop offset="0%" stop-color="#ffe97a"/>
+          <stop offset="100%" stop-color="#c06010"/>
+        </radialGradient>
+      </defs>
+    </svg>
+  </div>
+
+  <h1 class="title">Link to the Flask</h1>
+  <p class="subtitle">A Tabletop Combat Engine</p>
+  <div class="divider"></div>
+
+  <div class="cards">
+    <a class="card" href="/static/combat_arena.html">
+      <span class="card-badge">Live</span>
+      <span class="card-icon">⚔️</span>
+      <div class="card-title">Combat Arena</div>
+      <p class="card-desc">Enter the 3D combat arena. Join as hero or villain and fight in real-time with full turn-based rules.</p>
+    </a>
+
+    <a class="card" href="/game">
+      <span class="card-badge">2D</span>
+      <span class="card-icon">🗺️</span>
+      <div class="card-title">World Map</div>
+      <p class="card-desc">Explore the overworld. Move your character across the realm and encounter events.</p>
+    </a>
+
+    <a class="card" href="/static/map3d.html">
+      <span class="card-badge">3D</span>
+      <span class="card-icon">🌐</span>
+      <div class="card-title">3D World</div>
+      <p class="card-desc">Walk through the three-dimensional world map with full camera controls and multiplayer sync.</p>
+    </a>
+  </div>
+</div>
+
+<p class="footer">Link to the Flask &nbsp;·&nbsp; Multiplayer Tabletop Engine</p>
+
 <script>
-function resizeCanvas() {
-	const canvas = document.getElementById('game');
-	canvas.width = window.innerWidth;
-	canvas.height = window.innerHeight;
-}
-window.addEventListener('resize', resizeCanvas);
-window.addEventListener('DOMContentLoaded', resizeCanvas);
+(function () {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  for (let i = 0; i < 90; i++) {
+    particles.push({
+      x: rand(0, W), y: rand(0, H),
+      r: rand(0.4, 1.6),
+      vx: rand(-0.06, 0.06), vy: rand(-0.14, -0.04),
+      alpha: rand(0.08, 0.45),
+      hue: rand(32, 52),
+    });
+  }
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.y < -4) { p.y = H + 4; p.x = rand(0, W); }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 80%, 68%, ${p.alpha})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
 </script>
-
-<!-- Joystick and button UI removed -->
-
-<!-- Socket.IO client for multiplayer sync -->
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-<script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
-<!-- THIS loads your actual game code -->
-<script type="module" src="/static/game.js?v=99"></script>
 
 </body>
 </html>

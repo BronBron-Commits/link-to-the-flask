@@ -167,6 +167,11 @@ def index():
     return render_template("index.html")
 
 
+@app.route("/game")
+def game():
+    return render_template("game.html")
+
+
 @app.route("/favicon.ico")
 def favicon():
     p = gs.STATIC_DIR / "favicon.ico"
