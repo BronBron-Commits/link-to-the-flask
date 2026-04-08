@@ -5096,6 +5096,35 @@ if (backLinkEl) {
   });
 }
 if (modelUploadBtn) modelUploadBtn.addEventListener('click', uploadModelFile);
+
+// PDF character sheet upload
+const pdfFileEl = document.getElementById('cc-pdf-file');
+const pdfUploadBtn = document.getElementById('cc-pdf-upload');
+const pdfStatusEl = document.getElementById('cc-pdf-status');
+if (pdfUploadBtn) {
+  pdfUploadBtn.addEventListener('click', async () => {
+    const file = pdfFileEl && pdfFileEl.files && pdfFileEl.files[0];
+    if (!file) {
+      if (pdfStatusEl) pdfStatusEl.textContent = 'Select a .pdf file first.';
+      return;
+    }
+    if (pdfStatusEl) pdfStatusEl.textContent = 'Uploading…';
+    const fd = new FormData();
+    fd.append('pdf', file);
+    try {
+      const res = await fetch('/api/import-pdf', { method: 'POST', body: fd });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.ok !== false) {
+        if (pdfStatusEl) pdfStatusEl.textContent = `Sheet uploaded: ${file.name}`;
+      } else {
+        if (pdfStatusEl) pdfStatusEl.textContent = `Upload failed: ${json.error || res.statusText}`;
+      }
+    } catch (err) {
+      if (pdfStatusEl) pdfStatusEl.textContent = `Upload error: ${err.message}`;
+    }
+  });
+}
+
 if (modelRefreshBtn) modelRefreshBtn.addEventListener('click', loadAvailableCharacterModels);
 if (modelSelectEl) {
   modelSelectEl.addEventListener('change', async () => {
