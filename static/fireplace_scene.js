@@ -4601,6 +4601,25 @@ async function loadAvailableCharacterModels() {
   }
 }
 
+function enterCombatMode() {
+  // Expose lobby socket and player identity so combat-ui.js can reuse them
+  window.__LOBBY_SOCKET__ = fireplaceLobbySocket;
+  window.__COMBAT_PLAYER_NAME__ = profile.name;
+  window.__COMBAT_PLAYER_SIDE__ = profile.side;
+
+  // Hide the lobby creator panel — combat takes over the scene
+  const creatorPanel = document.getElementById('creator-panel');
+  if (creatorPanel) creatorPanel.style.display = 'none';
+
+  // Dynamically inject combat-ui.js once
+  if (!document.getElementById('combat-ui-script')) {
+    const script = document.createElement('script');
+    script.id = 'combat-ui-script';
+    script.src = '/static/combat-ui.js';
+    document.body.appendChild(script);
+  }
+}
+
 function connectFireplaceLobby() {
   if (fireplaceLobbySocket || typeof window.io !== 'function') {
     if (typeof window.io !== 'function') setLobbyStatus('Socket.IO unavailable; lobby offline.');
@@ -4658,7 +4677,7 @@ function connectFireplaceLobby() {
   fireplaceLobbySocket.on('combat-state', (packet) => {
     if (packet && packet.active) {
       stopFireplaceMusic();
-      window.location.href = '/map3d?view=isometric';
+      enterCombatMode();
     }
   });
 }

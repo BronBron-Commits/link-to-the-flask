@@ -908,6 +908,15 @@ if (socket) {
         uiState.guidedOverride = packet?.reason === 'not-your-turn' ? 'turn' : 'status';
         render();
     });
+
+    // Reused socket (e.g. from fireplace lobby) is already connected — bootstrap immediately
+    if (socket.connected) {
+        liveState.connected = true;
+        liveState.localSid = socket.id || null;
+        uiState.status = 'Connected.';
+        socket.emit('request-combat-state', {});
+        render();
+    }
 } else {
     liveState.connected = false;
     liveState.inCombat = false;
