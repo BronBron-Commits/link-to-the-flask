@@ -82,77 +82,30 @@
       margin-bottom: 48px;
     }
 
-    /* ── Card grid ── */
-    .cards {
-      display: flex;
-      gap: 20px;
-      flex-wrap: wrap;
+    .enter-link {
+      display: inline-flex;
+      align-items: center;
       justify-content: center;
-      max-width: 780px;
-    }
-
-    .card {
-      position: relative;
-      width: 220px;
+      min-width: 220px;
+      padding: 16px 28px;
+      border-radius: 999px;
+      border: 1px solid rgba(210,175,70,0.35);
       background: linear-gradient(155deg, rgba(18,22,36,0.96), rgba(12,15,26,0.98));
-      border: 1px solid rgba(210,175,70,0.2);
-      border-radius: 14px;
-      padding: 28px 22px 22px;
-      cursor: pointer;
+      color: #f0dfa0;
       text-decoration: none;
-      color: inherit;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      font-size: 0.88rem;
       transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      overflow: hidden;
     }
-    .card::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: radial-gradient(circle at 60% 20%, rgba(210,175,70,0.06), transparent 60%);
-      pointer-events: none;
-    }
-    .card:hover {
-      border-color: rgba(210,175,70,0.55);
+    .enter-link:hover {
+      border-color: rgba(210,175,70,0.6);
       box-shadow: 0 12px 44px rgba(0,0,0,0.65), 0 0 22px rgba(180,140,60,0.18);
-      transform: translateY(-4px);
+      transform: translateY(-3px);
     }
-    .card:active {
+    .enter-link:active {
       transform: translateY(-1px);
-    }
-
-    .card-icon {
-      font-size: 2.2rem;
-      margin-bottom: 14px;
-      display: block;
-      line-height: 1;
-    }
-    .card-title {
-      font-size: 1rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #e8d898;
-      margin-bottom: 8px;
-    }
-    .card-desc {
-      font-size: 0.78rem;
-      line-height: 1.55;
-      color: #7a7468;
-      font-family: Consolas, 'Courier New', monospace;
-    }
-
-    .card-badge {
-      position: absolute;
-      top: 12px;
-      right: 14px;
-      font-size: 0.62rem;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: #b8952a;
-      background: rgba(180,140,40,0.12);
-      border: 1px solid rgba(180,140,40,0.25);
-      border-radius: 4px;
-      padding: 2px 7px;
     }
 
     /* ── Footer ── */
@@ -200,35 +153,14 @@
     </svg>
   </div>
 
-  <h1 class="title">Link to the Flask</h1>
-  <p class="subtitle">A Tabletop Combat Engine</p>
+  <h1 class="title">Paraval</h1>
+  <p class="subtitle">A Tabletop Game Engine</p>
   <div class="divider"></div>
 
-  <div class="cards">
-    <a class="card" href="/static/combat_arena.html">
-      <span class="card-badge">Live</span>
-      <span class="card-icon">⚔️</span>
-      <div class="card-title">Combat Arena</div>
-      <p class="card-desc">Enter the 3D combat arena. Join as hero or villain and fight in real-time with full turn-based rules.</p>
-    </a>
-
-    <a class="card" href="/game">
-      <span class="card-badge">2D</span>
-      <span class="card-icon">🗺️</span>
-      <div class="card-title">World Map</div>
-      <p class="card-desc">Explore the overworld. Move your character across the realm and encounter events.</p>
-    </a>
-
-    <a class="card" href="/static/map3d.html">
-      <span class="card-badge">3D</span>
-      <span class="card-icon">🌐</span>
-      <div class="card-title">3D World</div>
-      <p class="card-desc">Walk through the three-dimensional world map with full camera controls and multiplayer sync.</p>
-    </a>
-  </div>
+  <a class="enter-link" href="/static/combat_arena.html">Enter</a>
 </div>
 
-<p class="footer">Link to the Flask &nbsp;·&nbsp; Multiplayer Tabletop Engine</p>
+<p class="footer">Paraval &nbsp;·&nbsp; Tabletop Game Engine</p>
 
 <script>
 (function () {
