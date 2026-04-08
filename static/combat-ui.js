@@ -4,12 +4,6 @@ const FALLBACK_PARTY = [
     { id: 'tat', name: 'Tat', role: 'Breaker', hp: 1124, maxHp: 1275, mp: 18, maxMp: 28, position: { x: 4, y: 0, z: -5 } },
 ];
 
-const FALLBACK_ENEMIES = [
-    { id: 'blimp', name: 'Blimp', hp: 480, maxHp: 640, position: { x: -4, y: 0, z: 6 } },
-    { id: 'eclipse', name: '6Eclipse', hp: 910, maxHp: 910, position: { x: 0, y: 0, z: 6 } },
-    { id: 'clover', name: 'Clover', hp: 320, maxHp: 470, position: { x: 4, y: 0, z: 6 } },
-];
-
 const COMMANDS = [
     { id: 'attack', label: 'Attack', kind: 'target-enemy' },
     { id: 'move', label: 'Move', kind: 'move', stepFt: 5 },
@@ -148,7 +142,6 @@ function getTurnPacketFromCombatFullState(packet) {
 
 function getOrderedActors(type) {
     const map = type === 'player' ? liveState.playersById : liveState.enemiesById;
-    const fallback = type === 'player' ? FALLBACK_PARTY : FALLBACK_ENEMIES;
     const ordered = [];
     const seen = new Set();
     const turnOrder = Array.isArray(liveState.currentTurn?.order) ? liveState.currentTurn.order : [];
@@ -158,6 +151,8 @@ function getOrderedActors(type) {
         const actorId = String(entry.id || '').trim();
         if (!actorId || seen.has(actorId)) return;
         const actor = map.get(actorId);
+        // Enemies should only appear when they exist in synced world entities.
+        if (type === 'enemy' && !actor) return;
         ordered.push(actor ? { ...actor, ...entry } : {
             id: actorId,
             type,
@@ -180,7 +175,10 @@ function getOrderedActors(type) {
     });
 
     if (!ordered.length) {
-        return fallback.map((entry) => ({ ...entry, type }));
+        if (type === 'player') {
+            return FALLBACK_PARTY.map((entry) => ({ ...entry, type }));
+        }
+        return [];
     }
     return ordered;
 }
