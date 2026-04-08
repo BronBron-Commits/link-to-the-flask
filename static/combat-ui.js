@@ -954,63 +954,14 @@ style.textContent = `
         width: 100%;
         height: 100%;
         overflow: hidden;
-        background:
-            radial-gradient(circle at 50% 68%, rgba(50, 105, 128, 0.35), transparent 28%),
-            radial-gradient(circle at 18% 20%, rgba(20, 124, 170, 0.22), transparent 22%),
-            linear-gradient(180deg, #07101a 0%, #0a1420 44%, #081018 100%);
+        background: transparent;
     }
 
     .stage-backdrop,
     .stage-aurora,
     .stage-horizon,
     .stage-foam {
-        position: absolute;
-        inset: 0;
-        pointer-events: none;
-    }
-
-    .stage-backdrop {
-        background:
-            radial-gradient(circle at 50% 20%, rgba(255, 249, 214, 0.08), transparent 18%),
-            linear-gradient(180deg, rgba(22, 46, 77, 0.2), transparent 48%),
-            radial-gradient(circle at 80% 82%, rgba(27, 97, 126, 0.24), transparent 16%);
-    }
-
-    .stage-aurora {
-        filter: blur(28px);
-        opacity: 0.75;
-        animation: drift 9s ease-in-out infinite alternate;
-    }
-
-    .stage-aurora-a {
-        background: radial-gradient(circle at 28% 34%, rgba(69, 146, 185, 0.34), transparent 20%);
-    }
-
-    .stage-aurora-b {
-        background: radial-gradient(circle at 66% 28%, rgba(232, 179, 92, 0.18), transparent 18%);
-        animation-duration: 12s;
-    }
-
-    .stage-horizon {
-        top: auto;
-        bottom: 18%;
-        height: 24%;
-        background:
-            linear-gradient(180deg, transparent 0%, rgba(20, 62, 88, 0.35) 35%, rgba(4, 9, 16, 0.8) 100%);
-        clip-path: polygon(0 60%, 14% 54%, 24% 58%, 39% 45%, 49% 52%, 62% 39%, 72% 44%, 85% 34%, 100% 46%, 100% 100%, 0 100%);
-        border-top: 1px solid rgba(255, 255, 255, 0.04);
-    }
-
-    .stage-foam {
-        top: auto;
-        bottom: 13%;
-        height: 8%;
-        background:
-            radial-gradient(circle at 8% 42%, rgba(173, 227, 255, 0.38), transparent 7%),
-            radial-gradient(circle at 27% 50%, rgba(173, 227, 255, 0.22), transparent 8%),
-            radial-gradient(circle at 55% 38%, rgba(173, 227, 255, 0.28), transparent 7%),
-            radial-gradient(circle at 82% 47%, rgba(173, 227, 255, 0.23), transparent 9%);
-        opacity: 0.85;
+        display: none;
     }
 
     .combat-header {
