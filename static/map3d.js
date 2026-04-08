@@ -73,6 +73,31 @@ const controls = createMap3dControls({
 controls.start();
 
 const urlSearch = new URLSearchParams(window.location.search || '');
+const selectedCharacterIdFromQuery = String(urlSearch.get('characterId') || '').trim();
+const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+let selectedCharacterProfile = null;
+try {
+    const rawSelected = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
+    if (rawSelected) {
+        const parsed = JSON.parse(rawSelected);
+        if (parsed && typeof parsed === 'object' && parsed.id) {
+            selectedCharacterProfile = {
+                id: String(parsed.id || '').trim(),
+                name: String(parsed.name || '').trim(),
+            };
+        }
+    }
+} catch (_err) {
+    selectedCharacterProfile = null;
+}
+
+if (selectedCharacterIdFromQuery && selectedCharacterProfile && selectedCharacterProfile.id !== selectedCharacterIdFromQuery) {
+    selectedCharacterProfile = {
+        id: selectedCharacterIdFromQuery,
+        name: selectedCharacterProfile.name || selectedCharacterIdFromQuery,
+    };
+}
+
 const rawDesign = String(urlSearch.get('design') || 'tactical').trim().toLowerCase();
 const globalView = typeof window.__MAP3D_VIEW__ === 'string'
     ? String(window.__MAP3D_VIEW__).trim().toLowerCase()
@@ -1138,6 +1163,11 @@ function createSocketBridge() {
 
     socket.on('connect', () => {
         networkState.localSid = socket.id || null;
+        if (selectedCharacterProfile && selectedCharacterProfile.name) {
+            socket.emit('player-update', {
+                name: selectedCharacterProfile.name,
+            });
+        }
         socket.emit('request-combat-state', {});
     });
 
