@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paraval Social Room</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #090b12;
+      color: #e8edf7;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+    #back-link {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 12;
+      text-decoration: none;
+      border: 1px solid rgba(130, 146, 208, 0.46);
+      background: rgba(10, 14, 25, 0.78);
+      color: #d6def4;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      backdrop-filter: blur(4px);
+    }
+    #hud {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 12;
+      min-width: 260px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 10px;
+      background: rgba(10, 14, 25, 0.74);
+      padding: 10px 12px;
+      backdrop-filter: blur(4px);
+    }
+    #hud-title {
+      color: #e9d8a4;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    #hud-player {
+      color: #9db0e6;
+      font-size: 11px;
+      line-height: 1.5;
+      margin-bottom: 6px;
+      white-space: pre-wrap;
+    }
+    #hud-controls {
+      color: #96a2c4;
+      font-size: 10px;
+      line-height: 1.45;
+    }
+  </style>
+</head>
+<body>
+  <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
+
+  <section id="hud">
+    <div id="hud-title">Paraval Social Room</div>
+    <div id="hud-player">Loading player...</div>
+    <div id="hud-controls">Click scene to lock camera. Mouse look. WASD move. Shift sprint.</div>
+  </section>
+
+  <script type="module" src="/static/fireplace_walkroom.js"></script>
+</body>
+</html>
