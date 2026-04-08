@@ -246,6 +246,16 @@ def hub():
     )
 
 
+@app.route("/model-select")
+def model_select():
+    cfg = _supabase_public_config()
+    return render_template(
+        "model_select.html",
+        supabase_url=cfg["url"],
+        supabase_anon_key=cfg["anon_key"],
+    )
+
+
 @app.route("/game")
 def game():
     return render_template("game.html")

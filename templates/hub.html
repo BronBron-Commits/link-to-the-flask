@@ -465,7 +465,7 @@ async function boot() {
       return;
     }
     localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
-    const target = `/map3d?characterId=${encodeURIComponent(String(selectedCharacter.id))}`;
+    const target = `/model-select?characterId=${encodeURIComponent(String(selectedCharacter.id))}`;
     window.location.href = target;
   });
 

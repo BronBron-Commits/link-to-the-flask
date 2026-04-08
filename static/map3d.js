@@ -75,6 +75,17 @@ controls.start();
 const urlSearch = new URLSearchParams(window.location.search || '');
 const selectedCharacterIdFromQuery = String(urlSearch.get('characterId') || '').trim();
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
+const selectedModelUrl = String(
+    urlSearch.get('modelUrl')
+    || localStorage.getItem(SELECTED_MODEL_STORAGE_KEY)
+    || ''
+).trim();
+
+if (selectedModelUrl) {
+    runtime.setModelUrl('player', selectedModelUrl);
+}
+
 let selectedCharacterProfile = null;
 try {
     const rawSelected = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
