@@ -845,6 +845,7 @@ scene.add(axisCompass);
 const profile = {
   name: 'Ashen Wanderer',
   side: 'heroes',
+  role: 'player',
   species: 'Human',
   className: 'Wizard',
   origin: 'Arcane Academy',
@@ -982,6 +983,7 @@ const beginBtn = document.getElementById('cc-begin');
 const startCombatBtn = document.getElementById('cc-start-combat');
 const lobbyStatusEl = document.getElementById('lobby-status');
 const lobbyRosterEl = document.getElementById('lobby-roster');
+const roleEl = document.getElementById('cc-role');
 const backLinkEl = document.getElementById('back-link');
 const rigFrontFlipBtn = document.getElementById('cc-rig-backflip');
 const rigIdleBtn = document.getElementById('cc-rig-idle');
@@ -4394,6 +4396,7 @@ function updateClassProp(_className) {
 function refreshPreview() {
   profile.name = (nameEl.value || '').trim() || 'Unnamed Hero';
   profile.side = String(sideEl?.value || profile.side || 'heroes').toLowerCase();
+  profile.role = roleEl?.value === 'dm' ? 'dm' : 'player';
   profile.species = resolvedSelectValue(speciesEl, speciesOtherEl, 'Custom Species');
   profile.className = resolvedSelectValue(classEl, classOtherEl, 'Custom Class');
   profile.origin = resolvedSelectValue(originEl, originOtherEl, 'Unknown Origin');
@@ -4525,8 +4528,9 @@ function renderLobbyRoster() {
   const lines = rows.map(([sid, entry]) => {
     const name = escapeLobbyText(entry?.name || `Player-${String(sid).slice(0, 6)}`);
     const side = escapeLobbyText(entry?.side || 'unknown');
+    const role = entry?.role === 'dm' ? ' [DM]' : '';
     const you = String(sid) === String(fireplaceLobbyLocalSid || '') ? ' (You)' : '';
-    return `${name} [${side}]${you}`;
+    return `${name} [${side}]${role}${you}`;
   });
   lobbyRosterEl.textContent = lines.join('\n');
 }
@@ -4544,9 +4548,10 @@ function publishLocalPresenceToLobby(options = {}) {
   const payload = {
     name: profile.name,
     side: normalizeLobbySide(profile.side),
+    role: profile.role || 'player',
     avatar: { modelUrl: profile.modelUrl || 'fallback' },
   };
-  const key = `${payload.name}|${payload.side}|${payload.avatar.modelUrl}`;
+  const key = `${payload.name}|${payload.side}|${payload.role}|${payload.avatar.modelUrl}`;
   if (!force && key === fireplaceLobbyLastPresenceKey) return;
   fireplaceLobbyLastPresenceKey = key;
 
@@ -4559,6 +4564,7 @@ function publishLocalPresenceToLobby(options = {}) {
       id: sid,
       name: payload.name,
       side: payload.side,
+      role: payload.role,
       avatar: payload.avatar,
     };
     renderLobbyRoster();
@@ -4623,6 +4629,7 @@ function connectFireplaceLobby() {
     setLobbyStatus('Connected to fireplace lobby.');
     renderLobbyRoster();
     if (fireplaceLobbyJoined) {
+      fireplaceLobbySocket.emit('register-role', { role: profile.role });
       publishLocalPresenceToLobby({ force: true });
     }
     if (COMBAT_ARENA_MODE) {
@@ -4696,10 +4703,11 @@ function joinFireplaceLobby() {
   syncLobbyButtons();
 
   if (fireplaceLobbyConnected && fireplaceLobbySocket) {
+    fireplaceLobbySocket.emit('register-role', { role: profile.role });
     publishLocalPresenceToLobby({ force: true });
   }
 
-  setLobbyStatus(`Joined lobby as ${profile.name} (${profile.side}).`);
+  setLobbyStatus(`Joined lobby as ${profile.name} (${profile.side}) · ${profile.role.toUpperCase()}.`);
 }
 
 function requestCombatStartFromLobby() {
@@ -4726,6 +4734,7 @@ try {
       ? profile.trainingDummy.modelUrl
       : null;
     profile.trainingDummy.pose = String(profile.trainingDummy.pose || 'idle').toLowerCase();
+    profile.role = profile.role === 'dm' ? 'dm' : 'player';
   }
 } catch (_) {
   // Ignore malformed local profile.
@@ -4736,6 +4745,7 @@ profile.side = String(profile.side || 'heroes').toLowerCase() === 'villains' ? '
 if (!COMBAT_ARENA_MODE) {
   if (nameEl) nameEl.value = profile.name;
   if (sideEl) sideEl.value = profile.side;
+  if (roleEl) roleEl.value = profile.role === 'dm' ? 'dm' : 'player';
   setSelectOrOther(speciesEl, speciesOtherEl, profile.species);
   setSelectOrOther(classEl, classOtherEl, profile.className);
   setSelectOrOther(originEl, originOtherEl, profile.origin);
@@ -4754,7 +4764,7 @@ connectFireplaceLobby();
 if (!COMBAT_ARENA_MODE) loadAvailableCharacterModels();
 
 if (!COMBAT_ARENA_MODE) {
-[nameEl, sideEl, speciesEl, classEl, originEl, voiceEl, colorEl].filter(Boolean).forEach((el) => {
+[nameEl, sideEl, roleEl, speciesEl, classEl, originEl, voiceEl, colorEl].filter(Boolean).forEach((el) => {
   el.addEventListener('input', refreshPreview);
   el.addEventListener('change', refreshPreview);
 });
