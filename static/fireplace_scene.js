@@ -1887,8 +1887,9 @@ function toggleOtherInput(selectEl, otherEl) {
 }
 
 function resolvedSelectValue(selectEl, otherEl, fallback) {
-  if (selectEl.value !== '__other__') return selectEl.value;
-  const custom = (otherEl.value || '').trim();
+  if (!selectEl) return fallback;
+  if (selectEl.value !== '__other__') return selectEl.value || fallback;
+  const custom = ((otherEl && otherEl.value) || '').trim();
   return custom || fallback;
 }
 
@@ -4394,14 +4395,14 @@ function updateClassProp(_className) {
 }
 
 function refreshPreview() {
-  profile.name = (nameEl.value || '').trim() || 'Unnamed Hero';
+  profile.name = (nameEl?.value || profile.name || '').trim() || 'Unnamed Hero';
   profile.side = String(sideEl?.value || profile.side || 'heroes').toLowerCase();
   profile.role = roleEl?.value === 'dm' ? 'dm' : 'player';
   profile.species = resolvedSelectValue(speciesEl, speciesOtherEl, 'Custom Species');
   profile.className = resolvedSelectValue(classEl, classOtherEl, 'Custom Class');
   profile.origin = resolvedSelectValue(originEl, originOtherEl, 'Unknown Origin');
   profile.voice = resolvedSelectValue(voiceEl, voiceOtherEl, 'Custom Voice');
-  profile.aura = colorEl.value;
+  profile.aura = colorEl?.value || profile.aura || '#7f6bff';
   if (!profile.trainingDummy || typeof profile.trainingDummy !== 'object') {
     profile.trainingDummy = { modelUrl: null, pose: 'idle' };
   }
