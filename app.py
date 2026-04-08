@@ -119,8 +119,10 @@ def socket_player_update(data):
     sid = request.sid
     if sid not in gs.players or not isinstance(data, dict):
         return
+    has_metadata_update = any(key in data for key in ("name", "side", "avatar"))
     now = perf_counter()
-    if (now - gs.player_update_last_seen.get(sid, 0.0)) < gs.PLAYER_UPDATE_MIN_INTERVAL_SEC:
+    if (not has_metadata_update
+            and (now - gs.player_update_last_seen.get(sid, 0.0)) < gs.PLAYER_UPDATE_MIN_INTERVAL_SEC):
         return
     gs.player_update_last_seen[sid] = now
     entry = gs.players[sid]
