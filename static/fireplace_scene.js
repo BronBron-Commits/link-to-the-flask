@@ -4414,16 +4414,18 @@ function refreshPreview() {
   const activeDummyRoot = uploadedTrainingDummyRoot || trainingDummyPoseRoot;
   applyTrainingDummyPoseToRoot(activeDummyRoot, profile.trainingDummy.pose);
 
-  previewEl.textContent = [
-    `Name: ${profile.name}`,
-    `Side: ${profile.side}`,
-    `Class: ${profile.className}`,
-    `Species: ${profile.species}`,
-    `Origin: ${profile.origin}`,
-    `Voice: ${profile.voice}`,
-    `Aura: ${profile.aura.toUpperCase()}`,
-    `Model: ${profile.modelUrl ? 'Custom GLTF/GLB' : 'Procedural Avatar'}`,
-  ].join('\n');
+  if (previewEl) {
+    previewEl.textContent = [
+      `Name: ${profile.name}`,
+      `Side: ${profile.side}`,
+      `Class: ${profile.className}`,
+      `Species: ${profile.species}`,
+      `Origin: ${profile.origin}`,
+      `Voice: ${profile.voice}`,
+      `Aura: ${profile.aura.toUpperCase()}`,
+      `Model: ${profile.modelUrl ? 'Custom GLTF/GLB' : 'Procedural Avatar'}`,
+    ].join('\n');
+  }
 
   if (fireplaceLobbyJoined) {
     publishLocalPresenceToLobby();
