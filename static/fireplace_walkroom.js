@@ -249,13 +249,23 @@ function setupImportedRigAnimator(root) {
   if (!root) return;
 
   const slots = {
-    hips: [/(^|[_.])hips?([_.]|$)/i, /pelvis/i, /root/i],
-    spine: [/spine/i, /chest/i, /torso/i],
-    head: [/head/i, /neck/i],
-    leftUpperArm: [/left.*upperarm/i, /upperarm.*left/i, /arm[_ .-]*l/i, /l[_ .-]*arm/i],
-    rightUpperArm: [/right.*upperarm/i, /upperarm.*right/i, /arm[_ .-]*r/i, /r[_ .-]*arm/i],
-    leftUpperLeg: [/left.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(left|_l|\.l| l)/i],
-    rightUpperLeg: [/right.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(right|_r|\.r| r)/i],
+    hips: [/(^|[_.])hips?([_.]|$)/i, /pelvis/i, /mixamorig:?hips/i, /^root$/i],
+    spine: [/spine$/i, /spine[_.-]?0*1/i, /mixamorig:?spine$/i, /torso/i],
+    chest: [/chest/i, /upperchest/i, /spine[_.-]?0*2/i, /mixamorig:?spine1/i],
+    neck: [/neck/i, /mixamorig:?neck/i],
+    head: [/head/i, /mixamorig:?head/i],
+    leftUpperArm: [/left.*upperarm/i, /upperarm.*left/i, /mixamorig:?leftarm/i, /^armature.*arm.*l/i, /arm[_ .-]*l/i],
+    leftLowerArm: [/left.*(lowerarm|forearm)/i, /(lowerarm|forearm).*(left|_l|\.l| l)/i, /mixamorig:?leftforearm/i],
+    leftHand: [/left.*hand/i, /hand.*left/i, /mixamorig:?lefthand/i],
+    rightUpperArm: [/right.*upperarm/i, /upperarm.*right/i, /mixamorig:?rightarm/i, /^armature.*arm.*r/i, /arm[_ .-]*r/i],
+    rightLowerArm: [/right.*(lowerarm|forearm)/i, /(lowerarm|forearm).*(right|_r|\.r| r)/i, /mixamorig:?rightforearm/i],
+    rightHand: [/right.*hand/i, /hand.*right/i, /mixamorig:?righthand/i],
+    leftUpperLeg: [/left.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(left|_l|\.l| l)/i, /mixamorig:?leftupleg/i],
+    leftLowerLeg: [/left.*(leg|calf|lowerleg)/i, /(leg|calf|lowerleg).*(left|_l|\.l| l)/i, /mixamorig:?leftleg/i],
+    leftFoot: [/left.*foot/i, /foot.*left/i, /mixamorig:?leftfoot/i],
+    rightUpperLeg: [/right.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(right|_r|\.r| r)/i, /mixamorig:?rightupleg/i],
+    rightLowerLeg: [/right.*(leg|calf|lowerleg)/i, /(leg|calf|lowerleg).*(right|_r|\.r| r)/i, /mixamorig:?rightleg/i],
+    rightFoot: [/right.*foot/i, /foot.*right/i, /mixamorig:?rightfoot/i],
   };
 
   for (const [slot, patterns] of Object.entries(slots)) {
@@ -268,7 +278,10 @@ function setupImportedRigAnimator(root) {
     }
   }
 
-  importedRigAnimator.active = importedRigAnimator.bones.size >= 4;
+  const hasCore = importedRigAnimator.bones.has('hips')
+    || importedRigAnimator.bones.has('spine')
+    || importedRigAnimator.bones.has('head');
+  importedRigAnimator.active = hasCore && importedRigAnimator.bones.size >= 3;
 }
 
 function applyImportedRigFallbackAnimation(elapsed, isMoving) {
@@ -279,29 +292,52 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
   const antiStride = Math.sin(walkPhase + Math.PI);
   const idleBreath = Math.sin(elapsed * 2.0);
   const makeQ = (x = 0, y = 0, z = 0) => new THREE.Quaternion().setFromEuler(new THREE.Euler(x, y, z, 'XYZ'));
+  const combineQ = (a, b) => a.clone().multiply(b);
 
-  const slotRot = isMoving
+  // Canonical relaxed idle pose for any imported humanoid armature.
+  const idlePose = {
+    hips: makeQ(0.03 + idleBreath * 0.01, Math.sin(elapsed * 0.7) * 0.02, 0),
+    spine: makeQ(-0.06 + idleBreath * 0.012, 0, 0),
+    chest: makeQ(-0.03 + idleBreath * 0.01, 0, 0),
+    neck: makeQ(0.02, 0, 0),
+    head: makeQ(0.03, Math.sin(elapsed * 0.6) * 0.03, 0),
+    leftUpperArm: makeQ(0.18 + Math.sin(elapsed * 1.0 + 0.4) * 0.02, 0, -0.22),
+    leftLowerArm: makeQ(0.22, 0, -0.05),
+    leftHand: makeQ(0.08, 0, 0),
+    rightUpperArm: makeQ(0.18 + Math.sin(elapsed * 1.0) * 0.02, 0, 0.22),
+    rightLowerArm: makeQ(0.22, 0, 0.05),
+    rightHand: makeQ(0.08, 0, 0),
+    leftUpperLeg: makeQ(-0.04, 0, 0.02),
+    leftLowerLeg: makeQ(0.08, 0, 0),
+    leftFoot: makeQ(-0.03, 0, 0),
+    rightUpperLeg: makeQ(-0.04, 0, -0.02),
+    rightLowerLeg: makeQ(0.08, 0, 0),
+    rightFoot: makeQ(-0.03, 0, 0),
+  };
+
+  const walkLayer = isMoving
     ? {
-      hips: makeQ(0, Math.sin(walkPhase * 0.5) * 0.08, Math.sin(walkPhase) * 0.03),
-      spine: makeQ(Math.sin(walkPhase * 0.5) * 0.04, 0, 0),
-      head: makeQ(0, Math.sin(walkPhase * 0.42) * 0.05, 0),
-      leftUpperArm: makeQ(antiStride * 0.55, 0, 0),
-      rightUpperArm: makeQ(stride * 0.55, 0, 0),
+      hips: makeQ(0, Math.sin(walkPhase * 0.5) * 0.06, Math.sin(walkPhase) * 0.025),
+      spine: makeQ(Math.sin(walkPhase * 0.5) * 0.03, 0, 0),
+      chest: makeQ(Math.sin(walkPhase * 0.5 + 0.4) * 0.025, 0, 0),
+      head: makeQ(0, Math.sin(walkPhase * 0.42) * 0.04, 0),
+      leftUpperArm: makeQ(antiStride * 0.52, 0, 0),
+      leftLowerArm: makeQ(Math.max(0, antiStride) * 0.22, 0, 0),
+      rightUpperArm: makeQ(stride * 0.52, 0, 0),
+      rightLowerArm: makeQ(Math.max(0, stride) * 0.22, 0, 0),
       leftUpperLeg: makeQ(stride * 0.72, 0, 0),
+      leftLowerLeg: makeQ(Math.max(0, -stride) * 0.8, 0, 0),
       rightUpperLeg: makeQ(antiStride * 0.72, 0, 0),
+      rightLowerLeg: makeQ(Math.max(0, -antiStride) * 0.8, 0, 0),
+      leftFoot: makeQ(stride * 0.2, 0, 0),
+      rightFoot: makeQ(antiStride * 0.2, 0, 0),
     }
-    : {
-      hips: makeQ(0, Math.sin(elapsed * 0.8) * 0.02, 0),
-      spine: makeQ(idleBreath * 0.02, 0, 0),
-      head: makeQ(0, Math.sin(elapsed * 0.6) * 0.03, 0),
-      leftUpperArm: makeQ(Math.sin(elapsed * 1.1 + 0.9) * 0.04, 0, 0),
-      rightUpperArm: makeQ(Math.sin(elapsed * 1.1) * 0.04, 0, 0),
-      leftUpperLeg: makeQ(0, 0, 0),
-      rightUpperLeg: makeQ(0, 0, 0),
-    };
+    : {};
 
   for (const [slot, record] of importedRigAnimator.bones.entries()) {
-    const offset = slotRot[slot] || makeQ();
+    const idleQ = idlePose[slot] || makeQ();
+    const walkQ = walkLayer[slot] || makeQ();
+    const offset = combineQ(idleQ, walkQ);
     record.bone.quaternion.copy(record.baseQuat).multiply(offset);
   }
 }
