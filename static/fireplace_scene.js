@@ -336,6 +336,7 @@ const lobbyTeamSlots = COMBAT_ARENA_MODE ? [] : [
 ];
 
 const SHOW_NON_PLAYER_STAGING = false;
+const FORCE_PROCEDURAL_PLAYERS = true;
 
 const localPreviewAnchor = new THREE.Group();
 scene.add(localPreviewAnchor);
@@ -4342,6 +4343,10 @@ async function applyUploadedAvatar(modelUrl) {
 }
 
 async function uploadModelFile() {
+  if (FORCE_PROCEDURAL_PLAYERS) {
+    if (modelStatusEl) modelStatusEl.textContent = 'Model uploads are disabled in 1v1 procedural mode.';
+    return;
+  }
   const files = modelFileEl.files ? Array.from(modelFileEl.files) : [];
   if (!files.length) {
     modelStatusEl.textContent = 'Choose a .glb or .gltf file first.';
@@ -4408,6 +4413,7 @@ function refreshPreview() {
   profile.origin = resolvedSelectValue(originEl, originOtherEl, 'Unknown Origin');
   profile.voice = resolvedSelectValue(voiceEl, voiceOtherEl, 'Custom Voice');
   profile.aura = colorEl?.value || profile.aura || '#7f6bff';
+  if (FORCE_PROCEDURAL_PLAYERS) profile.modelUrl = null;
   if (!profile.trainingDummy || typeof profile.trainingDummy !== 'object') {
     profile.trainingDummy = { modelUrl: null, pose: 'idle' };
   }
@@ -4784,7 +4790,7 @@ function publishLocalPresenceToLobby(options = {}) {
     name: profile.name,
     side: normalizeLobbySide(profile.side),
     role: profile.role || 'player',
-    avatar: { modelUrl: profile.modelUrl || 'fallback' },
+    avatar: { modelUrl: 'fallback' },
   };
   const key = `${payload.name}|${payload.side}|${payload.role}|${payload.avatar.modelUrl}`;
   if (!force && key === fireplaceLobbyLastPresenceKey) return;
@@ -4813,6 +4819,13 @@ async function loadAvailableCharacterModels() {
   base.value = '';
   base.textContent = 'Procedural Avatar (no model file)';
   modelSelectEl.appendChild(base);
+
+  if (FORCE_PROCEDURAL_PLAYERS) {
+    profile.modelUrl = null;
+    modelSelectEl.value = '';
+    if (modelStatusEl) modelStatusEl.textContent = 'Procedural avatars are enforced for this 1v1 mode.';
+    return;
+  }
 
   try {
     const res = await fetch('/api/character-models');
@@ -4972,6 +4985,7 @@ try {
       : null;
     profile.trainingDummy.pose = String(profile.trainingDummy.pose || 'idle').toLowerCase();
     profile.role = profile.role === 'dm' ? 'dm' : 'player';
+    if (FORCE_PROCEDURAL_PLAYERS) profile.modelUrl = null;
   }
 } catch (_) {
   // Ignore malformed local profile.
@@ -5080,9 +5094,12 @@ updateRigDanceButton();
 updateRigReboneButton();
 } // end !COMBAT_ARENA_MODE creator panel wiring
 
-if (profile.modelUrl) {
+if (!FORCE_PROCEDURAL_PLAYERS && profile.modelUrl) {
   applyUploadedAvatar(profile.modelUrl);
 } else {
+  profile.modelUrl = null;
+  clearUploadedAvatar();
+  setProceduralAvatarVisible(true);
   renderRigReport(null);
 }
 
@@ -5096,6 +5113,13 @@ if (profile.trainingDummy?.modelUrl) {
 if (!SHOW_NON_PLAYER_STAGING) {
   const dummyModelWrap = dummyModelFileEl?.closest('label');
   if (dummyModelWrap) dummyModelWrap.style.display = 'none';
+}
+
+if (FORCE_PROCEDURAL_PLAYERS) {
+  const modelSelectWrap = modelSelectEl?.closest('label');
+  if (modelSelectWrap) modelSelectWrap.style.display = 'none';
+  const modelUploadWrap = modelFileEl?.closest('label');
+  if (modelUploadWrap) modelUploadWrap.style.display = 'none';
 }
 
 window.fireplaceRigRetarget = {

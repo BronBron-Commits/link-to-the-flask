@@ -853,6 +853,7 @@ def build_world_payload(include_scene: bool = True) -> dict:
 
 def build_turn_order(initiator_sid: Optional[str] = None) -> list[dict]:
     order: list[dict] = []
+    player_pool: list[dict] = []
     for sid, entry in players.items():
         if not isinstance(entry, dict):
             continue
@@ -861,10 +862,29 @@ def build_turn_order(initiator_sid: Optional[str] = None) -> list[dict]:
         actor_id = str(entry.get("networkId") or entry.get("actorId") or "").strip()
         if not actor_id:
             continue
-        order.append({
+        side = str(entry.get("side") or "heroes").strip().lower()
+        side = "villains" if side == "villains" else "heroes"
+        player_pool.append({
+            "sid": sid,
+            "side": side,
+            "name": str(entry.get("name") or actor_id),
+            "actor": {
             "id": actor_id, "type": "player",
             "ownerSid": sid, "name": str(entry.get("name") or actor_id),
+            },
         })
+
+    player_pool.sort(key=lambda row: (str(row.get("name") or "").lower(), str(row.get("sid") or "")))
+    heroes = [row for row in player_pool if row.get("side") == "heroes"]
+    villains = [row for row in player_pool if row.get("side") == "villains"]
+
+    selected_players: list[dict] = []
+    if heroes and villains:
+        selected_players = [heroes[0], villains[0]]
+    else:
+        selected_players = player_pool[:2]
+
+    order.extend(row["actor"] for row in selected_players)
     if initiator_sid:
         for i, e in enumerate(order):
             if e.get("ownerSid") == initiator_sid:
