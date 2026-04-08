@@ -48,6 +48,16 @@
       text-transform: uppercase;
       backdrop-filter: blur(4px);
     }
+    #combat-ui-root {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 800;
+      pointer-events: none;
+    }
+    #combat-ui-root * {
+      pointer-events: auto;
+    }
   </style>
 </head>
 <body>
