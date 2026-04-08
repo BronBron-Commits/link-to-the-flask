@@ -889,6 +889,7 @@ const moveState = {
 let pointerLocked = false;
 let yaw = 0;
 let pitch = 0;
+let fireplaceCombatActive = false;
 
 const baseMoveSpeed = 3.2;
 const boostMultiplier = 2.2;
@@ -897,10 +898,31 @@ const lookSensitivity = 0.002;
 const _forward = new THREE.Vector3();
 const _right = new THREE.Vector3();
 const _move = new THREE.Vector3();
+const _thirdPersonAnchorPos = new THREE.Vector3();
+const _thirdPersonAnchorQuat = new THREE.Quaternion();
+const _thirdPersonDesiredPos = new THREE.Vector3();
+const _thirdPersonOffset = new THREE.Vector3(0, 2.35, 5.25);
+const _thirdPersonLookAt = new THREE.Vector3();
 const _retargetDeltaPos = new THREE.Vector3();
 const _retargetDeltaQuat = new THREE.Quaternion();
 const _retargetTargetQuat = new THREE.Quaternion();
 const _retargetTargetPos = new THREE.Vector3();
+
+function isThirdPersonCameraActive() {
+  return COMBAT_ARENA_MODE || fireplaceCombatActive;
+}
+
+function updateThirdPersonCamera(dt) {
+  localPreviewAnchor.getWorldPosition(_thirdPersonAnchorPos);
+  localPreviewAnchor.getWorldQuaternion(_thirdPersonAnchorQuat);
+
+  _thirdPersonDesiredPos.copy(_thirdPersonOffset).applyQuaternion(_thirdPersonAnchorQuat).add(_thirdPersonAnchorPos);
+  _thirdPersonLookAt.copy(_thirdPersonAnchorPos).add(new THREE.Vector3(0, 1.1, 0));
+
+  const lerpAlpha = 1 - Math.exp(-7.0 * dt);
+  camera.position.lerp(_thirdPersonDesiredPos, lerpAlpha);
+  camera.lookAt(_thirdPersonLookAt);
+}
 
 function setMoveStateByCode(code, value) {
   if (code === 'KeyW') moveState.forward = value;
@@ -923,6 +945,7 @@ function setMoveStateByCode(code, value) {
 }
 
 renderer.domElement.addEventListener('click', (event) => {
+  if (isThirdPersonCameraActive()) return;
   // Alt+click supports bone selection tooling; regular click enters FPS look mode.
   if (!pointerLocked && event.altKey) {
     handleBoneSelection(event);
@@ -938,6 +961,7 @@ document.addEventListener('pointerlockchange', () => {
 });
 
 document.addEventListener('mousemove', (e) => {
+  if (isThirdPersonCameraActive()) return;
   if (!pointerLocked) return;
   yaw -= e.movementX * lookSensitivity;
   pitch -= e.movementY * lookSensitivity;
@@ -4932,6 +4956,10 @@ function connectFireplaceLobby() {
   });
 
   fireplaceLobbySocket.on('combat-state', (packet) => {
+    fireplaceCombatActive = !!(packet && packet.active);
+    if (fireplaceCombatActive && document.pointerLockElement === renderer.domElement) {
+      document.exitPointerLock();
+    }
     if (packet && packet.active) {
       stopFireplaceMusic();
       enterCombatMode();
@@ -5199,22 +5227,28 @@ function animate() {
   applyRigDancePreview(nowMs);
   applyRigFrontFlipPreview(nowMs);
 
-  _move.set(0, 0, 0);
-  camera.getWorldDirection(_forward);
-  _forward.normalize();
-  _right.crossVectors(_forward, camera.up).normalize();
+  if (isThirdPersonCameraActive()) {
+    updateThirdPersonCamera(dt);
+  }
 
-  if (moveState.forward) _move.add(_forward);
-  if (moveState.back) _move.sub(_forward);
-  if (moveState.right) _move.add(_right);
-  if (moveState.left) _move.sub(_right);
-  if (moveState.up) _move.y += 1;
-  if (moveState.down) _move.y -= 1;
+  if (!isThirdPersonCameraActive()) {
+    _move.set(0, 0, 0);
+    camera.getWorldDirection(_forward);
+    _forward.normalize();
+    _right.crossVectors(_forward, camera.up).normalize();
 
-  if (_move.lengthSq() > 0) {
-    _move.normalize();
-    const speed = baseMoveSpeed * (moveState.boost ? boostMultiplier : 1);
-    camera.position.addScaledVector(_move, speed * dt);
+    if (moveState.forward) _move.add(_forward);
+    if (moveState.back) _move.sub(_forward);
+    if (moveState.right) _move.add(_right);
+    if (moveState.left) _move.sub(_right);
+    if (moveState.up) _move.y += 1;
+    if (moveState.down) _move.y -= 1;
+
+    if (_move.lengthSq() > 0) {
+      _move.normalize();
+      const speed = baseMoveSpeed * (moveState.boost ? boostMultiplier : 1);
+      camera.position.addScaledVector(_move, speed * dt);
+    }
   }
 
   for (const ember of embers) {
