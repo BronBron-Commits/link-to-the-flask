@@ -185,6 +185,7 @@ let avatarMixer = null;
 let customIdleAction = null;
 let customWalkAction = null;
 let activeCustomAction = null;
+let customMixerUsable = false;
 const importedRigAnimator = {
   active: false,
   bones: new Map(),
@@ -396,6 +397,28 @@ function buildArmRestIdleOffsets() {
   }
 }
 
+function clipHasUsableMotion(clip) {
+  if (!clip || !Array.isArray(clip.tracks) || clip.tracks.length === 0) return false;
+  if (!Number.isFinite(clip.duration) || clip.duration <= 0.02) return false;
+
+  for (const track of clip.tracks) {
+    const values = track && track.values;
+    if (!values || values.length < 2) continue;
+    const stride = track.getValueSize ? track.getValueSize() : 1;
+    if (!Number.isFinite(stride) || stride <= 0) continue;
+    if (values.length < stride * 2) continue;
+
+    for (let i = stride; i < values.length; i += stride) {
+      for (let c = 0; c < stride; c += 1) {
+        if (Math.abs(values[i + c] - values[c]) > 1e-4) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 function setupImportedRigAnimator(root) {
   importedRigAnimator.active = false;
   importedRigAnimator.bones.clear();
@@ -533,6 +556,7 @@ async function loadSelectedAvatar() {
     customIdleAction = null;
     customWalkAction = null;
     activeCustomAction = null;
+    customMixerUsable = false;
     importedRigAnimator.active = false;
     importedRigAnimator.bones.clear();
 
@@ -545,12 +569,18 @@ async function loadSelectedAvatar() {
 
     if (Array.isArray(gltf.animations) && gltf.animations.length) {
       const clips = gltf.animations;
-      avatarMixer = new THREE.AnimationMixer(customAvatarRoot);
       const findClip = (matcher) => clips.find((clip) => matcher.test(String(clip.name || '').toLowerCase())) || null;
       const idleClip = findClip(/idle|stand|breath|rest/) || clips[0] || null;
       const walkClip = findClip(/walk|locomotion|move|run/) || clips.find((clip) => clip !== idleClip) || idleClip;
+      const idleUsable = clipHasUsableMotion(idleClip);
+      const walkUsable = clipHasUsableMotion(walkClip);
 
-      if (idleClip) {
+      if (idleUsable || walkUsable) {
+        avatarMixer = new THREE.AnimationMixer(customAvatarRoot);
+        customMixerUsable = true;
+      }
+
+      if (avatarMixer && idleClip && idleUsable) {
         customIdleAction = avatarMixer.clipAction(idleClip);
         customIdleAction.enabled = true;
         customIdleAction.setEffectiveWeight(1);
@@ -558,10 +588,21 @@ async function loadSelectedAvatar() {
         activeCustomAction = customIdleAction;
       }
 
-      if (walkClip) {
+      if (avatarMixer && walkClip && walkUsable) {
         customWalkAction = avatarMixer.clipAction(walkClip);
         customWalkAction.enabled = true;
         customWalkAction.setEffectiveWeight(0);
+      }
+
+      if (avatarMixer && !customIdleAction && customWalkAction) {
+        customIdleAction = customWalkAction;
+        customIdleAction.setEffectiveWeight(1);
+        customIdleAction.play();
+        activeCustomAction = customIdleAction;
+      }
+
+      if (avatarMixer && !customWalkAction && customIdleAction) {
+        customWalkAction = customIdleAction;
       }
     }
   } catch (_err) {
@@ -569,6 +610,7 @@ async function loadSelectedAvatar() {
     customIdleAction = null;
     customWalkAction = null;
     activeCustomAction = null;
+    customMixerUsable = false;
     importedRigAnimator.active = false;
     importedRigAnimator.bones.clear();
     fallbackAvatar.visible = true;
@@ -691,7 +733,7 @@ function updatePlayerMovement(dt) {
 }
 
 function updateAvatarAnimation(dt, elapsed, isMoving) {
-  if (avatarMixer && (customIdleAction || customWalkAction)) {
+  if (customMixerUsable && avatarMixer && (customIdleAction || customWalkAction)) {
     if (isMoving && customWalkAction) {
       switchCustomAction(customWalkAction);
     } else if (!isMoving && customIdleAction) {
