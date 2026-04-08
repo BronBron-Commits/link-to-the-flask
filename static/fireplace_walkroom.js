@@ -139,6 +139,9 @@ const actor = new THREE.Group();
 actor.position.set(0, 0, 2.1);
 scene.add(actor);
 
+const remoteActorsLayer = new THREE.Group();
+scene.add(remoteActorsLayer);
+
 const fallbackBodyMat = new THREE.MeshStandardMaterial({ color: 0x7f6bff, roughness: 0.62, metalness: 0.08, emissive: 0x121425 });
 const fallbackSkinMat = new THREE.MeshStandardMaterial({ color: 0xe8ccb2, roughness: 0.72, metalness: 0.01 });
 const fallbackClothMat = new THREE.MeshStandardMaterial({ color: 0x2b304d, roughness: 0.9, metalness: 0.02 });
@@ -397,6 +400,252 @@ function buildArmRestIdleOffsets() {
   }
 }
 
+function buildProceduralAvatar(colorHex = '#7f6bff') {
+  const bodyMat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.62, metalness: 0.08, emissive: 0x121425 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe8ccb2, roughness: 0.72, metalness: 0.01 });
+  const clothMat = new THREE.MeshStandardMaterial({ color: 0x2b304d, roughness: 0.9, metalness: 0.02 });
+  const root = new THREE.Group();
+
+  const torsoMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.56, 6, 12), bodyMat);
+  torsoMesh.position.y = 1.03;
+  root.add(torsoMesh);
+
+  const headMesh = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 20), skinMat);
+  headMesh.position.y = 1.59;
+  root.add(headMesh);
+
+  const cloakMesh = new THREE.Mesh(new THREE.ConeGeometry(0.43, 1.05, 14), clothMat);
+  cloakMesh.position.y = 0.64;
+  root.add(cloakMesh);
+
+  const leftArmMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.4, 4, 8), skinMat);
+  leftArmMesh.position.set(-0.34, 1.03, 0.02);
+  leftArmMesh.rotation.z = Math.PI / 10;
+  root.add(leftArmMesh);
+
+  const rightArmMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.4, 4, 8), skinMat);
+  rightArmMesh.position.set(0.34, 1.03, 0.02);
+  rightArmMesh.rotation.z = -Math.PI / 10;
+  root.add(rightArmMesh);
+
+  const leftLegMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.72, 4, 8), bodyMat);
+  leftLegMesh.position.set(-0.14, 0.4, 0.02);
+  root.add(leftLegMesh);
+
+  const rightLegMesh = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.72, 4, 8), bodyMat);
+  rightLegMesh.position.set(0.14, 0.4, 0.02);
+  root.add(rightLegMesh);
+
+  const bootsMesh = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.3), new THREE.MeshStandardMaterial({ color: 0x1a1520, roughness: 0.86, metalness: 0.03 }));
+  bootsMesh.position.set(0, 0.06, 0.07);
+  root.add(bootsMesh);
+
+  return root;
+}
+
+const netState = {
+  socket: null,
+  localSid: '',
+  roster: {},
+  remoteVisuals: new Map(),
+  lastPublishedKey: '',
+  publishAtMs: 0,
+};
+
+function removeRemoteVisual(sid) {
+  const rec = netState.remoteVisuals.get(sid);
+  if (!rec) return;
+  if (rec.root && rec.root.parent) rec.root.parent.remove(rec.root);
+  if (rec.modelRoot) disposeObject3D(rec.modelRoot);
+  if (rec.fallbackRoot) disposeObject3D(rec.fallbackRoot);
+  if (rec.nameplate && rec.nameplate.material && rec.nameplate.material.map) {
+    rec.nameplate.material.map.dispose();
+    rec.nameplate.material.dispose();
+  }
+  netState.remoteVisuals.delete(sid);
+}
+
+function createNameplate(text) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 384;
+  canvas.height = 96;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = 'rgba(10,14,24,0.78)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(1.5, 1.5, canvas.width - 3, canvas.height - 3);
+  ctx.font = 'bold 34px Consolas';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#9db0e6';
+  ctx.fillText(String(text || '').slice(0, 20), canvas.width / 2, canvas.height / 2);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false });
+  const sprite = new THREE.Sprite(mat);
+  sprite.scale.set(1.2, 0.3, 1);
+  sprite.position.set(0, 2.35, 0);
+  return sprite;
+}
+
+async function ensureRemoteVisual(sid, entry) {
+  let rec = netState.remoteVisuals.get(sid);
+  if (!rec) {
+    const root = new THREE.Group();
+    const fallbackRoot = buildProceduralAvatar(String(entry?.side || '').toLowerCase() === 'villains' ? '#dd7f7f' : '#7f8fff');
+    const nameplate = createNameplate(String(entry?.name || `Player-${sid.slice(0, 6)}`));
+    root.add(fallbackRoot);
+    root.add(nameplate);
+    remoteActorsLayer.add(root);
+    rec = {
+      root,
+      fallbackRoot,
+      modelRoot: null,
+      modelUrl: '',
+      loadToken: 0,
+      nameplate,
+    };
+    netState.remoteVisuals.set(sid, rec);
+  }
+
+  rec.root.position.set(
+    Number(entry?.position?.x) || 0,
+    Number(entry?.position?.y) || 0,
+    Number(entry?.position?.z) || 0,
+  );
+  rec.root.rotation.y = Number(entry?.rotation?.y) || 0;
+
+  const modelUrl = String(entry?.avatar?.modelUrl || 'fallback').trim() || 'fallback';
+  if (modelUrl === rec.modelUrl) return;
+  rec.modelUrl = modelUrl;
+  rec.loadToken += 1;
+  const token = rec.loadToken;
+
+  if (rec.modelRoot) {
+    rec.root.remove(rec.modelRoot);
+    disposeObject3D(rec.modelRoot);
+    rec.modelRoot = null;
+  }
+
+  if (modelUrl === 'fallback') {
+    rec.fallbackRoot.visible = true;
+    return;
+  }
+
+  try {
+    const loader = new GLTFLoader();
+    const gltf = await new Promise((resolve, reject) => loader.load(modelUrl, resolve, undefined, reject));
+    if (!netState.remoteVisuals.has(sid)) return;
+    const latest = netState.remoteVisuals.get(sid);
+    if (!latest || latest.loadToken !== token) return;
+    const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
+    if (!root) {
+      latest.fallbackRoot.visible = true;
+      return;
+    }
+    normalizeAvatarRoot(root);
+    latest.root.add(root);
+    latest.modelRoot = root;
+    latest.fallbackRoot.visible = false;
+  } catch (_err) {
+    const latest = netState.remoteVisuals.get(sid);
+    if (latest) latest.fallbackRoot.visible = true;
+  }
+}
+
+function syncRemoteActors() {
+  const localSid = String(netState.localSid || '');
+  const wanted = new Set();
+
+  for (const [sid, entry] of Object.entries(netState.roster || {})) {
+    if (!sid || sid === localSid) continue;
+    wanted.add(sid);
+    ensureRemoteVisual(sid, entry);
+  }
+
+  for (const sid of Array.from(netState.remoteVisuals.keys())) {
+    if (!wanted.has(sid)) removeRemoteVisual(sid);
+  }
+}
+
+function publishLocalPresence(force = false) {
+  if (!netState.socket || !netState.localSid) return;
+  const payload = {
+    name: selectedCharacter?.name || selectedCharacter?.id || 'Traveler',
+    side: 'heroes',
+    role: 'player',
+    position: {
+      x: Number(actor.position.x.toFixed(3)),
+      y: Number(actor.position.y.toFixed(3)),
+      z: Number(actor.position.z.toFixed(3)),
+    },
+    rotation: {
+      x: 0,
+      y: Number(actor.rotation.y.toFixed(4)),
+      z: 0,
+    },
+    avatar: {
+      modelUrl: selectedModelUrl || 'fallback',
+    },
+  };
+
+  const key = `${payload.name}|${payload.position.x},${payload.position.y},${payload.position.z}|${payload.rotation.y}|${payload.avatar.modelUrl}`;
+  if (!force && key === netState.lastPublishedKey) return;
+  netState.lastPublishedKey = key;
+
+  netState.socket.emit('player-update', payload);
+  netState.roster[netState.localSid] = {
+    ...(netState.roster[netState.localSid] || {}),
+    id: netState.localSid,
+    ...payload,
+  };
+}
+
+function connectMultiplayer() {
+  if (typeof window.io !== 'function') return;
+  const socket = window.io();
+  netState.socket = socket;
+
+  socket.on('connect', () => {
+    netState.localSid = socket.id || netState.localSid;
+    socket.emit('register-role', { role: 'player' });
+    publishLocalPresence(true);
+  });
+
+  socket.on('player-id', (payload) => {
+    if (payload && payload.id) {
+      netState.localSid = String(payload.id);
+      publishLocalPresence(true);
+    }
+  });
+
+  socket.on('players-state', (players) => {
+    netState.roster = (players && typeof players === 'object') ? players : {};
+    syncRemoteActors();
+  });
+
+  socket.on('player-update', (entry) => {
+    if (!entry || !entry.id) return;
+    netState.roster[entry.id] = entry;
+    syncRemoteActors();
+  });
+
+  socket.on('player-joined', (entry) => {
+    if (!entry || !entry.id) return;
+    netState.roster[entry.id] = entry;
+    syncRemoteActors();
+  });
+
+  socket.on('player-left', (payload) => {
+    const sid = String(payload?.id || '').trim();
+    if (!sid) return;
+    delete netState.roster[sid];
+    removeRemoteVisual(sid);
+  });
+}
+
 function clipHasUsableMotion(clip) {
   if (!clip || !Array.isArray(clip.tracks) || clip.tracks.length === 0) return false;
   if (!Number.isFinite(clip.duration) || clip.duration <= 0.02) return false;
@@ -618,6 +867,7 @@ async function loadSelectedAvatar() {
 }
 
 loadSelectedAvatar();
+connectMultiplayer();
 
 const moveState = {
   forward: false,
@@ -804,6 +1054,12 @@ function animate() {
   const isMoving = updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
+
+  const nowMs = performance.now();
+  if (nowMs >= netState.publishAtMs) {
+    publishLocalPresence(false);
+    netState.publishAtMs = nowMs + (isMoving ? 90 : 300);
+  }
 
   renderer.render(scene, camera);
   requestAnimationFrame(animate);
