@@ -321,19 +321,21 @@ function createTeamSlot(team, index, pos) {
   root.add(ring);
 
   const plate = createNameplateSprite(`${team.toUpperCase()}-${index + 1}`);
-  plate.position.set(0, 0.6, 0);
+  plate.position.set(0, 2.4, 0);
   root.add(plate);
 
   scene.add(root);
   return { team, index, root, ringMat, plate, occupantSid: null };
 }
 
-const lobbyTeamSlots = [
+const lobbyTeamSlots = COMBAT_ARENA_MODE ? [] : [
   ...lobbySlotLayouts.heroes.map((pos, i) => createTeamSlot('heroes', i, pos)),
   ...lobbySlotLayouts.villains.map((pos, i) => createTeamSlot('villains', i, pos)),
 ];
 
 const SHOW_NON_PLAYER_STAGING = false;
+
+const COMBAT_ARENA_MODE = !!window.__COMBAT_ARENA_MODE__;
 
 const localPreviewAnchor = new THREE.Group();
 scene.add(localPreviewAnchor);
@@ -4602,22 +4604,9 @@ async function loadAvailableCharacterModels() {
 }
 
 function enterCombatMode() {
-  // Expose lobby socket and player identity so combat-ui.js can reuse them
-  window.__LOBBY_SOCKET__ = fireplaceLobbySocket;
-  window.__COMBAT_PLAYER_NAME__ = profile.name;
-  window.__COMBAT_PLAYER_SIDE__ = profile.side;
-
-  // Hide the lobby creator panel — combat takes over the scene
-  const creatorPanel = document.getElementById('creator-panel');
-  if (creatorPanel) creatorPanel.style.display = 'none';
-
-  // Dynamically inject combat-ui.js once
-  if (!document.getElementById('combat-ui-script')) {
-    const script = document.createElement('script');
-    script.id = 'combat-ui-script';
-    script.src = '/static/combat-ui.js';
-    document.body.appendChild(script);
-  }
+  if (COMBAT_ARENA_MODE) return; // already in the arena page
+  stopFireplaceMusic();
+  window.location.href = '/static/combat_arena.html';
 }
 
 function connectFireplaceLobby() {
@@ -4635,6 +4624,17 @@ function connectFireplaceLobby() {
     renderLobbyRoster();
     if (fireplaceLobbyJoined) {
       publishLocalPresenceToLobby({ force: true });
+    }
+    if (COMBAT_ARENA_MODE) {
+      window.__LOBBY_SOCKET__ = fireplaceLobbySocket;
+      window.__COMBAT_PLAYER_NAME__ = profile.name;
+      window.__COMBAT_PLAYER_SIDE__ = profile.side;
+      if (!document.getElementById('combat-ui-script')) {
+        const script = document.createElement('script');
+        script.id = 'combat-ui-script';
+        script.src = '/static/combat-ui.js';
+        document.body.appendChild(script);
+      }
     }
   });
 
@@ -4731,30 +4731,35 @@ try {
   // Ignore malformed local profile.
 }
 
-nameEl.value = profile.name;
 profile.side = String(profile.side || 'heroes').toLowerCase() === 'villains' ? 'villains' : 'heroes';
-if (sideEl) sideEl.value = profile.side;
-setSelectOrOther(speciesEl, speciesOtherEl, profile.species);
-setSelectOrOther(classEl, classOtherEl, profile.className);
-setSelectOrOther(originEl, originOtherEl, profile.origin);
-setSelectOrOther(voiceEl, voiceOtherEl, profile.voice);
-colorEl.value = profile.aura;
-if (dummyPoseEl) {
-  const allowedPoses = new Set(['idle', 'guard', 'taunt', 'slump']);
-  dummyPoseEl.value = allowedPoses.has(profile.trainingDummy.pose) ? profile.trainingDummy.pose : 'idle';
+
+if (!COMBAT_ARENA_MODE) {
+  if (nameEl) nameEl.value = profile.name;
+  if (sideEl) sideEl.value = profile.side;
+  setSelectOrOther(speciesEl, speciesOtherEl, profile.species);
+  setSelectOrOther(classEl, classOtherEl, profile.className);
+  setSelectOrOther(originEl, originOtherEl, profile.origin);
+  setSelectOrOther(voiceEl, voiceOtherEl, profile.voice);
+  if (colorEl) colorEl.value = profile.aura;
+  if (dummyPoseEl) {
+    const allowedPoses = new Set(['idle', 'guard', 'taunt', 'slump']);
+    dummyPoseEl.value = allowedPoses.has(profile.trainingDummy.pose) ? profile.trainingDummy.pose : 'idle';
+  }
 }
+
 refreshPreview();
 syncLobbyButtons();
 renderLobbyRoster();
 connectFireplaceLobby();
-loadAvailableCharacterModels();
+if (!COMBAT_ARENA_MODE) loadAvailableCharacterModels();
 
+if (!COMBAT_ARENA_MODE) {
 [nameEl, sideEl, speciesEl, classEl, originEl, voiceEl, colorEl].filter(Boolean).forEach((el) => {
   el.addEventListener('input', refreshPreview);
   el.addEventListener('change', refreshPreview);
 });
 
-[speciesEl, classEl, originEl, voiceEl].forEach((el) => {
+[speciesEl, classEl, originEl, voiceEl].filter(Boolean).forEach((el) => {
   el.addEventListener('change', () => {
     toggleOtherInput(speciesEl, speciesOtherEl);
     toggleOtherInput(classEl, classOtherEl);
@@ -4774,15 +4779,15 @@ toggleOtherInput(classEl, classOtherEl);
 toggleOtherInput(originEl, originOtherEl);
 toggleOtherInput(voiceEl, voiceOtherEl);
 
-randomBtn.addEventListener('click', randomizeProfile);
-beginBtn.addEventListener('click', saveAndBegin);
+if (randomBtn) randomBtn.addEventListener('click', randomizeProfile);
+if (beginBtn) beginBtn.addEventListener('click', saveAndBegin);
 if (startCombatBtn) startCombatBtn.addEventListener('click', requestCombatStartFromLobby);
 if (backLinkEl) {
   backLinkEl.addEventListener('click', () => {
     stopFireplaceMusic();
   });
 }
-modelUploadBtn.addEventListener('click', uploadModelFile);
+if (modelUploadBtn) modelUploadBtn.addEventListener('click', uploadModelFile);
 if (modelRefreshBtn) modelRefreshBtn.addEventListener('click', loadAvailableCharacterModels);
 if (modelSelectEl) {
   modelSelectEl.addEventListener('change', async () => {
@@ -4826,6 +4831,7 @@ updateRigIdleButton();
 updateRigWalkButton();
 updateRigDanceButton();
 updateRigReboneButton();
+} // end !COMBAT_ARENA_MODE creator panel wiring
 
 if (profile.modelUrl) {
   applyUploadedAvatar(profile.modelUrl);
