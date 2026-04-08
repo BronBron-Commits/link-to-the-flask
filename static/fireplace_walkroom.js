@@ -67,17 +67,17 @@ renderer.setPixelRatio(window.devicePixelRatio || 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.08;
+renderer.toneMappingExposure = 1.24;
 document.body.appendChild(renderer.domElement);
 
-const hemi = new THREE.HemisphereLight(0x5f7397, 0x1d1814, 0.5);
+const hemi = new THREE.HemisphereLight(0x6f84ad, 0x241d17, 0.68);
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(0x95a8cf, 0.62);
+const key = new THREE.DirectionalLight(0xa3b7dd, 0.86);
 key.position.set(-3.4, 4.4, 2.8);
 scene.add(key);
 
-const fireGlow = new THREE.PointLight(0xff8f36, 2.3, 12, 2);
+const fireGlow = new THREE.PointLight(0xff9a45, 2.9, 13, 2);
 fireGlow.position.set(0, 1.3, -3.1);
 scene.add(fireGlow);
 
@@ -386,12 +386,12 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
     chest: makeQ(-0.03 + idleBreath * 0.01, 0, 0),
     neck: makeQ(0.02, 0, 0),
     head: makeQ(0.03, Math.sin(elapsed * 0.6) * 0.03, 0),
-    leftUpperArm: makeQ(0.18 + Math.sin(elapsed * 1.0 + 0.4) * 0.02, 0, -0.22),
-    leftLowerArm: makeQ(0.22, 0, -0.05),
-    leftHand: makeQ(0.08, 0, 0),
-    rightUpperArm: makeQ(0.18 + Math.sin(elapsed * 1.0) * 0.02, 0, 0.22),
-    rightLowerArm: makeQ(0.22, 0, 0.05),
-    rightHand: makeQ(0.08, 0, 0),
+    leftUpperArm: makeQ(0.05 + Math.sin(elapsed * 1.0 + 0.4) * 0.01, 0, -0.07),
+    leftLowerArm: makeQ(0.04, 0, -0.01),
+    leftHand: makeQ(0.02, 0, 0),
+    rightUpperArm: makeQ(0.05 + Math.sin(elapsed * 1.0) * 0.01, 0, 0.07),
+    rightLowerArm: makeQ(0.04, 0, 0.01),
+    rightHand: makeQ(0.02, 0, 0),
     leftUpperLeg: makeQ(-0.04, 0, 0.02),
     leftLowerLeg: makeQ(0.08, 0, 0),
     leftFoot: makeQ(-0.03, 0, 0),
@@ -671,7 +671,7 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
-  fireGlow.intensity = 2.15 + Math.sin(elapsed * 6.8) * 0.3 + Math.sin(elapsed * 10.4) * 0.18;
+  fireGlow.intensity = 2.65 + Math.sin(elapsed * 6.8) * 0.34 + Math.sin(elapsed * 10.4) * 0.2;
   flameCore.scale.set(1 + Math.sin(elapsed * 8.1) * 0.07, 1 + Math.sin(elapsed * 10.5 + 0.4) * 0.12, 1 + Math.sin(elapsed * 6.3) * 0.06);
   flameOuter.scale.set(1 + Math.sin(elapsed * 6.7 + 0.6) * 0.09, 1 + Math.sin(elapsed * 9.7) * 0.14, 1 + Math.sin(elapsed * 5.7) * 0.07);
 
