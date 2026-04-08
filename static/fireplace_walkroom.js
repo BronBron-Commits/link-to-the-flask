@@ -87,7 +87,7 @@ skyboxTextureLoader.load(
   }
 );
 
-const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 2.6, 6.4);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -956,6 +956,7 @@ const moveBounds = {
 let pointerLocked = false;
 let orbitYaw = 0;
 let orbitPitch = -0.12;
+let orbitDistance = 5.2;
 
 const moveSpeed = 3.4;
 const boostMultiplier = 2.2;
@@ -989,6 +990,13 @@ document.addEventListener('mousemove', (event) => {
   orbitYaw -= event.movementX * lookSensitivity;
   orbitPitch = THREE.MathUtils.clamp(orbitPitch - event.movementY * lookSensitivity, -0.72, 0.36);
 });
+
+renderer.domElement.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  const zoomFactor = Math.exp(event.deltaY * 0.0015);
+  orbitDistance *= zoomFactor;
+  orbitDistance = Math.max(0.65, orbitDistance);
+}, { passive: false });
 
 document.addEventListener('keydown', (event) => {
   const tag = document.activeElement ? document.activeElement.tagName : '';
@@ -1092,18 +1100,13 @@ function updateAvatarAnimation(dt, elapsed, isMoving) {
 }
 
 function updateCamera(dt) {
-  const distance = 5.2;
-  const horizontal = Math.cos(orbitPitch) * distance;
+  const horizontal = Math.cos(orbitPitch) * orbitDistance;
 
   tmpDesiredCam.set(
     actor.position.x + Math.sin(orbitYaw + Math.PI) * horizontal,
-    actor.position.y + 2.15 + Math.sin(orbitPitch) * distance,
+    actor.position.y + 2.15 + Math.sin(orbitPitch) * orbitDistance,
     actor.position.z + Math.cos(orbitYaw + Math.PI) * horizontal,
   );
-
-  tmpDesiredCam.x = THREE.MathUtils.clamp(tmpDesiredCam.x, -6.3, 6.3);
-  tmpDesiredCam.z = THREE.MathUtils.clamp(tmpDesiredCam.z, -5.9, 4.5);
-  tmpDesiredCam.y = THREE.MathUtils.clamp(tmpDesiredCam.y, 1.25, 6.2);
 
   const lerpAlpha = 1 - Math.exp(-8.0 * dt);
   camera.position.lerp(tmpDesiredCam, lerpAlpha);
