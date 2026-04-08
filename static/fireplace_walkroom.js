@@ -188,6 +188,7 @@ let activeCustomAction = null;
 const importedRigAnimator = {
   active: false,
   bones: new Map(),
+  idleOffsets: new Map(),
 };
 
 function disposeObject3D(root) {
@@ -318,9 +319,87 @@ function inferBonesFromSpatialLayout(root) {
   return inferred;
 }
 
+function getFirstBoneChild(bone) {
+  if (!bone || !Array.isArray(bone.children)) return null;
+  return bone.children.find((child) => child && child.isBone) || null;
+}
+
+function rotateBoneTowardWorldDirection(bone, desiredWorldDir) {
+  const child = getFirstBoneChild(bone);
+  if (!bone || !child || !desiredWorldDir) return false;
+
+  const start = new THREE.Vector3();
+  const end = new THREE.Vector3();
+  bone.getWorldPosition(start);
+  child.getWorldPosition(end);
+
+  const currentDir = end.sub(start);
+  if (currentDir.lengthSq() < 1e-8) return false;
+  currentDir.normalize();
+
+  const targetDir = desiredWorldDir.clone().normalize();
+  const deltaWorld = new THREE.Quaternion().setFromUnitVectors(currentDir, targetDir);
+
+  const parentWorldQ = new THREE.Quaternion();
+  if (bone.parent) {
+    bone.parent.getWorldQuaternion(parentWorldQ);
+  } else {
+    parentWorldQ.identity();
+  }
+
+  const parentWorldInv = parentWorldQ.clone().invert();
+  const localDelta = parentWorldInv.multiply(deltaWorld).multiply(parentWorldQ);
+  bone.quaternion.premultiply(localDelta);
+  bone.updateMatrixWorld(true);
+  return true;
+}
+
+function captureIdleOffsetForSlot(slot) {
+  const record = importedRigAnimator.bones.get(slot);
+  if (!record) return;
+  const baseInv = record.baseQuat.clone().invert();
+  const offset = baseInv.multiply(record.bone.quaternion.clone());
+  importedRigAnimator.idleOffsets.set(slot, offset);
+}
+
+function buildArmRestIdleOffsets() {
+  importedRigAnimator.idleOffsets.clear();
+
+  // Start from base pose before calibration.
+  for (const record of importedRigAnimator.bones.values()) {
+    record.bone.quaternion.copy(record.baseQuat);
+  }
+
+  const leftUpper = importedRigAnimator.bones.get('leftUpperArm')?.bone || null;
+  const rightUpper = importedRigAnimator.bones.get('rightUpperArm')?.bone || null;
+  const leftLower = importedRigAnimator.bones.get('leftLowerArm')?.bone || null;
+  const rightLower = importedRigAnimator.bones.get('rightLowerArm')?.bone || null;
+
+  const leftUpperTarget = new THREE.Vector3(-0.16, -0.98, 0.08);
+  const rightUpperTarget = new THREE.Vector3(0.16, -0.98, 0.08);
+  const leftLowerTarget = new THREE.Vector3(-0.12, -0.99, 0.03);
+  const rightLowerTarget = new THREE.Vector3(0.12, -0.99, 0.03);
+
+  rotateBoneTowardWorldDirection(leftUpper, leftUpperTarget);
+  rotateBoneTowardWorldDirection(rightUpper, rightUpperTarget);
+  rotateBoneTowardWorldDirection(leftLower, leftLowerTarget);
+  rotateBoneTowardWorldDirection(rightLower, rightLowerTarget);
+
+  captureIdleOffsetForSlot('leftUpperArm');
+  captureIdleOffsetForSlot('rightUpperArm');
+  captureIdleOffsetForSlot('leftLowerArm');
+  captureIdleOffsetForSlot('rightLowerArm');
+
+  // Restore base; runtime animation reapplies offsets every frame.
+  for (const record of importedRigAnimator.bones.values()) {
+    record.bone.quaternion.copy(record.baseQuat);
+  }
+}
+
 function setupImportedRigAnimator(root) {
   importedRigAnimator.active = false;
   importedRigAnimator.bones.clear();
+  importedRigAnimator.idleOffsets.clear();
   if (!root) return;
 
   const slots = {
@@ -367,6 +446,10 @@ function setupImportedRigAnimator(root) {
     || importedRigAnimator.bones.has('spine')
     || importedRigAnimator.bones.has('head');
   importedRigAnimator.active = hasCore && importedRigAnimator.bones.size >= 3;
+
+  if (importedRigAnimator.active) {
+    buildArmRestIdleOffsets();
+  }
 }
 
 function applyImportedRigFallbackAnimation(elapsed, isMoving) {
@@ -386,11 +469,11 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
     chest: makeQ(-0.03 + idleBreath * 0.01, 0, 0),
     neck: makeQ(0.02, 0, 0),
     head: makeQ(0.03, Math.sin(elapsed * 0.6) * 0.03, 0),
-    leftUpperArm: makeQ(0.05 + Math.sin(elapsed * 1.0 + 0.4) * 0.01, 0, -0.07),
-    leftLowerArm: makeQ(0.04, 0, -0.01),
+    leftUpperArm: makeQ(Math.sin(elapsed * 1.0 + 0.4) * 0.01, 0, 0),
+    leftLowerArm: makeQ(0, 0, 0),
     leftHand: makeQ(0.02, 0, 0),
-    rightUpperArm: makeQ(0.05 + Math.sin(elapsed * 1.0) * 0.01, 0, 0.07),
-    rightLowerArm: makeQ(0.04, 0, 0.01),
+    rightUpperArm: makeQ(Math.sin(elapsed * 1.0) * 0.01, 0, 0),
+    rightLowerArm: makeQ(0, 0, 0),
     rightHand: makeQ(0.02, 0, 0),
     leftUpperLeg: makeQ(-0.04, 0, 0.02),
     leftLowerLeg: makeQ(0.08, 0, 0),
@@ -420,7 +503,8 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
     : {};
 
   for (const [slot, record] of importedRigAnimator.bones.entries()) {
-    const idleQ = idlePose[slot] || makeQ();
+    const calibratedIdle = importedRigAnimator.idleOffsets.get(slot) || makeQ();
+    const idleQ = calibratedIdle.clone().multiply(idlePose[slot] || makeQ());
     const walkQ = walkLayer[slot] || makeQ();
     const offset = combineQ(idleQ, walkQ);
     record.bone.quaternion.copy(record.baseQuat).multiply(offset);
