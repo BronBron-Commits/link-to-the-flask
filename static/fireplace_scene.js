@@ -865,6 +865,7 @@ let fireplaceLobbyConnected = false;
 let fireplaceLobbyLocalSid = null;
 let fireplaceLobbyJoined = false;
 let fireplaceLobbyRoster = {};
+let fireplaceLobbyLastPresenceKey = '';
 
 const moveState = {
   forward: false,
@@ -4417,6 +4418,10 @@ function refreshPreview() {
     `Aura: ${profile.aura.toUpperCase()}`,
     `Model: ${profile.modelUrl ? 'Custom GLTF/GLB' : 'Procedural Avatar'}`,
   ].join('\n');
+
+  if (fireplaceLobbyJoined) {
+    publishLocalPresenceToLobby();
+  }
 }
 
 function randomizeProfile() {
@@ -4529,6 +4534,35 @@ function syncLobbyButtons() {
   if (beginBtn) beginBtn.disabled = fireplaceLobbyJoined;
 }
 
+function publishLocalPresenceToLobby(options = {}) {
+  const force = !!options.force;
+  const optimistic = options.optimistic !== false;
+  if (!fireplaceLobbySocket || !fireplaceLobbyJoined) return;
+
+  const payload = {
+    name: profile.name,
+    side: normalizeLobbySide(profile.side),
+    avatar: { modelUrl: profile.modelUrl || 'fallback' },
+  };
+  const key = `${payload.name}|${payload.side}|${payload.avatar.modelUrl}`;
+  if (!force && key === fireplaceLobbyLastPresenceKey) return;
+  fireplaceLobbyLastPresenceKey = key;
+
+  fireplaceLobbySocket.emit('player-update', payload);
+
+  if (optimistic && fireplaceLobbyLocalSid) {
+    const sid = String(fireplaceLobbyLocalSid);
+    fireplaceLobbyRoster[sid] = {
+      ...(fireplaceLobbyRoster[sid] || {}),
+      id: sid,
+      name: payload.name,
+      side: payload.side,
+      avatar: payload.avatar,
+    };
+    renderLobbyRoster();
+  }
+}
+
 async function loadAvailableCharacterModels() {
   if (!modelSelectEl) return;
   modelSelectEl.innerHTML = '';
@@ -4581,11 +4615,7 @@ function connectFireplaceLobby() {
     setLobbyStatus('Connected to fireplace lobby.');
     renderLobbyRoster();
     if (fireplaceLobbyJoined) {
-      fireplaceLobbySocket.emit('player-update', {
-        name: profile.name,
-        side: profile.side,
-        avatar: { modelUrl: profile.modelUrl || 'fallback' },
-      });
+      publishLocalPresenceToLobby({ force: true });
     }
   });
 
@@ -4647,11 +4677,7 @@ function joinFireplaceLobby() {
   syncLobbyButtons();
 
   if (fireplaceLobbyConnected && fireplaceLobbySocket) {
-    fireplaceLobbySocket.emit('player-update', {
-      name: profile.name,
-      side: profile.side,
-      avatar: { modelUrl: profile.modelUrl || 'fallback' },
-    });
+    publishLocalPresenceToLobby({ force: true });
   }
 
   setLobbyStatus(`Joined lobby as ${profile.name} (${profile.side}).`);
