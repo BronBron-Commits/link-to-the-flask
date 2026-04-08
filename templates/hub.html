@@ -338,6 +338,45 @@ async function boot() {
     setStatus(`Loaded ${(data || []).length} character(s).`, 'ok');
   }
 
+  async function persistParsedCharacter(parsedPayload, uploadedFileName) {
+    const character = (parsedPayload && typeof parsedPayload === 'object' && parsedPayload.character && typeof parsedPayload.character === 'object')
+      ? parsedPayload.character
+      : {};
+    const identity = (parsedPayload && typeof parsedPayload === 'object' && parsedPayload.master && typeof parsedPayload.master === 'object'
+      && parsedPayload.master.identity && typeof parsedPayload.master.identity === 'object')
+      ? parsedPayload.master.identity
+      : {};
+
+    const rawClassLevel = String(character.class_level || identity.class_level || '').trim();
+    const className = String(identity.class_name || '').trim() || rawClassLevel.replace(/\s+\d+\s*$/, '').trim() || null;
+    const rawLevel = Number(character.level ?? identity.level ?? 1);
+    const safeLevel = Number.isFinite(rawLevel) && rawLevel > 0 ? Math.floor(rawLevel) : 1;
+
+    const row = {
+      user_id: String((me.user && me.user.id) || '').trim(),
+      name: String(character.name || identity.character_name || uploadedFileName || 'Unnamed Character').trim(),
+      class_name: className,
+      species: String(character.species || identity.species || '').trim() || null,
+      level: safeLevel,
+      sheet_id: String(character.character_id || '').trim() || null,
+      source: 'pdf-import',
+      metadata: {
+        source_file: String(parsedPayload.source_file || uploadedFileName || '').trim() || null,
+        parsed_at_utc: new Date().toISOString(),
+      },
+    };
+
+    if (!row.user_id) {
+      return { ok: false, reason: 'missing-user-id' };
+    }
+
+    const { error: insertError } = await supabase.from('characters').insert(row);
+    if (insertError) {
+      return { ok: false, reason: insertError.message || 'insert-failed' };
+    }
+    return { ok: true };
+  }
+
   refreshBtn.addEventListener('click', loadCharacters);
 
   pdfUploadBtn.addEventListener('click', async () => {
@@ -359,7 +398,14 @@ async function boot() {
       setStatus(`PDF upload failed: ${payload.error || response.statusText}`, 'error');
       return;
     }
-    setStatus('PDF uploaded and parsed.', 'ok');
+
+    const persistResult = await persistParsedCharacter(payload, file.name);
+    if (!persistResult.ok) {
+      setStatus(`PDF parsed, but could not save character row: ${persistResult.reason}`, 'error');
+    } else {
+      setStatus('PDF uploaded, parsed, and saved to Supabase characters.', 'ok');
+    }
+
     if (pdfFileEl) {
       pdfFileEl.value = '';
     }
