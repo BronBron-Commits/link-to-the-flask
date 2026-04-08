@@ -79,7 +79,7 @@
     }
     .creator-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       gap: 10px;
     }
     .creator-field {
@@ -201,7 +201,7 @@
 
     <div class="creator-grid">
       <label class="creator-field full">
-        <span class="creator-label">Character Name</span>
+        <span class="creator-label">Display Name</span>
         <input id="cc-name" class="creator-input" type="text" placeholder="Alyra Stormglass" />
       </label>
 
@@ -225,36 +225,20 @@
           <option value="dm">DM (Dungeon Master)</option>
         </select>
       </label>
-
-      <label class="creator-field full">
-        <span class="creator-label">Player Model (.glb / .gltf)</span>
-        <div style="display:flex;gap:8px;">
-          <input id="cc-model-file" class="creator-input" type="file" accept=".glb,.gltf,.bin,image/*,model/gltf-binary,model/gltf+json" multiple />
-          <button id="cc-model-upload" class="creator-btn" type="button" style="flex:0 0 auto;padding:8px 10px;">Upload</button>
-        </div>
-        <div id="cc-model-status" style="margin-top:6px;font-size:10px;color:#6a739f;letter-spacing:0.03em;">No model uploaded — procedural avatar will be used.</div>
-        <div id="cc-rig-report" style="display:none;"></div>
-      </label>
-
-      <label class="creator-field full">
-        <span class="creator-label">Character Sheet (.pdf)</span>
-        <div style="display:flex;gap:8px;">
-          <input id="cc-pdf-file" class="creator-input" type="file" accept=".pdf" />
-          <button id="cc-pdf-upload" class="creator-btn" type="button" style="flex:0 0 auto;padding:8px 10px;">Upload</button>
-        </div>
-        <div id="cc-pdf-status" style="margin-top:6px;font-size:10px;color:#6a739f;letter-spacing:0.03em;">No sheet uploaded yet.</div>
-      </label>
     </div>
 
     <div id="creator-preview"></div>
 
     <div class="creator-actions">
       <button id="cc-begin" class="creator-btn primary">Join Social Scene</button>
-      <button id="cc-start-combat" class="creator-btn primary" type="button" style="display:none;">Start Combat</button>
     </div>
 
+    <div id="cc-model-status" style="display:none;"></div>
+    <div id="cc-rig-report" style="display:none;"></div>
+
     <div id="lobby-status">Not connected to lobby.</div>
-    <div id="lobby-roster">Lobby roster will appear here.</div>
+    <div id="social-presence" style="margin-top:8px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px;background:rgba(255,255,255,0.03);font-size:11px;line-height:1.45;color:#a7b0d8;">Players present: 0</div>
+    <div id="lobby-roster">Players present will appear here.</div>
 
     <div id="creator-note">Click the 3D scene to lock cursor. Mouse = camera, WASD = walk, Shift = sprint.</div>
   </aside>

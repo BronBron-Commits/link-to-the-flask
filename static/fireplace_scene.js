@@ -912,6 +912,7 @@ const _thirdPersonDesiredPos = new THREE.Vector3();
 const _thirdPersonForward = new THREE.Vector3();
 const _thirdPersonLookAt = new THREE.Vector3();
 const _worldUp = new THREE.Vector3(0, 1, 0);
+const _cameraToAnchor = new THREE.Vector3();
 const _retargetDeltaPos = new THREE.Vector3();
 const _retargetDeltaQuat = new THREE.Quaternion();
 const _retargetTargetQuat = new THREE.Quaternion();
@@ -941,6 +942,9 @@ function updateThirdPersonCamera(dt) {
     _thirdPersonAnchorPos.y + 2.1 + Math.sin(camPitch) * distance,
     _thirdPersonAnchorPos.z + Math.cos(camYaw) * horizontal,
   );
+  _thirdPersonDesiredPos.x = THREE.MathUtils.clamp(_thirdPersonDesiredPos.x, -6.2, 6.2);
+  _thirdPersonDesiredPos.z = THREE.MathUtils.clamp(_thirdPersonDesiredPos.z, -5.8, 4.4);
+  _thirdPersonDesiredPos.y = THREE.MathUtils.clamp(_thirdPersonDesiredPos.y, 1.3, 6.2);
   _thirdPersonLookAt.copy(_thirdPersonAnchorPos).add(new THREE.Vector3(0, 1.1, 0));
 
   const lerpAlpha = 1 - Math.exp(-7.0 * dt);
@@ -1043,6 +1047,7 @@ const randomBtn = document.getElementById('cc-random');
 const beginBtn = document.getElementById('cc-begin');
 const startCombatBtn = document.getElementById('cc-start-combat');
 const lobbyStatusEl = document.getElementById('lobby-status');
+const socialPresenceEl = document.getElementById('social-presence');
 const lobbyRosterEl = document.getElementById('lobby-roster');
 const roleEl = document.getElementById('cc-role');
 const backLinkEl = document.getElementById('back-link');
@@ -4482,15 +4487,14 @@ function refreshPreview() {
   applyTrainingDummyPoseToRoot(activeDummyRoot, profile.trainingDummy.pose);
 
   if (previewEl) {
+    const onlineCount = Object.keys(fireplaceLobbyRoster || {}).length;
     previewEl.textContent = [
       `Name: ${profile.name}`,
       `Side: ${profile.side}`,
-      `Class: ${profile.className}`,
-      `Species: ${profile.species}`,
-      `Origin: ${profile.origin}`,
-      `Voice: ${profile.voice}`,
       `Aura: ${profile.aura.toUpperCase()}`,
-      `Model: ${profile.modelUrl ? 'Custom GLTF/GLB' : 'Procedural Avatar'}`,
+      `Players present: ${onlineCount}`,
+      'Social mode controls:',
+      'Click scene to lock camera • Mouse look • WASD walk • Shift sprint',
     ].join('\n');
   }
 
@@ -4839,10 +4843,13 @@ function refreshTeamPlatformAssignments() {
 
 function renderLobbyRoster() {
   refreshTeamPlatformAssignments();
-  if (!lobbyRosterEl) return;
   const rows = Object.entries(fireplaceLobbyRoster || {});
+  if (socialPresenceEl) {
+    socialPresenceEl.textContent = `Players present: ${rows.length}`;
+  }
+  if (!lobbyRosterEl) return;
   if (!rows.length) {
-    lobbyRosterEl.textContent = 'Lobby roster will appear here.';
+    lobbyRosterEl.textContent = 'Players present will appear here.';
     return;
   }
   const lines = rows.map(([sid, entry]) => {
@@ -4856,7 +4863,6 @@ function renderLobbyRoster() {
 }
 
 function syncLobbyButtons() {
-  if (startCombatBtn) startCombatBtn.style.display = fireplaceLobbyJoined ? '' : 'none';
   if (beginBtn) beginBtn.disabled = fireplaceLobbyJoined;
 }
 
@@ -5140,41 +5146,12 @@ if (voiceEl && voiceOtherEl) toggleOtherInput(voiceEl, voiceOtherEl);
 
 if (randomBtn) randomBtn.addEventListener('click', randomizeProfile);
 if (beginBtn) beginBtn.addEventListener('click', saveAndBegin);
-if (startCombatBtn) startCombatBtn.addEventListener('click', requestCombatStartFromLobby);
 if (backLinkEl) {
   backLinkEl.addEventListener('click', () => {
     stopFireplaceMusic();
   });
 }
 if (modelUploadBtn) modelUploadBtn.addEventListener('click', uploadModelFile);
-
-// PDF character sheet upload
-const pdfFileEl = document.getElementById('cc-pdf-file');
-const pdfUploadBtn = document.getElementById('cc-pdf-upload');
-const pdfStatusEl = document.getElementById('cc-pdf-status');
-if (pdfUploadBtn) {
-  pdfUploadBtn.addEventListener('click', async () => {
-    const file = pdfFileEl && pdfFileEl.files && pdfFileEl.files[0];
-    if (!file) {
-      if (pdfStatusEl) pdfStatusEl.textContent = 'Select a .pdf file first.';
-      return;
-    }
-    if (pdfStatusEl) pdfStatusEl.textContent = 'Uploading…';
-    const fd = new FormData();
-    fd.append('pdf', file);
-    try {
-      const res = await fetch('/api/import-pdf', { method: 'POST', body: fd });
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json.ok !== false) {
-        if (pdfStatusEl) pdfStatusEl.textContent = `Sheet uploaded: ${file.name}`;
-      } else {
-        if (pdfStatusEl) pdfStatusEl.textContent = `Upload failed: ${json.error || res.statusText}`;
-      }
-    } catch (err) {
-      if (pdfStatusEl) pdfStatusEl.textContent = `Upload error: ${err.message}`;
-    }
-  });
-}
 
 if (modelRefreshBtn) modelRefreshBtn.addEventListener('click', loadAvailableCharacterModels);
 if (modelSelectEl) {
@@ -5329,12 +5306,12 @@ function animate() {
   if (isThirdPersonCameraActive()) {
     if (isSocialHangoutMode()) {
       _move.set(0, 0, 0);
-      camera.getWorldDirection(_forward);
-      _forward.y = 0;
-      if (_forward.lengthSq() < 1e-5) {
+      _cameraToAnchor.copy(localPreviewAnchor.position).sub(camera.position);
+      _cameraToAnchor.y = 0;
+      if (_cameraToAnchor.lengthSq() < 1e-5) {
         _forward.set(0, 0, -1);
       } else {
-        _forward.normalize();
+        _forward.copy(_cameraToAnchor).normalize();
       }
       _right.crossVectors(_forward, _worldUp).normalize();
 
