@@ -8,9 +8,11 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from uuid import uuid4
 
-from flask import request, jsonify, render_template, send_file, send_from_directory, Response
+from flask import request, jsonify, render_template, send_file, send_from_directory, Response, session
 from werkzeug.utils import secure_filename
 
 from extensions import app
@@ -25,6 +27,45 @@ from scripts.pdf_to_tidy_data import (
 
 
 ARTIFACTS_DIR = Path("artifacts")
+
+
+def _supabase_public_config() -> dict:
+    return {
+        "url": str(os.environ.get("SUPABASE_URL") or "").strip(),
+        "anon_key": str(os.environ.get("SUPABASE_ANON_KEY") or "").strip(),
+    }
+
+
+def _supabase_is_configured() -> bool:
+    cfg = _supabase_public_config()
+    return bool(cfg["url"] and cfg["anon_key"])
+
+
+def _fetch_supabase_user(access_token: str) -> dict | None:
+    token = str(access_token or "").strip()
+    config = _supabase_public_config()
+    if not token or not config["url"] or not config["anon_key"]:
+        return None
+    base_url = config["url"].rstrip("/")
+    req = urllib_request.Request(
+        f"{base_url}/auth/v1/user",
+        headers={
+            "apikey": config["anon_key"],
+            "Authorization": f"Bearer {token}",
+        },
+        method="GET",
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib_error.URLError, urllib_error.HTTPError, TimeoutError, json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _current_auth_user() -> dict | None:
+    auth_user = session.get("auth_user")
+    return auth_user if isinstance(auth_user, dict) else None
 
 
 def _resolve_contract(filename: str) -> Path | None:
@@ -164,7 +205,12 @@ def _import_pdf_to_contracts(source_path: Path) -> dict:
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    cfg = _supabase_public_config()
+    return render_template(
+        "index.html",
+        supabase_url=cfg["url"],
+        supabase_anon_key=cfg["anon_key"],
+    )
 
 
 @app.route("/game")
@@ -176,6 +222,46 @@ def game():
 def favicon():
     p = gs.STATIC_DIR / "favicon.ico"
     return send_file(p, mimetype="image/x-icon") if p.exists() else Response(status=204)
+
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    user = _current_auth_user()
+    return jsonify(
+        ok=True,
+        configured=_supabase_is_configured(),
+        authenticated=bool(user),
+        user=user,
+    )
+
+
+@app.route("/api/auth/session", methods=["POST"])
+def auth_session_create():
+    if not _supabase_is_configured():
+        return jsonify(ok=False, error="supabase-not-configured"), 503
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify(ok=False, error="invalid-payload"), 400
+    access_token = str(payload.get("accessToken") or "").strip()
+    if not access_token:
+        return jsonify(ok=False, error="missing-access-token"), 400
+    user = _fetch_supabase_user(access_token)
+    if not user:
+        return jsonify(ok=False, error="invalid-supabase-session"), 401
+    session["auth_user"] = {
+        "id": str(user.get("id") or "").strip(),
+        "email": str(user.get("email") or "").strip(),
+        "role": str(user.get("role") or "authenticated").strip() or "authenticated",
+    }
+    session["supabase_access_token"] = access_token
+    return jsonify(ok=True, authenticated=True, user=session["auth_user"])
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    session.pop("auth_user", None)
+    session.pop("supabase_access_token", None)
+    return jsonify(ok=True, authenticated=False)
 
 
 @app.route("/map3d")

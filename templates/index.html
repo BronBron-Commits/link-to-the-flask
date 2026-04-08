@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Link to the Flask</title>
+  <title>Paraval</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -79,7 +79,119 @@
       width: 240px;
       height: 1px;
       background: linear-gradient(90deg, transparent, rgba(210,175,70,0.45), transparent);
-      margin-bottom: 48px;
+      margin-bottom: 26px;
+    }
+
+    .auth-panel {
+      width: min(420px, calc(100vw - 40px));
+      padding: 20px;
+      border-radius: 18px;
+      border: 1px solid rgba(210,175,70,0.18);
+      background: linear-gradient(155deg, rgba(18,22,36,0.94), rgba(12,15,26,0.98));
+      box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+      margin-bottom: 24px;
+    }
+
+    .auth-title {
+      font-size: 0.76rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: #b9a677;
+      margin-bottom: 16px;
+      text-align: center;
+    }
+
+    .auth-fields {
+      display: grid;
+      gap: 10px;
+    }
+
+    .auth-input {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.18);
+      background: rgba(7, 10, 17, 0.92);
+      color: #efe3bd;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-family: Consolas, 'Courier New', monospace;
+      outline: none;
+    }
+    .auth-input:focus {
+      border-color: rgba(210,175,70,0.5);
+      box-shadow: 0 0 0 2px rgba(210,175,70,0.12);
+    }
+
+    .auth-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .auth-btn {
+      flex: 1 1 0;
+      min-width: 110px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.24);
+      background: rgba(15, 19, 31, 0.96);
+      color: #f0dfa0;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+    .auth-btn:hover {
+      border-color: rgba(210,175,70,0.55);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+    }
+    .auth-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .auth-btn.primary {
+      background: linear-gradient(155deg, rgba(80,61,20,0.98), rgba(39,31,14,0.98));
+    }
+
+    .auth-status {
+      min-height: 20px;
+      margin-top: 14px;
+      color: #8f8778;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    .auth-status.is-error {
+      color: #d58f83;
+    }
+
+    .auth-status.is-success {
+      color: #a8c78a;
+    }
+
+    .account-chip {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(210,175,70,0.16);
+      background: rgba(255,255,255,0.04);
+      color: #d9cfae;
+      font-size: 0.78rem;
+      font-family: Consolas, 'Courier New', monospace;
+      text-align: center;
+      word-break: break-word;
+    }
+
+    .account-chip.show {
+      display: block;
     }
 
     .enter-link {
@@ -99,6 +211,9 @@
       transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
       box-shadow: 0 8px 32px rgba(0,0,0,0.5);
       cursor: default;
+    }
+    .enter-link:disabled {
+      opacity: 0.7;
     }
     .enter-link:hover {
       border-color: rgba(210,175,70,0.6);
@@ -122,7 +237,7 @@
     }
   </style>
 </head>
-<body>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
 
 <canvas id="bg-canvas"></canvas>
 
@@ -158,7 +273,22 @@
   <p class="subtitle">A Tabletop Game Engine</p>
   <div class="divider"></div>
 
-  <button class="enter-link" type="button">Enter</button>
+  <section class="auth-panel" aria-label="Player account login">
+    <div class="auth-title">Player Accounts</div>
+    <div class="auth-fields">
+      <input id="auth-email" class="auth-input" type="email" autocomplete="email" placeholder="Email" />
+      <input id="auth-password" class="auth-input" type="password" autocomplete="current-password" placeholder="Password" />
+    </div>
+    <div class="auth-actions">
+      <button id="auth-sign-in" class="auth-btn primary" type="button">Sign In</button>
+      <button id="auth-sign-up" class="auth-btn" type="button">Create Account</button>
+      <button id="auth-sign-out" class="auth-btn" type="button" disabled>Sign Out</button>
+    </div>
+    <div id="auth-status" class="auth-status">Checking auth backend...</div>
+    <div id="auth-account" class="account-chip"></div>
+  </section>
+
+  <button id="enter-button" class="enter-link" type="button">Enter</button>
 </div>
 
 <p class="footer">Paraval &nbsp;·&nbsp; Tabletop Game Engine</p>
@@ -202,6 +332,170 @@
   }
   frame();
 })();
+</script>
+
+<script type="module">
+const emailEl = document.getElementById('auth-email');
+const passwordEl = document.getElementById('auth-password');
+const signInBtn = document.getElementById('auth-sign-in');
+const signUpBtn = document.getElementById('auth-sign-up');
+const signOutBtn = document.getElementById('auth-sign-out');
+const statusEl = document.getElementById('auth-status');
+const accountEl = document.getElementById('auth-account');
+const enterBtn = document.getElementById('enter-button');
+
+const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
+const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+
+function setStatus(message, tone = '') {
+  statusEl.textContent = message;
+  statusEl.className = `auth-status${tone ? ` is-${tone}` : ''}`;
+}
+
+function setInputsDisabled(disabled) {
+  emailEl.disabled = disabled;
+  passwordEl.disabled = disabled;
+  signInBtn.disabled = disabled;
+  signUpBtn.disabled = disabled;
+}
+
+function renderAccount(user) {
+  if (user && (user.email || user.id)) {
+    accountEl.textContent = `Signed in as ${user.email || user.id}`;
+    accountEl.classList.add('show');
+    signOutBtn.disabled = false;
+  } else {
+    accountEl.textContent = '';
+    accountEl.classList.remove('show');
+    signOutBtn.disabled = true;
+  }
+}
+
+async function readBackendSession() {
+  const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
+  const payload = await response.json();
+  renderAccount(payload.user || null);
+  if (!payload.configured) {
+    setStatus('Supabase auth is not configured on this server yet.', 'error');
+    setInputsDisabled(true);
+    return payload;
+  }
+  if (payload.authenticated && payload.user) {
+    setStatus('Backend session active.', 'success');
+  } else {
+    setStatus('Sign in or create an account to attach a player identity.', '');
+  }
+  return payload;
+}
+
+async function exchangeSession(session) {
+  const response = await fetch('/api/auth/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ accessToken: session.access_token }),
+  });
+  const payload = await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }));
+  if (!response.ok || payload.ok === false) {
+    throw new Error(String(payload.error || response.statusText || 'auth-session-failed'));
+  }
+  renderAccount(payload.user || null);
+  setStatus('Signed in. Backend session established.', 'success');
+}
+
+enterBtn.addEventListener('click', () => {
+  setStatus('Enter is reserved for the next navigation step. Account auth is live now.', '');
+});
+
+const backendState = await readBackendSession();
+if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
+  setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
+} else {
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+
+  const current = await supabase.auth.getSession();
+  if (current.data.session) {
+    try {
+      await exchangeSession(current.data.session);
+    } catch (error) {
+      setStatus(`Session restore failed: ${error.message}`, 'error');
+    }
+  }
+
+  signInBtn.addEventListener('click', async () => {
+    const email = String(emailEl.value || '').trim();
+    const password = String(passwordEl.value || '');
+    if (!email || !password) {
+      setStatus('Enter both email and password.', 'error');
+      return;
+    }
+    setStatus('Signing in...', '');
+    const result = await supabase.auth.signInWithPassword({ email, password });
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    try {
+      await exchangeSession(result.data.session);
+    } catch (error) {
+      setStatus(`Backend session failed: ${error.message}`, 'error');
+    }
+  });
+
+  signUpBtn.addEventListener('click', async () => {
+    const email = String(emailEl.value || '').trim();
+    const password = String(passwordEl.value || '');
+    if (!email || !password) {
+      setStatus('Enter both email and password.', 'error');
+      return;
+    }
+    setStatus('Creating account...', '');
+    const result = await supabase.auth.signUp({ email, password });
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    if (result.data.session) {
+      try {
+        await exchangeSession(result.data.session);
+      } catch (error) {
+        setStatus(`Backend session failed: ${error.message}`, 'error');
+      }
+      return;
+    }
+    setStatus('Account created. Check your email if confirmation is required by Supabase.', 'success');
+  });
+
+  signOutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    renderAccount(null);
+    setStatus('Signed out.', '');
+  });
+
+  supabase.auth.onAuthStateChange(async (_event, session) => {
+    if (!session) {
+      renderAccount(null);
+      return;
+    }
+    try {
+      await exchangeSession(session);
+    } catch (error) {
+      setStatus(`Backend session failed: ${error.message}`, 'error');
+    }
+  });
+}
 </script>
 
 </body>
