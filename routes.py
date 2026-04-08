@@ -236,11 +236,11 @@ def index():
     )
 
 
-@app.route("/account")
-def account():
+@app.route("/hub")
+def hub():
     cfg = _supabase_public_config()
     return render_template(
-        "account.html",
+        "hub.html",
         supabase_url=cfg["url"],
         supabase_anon_key=cfg["anon_key"],
     )

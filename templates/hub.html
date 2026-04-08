@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hub — Paraval</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #06090f;
+      color: #e8e0d0;
+      font-family: Georgia, 'Times New Roman', serif;
+      overflow: hidden;
+    }
+
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .panel {
+      width: min(920px, calc(100vw - 40px));
+      max-height: calc(100vh - 120px);
+      overflow: auto;
+      border-radius: 20px;
+      border: 1px solid rgba(210,175,70,0.16);
+      background: linear-gradient(155deg, rgba(18,22,36,0.94), rgba(12,15,26,0.98));
+      box-shadow: 0 22px 56px rgba(0,0,0,0.6);
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-size: 1.5rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #f0dfa0;
+    }
+
+    .sub {
+      color: #8f8778;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid rgba(210,175,70,0.24);
+      background: rgba(15, 19, 31, 0.96);
+      color: #f0dfa0;
+      padding: 9px 12px;
+      border-radius: 10px;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn:hover {
+      border-color: rgba(210,175,70,0.55);
+    }
+
+    .status {
+      margin: 12px 0 14px;
+      min-height: 22px;
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.85rem;
+    }
+
+    .status.error { color: #d58f83; }
+    .status.ok { color: #a8c78a; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      border: 1px solid rgba(210,175,70,0.15);
+      background: rgba(255,255,255,0.03);
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .card h3 {
+      color: #e8d898;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      letter-spacing: 0.06em;
+    }
+
+    .meta {
+      color: #9e937c;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.74rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .empty {
+      border: 1px dashed rgba(210,175,70,0.2);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      color: #857d6f;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.86rem;
+    }
+  </style>
+</head>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
+<canvas id="bg-canvas"></canvas>
+
+<div class="shell">
+  <section class="panel">
+    <div class="header">
+      <div>
+        <h1 class="title">Character Hub</h1>
+        <p id="whoami" class="sub">Loading account...</p>
+      </div>
+      <div class="actions">
+        <button id="refresh-btn" class="btn" type="button">Refresh</button>
+        <a class="btn" href="/map3d">Enter World</a>
+        <button id="sign-out-btn" class="btn" type="button">Sign Out</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">Checking session...</div>
+    <div id="character-grid" class="grid"></div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+  function rand(a, b) { return a + Math.random() * (b - a); }
+  for (let i = 0; i < 90; i++) {
+    particles.push({ x: rand(0, W), y: rand(0, H), r: rand(0.4, 1.6), vx: rand(-0.06, 0.06), vy: rand(-0.14, -0.04), alpha: rand(0.08, 0.45), hue: rand(32, 52) });
+  }
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.y < -4) { p.y = H + 4; p.x = rand(0, W); }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 80%, 68%, ${p.alpha})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
+
+<script type="module">
+const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
+const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+const whoamiEl = document.getElementById('whoami');
+const statusEl = document.getElementById('status');
+const gridEl = document.getElementById('character-grid');
+const refreshBtn = document.getElementById('refresh-btn');
+const signOutBtn = document.getElementById('sign-out-btn');
+
+function setStatus(msg, tone = '') {
+  statusEl.textContent = msg;
+  statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderCharacters(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    gridEl.innerHTML = '<div class="empty">No characters found yet in Supabase.</div>';
+    return;
+  }
+  gridEl.innerHTML = rows.map((row, idx) => {
+    const name = row.name || row.character_name || row.title || `Character ${idx + 1}`;
+    const level = row.level ?? row.character_level ?? '-';
+    const cls = row.class || row.class_name || '-';
+    const species = row.species || row.race || '-';
+    const updated = row.updated_at || row.created_at || '-';
+    return `
+      <article class="card">
+        <h3>${escapeHtml(name)}</h3>
+        <div class="meta">Class: ${escapeHtml(cls)}\nSpecies: ${escapeHtml(species)}\nLevel: ${escapeHtml(level)}\nUpdated: ${escapeHtml(updated)}</div>
+      </article>
+    `;
+  }).join('');
+}
+
+async function boot() {
+  const meRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
+  const me = await meRes.json();
+  if (!me.authenticated || !me.user) {
+    window.location.replace('/');
+    return;
+  }
+
+  whoamiEl.textContent = `Signed in as ${me.user.displayName || me.user.email || me.user.id}`;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    setStatus('Supabase is not configured on this server.', 'error');
+    return;
+  }
+
+  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+  });
+
+  async function loadCharacters() {
+    setStatus('Loading characters from Supabase...');
+    const { data, error } = await supabase
+      .from('characters')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(50);
+    if (error) {
+      setStatus(`Could not load characters: ${error.message}`, 'error');
+      renderCharacters([]);
+      return;
+    }
+    renderCharacters(data || []);
+    setStatus(`Loaded ${(data || []).length} character(s).`, 'ok');
+  }
+
+  refreshBtn.addEventListener('click', loadCharacters);
+
+  signOutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    window.location.replace('/');
+  });
+
+  supabase.auth.onAuthStateChange((_event, session) => {
+    if (!session) {
+      window.location.replace('/');
+    }
+  });
+
+  await loadCharacters();
+}
+
+boot().catch((err) => {
+  setStatus(`Hub init failed: ${err && err.message ? err.message : String(err)}`, 'error');
+});
+</script>
+</body>
+</html>
