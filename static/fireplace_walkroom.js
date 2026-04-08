@@ -158,11 +158,33 @@ const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.43, 1.05, 14), fallbackClo
 cloak.position.y = 0.64;
 fallbackAvatar.add(cloak);
 
-const legs = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.8, 0.24), fallbackBodyMat);
-legs.position.y = 0.42;
-fallbackAvatar.add(legs);
+const leftArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.4, 4, 8), fallbackSkinMat);
+leftArm.position.set(-0.34, 1.03, 0.02);
+leftArm.rotation.z = Math.PI / 10;
+fallbackAvatar.add(leftArm);
+
+const rightArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.4, 4, 8), fallbackSkinMat);
+rightArm.position.set(0.34, 1.03, 0.02);
+rightArm.rotation.z = -Math.PI / 10;
+fallbackAvatar.add(rightArm);
+
+const leftLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.72, 4, 8), fallbackBodyMat);
+leftLeg.position.set(-0.14, 0.4, 0.02);
+fallbackAvatar.add(leftLeg);
+
+const rightLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.72, 4, 8), fallbackBodyMat);
+rightLeg.position.set(0.14, 0.4, 0.02);
+fallbackAvatar.add(rightLeg);
+
+const boots = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.3), new THREE.MeshStandardMaterial({ color: 0x1a1520, roughness: 0.86, metalness: 0.03 }));
+boots.position.set(0, 0.06, 0.07);
+fallbackAvatar.add(boots);
 
 let customAvatarRoot = null;
+let avatarMixer = null;
+let customIdleAction = null;
+let customWalkAction = null;
+let activeCustomAction = null;
 
 function disposeObject3D(root) {
   if (!root) return;
@@ -222,11 +244,42 @@ async function loadSelectedAvatar() {
       customAvatarRoot = null;
     }
 
+    avatarMixer = null;
+    customIdleAction = null;
+    customWalkAction = null;
+    activeCustomAction = null;
+
     normalizeAvatarRoot(root);
     customAvatarRoot = root;
     actor.add(customAvatarRoot);
     fallbackAvatar.visible = false;
+
+    if (Array.isArray(gltf.animations) && gltf.animations.length) {
+      const clips = gltf.animations;
+      avatarMixer = new THREE.AnimationMixer(customAvatarRoot);
+      const findClip = (matcher) => clips.find((clip) => matcher.test(String(clip.name || '').toLowerCase())) || null;
+      const idleClip = findClip(/idle|stand|breath|rest/);
+      const walkClip = findClip(/walk|locomotion|move|run/);
+
+      if (idleClip) {
+        customIdleAction = avatarMixer.clipAction(idleClip);
+        customIdleAction.enabled = true;
+        customIdleAction.setEffectiveWeight(1);
+        customIdleAction.play();
+        activeCustomAction = customIdleAction;
+      }
+
+      if (walkClip) {
+        customWalkAction = avatarMixer.clipAction(walkClip);
+        customWalkAction.enabled = true;
+        customWalkAction.setEffectiveWeight(0);
+      }
+    }
   } catch (_err) {
+    avatarMixer = null;
+    customIdleAction = null;
+    customWalkAction = null;
+    activeCustomAction = null;
     fallbackAvatar.visible = true;
   }
 }
@@ -304,6 +357,15 @@ document.addEventListener('keyup', (event) => {
 
 const clock = new THREE.Clock();
 
+function switchCustomAction(nextAction, fadeSeconds = 0.18) {
+  if (!nextAction || nextAction === activeCustomAction) return;
+  if (activeCustomAction) {
+    activeCustomAction.fadeOut(fadeSeconds);
+  }
+  nextAction.reset().fadeIn(fadeSeconds).play();
+  activeCustomAction = nextAction;
+}
+
 function updatePlayerMovement(dt) {
   tmpTarget.copy(actor.position).add(new THREE.Vector3(0, 1.05, 0));
 
@@ -322,15 +384,53 @@ function updatePlayerMovement(dt) {
   if (moveState.right) tmpMove.add(tmpRight);
   if (moveState.left) tmpMove.sub(tmpRight);
 
+  let isMoving = false;
   if (tmpMove.lengthSq() > 0) {
     tmpMove.normalize();
     const speed = moveSpeed * (moveState.boost ? boostMultiplier : 1);
     actor.position.addScaledVector(tmpMove, speed * dt);
+    isMoving = true;
 
     actor.position.x = THREE.MathUtils.clamp(actor.position.x, moveBounds.minX, moveBounds.maxX);
     actor.position.z = THREE.MathUtils.clamp(actor.position.z, moveBounds.minZ, moveBounds.maxZ);
 
     actor.rotation.y = Math.atan2(tmpMove.x, tmpMove.z);
+  }
+  return isMoving;
+}
+
+function updateAvatarAnimation(dt, elapsed, isMoving) {
+  if (avatarMixer) {
+    if (isMoving && customWalkAction) {
+      switchCustomAction(customWalkAction);
+    } else if (!isMoving && customIdleAction) {
+      switchCustomAction(customIdleAction);
+    }
+    avatarMixer.update(dt);
+    return;
+  }
+
+  const walkPhase = elapsed * (moveState.boost ? 9.5 : 6.2);
+  const stride = Math.sin(walkPhase);
+  const antiStride = Math.sin(walkPhase + Math.PI);
+  const idleBreath = Math.sin(elapsed * 2.1);
+
+  fallbackAvatar.position.y = isMoving ? 0 : idleBreath * 0.02;
+
+  if (isMoving) {
+    leftArm.rotation.x = antiStride * 0.55;
+    rightArm.rotation.x = stride * 0.55;
+    leftLeg.rotation.x = stride * 0.7;
+    rightLeg.rotation.x = antiStride * 0.7;
+    torso.rotation.y = Math.sin(walkPhase * 0.5) * 0.05;
+    head.rotation.y = Math.sin(walkPhase * 0.45) * 0.04;
+  } else {
+    leftArm.rotation.x = Math.sin(elapsed * 1.3) * 0.04;
+    rightArm.rotation.x = Math.sin(elapsed * 1.3 + 0.9) * 0.04;
+    leftLeg.rotation.x = 0;
+    rightLeg.rotation.x = 0;
+    torso.rotation.y = Math.sin(elapsed * 0.8) * 0.02;
+    head.rotation.y = Math.sin(elapsed * 0.65) * 0.03;
   }
 }
 
@@ -363,11 +463,8 @@ function animate() {
   flameCore.scale.set(1 + Math.sin(elapsed * 8.1) * 0.07, 1 + Math.sin(elapsed * 10.5 + 0.4) * 0.12, 1 + Math.sin(elapsed * 6.3) * 0.06);
   flameOuter.scale.set(1 + Math.sin(elapsed * 6.7 + 0.6) * 0.09, 1 + Math.sin(elapsed * 9.7) * 0.14, 1 + Math.sin(elapsed * 5.7) * 0.07);
 
-  if (!customAvatarRoot) {
-    fallbackAvatar.position.y = Math.sin(elapsed * 2.1) * 0.02;
-  }
-
-  updatePlayerMovement(dt);
+  const isMoving = updatePlayerMovement(dt);
+  updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
 
   renderer.render(scene, camera);
