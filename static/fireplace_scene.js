@@ -340,6 +340,11 @@ const SHOW_NON_PLAYER_STAGING = false;
 const localPreviewAnchor = new THREE.Group();
 scene.add(localPreviewAnchor);
 
+const rosterAvatarLayer = new THREE.Group();
+scene.add(rosterAvatarLayer);
+
+const rosterAvatarVisuals = new Map();
+
 const pedestal = new THREE.Mesh(
   new THREE.CylinderGeometry(0.34, 0.4, 0.24, 22),
   new THREE.MeshStandardMaterial({ color: 0x3a2f33, roughness: 0.86, metalness: 0.08 })
@@ -4468,6 +4473,201 @@ function normalizeLobbySide(value) {
   return side === 'villains' ? 'villains' : 'heroes';
 }
 
+function getLobbyPlacement(team, index) {
+  const slots = lobbySlotLayouts[team] || [];
+  const fallbackZ = 2.6 - (index * 2.3);
+  const pos = slots[index] || { x: team === 'villains' ? 4.4 : -4.4, z: fallbackZ };
+  return {
+    x: pos.x,
+    y: 0,
+    z: pos.z,
+    rotationY: team === 'heroes' ? -Math.PI / 2 : Math.PI / 2,
+  };
+}
+
+function disposeObject3D(root) {
+  if (!root) return;
+  root.traverse((child) => {
+    if (child.geometry && typeof child.geometry.dispose === 'function') child.geometry.dispose();
+    const material = child.material;
+    if (Array.isArray(material)) {
+      material.forEach((mat) => {
+        if (mat && typeof mat.dispose === 'function') mat.dispose();
+      });
+    } else if (material && typeof material.dispose === 'function') {
+      material.dispose();
+    }
+  });
+}
+
+function createProceduralRosterAvatar(colorHex = '#7f6bff') {
+  const root = new THREE.Group();
+  root.position.y = 0.24;
+
+  const color = new THREE.Color(colorHex);
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: color.clone().offsetHSL(0, -0.08, -0.05),
+    roughness: 0.62,
+    metalness: 0.08,
+    emissive: color.clone().multiplyScalar(0.11),
+  });
+  const clothMat = new THREE.MeshStandardMaterial({
+    color: color.clone().offsetHSL(0, -0.2, -0.28),
+    roughness: 0.9,
+    metalness: 0.03,
+  });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xe9cdb0, roughness: 0.72, metalness: 0.01 });
+  const hairMat = new THREE.MeshStandardMaterial({ color: 0x2c1f18, roughness: 0.84, metalness: 0.02 });
+  const orbMat = new THREE.MeshStandardMaterial({
+    color: color.clone().offsetHSL(0, -0.06, 0.2),
+    roughness: 0.26,
+    metalness: 0.28,
+    emissive: color.clone().multiplyScalar(0.2),
+    emissiveIntensity: 0.45,
+  });
+
+  const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.285, 0.56, 6, 12), bodyMat);
+  torso.position.y = 1.02;
+  root.add(torso);
+
+  const shoulders = new THREE.Mesh(new THREE.CapsuleGeometry(0.36, 0.24, 4, 10), clothMat);
+  shoulders.rotation.z = Math.PI / 2;
+  shoulders.position.y = 1.22;
+  root.add(shoulders);
+
+  const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.43, 1.04, 14), clothMat);
+  cloak.position.y = 0.64;
+  cloak.rotation.y = Math.PI / 8;
+  root.add(cloak);
+
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 20), skinMat);
+  head.position.y = 1.58;
+  root.add(head);
+
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.205, 20, 16, 0, Math.PI * 2, 0, Math.PI * 0.58), hairMat);
+  hair.position.y = 1.64;
+  hair.position.z = -0.01;
+  root.add(hair);
+
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 16, 14), orbMat);
+  orb.position.set(0, 1.33, 0.34);
+  root.add(orb);
+
+  const leftArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.44, 4, 8), skinMat);
+  leftArm.position.set(-0.34, 1.04, 0.02);
+  leftArm.rotation.z = Math.PI / 11;
+  root.add(leftArm);
+
+  const rightArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.44, 4, 8), skinMat);
+  rightArm.position.set(0.34, 1.04, 0.02);
+  rightArm.rotation.z = -Math.PI / 11;
+  root.add(rightArm);
+
+  const leftLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.76, 4, 8), bodyMat);
+  leftLeg.position.set(-0.14, 0.35, 0.03);
+  root.add(leftLeg);
+
+  const rightLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.76, 4, 8), bodyMat);
+  rightLeg.position.set(0.14, 0.35, 0.03);
+  root.add(rightLeg);
+
+  const boots = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.3), new THREE.MeshStandardMaterial({ color: 0x18141e, roughness: 0.86, metalness: 0.02 }));
+  boots.position.set(0, 0.04, 0.06);
+  root.add(boots);
+
+  root.userData.orb = orb;
+  root.userData.leftArm = leftArm;
+  root.userData.rightArm = rightArm;
+  return root;
+}
+
+function removeRosterAvatarVisual(sid) {
+  const record = rosterAvatarVisuals.get(sid);
+  if (!record) return;
+  if (record.modelRoot) disposeObject3D(record.modelRoot);
+  if (record.proceduralRoot) disposeObject3D(record.proceduralRoot);
+  if (record.root && record.root.parent) record.root.parent.remove(record.root);
+  rosterAvatarVisuals.delete(sid);
+}
+
+async function ensureRosterAvatarVisual(sid, entry, placement) {
+  let record = rosterAvatarVisuals.get(sid);
+  if (!record) {
+    const root = new THREE.Group();
+    const proceduralRoot = createProceduralRosterAvatar(entry?.side === 'villains' ? '#ff8f8f' : '#8fe8bd');
+    root.add(proceduralRoot);
+    rosterAvatarLayer.add(root);
+    record = {
+      root,
+      proceduralRoot,
+      modelRoot: null,
+      modelUrl: null,
+      loadToken: 0,
+    };
+    rosterAvatarVisuals.set(sid, record);
+  }
+
+  record.root.position.set(placement.x, placement.y, placement.z);
+  record.root.rotation.y = placement.rotationY;
+
+  const desiredModelUrl = String(entry?.avatar?.modelUrl || 'fallback').trim() || 'fallback';
+  if (desiredModelUrl === record.modelUrl) return;
+  record.modelUrl = desiredModelUrl;
+  record.loadToken += 1;
+  const loadToken = record.loadToken;
+
+  if (record.modelRoot) {
+    if (record.modelRoot.parent) record.modelRoot.parent.remove(record.modelRoot);
+    disposeObject3D(record.modelRoot);
+    record.modelRoot = null;
+  }
+
+  if (desiredModelUrl === 'fallback') {
+    record.proceduralRoot.visible = true;
+    return;
+  }
+
+  record.proceduralRoot.visible = true;
+  try {
+    const root = await loadAvatarModel(desiredModelUrl);
+    if (!rosterAvatarVisuals.has(sid)) {
+      disposeObject3D(root);
+      return;
+    }
+    const latest = rosterAvatarVisuals.get(sid);
+    if (!latest || latest.loadToken !== loadToken) {
+      disposeObject3D(root);
+      return;
+    }
+    normalizeUploadedModel(root);
+    root.position.y = 0.36;
+    latest.modelRoot = root;
+    latest.root.add(root);
+    latest.proceduralRoot.visible = false;
+  } catch (_) {
+    const latest = rosterAvatarVisuals.get(sid);
+    if (latest) latest.proceduralRoot.visible = true;
+  }
+}
+
+function syncRosterAvatarVisuals(byTeam) {
+  const desiredSids = new Set();
+  const localSid = String(fireplaceLobbyLocalSid || '');
+
+  for (const team of ['heroes', 'villains']) {
+    const arr = byTeam[team] || [];
+    arr.forEach((entry, index) => {
+      if (String(entry.sid) === localSid) return;
+      desiredSids.add(String(entry.sid));
+      ensureRosterAvatarVisual(String(entry.sid), entry, getLobbyPlacement(team, index));
+    });
+  }
+
+  for (const sid of Array.from(rosterAvatarVisuals.keys())) {
+    if (!desiredSids.has(sid)) removeRosterAvatarVisual(sid);
+  }
+}
+
 function refreshTeamPlatformAssignments() {
   const rows = Object.entries(fireplaceLobbyRoster || {});
   const heroes = [];
@@ -4479,6 +4679,7 @@ function refreshTeamPlatformAssignments() {
       sid,
       name: escapeLobbyText(entry?.name || `Player-${String(sid).slice(0, 6)}`),
       side,
+      avatar: entry?.avatar || null,
     };
     if (side === 'villains') villains.push(payload);
     else heroes.push(payload);
@@ -4489,6 +4690,7 @@ function refreshTeamPlatformAssignments() {
 
   const byTeam = { heroes, villains };
   let localSlot = null;
+  let localPlacement = null;
 
   for (const slot of lobbyTeamSlots) {
     const arr = byTeam[slot.team] || [];
@@ -4501,7 +4703,10 @@ function refreshTeamPlatformAssignments() {
       const text = `${occupant.name}${isYou ? ' (You)' : ''}`;
       updateNameplateSprite(slot.plate, text, baseColor);
       slot.ringMat.opacity = isYou ? 0.82 : 0.58;
-      if (isYou) localSlot = slot;
+      if (isYou) {
+        localSlot = slot;
+        localPlacement = getLobbyPlacement(slot.team, slot.index);
+      }
     } else {
       const emptyText = `${slot.team.toUpperCase()}-${slot.index + 1}`;
       updateNameplateSprite(slot.plate, emptyText, '#8d95b7');
@@ -4509,21 +4714,38 @@ function refreshTeamPlatformAssignments() {
     }
   }
 
+  if (!localPlacement) {
+    for (const team of ['heroes', 'villains']) {
+      const arr = byTeam[team] || [];
+      const index = arr.findIndex((entry) => String(entry.sid) === String(fireplaceLobbyLocalSid || ''));
+      if (index >= 0) {
+        localPlacement = getLobbyPlacement(team, index);
+        break;
+      }
+    }
+  }
+
   if (!localSlot) {
     const fallbackTeam = normalizeLobbySide(profile.side);
     localSlot = lobbyTeamSlots.find((slot) => slot.team === fallbackTeam && slot.index === 0) || null;
+    if (!localPlacement) localPlacement = getLobbyPlacement(fallbackTeam, 0);
   }
 
   if (localSlot) {
     localPreviewAnchor.position.copy(localSlot.root.position);
     localPreviewAnchor.rotation.y = localSlot.team === 'heroes' ? -Math.PI / 2 : Math.PI / 2;
+  } else if (localPlacement) {
+    localPreviewAnchor.position.set(localPlacement.x, localPlacement.y, localPlacement.z);
+    localPreviewAnchor.rotation.y = localPlacement.rotationY;
   }
+
+  syncRosterAvatarVisuals(byTeam);
 }
 
 function renderLobbyRoster() {
+  refreshTeamPlatformAssignments();
   if (!lobbyRosterEl) return;
   const rows = Object.entries(fireplaceLobbyRoster || {});
-  refreshTeamPlatformAssignments();
   if (!rows.length) {
     lobbyRosterEl.textContent = 'Lobby roster will appear here.';
     return;
