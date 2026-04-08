@@ -872,6 +872,9 @@ const profile = {
 };
 
 const gltfLoader = new GLTFLoader();
+const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
+const fireplaceUrlSearch = new URLSearchParams(window.location.search || '');
 let uploadedAvatarRoot = null;
 let uploadedRigHelper = null;
 let uploadedTrainingDummyRoot = null;
@@ -1049,6 +1052,7 @@ const startCombatBtn = document.getElementById('cc-start-combat');
 const lobbyStatusEl = document.getElementById('lobby-status');
 const socialPresenceEl = document.getElementById('social-presence');
 const lobbyRosterEl = document.getElementById('lobby-roster');
+const sceneLabelEl = document.getElementById('scene-label');
 const roleEl = document.getElementById('cc-role');
 const backLinkEl = document.getElementById('back-link');
 const rigFrontFlipBtn = document.getElementById('cc-rig-backflip');
@@ -4534,6 +4538,38 @@ function setLobbyStatus(text) {
   lobbyStatusEl.textContent = text;
 }
 
+function hydrateProfileFromWorldSelection() {
+  let selectedCharacter = null;
+  try {
+    const raw = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
+    selectedCharacter = raw ? JSON.parse(raw) : null;
+  } catch (_err) {
+    selectedCharacter = null;
+  }
+
+  const selectedCharacterName = selectedCharacter && typeof selectedCharacter.name === 'string'
+    ? selectedCharacter.name.trim()
+    : '';
+  const selectedCharacterId = String(fireplaceUrlSearch.get('characterId') || '').trim();
+  const chosenName = selectedCharacterName || selectedCharacterId;
+  if (chosenName) {
+    profile.name = chosenName;
+  }
+
+  if (!FORCE_PROCEDURAL_PLAYERS) {
+    let storedModelUrl = '';
+    try {
+      storedModelUrl = String(localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || '').trim();
+    } catch (_err) {
+      storedModelUrl = '';
+    }
+    const selectedModelUrl = String(fireplaceUrlSearch.get('modelUrl') || '').trim() || storedModelUrl;
+    if (selectedModelUrl) {
+      profile.modelUrl = selectedModelUrl;
+    }
+  }
+}
+
 function syncLocalProfileFromLobbyEntry(entry) {
   if (!entry || String(entry.id || '') !== String(fireplaceLobbyLocalSid || '')) return;
   const authoritativeSide = normalizeLobbySide(entry.side);
@@ -4847,6 +4883,9 @@ function renderLobbyRoster() {
   if (socialPresenceEl) {
     socialPresenceEl.textContent = `Players present: ${rows.length}`;
   }
+  if (sceneLabelEl) {
+    sceneLabelEl.textContent = `Fireplace Social Scene • ${rows.length} Present`;
+  }
   if (!lobbyRosterEl) return;
   if (!rows.length) {
     lobbyRosterEl.textContent = 'Players present will appear here.';
@@ -5095,6 +5134,8 @@ try {
   // Ignore malformed local profile.
 }
 
+hydrateProfileFromWorldSelection();
+
 profile.side = String(profile.side || 'heroes').toLowerCase() === 'villains' ? 'villains' : 'heroes';
 
 if (!COMBAT_ARENA_MODE) {
@@ -5117,6 +5158,9 @@ syncLobbyButtons();
 renderLobbyRoster();
 connectFireplaceLobby();
 if (!COMBAT_ARENA_MODE) loadAvailableCharacterModels();
+if (!COMBAT_ARENA_MODE && !beginBtn && !fireplaceLobbyJoined) {
+  joinFireplaceLobby();
+}
 
 if (!COMBAT_ARENA_MODE) {
 [nameEl, sideEl, roleEl, speciesEl, classEl, originEl, voiceEl, colorEl].filter(Boolean).forEach((el) => {

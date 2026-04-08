@@ -195,53 +195,24 @@
   <a id="back-link" href="/">&larr; Back to Room</a>
   <div id="scene-label">Fireplace Social Scene</div>
 
-  <aside id="creator-panel">
-    <h2 id="creator-title">Fireplace Hangout</h2>
-    <p id="creator-sub">Bring your avatar, join the room, and walk around with third-person WASD controls.</p>
-
-    <div class="creator-grid">
-      <label class="creator-field full">
-        <span class="creator-label">Display Name</span>
-        <input id="cc-name" class="creator-input" type="text" placeholder="Alyra Stormglass" />
-      </label>
-
-      <label class="creator-field full">
-        <span class="creator-label">Aura Color</span>
-        <input id="cc-color" class="creator-input" type="color" value="#7f6bff" />
-      </label>
-
-      <label class="creator-field full">
-        <span class="creator-label">Faction Side</span>
-        <select id="cc-side" class="creator-select">
-          <option value="heroes">Heroes</option>
-          <option value="villains">Villains</option>
-        </select>
-      </label>
-
-      <label class="creator-field full">
-        <span class="creator-label">Role</span>
-        <select id="cc-role" class="creator-select">
-          <option value="player">Player</option>
-          <option value="dm">DM (Dungeon Master)</option>
-        </select>
-      </label>
-    </div>
-
+  <div id="fireplace-hidden-state" style="display:none;">
+    <input id="cc-name" type="text" value="Ashen Wanderer" />
+    <input id="cc-color" type="color" value="#7f6bff" />
+    <select id="cc-side">
+      <option value="heroes">Heroes</option>
+      <option value="villains">Villains</option>
+    </select>
+    <select id="cc-role">
+      <option value="player">Player</option>
+      <option value="dm">DM</option>
+    </select>
     <div id="creator-preview"></div>
-
-    <div class="creator-actions">
-      <button id="cc-begin" class="creator-btn primary">Join Social Scene</button>
-    </div>
-
-    <div id="cc-model-status" style="display:none;"></div>
-    <div id="cc-rig-report" style="display:none;"></div>
-
-    <div id="lobby-status">Not connected to lobby.</div>
-    <div id="social-presence" style="margin-top:8px;border:1px solid rgba(255,255,255,0.08);border-radius:10px;padding:8px;background:rgba(255,255,255,0.03);font-size:11px;line-height:1.45;color:#a7b0d8;">Players present: 0</div>
-    <div id="lobby-roster">Players present will appear here.</div>
-
-    <div id="creator-note">Click the 3D scene to lock cursor. Mouse = camera, WASD = walk, Shift = sprint.</div>
-  </aside>
+    <div id="cc-model-status"></div>
+    <div id="cc-rig-report"></div>
+    <div id="lobby-status"></div>
+    <div id="social-presence"></div>
+    <div id="lobby-roster"></div>
+  </div>
   <div id="combat-ui-root"></div>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
