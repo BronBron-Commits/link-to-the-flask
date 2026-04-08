@@ -1333,20 +1333,7 @@ function pointInRect(px, py, rect) {
 }
 
 canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    canvas.style.cursor = pointInRect(mx, my, fireplaceHotspot) ? 'pointer' : 'default';
-});
-
-canvas.addEventListener('click', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    if (pointInRect(mx, my, fireplaceHotspot)) {
-        stopMainPageMusic();
-        window.location.href = '/static/fireplace_scene.html';
-    }
+    canvas.style.cursor = 'default';
 });
 
 let last=performance.now();
