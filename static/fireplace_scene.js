@@ -5078,15 +5078,15 @@ if (!COMBAT_ARENA_MODE) {
   });
 });
 
-[speciesOtherEl, classOtherEl, originOtherEl, voiceOtherEl].forEach((el) => {
+[speciesOtherEl, classOtherEl, originOtherEl, voiceOtherEl].filter(Boolean).forEach((el) => {
   el.addEventListener('input', refreshPreview);
   el.addEventListener('change', refreshPreview);
 });
 
-toggleOtherInput(speciesEl, speciesOtherEl);
-toggleOtherInput(classEl, classOtherEl);
-toggleOtherInput(originEl, originOtherEl);
-toggleOtherInput(voiceEl, voiceOtherEl);
+if (speciesEl && speciesOtherEl) toggleOtherInput(speciesEl, speciesOtherEl);
+if (classEl && classOtherEl) toggleOtherInput(classEl, classOtherEl);
+if (originEl && originOtherEl) toggleOtherInput(originEl, originOtherEl);
+if (voiceEl && voiceOtherEl) toggleOtherInput(voiceEl, voiceOtherEl);
 
 if (randomBtn) randomBtn.addEventListener('click', randomizeProfile);
 if (beginBtn) beginBtn.addEventListener('click', saveAndBegin);
@@ -5159,9 +5159,9 @@ if (dummyPoseEl) {
 }
 if (rigFrontFlipBtn) rigFrontFlipBtn.addEventListener('click', startRigFrontFlipPreview);
 if (rigIdleBtn) rigIdleBtn.addEventListener('click', startRigIdlePreview);
-rigWalkBtn.addEventListener('click', startRigWalkPreview);
+if (rigWalkBtn) rigWalkBtn.addEventListener('click', startRigWalkPreview);
 if (rigDanceBtn) rigDanceBtn.addEventListener('click', startRigDancePreview);
-rigReboneBtn.addEventListener('click', toggleFallbackRebone);
+if (rigReboneBtn) rigReboneBtn.addEventListener('click', toggleFallbackRebone);
 if (rigClearRotationsBtn) rigClearRotationsBtn.addEventListener('click', clearBoneRotationOverrides);
 if (rigDiagnosticsBtn) rigDiagnosticsBtn.addEventListener('click', showRigDiagnostics);
 
