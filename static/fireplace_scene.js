@@ -245,6 +245,8 @@ rug.position.set(0, 0.01, -1.2);
 scene.add(rug);
 
 // Team staging platforms: heroes and villains face each other.
+const COMBAT_ARENA_MODE = !!window.__COMBAT_ARENA_MODE__;
+
 const lobbySlotLayouts = {
   heroes: [
     { x: -4.4, z: 2.6 },
@@ -334,8 +336,6 @@ const lobbyTeamSlots = COMBAT_ARENA_MODE ? [] : [
 ];
 
 const SHOW_NON_PLAYER_STAGING = false;
-
-const COMBAT_ARENA_MODE = !!window.__COMBAT_ARENA_MODE__;
 
 const localPreviewAnchor = new THREE.Group();
 scene.add(localPreviewAnchor);
