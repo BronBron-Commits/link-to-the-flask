@@ -68,6 +68,29 @@ def _current_auth_user() -> dict | None:
     return auth_user if isinstance(auth_user, dict) else None
 
 
+def _normalize_auth_user(user: dict) -> dict:
+    metadata = user.get("user_metadata") if isinstance(user.get("user_metadata"), dict) else {}
+    app_metadata = user.get("app_metadata") if isinstance(user.get("app_metadata"), dict) else {}
+    display_name = str(
+        metadata.get("display_name")
+        or metadata.get("full_name")
+        or metadata.get("name")
+        or ""
+    ).strip()
+    role = str(
+        app_metadata.get("role")
+        or user.get("role")
+        or "authenticated"
+    ).strip() or "authenticated"
+    return {
+        "id": str(user.get("id") or "").strip(),
+        "email": str(user.get("email") or "").strip(),
+        "displayName": display_name,
+        "role": role,
+        "emailConfirmed": bool(user.get("email_confirmed_at") or user.get("confirmed_at")),
+    }
+
+
 def _resolve_contract(filename: str) -> Path | None:
     for candidate in (gs.CONTRACTS_DIR / filename, gs.STATIC_DIR / filename):
         if candidate.exists():
@@ -248,11 +271,7 @@ def auth_session_create():
     user = _fetch_supabase_user(access_token)
     if not user:
         return jsonify(ok=False, error="invalid-supabase-session"), 401
-    session["auth_user"] = {
-        "id": str(user.get("id") or "").strip(),
-        "email": str(user.get("email") or "").strip(),
-        "role": str(user.get("role") or "authenticated").strip() or "authenticated",
-    }
+    session["auth_user"] = _normalize_auth_user(user)
     session["supabase_access_token"] = access_token
     return jsonify(ok=True, authenticated=True, user=session["auth_user"])
 

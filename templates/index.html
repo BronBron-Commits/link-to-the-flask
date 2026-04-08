@@ -83,13 +83,13 @@
     }
 
     .auth-panel {
-      width: min(420px, calc(100vw - 40px));
-      padding: 20px;
+      width: min(520px, calc(100vw - 40px));
+      padding: 22px;
       border-radius: 18px;
       border: 1px solid rgba(210,175,70,0.18);
       background: linear-gradient(155deg, rgba(18,22,36,0.94), rgba(12,15,26,0.98));
       box-shadow: 0 18px 48px rgba(0,0,0,0.55);
-      margin-bottom: 24px;
+      margin-bottom: 0;
     }
 
     .auth-title {
@@ -97,13 +97,66 @@
       letter-spacing: 0.22em;
       text-transform: uppercase;
       color: #b9a677;
-      margin-bottom: 16px;
+      margin-bottom: 10px;
       text-align: center;
+    }
+
+    .auth-subtitle {
+      color: #8f8778;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      text-align: center;
+      margin-bottom: 18px;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .auth-tab {
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.16);
+      background: rgba(255,255,255,0.03);
+      color: #a99d84;
+      padding: 10px 12px;
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+
+    .auth-tab.is-active {
+      color: #f0dfa0;
+      border-color: rgba(210,175,70,0.42);
+      background: rgba(180, 140, 40, 0.08);
     }
 
     .auth-fields {
       display: grid;
       gap: 10px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .field-wrap {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field-label {
+      color: #8f8778;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
     }
 
     .auth-input {
@@ -120,6 +173,10 @@
     .auth-input:focus {
       border-color: rgba(210,175,70,0.5);
       box-shadow: 0 0 0 2px rgba(210,175,70,0.12);
+    }
+
+    .auth-input[readonly] {
+      opacity: 0.78;
     }
 
     .auth-actions {
@@ -194,34 +251,44 @@
       display: block;
     }
 
-    .enter-link {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 220px;
-      padding: 16px 28px;
-      border-radius: 999px;
-      border: 1px solid rgba(210,175,70,0.35);
-      background: linear-gradient(155deg, rgba(18,22,36,0.96), rgba(12,15,26,0.98));
-      color: #f0dfa0;
-      text-decoration: none;
+    .account-summary {
+      display: none;
+      margin-top: 14px;
+      border: 1px solid rgba(210,175,70,0.12);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.025);
+      padding: 14px;
+      gap: 10px;
+    }
+
+    .account-summary.show {
+      display: grid;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      color: #d9cfae;
+      font-size: 0.82rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .summary-label {
+      color: #8f8778;
       text-transform: uppercase;
-      letter-spacing: 0.22em;
-      font-size: 0.88rem;
-      transition: border-color 0.25s, box-shadow 0.25s, transform 0.2s;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      cursor: default;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+      white-space: nowrap;
     }
-    .enter-link:disabled {
-      opacity: 0.7;
+
+    .summary-value {
+      text-align: right;
+      word-break: break-word;
     }
-    .enter-link:hover {
-      border-color: rgba(210,175,70,0.6);
-      box-shadow: 0 12px 44px rgba(0,0,0,0.65), 0 0 22px rgba(180,140,60,0.18);
-      transform: translateY(-3px);
-    }
-    .enter-link:active {
-      transform: translateY(-1px);
+
+    .is-hidden {
+      display: none !important;
     }
 
     /* ── Footer ── */
@@ -274,21 +341,51 @@
   <div class="divider"></div>
 
   <section class="auth-panel" aria-label="Player account login">
-    <div class="auth-title">Player Accounts</div>
+    <div class="auth-title">Player Account Management</div>
+    <p class="auth-subtitle">Create an account, sign in, manage your profile, and handle password reset directly from the main screen.</p>
+
+    <div class="auth-tabs" role="tablist" aria-label="Account mode tabs">
+      <button id="tab-sign-in" class="auth-tab is-active" type="button">Sign In</button>
+      <button id="tab-create" class="auth-tab" type="button">Create</button>
+      <button id="tab-manage" class="auth-tab" type="button">Manage</button>
+    </div>
+
     <div class="auth-fields">
-      <input id="auth-email" class="auth-input" type="email" autocomplete="email" placeholder="Email" />
-      <input id="auth-password" class="auth-input" type="password" autocomplete="current-password" placeholder="Password" />
+      <div class="field-wrap">
+        <label class="field-label" for="auth-display-name">Display Name</label>
+        <input id="auth-display-name" class="auth-input" type="text" autocomplete="nickname" placeholder="Paraval Wanderer" />
+      </div>
+      <div class="field-row">
+        <div class="field-wrap">
+          <label class="field-label" for="auth-email">Email</label>
+          <input id="auth-email" class="auth-input" type="email" autocomplete="email" placeholder="Email" />
+        </div>
+        <div class="field-wrap">
+          <label class="field-label" for="auth-password">Password</label>
+          <input id="auth-password" class="auth-input" type="password" autocomplete="current-password" placeholder="Password" />
+        </div>
+      </div>
+      <div id="confirm-wrap" class="field-wrap is-hidden">
+        <label class="field-label" for="auth-password-confirm">Confirm Password</label>
+        <input id="auth-password-confirm" class="auth-input" type="password" autocomplete="new-password" placeholder="Confirm password" />
+      </div>
     </div>
     <div class="auth-actions">
       <button id="auth-sign-in" class="auth-btn primary" type="button">Sign In</button>
       <button id="auth-sign-up" class="auth-btn" type="button">Create Account</button>
+      <button id="auth-save-profile" class="auth-btn is-hidden" type="button">Save Profile</button>
+      <button id="auth-reset-password" class="auth-btn is-hidden" type="button">Reset Password</button>
       <button id="auth-sign-out" class="auth-btn" type="button" disabled>Sign Out</button>
     </div>
     <div id="auth-status" class="auth-status">Checking auth backend...</div>
     <div id="auth-account" class="account-chip"></div>
+    <div id="auth-summary" class="account-summary">
+      <div class="summary-row"><span class="summary-label">Display</span><span id="summary-display-name" class="summary-value">-</span></div>
+      <div class="summary-row"><span class="summary-label">Email</span><span id="summary-email" class="summary-value">-</span></div>
+      <div class="summary-row"><span class="summary-label">Status</span><span id="summary-status" class="summary-value">Signed out</span></div>
+      <div class="summary-row"><span class="summary-label">User ID</span><span id="summary-id" class="summary-value">-</span></div>
+    </div>
   </section>
-
-  <button id="enter-button" class="enter-link" type="button">Enter</button>
 </div>
 
 <p class="footer">Paraval &nbsp;·&nbsp; Tabletop Game Engine</p>
@@ -337,15 +434,29 @@
 <script type="module">
 const emailEl = document.getElementById('auth-email');
 const passwordEl = document.getElementById('auth-password');
+const passwordConfirmEl = document.getElementById('auth-password-confirm');
+const displayNameEl = document.getElementById('auth-display-name');
 const signInBtn = document.getElementById('auth-sign-in');
 const signUpBtn = document.getElementById('auth-sign-up');
+const saveProfileBtn = document.getElementById('auth-save-profile');
+const resetPasswordBtn = document.getElementById('auth-reset-password');
 const signOutBtn = document.getElementById('auth-sign-out');
 const statusEl = document.getElementById('auth-status');
 const accountEl = document.getElementById('auth-account');
-const enterBtn = document.getElementById('enter-button');
+const summaryEl = document.getElementById('auth-summary');
+const summaryDisplayNameEl = document.getElementById('summary-display-name');
+const summaryEmailEl = document.getElementById('summary-email');
+const summaryStatusEl = document.getElementById('summary-status');
+const summaryIdEl = document.getElementById('summary-id');
+const confirmWrapEl = document.getElementById('confirm-wrap');
+const tabSignInEl = document.getElementById('tab-sign-in');
+const tabCreateEl = document.getElementById('tab-create');
+const tabManageEl = document.getElementById('tab-manage');
 
 const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
 const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+let currentMode = 'sign-in';
+let currentUser = null;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -353,21 +464,57 @@ function setStatus(message, tone = '') {
 }
 
 function setInputsDisabled(disabled) {
+  displayNameEl.disabled = disabled;
   emailEl.disabled = disabled;
   passwordEl.disabled = disabled;
+  passwordConfirmEl.disabled = disabled;
   signInBtn.disabled = disabled;
   signUpBtn.disabled = disabled;
+  saveProfileBtn.disabled = disabled;
+  resetPasswordBtn.disabled = disabled;
 }
 
 function renderAccount(user) {
+  currentUser = user || null;
   if (user && (user.email || user.id)) {
-    accountEl.textContent = `Signed in as ${user.email || user.id}`;
+    accountEl.textContent = `Signed in as ${user.displayName || user.email || user.id}`;
     accountEl.classList.add('show');
     signOutBtn.disabled = false;
+    summaryEl.classList.add('show');
+    summaryDisplayNameEl.textContent = user.displayName || 'Not set';
+    summaryEmailEl.textContent = user.email || '-';
+    summaryStatusEl.textContent = user.emailConfirmed ? 'Email confirmed' : 'Pending email confirmation';
+    summaryIdEl.textContent = user.id || '-';
+    displayNameEl.value = user.displayName || '';
+    if (!emailEl.value) emailEl.value = user.email || '';
   } else {
     accountEl.textContent = '';
     accountEl.classList.remove('show');
     signOutBtn.disabled = true;
+    summaryEl.classList.remove('show');
+    summaryDisplayNameEl.textContent = '-';
+    summaryEmailEl.textContent = '-';
+    summaryStatusEl.textContent = 'Signed out';
+    summaryIdEl.textContent = '-';
+  }
+}
+
+function applyMode(mode) {
+  currentMode = mode;
+  const isCreate = mode === 'create';
+  const isManage = mode === 'manage';
+  tabSignInEl.classList.toggle('is-active', mode === 'sign-in');
+  tabCreateEl.classList.toggle('is-active', isCreate);
+  tabManageEl.classList.toggle('is-active', isManage);
+  confirmWrapEl.classList.toggle('is-hidden', !isCreate);
+  signInBtn.classList.toggle('is-hidden', mode !== 'sign-in');
+  signUpBtn.classList.toggle('is-hidden', !isCreate);
+  saveProfileBtn.classList.toggle('is-hidden', !isManage);
+  resetPasswordBtn.classList.toggle('is-hidden', !isManage);
+  passwordEl.placeholder = isManage ? 'New password optional' : 'Password';
+  passwordEl.autocomplete = isManage ? 'new-password' : (isCreate ? 'new-password' : 'current-password');
+  if (!isCreate) {
+    passwordConfirmEl.value = '';
   }
 }
 
@@ -381,9 +528,9 @@ async function readBackendSession() {
     return payload;
   }
   if (payload.authenticated && payload.user) {
-    setStatus('Backend session active.', 'success');
+    setStatus('Account session active.', 'success');
   } else {
-    setStatus('Sign in or create an account to attach a player identity.', '');
+    setStatus('Create an account or sign in to manage your player profile.', '');
   }
   return payload;
 }
@@ -400,12 +547,8 @@ async function exchangeSession(session) {
     throw new Error(String(payload.error || response.statusText || 'auth-session-failed'));
   }
   renderAccount(payload.user || null);
-  setStatus('Signed in. Backend session established.', 'success');
+  setStatus('Account session synced with the backend.', 'success');
 }
-
-enterBtn.addEventListener('click', () => {
-  setStatus('Enter is reserved for the next navigation step. Account auth is live now.', '');
-});
 
 const backendState = await readBackendSession();
 if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
@@ -424,10 +567,15 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   if (current.data.session) {
     try {
       await exchangeSession(current.data.session);
+      applyMode('manage');
     } catch (error) {
       setStatus(`Session restore failed: ${error.message}`, 'error');
     }
   }
+
+  tabSignInEl.addEventListener('click', () => applyMode('sign-in'));
+  tabCreateEl.addEventListener('click', () => applyMode('create'));
+  tabManageEl.addEventListener('click', () => applyMode('manage'));
 
   signInBtn.addEventListener('click', async () => {
     const email = String(emailEl.value || '').trim();
@@ -444,6 +592,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     try {
       await exchangeSession(result.data.session);
+      applyMode('manage');
     } catch (error) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
@@ -452,12 +601,30 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   signUpBtn.addEventListener('click', async () => {
     const email = String(emailEl.value || '').trim();
     const password = String(passwordEl.value || '');
-    if (!email || !password) {
-      setStatus('Enter both email and password.', 'error');
+    const passwordConfirm = String(passwordConfirmEl.value || '');
+    const displayName = String(displayNameEl.value || '').trim();
+    if (!email || !password || !passwordConfirm) {
+      setStatus('Fill in email, password, and password confirmation.', 'error');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setStatus('Password confirmation does not match.', 'error');
+      return;
+    }
+    if (password.length < 8) {
+      setStatus('Use a password with at least 8 characters.', 'error');
       return;
     }
     setStatus('Creating account...', '');
-    const result = await supabase.auth.signUp({ email, password });
+    const result = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+        },
+      },
+    });
     if (result.error) {
       setStatus(result.error.message, 'error');
       return;
@@ -465,12 +632,66 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     if (result.data.session) {
       try {
         await exchangeSession(result.data.session);
+        applyMode('manage');
       } catch (error) {
         setStatus(`Backend session failed: ${error.message}`, 'error');
       }
       return;
     }
     setStatus('Account created. Check your email if confirmation is required by Supabase.', 'success');
+  });
+
+  saveProfileBtn.addEventListener('click', async () => {
+    const sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) {
+      setStatus('Sign in before updating your profile.', 'error');
+      return;
+    }
+    const displayName = String(displayNameEl.value || '').trim();
+    const nextPassword = String(passwordEl.value || '');
+    setStatus('Saving profile...', '');
+    const updatePayload = { data: { display_name: displayName } };
+    if (nextPassword) {
+      if (nextPassword.length < 8) {
+        setStatus('Use a password with at least 8 characters.', 'error');
+        return;
+      }
+      updatePayload.password = nextPassword;
+    }
+    const result = await supabase.auth.updateUser(updatePayload);
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    const refreshed = await supabase.auth.getSession();
+    if (refreshed.data.session) {
+      try {
+        await exchangeSession(refreshed.data.session);
+      } catch (error) {
+        setStatus(`Backend session failed: ${error.message}`, 'error');
+        return;
+      }
+    }
+    passwordEl.value = '';
+    passwordConfirmEl.value = '';
+    setStatus('Profile updated.', 'success');
+  });
+
+  resetPasswordBtn.addEventListener('click', async () => {
+    const email = String((currentUser && currentUser.email) || emailEl.value || '').trim();
+    if (!email) {
+      setStatus('An email address is required to send a reset link.', 'error');
+      return;
+    }
+    setStatus('Sending password reset email...', '');
+    const result = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    setStatus('Password reset email sent.', 'success');
   });
 
   signOutBtn.addEventListener('click', async () => {
@@ -481,20 +702,30 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       headers: { 'Content-Type': 'application/json' },
     });
     renderAccount(null);
+    displayNameEl.value = '';
+    passwordEl.value = '';
+    passwordConfirmEl.value = '';
+    applyMode('sign-in');
     setStatus('Signed out.', '');
   });
 
   supabase.auth.onAuthStateChange(async (_event, session) => {
     if (!session) {
       renderAccount(null);
+      applyMode('sign-in');
       return;
     }
     try {
       await exchangeSession(session);
+      applyMode('manage');
     } catch (error) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
   });
+}
+
+if (!currentUser) {
+  applyMode('sign-in');
 }
 </script>
 
