@@ -1943,22 +1943,23 @@ function resolvedSelectValue(selectEl, otherEl, fallback) {
 }
 
 function setSelectOrOther(selectEl, otherEl, value) {
+  if (!selectEl) return;
   const normalized = (value || '').trim();
   if (!normalized) {
     selectEl.selectedIndex = 0;
-    otherEl.value = '';
-    toggleOtherInput(selectEl, otherEl);
+    if (otherEl) otherEl.value = '';
+    if (otherEl) toggleOtherInput(selectEl, otherEl);
     return;
   }
   const hasOption = Array.from(selectEl.options).some((opt) => opt.value === normalized || opt.text === normalized);
   if (hasOption) {
     selectEl.value = normalized;
-    otherEl.value = '';
+    if (otherEl) otherEl.value = '';
   } else {
     selectEl.value = '__other__';
-    otherEl.value = normalized;
+    if (otherEl) otherEl.value = normalized;
   }
-  toggleOtherInput(selectEl, otherEl);
+  if (otherEl) toggleOtherInput(selectEl, otherEl);
 }
 
 function setProceduralAvatarVisible(visible) {
