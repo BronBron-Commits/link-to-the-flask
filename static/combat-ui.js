@@ -529,7 +529,7 @@ function render() {
         root.style.display = 'none';
         return;
     }
-    root.style.display = '';
+    root.style.display = 'block';
     currentActorChanged();
     const currentActor = getCurrentActor();
     const guidance = getGuidance();
