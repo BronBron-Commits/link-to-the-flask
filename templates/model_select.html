@@ -595,7 +595,7 @@ if (loadSelectedCharacter()) {
       setStatus('Select a model first.', 'error');
       return;
     }
-    const target = `/map3d?characterId=${encodeURIComponent(selectedCharacter.id)}&modelUrl=${encodeURIComponent(selectedModelUrl)}`;
+    const target = `/world-select?characterId=${encodeURIComponent(selectedCharacter.id)}&modelUrl=${encodeURIComponent(selectedModelUrl)}`;
     window.location.href = target;
   });
 

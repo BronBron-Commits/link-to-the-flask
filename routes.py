@@ -256,6 +256,16 @@ def model_select():
     )
 
 
+@app.route("/world-select")
+def world_select():
+    cfg = _supabase_public_config()
+    return render_template(
+        "world_select.html",
+        supabase_url=cfg["url"],
+        supabase_anon_key=cfg["anon_key"],
+    )
+
+
 @app.route("/game")
 def game():
     return render_template("game.html")
