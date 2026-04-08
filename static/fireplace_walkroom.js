@@ -3,8 +3,13 @@ import { GLTFLoader } from '/static/GLTFLoader.js';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
+const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
 
 const hudPlayerEl = document.getElementById('hud-player');
+const nameGateEl = document.getElementById('name-gate');
+const displayNameInputEl = document.getElementById('display-name-input');
+const displayNameSubmitEl = document.getElementById('display-name-submit');
+const displayNameErrorEl = document.getElementById('display-name-error');
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const queryCharacterId = String(urlSearch.get('characterId') || '').trim();
@@ -12,6 +17,17 @@ const queryModelUrl = String(urlSearch.get('modelUrl') || '').trim();
 
 let selectedCharacter = null;
 let selectedModelUrl = '';
+let chosenDisplayName = '';
+
+function sanitizeDisplayName(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
+}
+
+function updateHudPlayerText() {
+  if (!hudPlayerEl) return;
+  const nameText = chosenDisplayName || '(choose name to join)';
+  hudPlayerEl.textContent = `Player: ${nameText}\nModel: ${selectedModelUrl || 'Procedural fallback'}`;
+}
 
 function loadSelectionContext() {
   try {
@@ -48,9 +64,7 @@ function loadSelectionContext() {
     localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
   }
 
-  if (hudPlayerEl) {
-    hudPlayerEl.textContent = `Player: ${selectedCharacter.name || selectedCharacter.id}\nModel: ${selectedModelUrl || 'Procedural fallback'}`;
-  }
+  updateHudPlayerText();
 }
 
 loadSelectionContext();
@@ -573,7 +587,7 @@ function syncRemoteActors() {
 function publishLocalPresence(force = false) {
   if (!netState.socket || !netState.localSid) return;
   const payload = {
-    name: selectedCharacter?.name || selectedCharacter?.id || 'Traveler',
+    name: chosenDisplayName || 'Traveler',
     side: 'heroes',
     role: 'player',
     position: {
@@ -604,7 +618,7 @@ function publishLocalPresence(force = false) {
 }
 
 function connectMultiplayer() {
-  if (typeof window.io !== 'function') return;
+  if (netState.socket || typeof window.io !== 'function') return;
   const socket = window.io();
   netState.socket = socket;
 
@@ -666,6 +680,47 @@ function clipHasUsableMotion(clip) {
     }
   }
   return false;
+}
+
+function initDisplayNameGate() {
+  const storedName = sanitizeDisplayName(localStorage.getItem(DISPLAY_NAME_STORAGE_KEY) || '');
+  const suggested = storedName || sanitizeDisplayName(selectedCharacter?.name || selectedCharacter?.id || '');
+
+  if (displayNameInputEl) {
+    displayNameInputEl.value = suggested;
+    displayNameInputEl.focus();
+    displayNameInputEl.select();
+  }
+
+  const joinRoom = () => {
+    const candidate = sanitizeDisplayName(displayNameInputEl ? displayNameInputEl.value : '');
+    if (!candidate) {
+      if (displayNameErrorEl) displayNameErrorEl.textContent = 'Display name is required.';
+      if (displayNameInputEl) displayNameInputEl.focus();
+      return;
+    }
+
+    chosenDisplayName = candidate;
+    localStorage.setItem(DISPLAY_NAME_STORAGE_KEY, chosenDisplayName);
+    if (displayNameErrorEl) displayNameErrorEl.textContent = '';
+    if (nameGateEl) nameGateEl.style.display = 'none';
+
+    updateHudPlayerText();
+    connectMultiplayer();
+    publishLocalPresence(true);
+  };
+
+  if (displayNameSubmitEl) {
+    displayNameSubmitEl.addEventListener('click', joinRoom);
+  }
+  if (displayNameInputEl) {
+    displayNameInputEl.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        joinRoom();
+      }
+    });
+  }
 }
 
 function setupImportedRigAnimator(root) {
@@ -867,7 +922,7 @@ async function loadSelectedAvatar() {
 }
 
 loadSelectedAvatar();
-connectMultiplayer();
+initDisplayNameGate();
 
 const moveState = {
   forward: false,

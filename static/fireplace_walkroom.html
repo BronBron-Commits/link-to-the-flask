@@ -60,6 +60,76 @@
       font-size: 10px;
       line-height: 1.45;
     }
+    #name-gate {
+      position: fixed;
+      inset: 0;
+      z-index: 24;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at center, rgba(18, 24, 38, 0.72), rgba(4, 6, 11, 0.92));
+      backdrop-filter: blur(6px);
+    }
+    .name-card {
+      width: min(460px, calc(100vw - 36px));
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      background: rgba(8, 12, 22, 0.9);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56);
+      padding: 16px;
+    }
+    .name-title {
+      color: #e9d8a4;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .name-sub {
+      color: #9fb0da;
+      font-size: 12px;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+    #display-name-input {
+      width: 100%;
+      box-sizing: border-box;
+      border-radius: 10px;
+      border: 1px solid rgba(130, 146, 208, 0.52);
+      background: rgba(12, 16, 28, 0.92);
+      color: #e8edf7;
+      padding: 10px 12px;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 14px;
+      outline: none;
+    }
+    #display-name-input:focus {
+      border-color: rgba(184, 202, 255, 0.82);
+      box-shadow: 0 0 0 2px rgba(138, 161, 230, 0.25);
+    }
+    .name-actions {
+      margin-top: 10px;
+      display: flex;
+      justify-content: flex-end;
+    }
+    #display-name-submit {
+      border: 1px solid rgba(170, 192, 255, 0.7);
+      border-radius: 10px;
+      background: rgba(47, 64, 107, 0.94);
+      color: #eaf0ff;
+      padding: 9px 14px;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+    }
+    #display-name-error {
+      min-height: 16px;
+      margin-top: 8px;
+      color: #e0a8a8;
+      font-size: 11px;
+    }
   </style>
 </head>
 <body>
@@ -69,6 +139,18 @@
     <div id="hud-title">Paraval Social Room</div>
     <div id="hud-player">Loading player...</div>
     <div id="hud-controls">Click scene to lock camera. Mouse look. WASD move. Shift sprint.</div>
+  </section>
+
+  <section id="name-gate" aria-label="Display name prompt">
+    <div class="name-card">
+      <div class="name-title">Enter Social Room</div>
+      <div class="name-sub">What's your display name?</div>
+      <input id="display-name-input" type="text" maxlength="24" placeholder="Type your display name" />
+      <div id="display-name-error"></div>
+      <div class="name-actions">
+        <button id="display-name-submit" type="button">Join Room</button>
+      </div>
+    </div>
   </section>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
