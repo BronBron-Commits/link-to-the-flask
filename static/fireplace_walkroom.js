@@ -73,6 +73,20 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0a0d15);
 scene.fog = new THREE.Fog(0x0a0d15, 10, 34);
 
+const skyboxTextureLoader = new THREE.TextureLoader();
+skyboxTextureLoader.load(
+  '/static/skybox_night.jpg',
+  (texture) => {
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = texture;
+  },
+  undefined,
+  () => {
+    // Keep color fallback if skybox fails to load.
+  }
+);
+
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 2.6, 6.4);
 
