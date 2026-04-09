@@ -652,6 +652,15 @@ async function readBackendSession() {
 }
 
 async function exchangeSession(session) {
+  if (!window.__paravalAuth || typeof window.__paravalAuth !== 'object') {
+    window.__paravalAuth = {
+      page: 'index',
+      moduleLoaded: false,
+      clientReady: false,
+      lastError: null,
+      lastSessionExchange: null,
+    };
+  }
   const response = await fetch('/api/auth/session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -688,16 +697,26 @@ async function exchangeSession(session) {
   setStatus('Account session synced with the backend.', 'success');
 }
 
-const backendState = await readBackendSession();
-if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
-  setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
-} else {
+if (!window.__paravalAuth || typeof window.__paravalAuth !== 'object') {
   window.__paravalAuth = {
     page: 'index',
     moduleLoaded: false,
     clientReady: false,
     lastError: null,
+    lastSessionExchange: null,
   };
+} else if (!('lastSessionExchange' in window.__paravalAuth)) {
+  window.__paravalAuth.lastSessionExchange = null;
+}
+
+const backendState = await readBackendSession();
+if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
+  setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
+} else {
+  window.__paravalAuth.page = 'index';
+  window.__paravalAuth.moduleLoaded = false;
+  window.__paravalAuth.clientReady = false;
+  window.__paravalAuth.lastError = null;
   let createClient = null;
   try {
     ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
