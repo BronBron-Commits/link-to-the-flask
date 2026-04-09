@@ -966,6 +966,7 @@
         <div class="actions">
           <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
           <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
+          <button id="audio-toggle-btn" class="btn" type="button" aria-pressed="false">Sound: Off</button>
         </div>
       </div>
       <div id="context" class="meta"></div>
@@ -1255,6 +1256,7 @@ S: Who does? Tidus?
     const nextBookBtn = document.getElementById('next-book-btn');
     const backWorldsBtn = document.getElementById('back-worlds-btn');
     const enterWorldBtn = document.getElementById('enter-world-btn');
+    const audioToggleBtn = document.getElementById('audio-toggle-btn');
 
     const params = new URLSearchParams(window.location.search || '');
     const urlCharacterId = String(params.get('characterId') || '').trim();
@@ -1264,6 +1266,18 @@ S: Who does? Tidus?
     let selectedModelUrl = '';
     let currentIndex = 0;
     let activePulseTimer = null;
+
+    const audioState = {
+      enabled: false,
+      unlocked: false,
+      ctx: null,
+      masterGain: null,
+      roomGain: null,
+      roomSource: null,
+      roomFilter: null,
+      roomLfo: null,
+      roomLfoGain: null,
+    };
 
     const runeSetsByTheme = {
       divine: ['SOL', 'AUR', 'VIA', 'HALO', 'ALT', 'SAC'],
@@ -1439,6 +1453,175 @@ S: Who does? Tidus?
       window.setInterval(pulseOneName, 5200);
     }
 
+    function updateAudioToggleUi() {
+      if (!audioToggleBtn) return;
+      audioToggleBtn.setAttribute('aria-pressed', String(audioState.enabled));
+      audioToggleBtn.textContent = audioState.enabled ? 'Sound: On' : 'Sound: Off';
+    }
+
+    function ensureAudioContext() {
+      if (audioState.ctx) {
+        return audioState.ctx;
+      }
+
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) {
+        return null;
+      }
+
+      const ctx = new Ctx();
+      const masterGain = ctx.createGain();
+      masterGain.gain.value = 0.22;
+      masterGain.connect(ctx.destination);
+
+      audioState.ctx = ctx;
+      audioState.masterGain = masterGain;
+      return ctx;
+    }
+
+    function unlockAudio() {
+      const ctx = ensureAudioContext();
+      if (!ctx) return false;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      audioState.unlocked = true;
+      return true;
+    }
+
+    function createRoomTone() {
+      const ctx = ensureAudioContext();
+      if (!ctx || audioState.roomSource) {
+        return;
+      }
+
+      const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 2.5), ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i += 1) {
+        data[i] = (Math.random() * 2 - 1) * 0.34;
+      }
+
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.loop = true;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.value = 430;
+      filter.Q.value = 0.8;
+
+      const roomGain = ctx.createGain();
+      roomGain.gain.value = 0.0;
+
+      const lfo = ctx.createOscillator();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.09;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 0.0028;
+
+      source.connect(filter);
+      filter.connect(roomGain);
+      roomGain.connect(audioState.masterGain);
+      lfo.connect(lfoGain);
+      lfoGain.connect(roomGain.gain);
+
+      source.start();
+      lfo.start();
+
+      audioState.roomSource = source;
+      audioState.roomFilter = filter;
+      audioState.roomGain = roomGain;
+      audioState.roomLfo = lfo;
+      audioState.roomLfoGain = lfoGain;
+    }
+
+    function setRoomToneEnabled(enabled) {
+      const ctx = ensureAudioContext();
+      if (!ctx) return;
+      createRoomTone();
+      if (!audioState.roomGain) return;
+
+      const now = ctx.currentTime;
+      audioState.roomGain.gain.cancelScheduledValues(now);
+      audioState.roomGain.gain.setValueAtTime(audioState.roomGain.gain.value, now);
+      audioState.roomGain.gain.linearRampToValueAtTime(enabled ? 0.011 : 0.0, now + 0.38);
+    }
+
+    function playPageTurnSound() {
+      if (!audioState.enabled || !audioState.unlocked) {
+        return;
+      }
+
+      const ctx = ensureAudioContext();
+      if (!ctx || !audioState.masterGain) {
+        return;
+      }
+
+      const now = ctx.currentTime;
+
+      const hissBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.13), ctx.sampleRate);
+      const hissData = hissBuffer.getChannelData(0);
+      for (let i = 0; i < hissData.length; i += 1) {
+        hissData[i] = (Math.random() * 2 - 1) * (1 - (i / hissData.length));
+      }
+
+      const hissSource = ctx.createBufferSource();
+      hissSource.buffer = hissBuffer;
+      const hissFilter = ctx.createBiquadFilter();
+      hissFilter.type = 'highpass';
+      hissFilter.frequency.value = 950;
+      const hissGain = ctx.createGain();
+      hissGain.gain.setValueAtTime(0.0, now);
+      hissGain.gain.linearRampToValueAtTime(0.022, now + 0.012);
+      hissGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+
+      hissSource.connect(hissFilter);
+      hissFilter.connect(hissGain);
+      hissGain.connect(audioState.masterGain);
+      hissSource.start(now);
+      hissSource.stop(now + 0.16);
+
+      const thump = ctx.createOscillator();
+      thump.type = 'triangle';
+      thump.frequency.setValueAtTime(210, now);
+      thump.frequency.exponentialRampToValueAtTime(118, now + 0.11);
+      const thumpGain = ctx.createGain();
+      thumpGain.gain.setValueAtTime(0.0, now);
+      thumpGain.gain.linearRampToValueAtTime(0.012, now + 0.008);
+      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      thump.connect(thumpGain);
+      thumpGain.connect(audioState.masterGain);
+      thump.start(now);
+      thump.stop(now + 0.14);
+    }
+
+    function bindLibraryAudio() {
+      updateAudioToggleUi();
+
+      const unlockHandler = () => {
+        if (audioState.unlocked) return;
+        unlockAudio();
+        if (audioState.enabled) {
+          setRoomToneEnabled(true);
+        }
+      };
+
+      window.addEventListener('pointerdown', unlockHandler, { passive: true });
+      window.addEventListener('keydown', unlockHandler, { passive: true });
+
+      if (!audioToggleBtn) return;
+
+      audioToggleBtn.addEventListener('click', () => {
+        unlockAudio();
+        audioState.enabled = !audioState.enabled;
+        updateAudioToggleUi();
+        setRoomToneEnabled(audioState.enabled);
+        if (audioState.enabled) {
+          playPageTurnSound();
+        }
+      });
+    }
+
     function getStoryTheme(story) {
       const tag = String(story.tag || '').toLowerCase();
       const title = String(story.title || '').toLowerCase();
@@ -1548,9 +1731,13 @@ S: Who does? Tidus?
       `).join('');
     }
 
-    function renderStory(index) {
+    function renderStory(index, options = {}) {
+      const { silent = false } = options;
       currentIndex = (index + stories.length) % stories.length;
       const story = stories[currentIndex];
+      if (!silent) {
+        playPageTurnSound();
+      }
       applyTheme(story);
       if (bookOpenEl) {
         bookOpenEl.classList.add('transitioning');
@@ -1593,8 +1780,9 @@ S: Who does? Tidus?
 
     loadContext();
     initDustLayer();
+    bindLibraryAudio();
     renderShelf();
-    renderStory(0);
+    renderStory(0, { silent: true });
     bindShelfDepth();
     bindShelfParallax();
     bindPageCurl();
