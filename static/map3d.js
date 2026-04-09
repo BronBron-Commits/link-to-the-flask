@@ -31,6 +31,13 @@ const keyLight = new THREE.DirectionalLight(0xffffff, 1.0);
 keyLight.position.set(5, 10, 7);
 scene.add(keyLight);
 
+const hemiLight = new THREE.HemisphereLight(0xddefff, 0x44505f, 0.8);
+scene.add(hemiLight);
+
+const fillLight = new THREE.DirectionalLight(0xbfd6ff, 0.8);
+fillLight.position.set(-8, 6, -6);
+scene.add(fillLight);
+
 const grid = new THREE.GridHelper(20, 20, 0x3a4a74, 0x22314d);
 if (Array.isArray(grid.material)) {
     grid.material.forEach((mat) => {
@@ -509,7 +516,15 @@ function frameWorldScene(root) {
 function loadDefaultOpenWorldScene() {
     grid.visible = false;
     floor.visible = false;
-    scene.background = new THREE.Color(0x0c1016);
+    scene.background = new THREE.Color(0x2a3442);
+    scene.fog = null;
+    ambientLight.intensity = 1.65;
+    keyLight.intensity = 2.1;
+    keyLight.color.setHex(0xfff4d6);
+    keyLight.position.set(10, 18, 12);
+    hemiLight.intensity = 1.35;
+    fillLight.intensity = 1.15;
+    fillLight.position.set(-12, 10, -10);
 
     worldLoader.load(
         DEFAULT_OPEN_WORLD_ASSET_URL,
@@ -524,6 +539,16 @@ function loadDefaultOpenWorldScene() {
                 console.warn('[MAP3D] Open world asset loaded without scene root');
                 return;
             }
+            worldSceneRoot.traverse((child) => {
+                if (!child.isMesh || !child.material) return;
+                const applyMaterialTuning = (material) => {
+                    if (!material) return;
+                    if ('side' in material) material.side = THREE.DoubleSide;
+                    if ('needsUpdate' in material) material.needsUpdate = true;
+                };
+                if (Array.isArray(child.material)) child.material.forEach(applyMaterialTuning);
+                else applyMaterialTuning(child.material);
+            });
             scene.add(worldSceneRoot);
             frameWorldScene(worldSceneRoot);
             console.log('[MAP3D] Loaded default open world asset:', DEFAULT_OPEN_WORLD_ASSET_URL);
