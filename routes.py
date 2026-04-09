@@ -14,7 +14,7 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import uuid4
 
-from flask import request, jsonify, render_template, send_file, send_from_directory, Response, session
+from flask import request, jsonify, render_template, send_file, send_from_directory, Response, session, redirect
 from werkzeug.utils import secure_filename
 
 from extensions import app
@@ -464,6 +464,9 @@ def auth_logout():
 
 @app.route("/map3d")
 def map3d_page():
+    # Canonicalize Open World to one URL so CDN/browser caching cannot pin stale query variants.
+    if request.query_string:
+        return redirect("/map3d", code=302)
     return send_from_directory(gs.STATIC_DIR, "map3d.html")
 
 
