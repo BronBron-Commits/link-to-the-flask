@@ -1475,6 +1475,7 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
 }
 
 async function loadSelectedAvatar() {
+  if (USE_SCENE_ASSET) return;
   if (!selectedModelUrl) return;
   const loader = new GLTFLoader();
 
@@ -1565,6 +1566,8 @@ const moveState = {
   back: false,
   left: false,
   right: false,
+  up: false,
+  down: false,
   boost: false,
 };
 
@@ -1580,9 +1583,10 @@ let orbitYaw = 0;
 let orbitPitch = -0.12;
 let orbitDistance = 5.2;
 
-const moveSpeed = 3.4;
-const boostMultiplier = 2.2;
+const moveSpeed = USE_SCENE_ASSET ? 8.5 : 3.4;
+const boostMultiplier = USE_SCENE_ASSET ? 2.8 : 2.2;
 const lookSensitivity = 0.0022;
+const verticalLookLimit = USE_SCENE_ASSET ? 1.52 : 0.72;
 
 const tmpForward = new THREE.Vector3();
 const tmpRight = new THREE.Vector3();
@@ -1590,6 +1594,9 @@ const tmpMove = new THREE.Vector3();
 const tmpTarget = new THREE.Vector3();
 const tmpDesiredCam = new THREE.Vector3();
 const worldUp = new THREE.Vector3(0, 1, 0);
+const tmpLookForward = new THREE.Vector3();
+const tmpFlatForward = new THREE.Vector3();
+const tmpVertical = new THREE.Vector3();
 
 function loadSceneAssetEnvironment() {
   if (!USE_SCENE_ASSET) return;
@@ -1615,8 +1622,10 @@ function loadSceneAssetEnvironment() {
         moveBounds.maxX = halfX;
         moveBounds.minZ = -halfZ;
         moveBounds.maxZ = halfZ;
-        actor.position.set(0, 0, THREE.MathUtils.clamp(halfZ * 0.35, -halfZ + 2, halfZ - 2));
+        actor.position.set(0, Math.max(layout.size.y * 0.18, 2.4), THREE.MathUtils.clamp(halfZ * 0.35, -halfZ + 2, halfZ - 2));
         orbitDistance = THREE.MathUtils.clamp(Math.max(layout.size.x, layout.size.y, layout.size.z) * 0.16, 5.2, 10.5);
+        camera.position.copy(actor.position);
+        camera.lookAt(actor.position.x, actor.position.y, actor.position.z - 1);
       }
     },
     undefined,
@@ -1628,11 +1637,18 @@ function loadSceneAssetEnvironment() {
 
 loadSceneAssetEnvironment();
 
+if (USE_SCENE_ASSET) {
+  actor.visible = false;
+  fallbackAvatar.visible = false;
+}
+
 function setMoveState(code, value) {
   if (code === 'KeyW') moveState.forward = value;
   if (code === 'KeyS') moveState.back = value;
   if (code === 'KeyA') moveState.left = value;
   if (code === 'KeyD') moveState.right = value;
+  if (code === 'KeyQ') moveState.down = value;
+  if (code === 'KeyE') moveState.up = value;
   if (code === 'ShiftLeft' || code === 'ShiftRight') moveState.boost = value;
 }
 
@@ -1647,10 +1663,11 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('mousemove', (event) => {
   if (!pointerLocked) return;
   orbitYaw -= event.movementX * lookSensitivity;
-  orbitPitch = THREE.MathUtils.clamp(orbitPitch - event.movementY * lookSensitivity, -0.72, 0.36);
+  orbitPitch = THREE.MathUtils.clamp(orbitPitch - event.movementY * lookSensitivity, -verticalLookLimit, verticalLookLimit);
 });
 
 renderer.domElement.addEventListener('wheel', (event) => {
+  if (USE_SCENE_ASSET) return;
   event.preventDefault();
   const zoomFactor = Math.exp(event.deltaY * 0.0015);
   orbitDistance *= zoomFactor;
@@ -1661,14 +1678,14 @@ document.addEventListener('keydown', (event) => {
   const tag = document.activeElement ? document.activeElement.tagName : '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD' || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
     event.preventDefault();
   }
   setMoveState(event.code, true);
 });
 
 document.addEventListener('keyup', (event) => {
-  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD' || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
     event.preventDefault();
   }
   setMoveState(event.code, false);
@@ -1686,6 +1703,45 @@ function switchCustomAction(nextAction, fadeSeconds = 0.18) {
 }
 
 function updatePlayerMovement(dt) {
+  if (USE_SCENE_ASSET) {
+    tmpLookForward.set(
+      Math.sin(orbitYaw) * Math.cos(orbitPitch),
+      Math.sin(orbitPitch),
+      Math.cos(orbitYaw) * Math.cos(orbitPitch),
+    ).normalize();
+
+    tmpFlatForward.set(tmpLookForward.x, 0, tmpLookForward.z);
+    if (tmpFlatForward.lengthSq() < 1e-6) {
+      tmpFlatForward.set(Math.sin(orbitYaw), 0, Math.cos(orbitYaw));
+    }
+    tmpFlatForward.normalize();
+    tmpRight.crossVectors(tmpFlatForward, worldUp).normalize();
+    tmpVertical.copy(worldUp);
+
+    tmpMove.set(0, 0, 0);
+    if (moveState.forward) tmpMove.add(tmpLookForward);
+    if (moveState.back) tmpMove.sub(tmpLookForward);
+    if (moveState.right) tmpMove.add(tmpRight);
+    if (moveState.left) tmpMove.sub(tmpRight);
+    if (moveState.up) tmpMove.add(tmpVertical);
+    if (moveState.down) tmpMove.sub(tmpVertical);
+
+    let isMoving = false;
+    if (tmpMove.lengthSq() > 0) {
+      tmpMove.normalize();
+      const speed = moveSpeed * (moveState.boost ? boostMultiplier : 1);
+      camera.position.addScaledVector(tmpMove, speed * dt);
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, moveBounds.minX, moveBounds.maxX);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, moveBounds.minZ, moveBounds.maxZ);
+      camera.position.y = THREE.MathUtils.clamp(camera.position.y, 0.5, 250);
+      isMoving = true;
+    }
+
+    actor.position.copy(camera.position);
+    actor.rotation.y = orbitYaw;
+    return isMoving;
+  }
+
   tmpTarget.copy(actor.position).add(new THREE.Vector3(0, 1.05, 0));
 
   const cameraForward = new THREE.Vector3(
@@ -1719,6 +1775,7 @@ function updatePlayerMovement(dt) {
 }
 
 function updateAvatarAnimation(dt, elapsed, isMoving) {
+  if (USE_SCENE_ASSET) return;
   if (customMixerUsable && avatarMixer && (customIdleAction || customWalkAction)) {
     if (isMoving && customWalkAction) {
       switchCustomAction(customWalkAction);
@@ -1759,6 +1816,16 @@ function updateAvatarAnimation(dt, elapsed, isMoving) {
 }
 
 function updateCamera(dt) {
+  if (USE_SCENE_ASSET) {
+    tmpTarget.copy(camera.position).add(tmpLookForward.set(
+      Math.sin(orbitYaw) * Math.cos(orbitPitch),
+      Math.sin(orbitPitch),
+      Math.cos(orbitYaw) * Math.cos(orbitPitch),
+    ));
+    camera.lookAt(tmpTarget);
+    return;
+  }
+
   const horizontal = Math.cos(orbitPitch) * orbitDistance;
 
   tmpDesiredCam.set(
