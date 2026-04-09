@@ -733,12 +733,15 @@ S: Who does? Tidus?
       if (hasSessionContext && selectedCharacter && selectedCharacter.id && selectedModelUrl) {
         localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
         contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
+        backWorldsBtn.style.display = 'inline-flex';
+        enterWorldBtn.style.display = 'inline-flex';
+        backWorldsBtn.href = buildUrl('/world-select');
+        enterWorldBtn.href = buildUrl('/map3d');
       } else {
         contextEl.textContent = 'Welcome guest';
+        backWorldsBtn.style.display = 'none';
+        enterWorldBtn.style.display = 'none';
       }
-
-      backWorldsBtn.href = buildUrl('/world-select');
-      enterWorldBtn.href = buildUrl('/map3d');
     }
 
     function renderShelf() {
