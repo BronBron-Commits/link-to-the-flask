@@ -254,11 +254,29 @@
             pointer-events: none;
             filter: drop-shadow(0 2px 8px rgba(0,0,0,0.55));
         }
+        #hud-coords {
+            position: fixed;
+            top: 110px;
+            right: 14px;
+            z-index: 12;
+            pointer-events: none;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #b7c5ec;
+            background: rgba(8, 12, 22, 0.72);
+            border: 1px solid rgba(130, 146, 208, 0.28);
+            border-radius: 6px;
+            padding: 5px 9px;
+            text-align: right;
+            backdrop-filter: blur(4px);
+        }
     </style>
 </head>
 <body>
     <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
     <canvas id="compass-gizmo" width="90" height="90" aria-label="Compass"></canvas>
+    <div id="hud-coords">X&nbsp;0.00<br>Y&nbsp;0.00<br>Z&nbsp;0.00</div>
 
     <section id="name-gate" aria-label="Display name prompt">
         <div class="name-card">

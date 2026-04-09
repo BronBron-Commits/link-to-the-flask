@@ -315,6 +315,8 @@ document.body.appendChild(renderer.domElement);
 const _compassCanvas = document.getElementById('compass-gizmo');
 const _compassCtx = _compassCanvas ? _compassCanvas.getContext('2d') : null;
 const _compassDir = new THREE.Vector3();
+const _coordsEl = document.getElementById('hud-coords');
+let _coordsFrame = 0;
 
 function _drawCompass() {
   if (!_compassCtx) return;
@@ -375,6 +377,12 @@ function _drawCompass() {
   ctx.closePath();
   ctx.fillStyle = '#f4d98c';
   ctx.fill();
+
+  if (_coordsEl && (_coordsFrame++ % 3 === 0)) {
+    const pos = USE_SCENE_ASSET ? camera.position : actor.position;
+    _coordsEl.innerHTML =
+      `X&nbsp;${pos.x.toFixed(2)}<br>Y&nbsp;${pos.y.toFixed(2)}<br>Z&nbsp;${pos.z.toFixed(2)}`;
+  }
 }
 
 const hemi = new THREE.HemisphereLight(
