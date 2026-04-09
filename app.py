@@ -614,5 +614,5 @@ if __name__ == "__main__":
         print(f"[BOOT] gevent-websocket OK: {version}", flush=True)
     except ImportError as exc:
         raise RuntimeError("gevent-websocket not installed. Fix: pip install gevent-websocket") from exc
-    print("[BOOT] Starting on http://0.0.0.0:5000 with gevent WebSocket support", flush=True)
-    socketio.run(app, host="0.0.0.0", port=5000, debug=False)
+    print("[BOOT] Starting on http://0.0.0.0:8080 with gevent WebSocket support", flush=True)
+    socketio.run(app, host="0.0.0.0", port=8080, debug=False)

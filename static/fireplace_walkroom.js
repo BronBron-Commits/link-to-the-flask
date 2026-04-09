@@ -153,6 +153,12 @@ function isMicAllowedByContext() {
   return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
 }
 
+function buildInsecureContextMessage() {
+  const origin = String(window.location.origin || '').trim();
+  const host = String(window.location.hostname || '').trim();
+  return `Voice needs HTTPS or localhost. Current origin ${origin || '(unknown)'} is not secure. Use https://${host || 'your-host'} or http://localhost:8080.`;
+}
+
 function formatVoiceInitError(err) {
   const name = String(err && err.name ? err.name : '').trim();
   if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
@@ -1142,17 +1148,17 @@ function startVoiceMeter() {
 
 async function toggleVoiceState() {
   if (!voiceState.enabled) {
-    if (!canUseMicrophoneApis()) {
-      voiceState.unavailableReason = 'browser-api-unavailable';
-      updateVoiceUi();
-      pushChatMessage({ type: 'system', text: 'This browser does not expose microphone APIs (mediaDevices/getUserMedia).' });
-      return;
-    }
-
     if (!isMicAllowedByContext()) {
       voiceState.unavailableReason = 'insecure-context';
       updateVoiceUi();
-      pushChatMessage({ type: 'system', text: 'Voice needs HTTPS (or localhost). Current context is not secure.' });
+      pushChatMessage({ type: 'system', text: buildInsecureContextMessage() });
+      return;
+    }
+
+    if (!canUseMicrophoneApis()) {
+      voiceState.unavailableReason = 'browser-api-unavailable';
+      updateVoiceUi();
+      pushChatMessage({ type: 'system', text: 'This browser does not expose microphone APIs (mediaDevices/getUserMedia). Try latest Chrome/Edge/Firefox/Opera with permissions enabled.' });
       return;
     }
 
