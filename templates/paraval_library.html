@@ -522,6 +522,96 @@
       transform-origin: center center;
     }
 
+    .illumination {
+      position: absolute;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0.92;
+      transition: opacity 0.5s ease;
+    }
+
+    .illumination--corner {
+      top: 10px;
+      left: 10px;
+      width: 78px;
+      height: 78px;
+      border-radius: 16px;
+      border: 1px solid rgba(var(--accent-rgb), 0.34);
+      background:
+        radial-gradient(circle at 25% 25%, rgba(var(--accent-rgb), 0.34), transparent 45%),
+        conic-gradient(from 220deg, rgba(var(--accent-rgb), 0.3), rgba(var(--accent-rgb), 0.08), rgba(var(--accent-rgb), 0.28));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.18);
+      transform: rotate(-3deg);
+    }
+
+    .illumination--corner::before {
+      content: '';
+      position: absolute;
+      inset: 10px;
+      border-radius: 12px;
+      border: 1px dashed rgba(var(--accent-rgb), 0.4);
+      opacity: 0.9;
+    }
+
+    .illumination--sigil {
+      right: 14px;
+      bottom: 42px;
+      width: 92px;
+      height: 92px;
+      border-radius: 50%;
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
+      background:
+        radial-gradient(circle at center, rgba(var(--accent-rgb), 0.12) 0 42%, transparent 43%),
+        repeating-conic-gradient(from 0deg, rgba(var(--accent-rgb), 0.28) 0deg 10deg, transparent 10deg 20deg);
+      filter: drop-shadow(0 0 8px rgba(var(--accent-rgb), 0.2));
+      transform: rotate(6deg);
+    }
+
+    .illumination--sigil::before,
+    .illumination--sigil::after {
+      content: '';
+      position: absolute;
+      inset: 24px;
+      border: 1px solid rgba(var(--accent-rgb), 0.36);
+      border-radius: 50%;
+    }
+
+    .illumination--sigil::after {
+      inset: 36px;
+      background: rgba(var(--accent-rgb), 0.32);
+      box-shadow: 0 0 8px rgba(var(--accent-rgb), 0.2);
+    }
+
+    .margin-accent {
+      position: absolute;
+      left: 12px;
+      top: 104px;
+      bottom: 36px;
+      width: 16px;
+      background:
+        repeating-linear-gradient(
+          180deg,
+          rgba(var(--accent-rgb), 0.55),
+          rgba(var(--accent-rgb), 0.55) 2px,
+          transparent 2px,
+          transparent 16px
+        );
+      opacity: 0.32;
+      z-index: 0;
+      border-radius: 10px;
+    }
+
+    .page:nth-child(2) .illumination--corner {
+      left: auto;
+      right: 10px;
+      transform: rotate(3deg);
+    }
+
+    .page:nth-child(2) .margin-accent {
+      left: auto;
+      right: 12px;
+    }
+
     .page:nth-child(1) { transform: perspective(1400px) rotateY(0.65deg); }
     .page:nth-child(2) { transform: perspective(1400px) rotateY(-0.65deg); }
 
@@ -588,6 +678,33 @@
       font-family: 'Space Mono', Consolas, monospace;
     }
 
+    .page-number::before,
+    .page-number::after {
+      content: '';
+      display: inline-block;
+      width: 28px;
+      height: 1px;
+      background: rgba(var(--accent-rgb), 0.6);
+      margin: 0 10px 3px;
+      vertical-align: middle;
+    }
+
+    .frame[data-theme='nature'] .illumination--corner {
+      border-radius: 24px;
+      background:
+        radial-gradient(circle at 30% 20%, rgba(var(--accent-rgb), 0.3), transparent 45%),
+        conic-gradient(from 220deg, rgba(var(--accent-rgb), 0.26), rgba(255, 255, 255, 0.08), rgba(var(--accent-rgb), 0.24));
+    }
+
+    .frame[data-theme='war'] .illumination--sigil {
+      border-style: double;
+      transform: rotate(0deg);
+    }
+
+    .frame[data-theme='arcane'] .illumination--sigil {
+      filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), 0.3));
+    }
+
     @keyframes stardrift {
       0% { transform: translateY(0px); }
       50% { transform: translateY(9px); }
@@ -643,6 +760,10 @@
       .btn:hover::after,
       .page.turning {
         animation: none !important;
+      }
+
+      .illumination {
+        opacity: 0.7;
       }
     }
 
@@ -733,10 +854,16 @@
 
           <div class="book-open" aria-live="polite">
             <article class="page">
+              <span class="illumination illumination--corner" aria-hidden="true"></span>
+              <span class="illumination illumination--sigil" aria-hidden="true"></span>
+              <span class="margin-accent" aria-hidden="true"></span>
               <div id="page-left" class="page-body"></div>
               <div class="page-number">Page I</div>
             </article>
             <article class="page">
+              <span class="illumination illumination--corner" aria-hidden="true"></span>
+              <span class="illumination illumination--sigil" aria-hidden="true"></span>
+              <span class="margin-accent" aria-hidden="true"></span>
               <div id="page-right" class="page-body"></div>
               <div class="page-number">Page II</div>
             </article>
