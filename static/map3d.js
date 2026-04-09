@@ -1432,6 +1432,79 @@ window.addEventListener('resize', () => {
     renderer.setSize(window.innerWidth, window.innerHeight);
 });
 
+// --- Compass gizmo ---
+const _compassCanvas = document.getElementById('compass-gizmo');
+const _compassCtx = _compassCanvas ? _compassCanvas.getContext('2d') : null;
+const _compassDir = new THREE.Vector3();
+
+function _drawCompass() {
+    if (!_compassCtx) return;
+    const ctx = _compassCtx;
+    const size = _compassCanvas.width; // 90
+    const cx = size / 2;
+    const cy = size / 2;
+    const r = size * 0.40;
+
+    camera.getWorldDirection(_compassDir);
+    // yaw from north: 0 = north (-Z), PI/2 = east (+X)
+    const yaw = Math.atan2(_compassDir.x, -_compassDir.z);
+
+    ctx.clearRect(0, 0, size, size);
+
+    // Background circle
+    ctx.beginPath();
+    ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(8, 12, 22, 0.72)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(130, 146, 208, 0.38)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Rotating ring: rotate by -yaw so N tracks real north
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(-yaw);
+
+    // Intercardinal tick marks
+    for (let i = 0; i < 8; i++) {
+        if (i % 2 === 0) continue; // cardinals handled by labels
+        const a = (i * Math.PI) / 4;
+        ctx.beginPath();
+        ctx.moveTo(Math.sin(a) * (r - 2), -Math.cos(a) * (r - 2));
+        ctx.lineTo(Math.sin(a) * (r - 8), -Math.cos(a) * (r - 8));
+        ctx.strokeStyle = 'rgba(160, 176, 220, 0.45)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    }
+
+    // Cardinal labels
+    const cardinals = [
+        { label: 'N', angle: 0,              color: '#e87070' },
+        { label: 'E', angle: Math.PI / 2,    color: '#b7c5ec' },
+        { label: 'S', angle: Math.PI,        color: '#b7c5ec' },
+        { label: 'W', angle: -Math.PI / 2,   color: '#b7c5ec' },
+    ];
+    ctx.font = `bold ${Math.round(size * 0.16)}px Consolas, monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    cardinals.forEach(({ label, angle, color }) => {
+        ctx.fillStyle = color;
+        ctx.fillText(label, Math.sin(angle) * (r - 10), -Math.cos(angle) * (r - 10));
+    });
+
+    ctx.restore();
+
+    // Fixed forward triangle at top (yellow = where you're looking)
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - r + 1);
+    ctx.lineTo(cx - 4, cy - r + 9);
+    ctx.lineTo(cx + 4, cy - r + 9);
+    ctx.closePath();
+    ctx.fillStyle = '#f4d98c';
+    ctx.fill();
+}
+
+
 function animate(timeMs) {
     const previousTimeMs = animate._previousTimeMs || timeMs;
     const deltaSeconds = Math.min(0.05, Math.max(0, (Number(timeMs) - Number(previousTimeMs)) * 0.001));
@@ -1478,6 +1551,7 @@ function animate(timeMs) {
     }
 
     renderer.render(scene, camera);
+    _drawCompass();
 }
 
 renderer.setAnimationLoop(animate);

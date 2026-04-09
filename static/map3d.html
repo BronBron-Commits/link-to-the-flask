@@ -245,10 +245,20 @@
             color: #e0a8a8;
             font-size: 11px;
         }
+        #compass-gizmo {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            z-index: 12;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.55));
+        }
     </style>
 </head>
 <body>
     <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
+    <canvas id="compass-gizmo" width="90" height="90" aria-label="Compass"></canvas>
 
     <section id="name-gate" aria-label="Display name prompt">
         <div class="name-card">
