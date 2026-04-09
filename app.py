@@ -316,6 +316,37 @@ def socket_social_chat_message(data):
     })
 
 
+def _relay_social_voice_signal(event_name: str, data):
+    sid = request.sid
+    if sid not in gs.players or not isinstance(data, dict):
+        return
+
+    target_sid = str(data.get("targetSid") or "").strip()
+    if not target_sid or target_sid == sid or target_sid not in gs.players:
+        return
+
+    payload = data.get("payload") if isinstance(data.get("payload"), dict) else {}
+    emit(event_name, {
+        "fromSid": sid,
+        "payload": payload,
+    }, to=target_sid)
+
+
+@socketio.on("social-voice-offer")
+def socket_social_voice_offer(data):
+    _relay_social_voice_signal("social-voice-offer", data)
+
+
+@socketio.on("social-voice-answer")
+def socket_social_voice_answer(data):
+    _relay_social_voice_signal("social-voice-answer", data)
+
+
+@socketio.on("social-voice-ice-candidate")
+def socket_social_voice_ice_candidate(data):
+    _relay_social_voice_signal("social-voice-ice-candidate", data)
+
+
 # ---------------------------------------------------------------------------
 # BLOCK 4 -- TURN MANAGEMENT
 # ---------------------------------------------------------------------------

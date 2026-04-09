@@ -42,6 +42,12 @@ const voiceState = {
   speaking: false,
 };
 
+const rtcState = {
+  peers: new Map(),
+  remoteAudioRoot: null,
+  iceServers: [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }],
+};
+
 function sanitizeText(value, maxLen = 300) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLen);
 }
@@ -131,6 +137,43 @@ function updateVoiceUi() {
     else if (voiceState.muted) voiceStateEl.textContent = 'Muted';
     else voiceStateEl.textContent = 'Listening';
   }
+}
+
+function ensureRemoteAudioRoot() {
+  if (rtcState.remoteAudioRoot) return rtcState.remoteAudioRoot;
+  const root = document.createElement('div');
+  root.id = 'remote-audio-root';
+  root.style.display = 'none';
+  document.body.appendChild(root);
+  rtcState.remoteAudioRoot = root;
+  return root;
+}
+
+function createRemoteAudioElement(sid) {
+  const root = ensureRemoteAudioRoot();
+  const el = document.createElement('audio');
+  el.id = `remote-audio-${sid}`;
+  el.autoplay = true;
+  el.playsInline = true;
+  root.appendChild(el);
+  return el;
+}
+
+function removeRemoteAudioElement(sid) {
+  if (!rtcState.remoteAudioRoot) return;
+  const el = document.getElementById(`remote-audio-${sid}`);
+  if (!el) return;
+  try {
+    el.pause();
+  } catch (_err) {
+    // Ignore.
+  }
+  if (el.srcObject) {
+    const tracks = el.srcObject.getTracks ? el.srcObject.getTracks() : [];
+    tracks.forEach((track) => track.stop());
+  }
+  el.srcObject = null;
+  el.remove();
 }
 
 function sanitizeDisplayName(value) {
@@ -598,6 +641,178 @@ const netState = {
 
 renderSocialPlayers();
 
+function closeVoicePeer(sid) {
+  const rec = rtcState.peers.get(sid);
+  if (!rec) return;
+  try {
+    rec.pc.onicecandidate = null;
+    rec.pc.ontrack = null;
+    rec.pc.onconnectionstatechange = null;
+    rec.pc.oniceconnectionstatechange = null;
+    rec.pc.close();
+  } catch (_err) {
+    // Ignore.
+  }
+  removeRemoteAudioElement(sid);
+  rtcState.peers.delete(sid);
+}
+
+function closeAllVoicePeers() {
+  for (const sid of Array.from(rtcState.peers.keys())) {
+    closeVoicePeer(sid);
+  }
+}
+
+function attachLocalTracksToPeer(rec) {
+  if (!rec || !rec.pc || !voiceState.stream) return;
+  const existingTracks = rec.pc.getSenders().map((sender) => sender.track).filter(Boolean);
+  voiceState.stream.getAudioTracks().forEach((track) => {
+    track.enabled = !voiceState.muted;
+    if (!existingTracks.includes(track)) {
+      rec.pc.addTrack(track, voiceState.stream);
+    }
+  });
+}
+
+function getOrCreateVoicePeer(sid) {
+  if (!sid) return null;
+  const existing = rtcState.peers.get(sid);
+  if (existing) {
+    attachLocalTracksToPeer(existing);
+    return existing;
+  }
+
+  const pc = new RTCPeerConnection({ iceServers: rtcState.iceServers });
+  const audioEl = createRemoteAudioElement(sid);
+  const rec = { sid, pc, audioEl, makingOffer: false };
+  rtcState.peers.set(sid, rec);
+
+  attachLocalTracksToPeer(rec);
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate || !netState.socket) return;
+    netState.socket.emit('social-voice-ice-candidate', {
+      targetSid: sid,
+      payload: event.candidate.toJSON ? event.candidate.toJSON() : event.candidate,
+    });
+  };
+
+  pc.ontrack = (event) => {
+    const stream = event.streams && event.streams[0] ? event.streams[0] : null;
+    if (!stream) return;
+    audioEl.srcObject = stream;
+    audioEl.play().catch(() => {
+      // Autoplay can be blocked until user interaction; voice toggle provides one.
+    });
+  };
+
+  const cleanupIfFailed = () => {
+    const badStates = ['failed', 'closed', 'disconnected'];
+    if (badStates.includes(pc.connectionState) || badStates.includes(pc.iceConnectionState)) {
+      closeVoicePeer(sid);
+    }
+  };
+  pc.onconnectionstatechange = cleanupIfFailed;
+  pc.oniceconnectionstatechange = cleanupIfFailed;
+
+  return rec;
+}
+
+async function sendVoiceOffer(sid) {
+  if (!sid || !netState.socket || !netState.localSid) return;
+  const rec = getOrCreateVoicePeer(sid);
+  if (!rec) return;
+
+  try {
+    rec.makingOffer = true;
+    const offer = await rec.pc.createOffer({ offerToReceiveAudio: true });
+    await rec.pc.setLocalDescription(offer);
+    netState.socket.emit('social-voice-offer', {
+      targetSid: sid,
+      payload: rec.pc.localDescription,
+    });
+  } catch (_err) {
+    // Ignore renegotiation failures; next sync cycle can retry.
+  } finally {
+    rec.makingOffer = false;
+  }
+}
+
+function syncVoicePeers() {
+  if (!netState.socket || !netState.localSid) return;
+  const roster = netState.roster && typeof netState.roster === 'object' ? netState.roster : {};
+  const remoteSids = Object.keys(roster).filter((sid) => sid && sid !== netState.localSid);
+  const remoteSet = new Set(remoteSids);
+
+  for (const sid of Array.from(rtcState.peers.keys())) {
+    if (!remoteSet.has(sid)) {
+      closeVoicePeer(sid);
+    }
+  }
+
+  if (!voiceState.enabled) return;
+
+  for (const sid of remoteSids) {
+    // Deterministic initiator rule to avoid glare.
+    if (String(netState.localSid) < String(sid)) {
+      const rec = getOrCreateVoicePeer(sid);
+      if (!rec) continue;
+      const shouldOffer = rec.pc.signalingState === 'stable' && !rec.makingOffer;
+      if (shouldOffer) {
+        sendVoiceOffer(sid);
+      }
+    }
+  }
+}
+
+async function handleVoiceOffer(fromSid, payload) {
+  if (!fromSid || !payload) return;
+  const rec = getOrCreateVoicePeer(fromSid);
+  if (!rec) return;
+
+  try {
+    const offer = new RTCSessionDescription(payload);
+    if (rec.pc.signalingState !== 'stable') {
+      await Promise.allSettled([
+        rec.pc.setLocalDescription({ type: 'rollback' }),
+      ]);
+    }
+    await rec.pc.setRemoteDescription(offer);
+    const answer = await rec.pc.createAnswer();
+    await rec.pc.setLocalDescription(answer);
+    if (netState.socket) {
+      netState.socket.emit('social-voice-answer', {
+        targetSid: fromSid,
+        payload: rec.pc.localDescription,
+      });
+    }
+  } catch (_err) {
+    // Ignore malformed offers.
+  }
+}
+
+async function handleVoiceAnswer(fromSid, payload) {
+  if (!fromSid || !payload) return;
+  const rec = rtcState.peers.get(fromSid);
+  if (!rec) return;
+  try {
+    await rec.pc.setRemoteDescription(new RTCSessionDescription(payload));
+  } catch (_err) {
+    // Ignore malformed answers.
+  }
+}
+
+async function handleVoiceIceCandidate(fromSid, payload) {
+  if (!fromSid || !payload) return;
+  const rec = getOrCreateVoicePeer(fromSid);
+  if (!rec) return;
+  try {
+    await rec.pc.addIceCandidate(new RTCIceCandidate(payload));
+  } catch (_err) {
+    // Ignore candidate races.
+  }
+}
+
 function removeRemoteVisual(sid) {
   const rec = netState.remoteVisuals.get(sid);
   if (!rec) return;
@@ -777,18 +992,21 @@ function connectMultiplayer() {
   socket.on('players-state', (players) => {
     netState.roster = (players && typeof players === 'object') ? players : {};
     syncRemoteActors();
+    syncVoicePeers();
   });
 
   socket.on('player-update', (entry) => {
     if (!entry || !entry.id) return;
     netState.roster[entry.id] = entry;
     syncRemoteActors();
+    syncVoicePeers();
   });
 
   socket.on('player-joined', (entry) => {
     if (!entry || !entry.id) return;
     netState.roster[entry.id] = entry;
     syncRemoteActors();
+    syncVoicePeers();
   });
 
   socket.on('player-left', (payload) => {
@@ -796,7 +1014,26 @@ function connectMultiplayer() {
     if (!sid) return;
     delete netState.roster[sid];
     removeRemoteVisual(sid);
+    closeVoicePeer(sid);
     renderSocialPlayers();
+  });
+
+  socket.on('social-voice-offer', (packet) => {
+    const fromSid = String(packet?.fromSid || '').trim();
+    const payload = packet && typeof packet.payload === 'object' ? packet.payload : null;
+    handleVoiceOffer(fromSid, payload);
+  });
+
+  socket.on('social-voice-answer', (packet) => {
+    const fromSid = String(packet?.fromSid || '').trim();
+    const payload = packet && typeof packet.payload === 'object' ? packet.payload : null;
+    handleVoiceAnswer(fromSid, payload);
+  });
+
+  socket.on('social-voice-ice-candidate', (packet) => {
+    const fromSid = String(packet?.fromSid || '').trim();
+    const payload = packet && typeof packet.payload === 'object' ? packet.payload : null;
+    handleVoiceIceCandidate(fromSid, payload);
   });
 
   socket.on('social-chat-message', (payload) => {
@@ -808,6 +1045,7 @@ function connectMultiplayer() {
   });
 
   socket.on('disconnect', () => {
+    closeAllVoicePeers();
     pushChatMessage({ type: 'system', text: 'Disconnected from room.' });
   });
 }
@@ -837,6 +1075,7 @@ function teardownVoiceCapture() {
   voiceState.enabled = false;
   voiceState.muted = false;
   voiceState.speaking = false;
+  closeAllVoicePeers();
   updateVoiceUi();
 }
 
@@ -891,6 +1130,7 @@ async function toggleVoiceState() {
       updateVoiceUi();
       publishLocalPresence(true);
       startVoiceMeter();
+      syncVoicePeers();
       pushChatMessage({ type: 'system', text: 'Voice enabled.' });
     } catch (_err) {
       pushChatMessage({ type: 'system', text: 'Voice permission denied or unavailable.' });
