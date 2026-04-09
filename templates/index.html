@@ -12,7 +12,8 @@
       background: #06090f;
       color: #e8e0d0;
       font-family: Georgia, 'Times New Roman', serif;
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
     }
 
     /* ── Particle canvas ── */
@@ -149,13 +150,14 @@
         margin-top: 22px;
         margin-bottom: calc(26px + env(safe-area-inset-bottom));
         gap: 14px;
-        padding: 16px;
+        padding: 18px;
       }
 
       .guest-link {
         width: 100%;
-        min-height: 54px;
-        font-size: 0.76rem;
+        min-height: 64px;
+        padding: 14px 16px;
+        font-size: 0.82rem;
       }
 
       .footer {
