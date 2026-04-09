@@ -1741,8 +1741,9 @@ function loadSceneAssetEnvironment() {
         moveBounds.maxX = halfX;
         moveBounds.minZ = -halfZ;
         moveBounds.maxZ = halfZ;
-        frameSceneAsset(layout);
-        actor.position.copy(camera.position);
+        actor.position.set(0, 0, 0);
+        camera.position.set(0, 2.6, 6.4);
+        camera.lookAt(0, 1, 0);
         orbitDistance = THREE.MathUtils.clamp(Math.max(boxSize.x, boxSize.y, boxSize.z) * 0.14, 5.2, 10.5);
       }
     },
