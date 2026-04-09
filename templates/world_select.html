@@ -208,9 +208,7 @@ function loadContext() {
 function buildWorldUrl(basePath) {
   const url = new URL(basePath, window.location.origin);
   url.searchParams.set('characterId', selectedCharacter.id);
-  if (url.pathname === '/map3d') {
-    url.searchParams.set('modelUrl', OPEN_WORLD_MODEL_URL);
-  } else if (selectedModelUrl) {
+  if (url.pathname !== '/map3d' && selectedModelUrl) {
     url.searchParams.set('modelUrl', selectedModelUrl);
   }
   return `${url.pathname}${url.search}`;

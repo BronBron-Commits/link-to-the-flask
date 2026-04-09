@@ -264,6 +264,11 @@ function loadSelectionContext() {
     selectedModelUrl = queryModelUrl || '';
   }
 
+  // In open-world scene mode, this script should not treat scene assets as avatar models.
+  if (USE_SCENE_ASSET) {
+    selectedModelUrl = '';
+  }
+
   if (selectedModelUrl) {
     localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
   }
@@ -971,6 +976,7 @@ function createNameplate(text) {
 }
 
 async function ensureRemoteVisual(sid, entry) {
+  if (USE_SCENE_ASSET) return;
   let rec = netState.remoteVisuals.get(sid);
   if (!rec) {
     const root = new THREE.Group();
@@ -1036,6 +1042,14 @@ async function ensureRemoteVisual(sid, entry) {
 }
 
 function syncRemoteActors() {
+  if (USE_SCENE_ASSET) {
+    for (const sid of Array.from(netState.remoteVisuals.keys())) {
+      removeRemoteVisual(sid);
+    }
+    renderSocialPlayers();
+    return;
+  }
+
   const localSid = String(netState.localSid || '');
   const wanted = new Set();
 
@@ -1054,14 +1068,15 @@ function syncRemoteActors() {
 
 function publishLocalPresence(force = false) {
   if (!netState.socket || !netState.localSid) return;
+  const localPosition = USE_SCENE_ASSET ? camera.position : actor.position;
   const payload = {
     name: chosenDisplayName || 'Traveler',
     side: 'heroes',
     role: 'player',
     position: {
-      x: Number(actor.position.x.toFixed(3)),
-      y: Number(actor.position.y.toFixed(3)),
-      z: Number(actor.position.z.toFixed(3)),
+      x: Number(localPosition.x.toFixed(3)),
+      y: Number(localPosition.y.toFixed(3)),
+      z: Number(localPosition.z.toFixed(3)),
     },
     rotation: {
       x: 0,
@@ -1069,7 +1084,7 @@ function publishLocalPresence(force = false) {
       z: 0,
     },
     avatar: {
-      modelUrl: selectedModelUrl || 'fallback',
+      modelUrl: USE_SCENE_ASSET ? 'fallback' : (selectedModelUrl || 'fallback'),
     },
     social: {
       voiceEnabled: Boolean(voiceState.enabled && !voiceState.muted),
