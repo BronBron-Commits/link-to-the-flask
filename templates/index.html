@@ -770,12 +770,8 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   tabManageEl.addEventListener('click', () => applyMode('manage'));
 
   console.log('[BOOT] Attaching sign-in event listener...', !!signInBtn);
-  if (!signInBtn) {
-    console.error('[BOOT] ERROR: signInBtn not found! Cannot attach event listener.');
-    return;
-  }
-
-  signInBtn.addEventListener('click', async () => {
+  if (signInBtn) {
+    signInBtn.addEventListener('click', async () => {
     const email = String(emailEl.value || '').trim();
     const password = String(passwordEl.value || '');
     if (!email || !password) {
@@ -795,6 +791,9 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
   });
+  } else {
+    console.error('[BOOT] ERROR: signInBtn not found! Sign-in button will not work.');
+  }
 
   signUpBtn.addEventListener('click', async () => {
     const email = String(emailEl.value || '').trim();
