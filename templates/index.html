@@ -12,6 +12,7 @@
       background: #06090f;
       color: #e8e0d0;
       font-family: Georgia, 'Times New Roman', serif;
+      -webkit-text-size-adjust: 100%;
       overflow-x: hidden;
       overflow-y: auto;
     }
@@ -34,9 +35,30 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      height: 100vh;
+      min-height: 100vh;
+      min-height: 100svh;
+      min-height: 100dvh;
       padding: 24px;
       gap: 0;
+    }
+
+    body.is-opera #bg-canvas {
+      display: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #bg-canvas {
+        display: none;
+      }
+
+      .crest svg {
+        animation: none;
+      }
+    }
+
+    body.is-opera .crest svg {
+      animation: none;
+      filter: none;
     }
 
     /* ── Crest / logo area ── */
@@ -138,6 +160,8 @@
       .shell {
         height: auto;
         min-height: 100vh;
+        min-height: 100svh;
+        min-height: 100dvh;
         justify-content: flex-start;
         overflow-y: auto;
         padding-top: 20px;
@@ -470,8 +494,21 @@
 
 <script>
 (function () {
+  const isOpera = /OPR\//i.test(navigator.userAgent || '');
+  if (isOpera) {
+    document.body.classList.add('is-opera');
+  }
+
   const canvas = document.getElementById('bg-canvas');
+  if (!canvas || isOpera) {
+    return;
+  }
+
   const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return;
+  }
+
   let W, H, particles = [];
 
   function resize() {
@@ -633,7 +670,21 @@ const backendState = await readBackendSession();
 if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
 } else {
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  let createClient = null;
+  try {
+    ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+  } catch (_primaryImportError) {
+    try {
+      ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+    } catch (_fallbackImportError) {
+      setStatus('Could not load auth module in this browser. Disable content blocking or use the guest library entry.', 'error');
+      setInputsDisabled(true);
+    }
+  }
+
+  if (!createClient) {
+    signOutBtn.disabled = true;
+  } else {
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
@@ -801,6 +852,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
   });
+  }
 }
 
 if (!currentUser) {
