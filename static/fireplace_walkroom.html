@@ -29,6 +29,152 @@
       letter-spacing: 0.04em;
       backdrop-filter: blur(4px);
     }
+    #social-overlay {
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 13;
+      width: min(420px, calc(100vw - 28px));
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 12px;
+      background: rgba(10, 14, 25, 0.8);
+      backdrop-filter: blur(6px);
+      box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
+      display: grid;
+      gap: 8px;
+      padding: 10px;
+    }
+    .social-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .social-title {
+      color: #e9d8a4;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    #voice-controls {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #voice-toggle {
+      border: 1px solid rgba(170, 192, 255, 0.56);
+      border-radius: 8px;
+      background: rgba(34, 46, 79, 0.9);
+      color: #eaf0ff;
+      font-family: inherit;
+      font-size: 11px;
+      padding: 6px 8px;
+      cursor: pointer;
+    }
+    #voice-state {
+      font-size: 10px;
+      color: #95a6d4;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      min-width: 76px;
+      text-align: right;
+    }
+    #social-players {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(7, 10, 18, 0.55);
+      padding: 8px;
+      max-height: 122px;
+      overflow-y: auto;
+      display: grid;
+      gap: 4px;
+    }
+    .social-player-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      color: #b7c5ec;
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .social-player-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 260px;
+    }
+    .social-player-voice {
+      font-size: 10px;
+      color: #8ea0cd;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .voice-speaking {
+      color: #9be6a4;
+      font-weight: 700;
+    }
+    #social-chat-log {
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 8px;
+      background: rgba(7, 10, 18, 0.55);
+      padding: 8px;
+      min-height: 86px;
+      max-height: 170px;
+      overflow-y: auto;
+      display: grid;
+      gap: 5px;
+      align-content: start;
+    }
+    .chat-line {
+      color: #d8e0f8;
+      font-size: 11px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .chat-name {
+      color: #f4d99c;
+      font-weight: 700;
+      margin-right: 6px;
+    }
+    .chat-system {
+      color: #9bb2df;
+      font-style: italic;
+    }
+    .social-chat-entry {
+      display: flex;
+      gap: 6px;
+    }
+    #social-chat-input {
+      flex: 1;
+      border-radius: 8px;
+      border: 1px solid rgba(130, 146, 208, 0.5);
+      background: rgba(10, 14, 25, 0.85);
+      color: #e8edf7;
+      padding: 7px 8px;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+    }
+    #social-chat-send {
+      border: 1px solid rgba(170, 192, 255, 0.56);
+      border-radius: 8px;
+      background: rgba(34, 46, 79, 0.9);
+      color: #eaf0ff;
+      font-family: inherit;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      padding: 0 10px;
+      cursor: pointer;
+    }
+    @media (max-width: 760px) {
+      #social-overlay {
+        right: 10px;
+        left: 10px;
+        width: auto;
+        bottom: 10px;
+      }
+    }
     #name-gate {
       position: fixed;
       inset: 0;
@@ -113,6 +259,22 @@
       <div class="name-actions">
         <button id="display-name-submit" type="button">Join Room</button>
       </div>
+    </div>
+  </section>
+
+  <section id="social-overlay" aria-label="Social overlay">
+    <div class="social-head">
+      <div class="social-title">Social Room</div>
+      <div id="voice-controls">
+        <button id="voice-toggle" type="button">Enable Voice</button>
+        <span id="voice-state">Voice Off</span>
+      </div>
+    </div>
+    <div id="social-players"></div>
+    <div id="social-chat-log"></div>
+    <div class="social-chat-entry">
+      <input id="social-chat-input" type="text" maxlength="300" placeholder="Type a message" />
+      <button id="social-chat-send" type="button">Send</button>
     </div>
   </section>
 

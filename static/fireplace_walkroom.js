@@ -10,6 +10,12 @@ const nameGateEl = document.getElementById('name-gate');
 const displayNameInputEl = document.getElementById('display-name-input');
 const displayNameSubmitEl = document.getElementById('display-name-submit');
 const displayNameErrorEl = document.getElementById('display-name-error');
+const socialPlayersEl = document.getElementById('social-players');
+const socialChatLogEl = document.getElementById('social-chat-log');
+const socialChatInputEl = document.getElementById('social-chat-input');
+const socialChatSendEl = document.getElementById('social-chat-send');
+const voiceToggleEl = document.getElementById('voice-toggle');
+const voiceStateEl = document.getElementById('voice-state');
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const queryCharacterId = String(urlSearch.get('characterId') || '').trim();
@@ -18,6 +24,114 @@ const queryModelUrl = String(urlSearch.get('modelUrl') || '').trim();
 let selectedCharacter = null;
 let selectedModelUrl = '';
 let chosenDisplayName = '';
+
+const chatState = {
+  messages: [],
+  maxMessages: 80,
+};
+
+const voiceState = {
+  stream: null,
+  audioContext: null,
+  source: null,
+  analyser: null,
+  dataArray: null,
+  raf: 0,
+  enabled: false,
+  muted: false,
+  speaking: false,
+};
+
+function sanitizeText(value, maxLen = 300) {
+  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatVoiceBadge(entry) {
+  const social = entry && typeof entry.social === 'object' ? entry.social : {};
+  const voiceEnabled = Boolean(social.voiceEnabled);
+  const speaking = Boolean(social.voiceSpeaking);
+  if (!voiceEnabled) return 'voice off';
+  return speaking ? 'speaking' : 'listening';
+}
+
+function renderSocialPlayers() {
+  if (!socialPlayersEl) return;
+  const roster = netState && netState.roster && typeof netState.roster === 'object' ? netState.roster : {};
+  const rows = Object.entries(roster)
+    .filter(([sid]) => Boolean(sid))
+    .sort((a, b) => {
+      const aIsLocal = a[0] === netState.localSid;
+      const bIsLocal = b[0] === netState.localSid;
+      if (aIsLocal && !bIsLocal) return -1;
+      if (!aIsLocal && bIsLocal) return 1;
+      const aName = String(a[1]?.name || '').toLowerCase();
+      const bName = String(b[1]?.name || '').toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+  if (!rows.length) {
+    socialPlayersEl.innerHTML = '<div class="social-player-row"><span class="social-player-name">No players connected yet.</span></div>';
+    return;
+  }
+
+  socialPlayersEl.innerHTML = rows.map(([sid, entry]) => {
+    const name = sanitizeText((entry && entry.name) || `Player-${sid.slice(0, 6)}`, 24) || `Player-${sid.slice(0, 6)}`;
+    const label = sid === netState.localSid ? `${name} (you)` : name;
+    const badge = formatVoiceBadge(entry);
+    const badgeClass = badge === 'speaking' ? 'social-player-voice voice-speaking' : 'social-player-voice';
+    return `<div class="social-player-row"><span class="social-player-name">${escapeHtml(label)}</span><span class="${badgeClass}">${escapeHtml(badge)}</span></div>`;
+  }).join('');
+}
+
+function renderChatLog() {
+  if (!socialChatLogEl) return;
+  if (!chatState.messages.length) {
+    socialChatLogEl.innerHTML = '<div class="chat-line chat-system">Chat is ready. Say hello.</div>';
+    return;
+  }
+  socialChatLogEl.innerHTML = chatState.messages.map((msg) => {
+    if (msg.type === 'system') {
+      return `<div class="chat-line chat-system">${escapeHtml(msg.text)}</div>`;
+    }
+    return `<div class="chat-line"><span class="chat-name">${escapeHtml(msg.name)}:</span>${escapeHtml(msg.text)}</div>`;
+  }).join('');
+  socialChatLogEl.scrollTop = socialChatLogEl.scrollHeight;
+}
+
+function pushChatMessage(message) {
+  chatState.messages.push(message);
+  if (chatState.messages.length > chatState.maxMessages) {
+    chatState.messages.splice(0, chatState.messages.length - chatState.maxMessages);
+  }
+  renderChatLog();
+}
+
+function updateVoiceUi() {
+  if (voiceToggleEl) {
+    if (!voiceState.enabled) {
+      voiceToggleEl.textContent = 'Enable Voice';
+    } else if (voiceState.muted) {
+      voiceToggleEl.textContent = 'Unmute Voice';
+    } else {
+      voiceToggleEl.textContent = 'Mute Voice';
+    }
+  }
+  if (voiceStateEl) {
+    if (!voiceState.enabled) voiceStateEl.textContent = 'Voice Off';
+    else if (voiceState.speaking && !voiceState.muted) voiceStateEl.textContent = 'Speaking';
+    else if (voiceState.muted) voiceStateEl.textContent = 'Muted';
+    else voiceStateEl.textContent = 'Listening';
+  }
+}
 
 function sanitizeDisplayName(value) {
   return String(value || '').replace(/\s+/g, ' ').trim().slice(0, 24);
@@ -65,6 +179,8 @@ function loadSelectionContext() {
   }
 
   updateHudPlayerText();
+  renderChatLog();
+  updateVoiceUi();
 }
 
 loadSelectionContext();
@@ -480,6 +596,8 @@ const netState = {
   publishAtMs: 0,
 };
 
+renderSocialPlayers();
+
 function removeRemoteVisual(sid) {
   const rec = netState.remoteVisuals.get(sid);
   if (!rec) return;
@@ -596,6 +714,8 @@ function syncRemoteActors() {
   for (const sid of Array.from(netState.remoteVisuals.keys())) {
     if (!wanted.has(sid)) removeRemoteVisual(sid);
   }
+
+  renderSocialPlayers();
 }
 
 function publishLocalPresence(force = false) {
@@ -616,6 +736,10 @@ function publishLocalPresence(force = false) {
     },
     avatar: {
       modelUrl: selectedModelUrl || 'fallback',
+    },
+    social: {
+      voiceEnabled: Boolean(voiceState.enabled && !voiceState.muted),
+      voiceSpeaking: Boolean(voiceState.speaking && !voiceState.muted),
     },
   };
 
@@ -640,6 +764,7 @@ function connectMultiplayer() {
     netState.localSid = socket.id || netState.localSid;
     socket.emit('register-role', { role: 'player' });
     publishLocalPresence(true);
+    pushChatMessage({ type: 'system', text: 'Connected to room.' });
   });
 
   socket.on('player-id', (payload) => {
@@ -671,6 +796,136 @@ function connectMultiplayer() {
     if (!sid) return;
     delete netState.roster[sid];
     removeRemoteVisual(sid);
+    renderSocialPlayers();
+  });
+
+  socket.on('social-chat-message', (payload) => {
+    if (!payload || typeof payload !== 'object') return;
+    const name = sanitizeText(payload.name || 'Player', 24) || 'Player';
+    const text = sanitizeText(payload.message || '', 300);
+    if (!text) return;
+    pushChatMessage({ type: 'chat', name, text });
+  });
+
+  socket.on('disconnect', () => {
+    pushChatMessage({ type: 'system', text: 'Disconnected from room.' });
+  });
+}
+
+function teardownVoiceCapture() {
+  if (voiceState.raf) {
+    cancelAnimationFrame(voiceState.raf);
+    voiceState.raf = 0;
+  }
+  if (voiceState.source) {
+    voiceState.source.disconnect();
+    voiceState.source = null;
+  }
+  if (voiceState.analyser) {
+    voiceState.analyser.disconnect();
+    voiceState.analyser = null;
+  }
+  if (voiceState.stream) {
+    voiceState.stream.getTracks().forEach((track) => track.stop());
+    voiceState.stream = null;
+  }
+  if (voiceState.audioContext) {
+    voiceState.audioContext.close().catch(() => {});
+    voiceState.audioContext = null;
+  }
+  voiceState.dataArray = null;
+  voiceState.enabled = false;
+  voiceState.muted = false;
+  voiceState.speaking = false;
+  updateVoiceUi();
+}
+
+function startVoiceMeter() {
+  if (!voiceState.analyser || !voiceState.dataArray) return;
+
+  const loop = () => {
+    if (!voiceState.analyser || !voiceState.dataArray) {
+      voiceState.raf = 0;
+      return;
+    }
+    voiceState.analyser.getByteTimeDomainData(voiceState.dataArray);
+    let sumSquares = 0;
+    for (let i = 0; i < voiceState.dataArray.length; i += 1) {
+      const normalized = (voiceState.dataArray[i] - 128) / 128;
+      sumSquares += normalized * normalized;
+    }
+    const rms = Math.sqrt(sumSquares / voiceState.dataArray.length);
+    const speakingNow = !voiceState.muted && rms > 0.035;
+    if (speakingNow !== voiceState.speaking) {
+      voiceState.speaking = speakingNow;
+      updateVoiceUi();
+      publishLocalPresence(true);
+      renderSocialPlayers();
+    }
+    voiceState.raf = requestAnimationFrame(loop);
+  };
+
+  if (!voiceState.raf) {
+    voiceState.raf = requestAnimationFrame(loop);
+  }
+}
+
+async function toggleVoiceState() {
+  if (!voiceState.enabled) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      source.connect(analyser);
+
+      voiceState.stream = stream;
+      voiceState.audioContext = audioContext;
+      voiceState.source = source;
+      voiceState.analyser = analyser;
+      voiceState.dataArray = new Uint8Array(analyser.fftSize);
+      voiceState.enabled = true;
+      voiceState.muted = false;
+      voiceState.speaking = false;
+      updateVoiceUi();
+      publishLocalPresence(true);
+      startVoiceMeter();
+      pushChatMessage({ type: 'system', text: 'Voice enabled.' });
+    } catch (_err) {
+      pushChatMessage({ type: 'system', text: 'Voice permission denied or unavailable.' });
+      teardownVoiceCapture();
+    }
+    return;
+  }
+
+  voiceState.muted = !voiceState.muted;
+  if (voiceState.stream) {
+    voiceState.stream.getAudioTracks().forEach((track) => {
+      track.enabled = !voiceState.muted;
+    });
+  }
+  if (voiceState.muted) {
+    voiceState.speaking = false;
+  }
+  updateVoiceUi();
+  publishLocalPresence(true);
+  renderSocialPlayers();
+}
+
+function sendChatMessage() {
+  const text = sanitizeText(socialChatInputEl ? socialChatInputEl.value : '', 300);
+  if (!text) return;
+  if (socialChatInputEl) {
+    socialChatInputEl.value = '';
+  }
+  if (!netState.socket) {
+    pushChatMessage({ type: 'system', text: 'Not connected yet. Join room first.' });
+    return;
+  }
+  netState.socket.emit('social-chat-message', {
+    message: text,
+    name: chosenDisplayName || selectedCharacter?.name || 'Traveler',
   });
 }
 
@@ -722,6 +977,8 @@ function initDisplayNameGate() {
     updateHudPlayerText();
     connectMultiplayer();
     publishLocalPresence(true);
+    renderSocialPlayers();
+    pushChatMessage({ type: 'system', text: `Joined as ${chosenDisplayName}.` });
   };
 
   if (displayNameSubmitEl) {
@@ -735,6 +992,23 @@ function initDisplayNameGate() {
       }
     });
   }
+}
+
+if (socialChatSendEl) {
+  socialChatSendEl.addEventListener('click', sendChatMessage);
+}
+if (socialChatInputEl) {
+  socialChatInputEl.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      sendChatMessage();
+    }
+  });
+}
+if (voiceToggleEl) {
+  voiceToggleEl.addEventListener('click', () => {
+    toggleVoiceState();
+  });
 }
 
 function setupImportedRigAnimator(root) {
@@ -1143,4 +1417,8 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+window.addEventListener('beforeunload', () => {
+  teardownVoiceCapture();
 });

@@ -145,6 +145,14 @@ def socket_player_update(data):
         }
     else:
         entry.pop("avatar", None)
+    social = data.get("social") if isinstance(data.get("social"), dict) else None
+    if social:
+        entry["social"] = {
+            "voiceEnabled": bool(social.get("voiceEnabled", False)),
+            "voiceSpeaking": bool(social.get("voiceSpeaking", False)),
+        }
+    else:
+        entry.pop("social", None)
     mp = data.get("movementPreview") if isinstance(data.get("movementPreview"), dict) else None
     if mp:
         cursor = mp.get("cursor") if isinstance(mp.get("cursor"), dict) else None
@@ -288,6 +296,24 @@ def socket_scene_update(data):
         gs.world_state["scene"] = gs.latest_scene_state
     emit("scene-update", data, broadcast=True, include_self=False)
     broadcast_world(include_scene=True)
+
+
+@socketio.on("social-chat-message")
+def socket_social_chat_message(data):
+    sid = request.sid
+    if sid not in gs.players or not isinstance(data, dict):
+        return
+
+    message = str(data.get("message") or "").strip()
+    if not message:
+        return
+
+    sender = str(data.get("name") or gs.players[sid].get("name") or "Traveler").strip()[:24] or "Traveler"
+    socketio.emit("social-chat-message", {
+        "sid": sid,
+        "name": sender,
+        "message": message[:300],
+    })
 
 
 # ---------------------------------------------------------------------------
