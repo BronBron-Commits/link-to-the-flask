@@ -563,6 +563,15 @@ const summaryDisplayNameEl = document.getElementById('summary-display-name');
 const summaryEmailEl = document.getElementById('summary-email');
 const summaryStatusEl = document.getElementById('summary-status');
 const summaryIdEl = document.getElementById('summary-id');
+
+// Log button availability for debugging
+console.log('[BOOT] Auth elements:', {
+  signInBtn: !!signInBtn,
+  signUpBtn: !!signUpBtn,
+  signOutBtn: !!signOutBtn,
+  emailEl: !!emailEl,
+  passwordEl: !!passwordEl,
+});
 const confirmWrapEl = document.getElementById('confirm-wrap');
 const tabSignInEl = document.getElementById('tab-sign-in');
 const tabCreateEl = document.getElementById('tab-create');
@@ -759,6 +768,12 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   tabSignInEl.addEventListener('click', () => applyMode('sign-in'));
   tabCreateEl.addEventListener('click', () => applyMode('create'));
   tabManageEl.addEventListener('click', () => applyMode('manage'));
+
+  console.log('[BOOT] Attaching sign-in event listener...', !!signInBtn);
+  if (!signInBtn) {
+    console.error('[BOOT] ERROR: signInBtn not found! Cannot attach event listener.');
+    return;
+  }
 
   signInBtn.addEventListener('click', async () => {
     const email = String(emailEl.value || '').trim();
