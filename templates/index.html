@@ -581,6 +581,7 @@ const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
 const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
 let currentMode = 'sign-in';
 let currentUser = null;
+let signInInFlight = false;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -596,6 +597,15 @@ function setInputsDisabled(disabled) {
   signUpBtn.disabled = disabled;
   saveProfileBtn.disabled = disabled;
   resetPasswordBtn.disabled = disabled;
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label}-timeout-${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]);
 }
 
 function renderAccount(user) {
@@ -762,6 +772,10 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   console.log('[BOOT] Attaching sign-in event listener...', !!signInBtn);
   if (signInBtn) {
     signInBtn.addEventListener('click', async () => {
+      if (signInInFlight) {
+        console.log('[SIGN IN] ignored duplicate click while request is in flight');
+        return;
+      }
       console.log('[SIGN IN] button clicked');
       const email = String(emailEl.value || '').trim();
       const password = String(passwordEl.value || '');
@@ -773,21 +787,40 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     setStatus('Signing in...', '');
     console.log('[SIGN IN] calling supabase.auth.signInWithPassword...');
-    const result = await supabase.auth.signInWithPassword({ email, password });
-    console.log('[SIGN IN] supabase returned:', { hasError: !!result.error, hasSession: !!result.data?.session });
-    if (result.error) {
-      setStatus(result.error.message, 'error');
-      console.log('[SIGN IN] error:', result.error.message);
-      return;
-    }
-    console.log('[SIGN IN] exchanging session with backend...');
     try {
+      signInInFlight = true;
+      signInBtn.disabled = true;
+      const result = await withTimeout(
+        supabase.auth.signInWithPassword({ email, password }),
+        15000,
+        'supabase-sign-in'
+      );
+      console.log('[SIGN IN] supabase returned:', { hasError: !!result.error, hasSession: !!result.data?.session });
+      if (result.error) {
+        setStatus(result.error.message, 'error');
+        console.log('[SIGN IN] error:', result.error.message);
+        return;
+      }
+      if (!result.data || !result.data.session) {
+        setStatus('Sign-in succeeded but no session was returned.', 'error');
+        console.log('[SIGN IN] missing session in sign-in result');
+        return;
+      }
+      console.log('[SIGN IN] exchanging session with backend...');
       await exchangeSession(result.data.session);
       console.log('[SIGN IN] exchange succeeded, redirecting to /hub');
       window.location.replace('/hub');
     } catch (error) {
       console.log('[SIGN IN] exchange failed:', error.message);
-      setStatus(`Backend session failed: ${error.message}`, 'error');
+      const msg = String(error && error.message ? error.message : error);
+      if (msg.includes('supabase-sign-in-timeout-')) {
+        setStatus('Supabase sign-in timed out. Check browser network/ad-blocking and try again.', 'error');
+      } else {
+        setStatus(`Backend session failed: ${msg}`, 'error');
+      }
+    } finally {
+      signInInFlight = false;
+      signInBtn.disabled = false;
     }
   });
   } else {
