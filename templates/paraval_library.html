@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Paraval Library</title>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Cormorant+Garamond:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
     :root {
       --ink: #2f2217;
       --gold: #c7a766;
@@ -16,6 +18,9 @@
       --night: #0a1018;
       --night-blue: #152235;
       --ember: #a55a2a;
+      --moon: #b2d0ff;
+      --arcane: #85b6ff;
+      --starlight: rgba(178, 208, 255, 0.55);
     }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -24,8 +29,9 @@
       min-height: 100%;
       margin: 0;
       color: #f4ecd8;
-      font-family: Georgia, 'Times New Roman', serif;
+      font-family: 'Cormorant Garamond', Georgia, serif;
       background:
+        radial-gradient(circle at 18% 8%, rgba(178, 208, 255, 0.08), transparent 34%),
         radial-gradient(circle at top, rgba(194, 118, 54, 0.16), transparent 28%),
         linear-gradient(180deg, #1b2430 0%, var(--night) 42%, #04070c 100%);
     }
@@ -35,23 +41,72 @@
     }
 
     .frame {
+      position: relative;
+      isolation: isolate;
       max-width: 1380px;
       margin: 0 auto;
       border: 1px solid var(--gold-dim);
       border-radius: 28px;
       overflow: hidden;
       background:
+        radial-gradient(circle at 16% 0%, rgba(133, 182, 255, 0.08), transparent 36%),
         linear-gradient(135deg, rgba(11, 16, 24, 0.92), rgba(8, 11, 17, 0.98)),
         linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
       box-shadow: 0 34px 80px rgba(0, 0, 0, 0.48);
     }
 
+    .frame::before,
+    .frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: -1;
+    }
+
+    .frame::before {
+      background:
+        radial-gradient(2px 2px at 8% 20%, rgba(255,255,255,0.85), transparent),
+        radial-gradient(2px 2px at 22% 64%, rgba(178, 208, 255, 0.9), transparent),
+        radial-gradient(1px 1px at 58% 14%, rgba(255,255,255,0.75), transparent),
+        radial-gradient(1px 1px at 72% 76%, rgba(255,255,255,0.86), transparent),
+        radial-gradient(2px 2px at 93% 28%, rgba(178, 208, 255, 0.86), transparent);
+      opacity: 0.34;
+      animation: stardrift 26s linear infinite;
+    }
+
+    .frame::after {
+      background:
+        radial-gradient(circle at 50% -10%, rgba(133, 182, 255, 0.14), transparent 45%),
+        radial-gradient(circle at 50% 120%, rgba(199, 167, 102, 0.1), transparent 42%);
+      mix-blend-mode: screen;
+      opacity: 0.72;
+    }
+
     .hero {
+      position: relative;
+      overflow: hidden;
       padding: 28px 30px 18px;
       border-bottom: 1px solid rgba(199, 167, 102, 0.16);
       background:
         linear-gradient(180deg, rgba(199, 167, 102, 0.08), transparent),
         radial-gradient(circle at right top, rgba(165, 90, 42, 0.14), transparent 38%);
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      width: 420px;
+      height: 420px;
+      top: -250px;
+      right: -100px;
+      border-radius: 50%;
+      background:
+        conic-gradient(from 100deg, rgba(133, 182, 255, 0.24), rgba(199, 167, 102, 0.1), rgba(133, 182, 255, 0.24));
+      filter: blur(18px);
+      opacity: 0.36;
+      animation: haloSpin 20s linear infinite;
+      pointer-events: none;
     }
 
     .topbar {
@@ -68,7 +123,7 @@
       font-size: 0.78rem;
       letter-spacing: 0.28em;
       text-transform: uppercase;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
     }
 
     h1 {
@@ -78,6 +133,7 @@
       color: #f7e8ba;
       text-transform: uppercase;
       letter-spacing: 0.08em;
+      font-family: 'Cinzel', serif;
       text-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
     }
 
@@ -85,7 +141,7 @@
       max-width: 840px;
       margin: 14px 0 0;
       color: #bcae90;
-      font-size: 1rem;
+      font-size: 1.06rem;
       line-height: 1.7;
     }
 
@@ -103,18 +159,40 @@
       padding: 10px 14px;
       border-radius: 12px;
       border: 1px solid rgba(199, 167, 102, 0.28);
-      background: rgba(13, 18, 27, 0.9);
+      background: linear-gradient(180deg, rgba(16, 22, 33, 0.95), rgba(9, 14, 22, 0.95));
       color: #f4e3b3;
       text-decoration: none;
       text-transform: uppercase;
       letter-spacing: 0.12em;
       font-size: 0.75rem;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.25s ease, transform 0.25s ease, box-shadow 0.25s ease;
+    }
+
+    .btn::after {
+      content: '';
+      position: absolute;
+      top: -140%;
+      left: -35%;
+      width: 42%;
+      height: 300%;
+      transform: rotate(24deg);
+      background: linear-gradient(180deg, transparent, rgba(178, 208, 255, 0.4), transparent);
+      opacity: 0;
+      transition: opacity 0.25s ease;
     }
 
     .btn:hover {
       border-color: rgba(199, 167, 102, 0.62);
-      background: rgba(24, 30, 43, 0.95);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
+    }
+
+    .btn:hover::after {
+      opacity: 1;
+      animation: buttonSweep 0.9s ease;
     }
 
     .meta {
@@ -122,7 +200,7 @@
       color: #91856a;
       min-height: 20px;
       font-size: 0.85rem;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
     }
 
     .layout {
@@ -147,6 +225,7 @@
       font-size: 1.1rem;
       letter-spacing: 0.08em;
       text-transform: uppercase;
+      font-family: 'Cinzel', serif;
     }
 
     .shelf-copy {
@@ -172,7 +251,7 @@
       padding: 14px;
       text-align: left;
       cursor: pointer;
-      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
       position: relative;
       overflow: hidden;
     }
@@ -188,11 +267,28 @@
       opacity: 0.45;
     }
 
+    .book::after {
+      content: '';
+      position: absolute;
+      left: -120%;
+      top: 0;
+      width: 70%;
+      height: 100%;
+      transform: skewX(-16deg);
+      background: linear-gradient(90deg, transparent, rgba(178, 208, 255, 0.22), transparent);
+      transition: left 0.5s ease;
+    }
+
     .book:hover,
     .book[aria-pressed='true'] {
       transform: translateY(-2px);
       border-color: rgba(199, 167, 102, 0.48);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), 0 0 26px rgba(133, 182, 255, 0.08);
+    }
+
+    .book:hover::after,
+    .book[aria-pressed='true']::after {
+      left: 140%;
     }
 
     .book[aria-pressed='true'] {
@@ -208,6 +304,7 @@
       font-size: 1rem;
       letter-spacing: 0.05em;
       text-transform: uppercase;
+      font-family: 'Cinzel', serif;
     }
 
     .book-meta,
@@ -221,7 +318,7 @@
       font-size: 0.73rem;
       letter-spacing: 0.18em;
       text-transform: uppercase;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
     }
 
     .book-blurb {
@@ -244,9 +341,23 @@
       border: 1px solid rgba(199, 167, 102, 0.12);
       padding: 18px;
       background: rgba(6, 9, 14, 0.4);
+      backdrop-filter: blur(2px);
       display: grid;
       grid-template-rows: auto auto minmax(0, 1fr);
       gap: 16px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .reader-shell::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 24% 4%, rgba(178, 208, 255, 0.14), transparent 28%),
+        radial-gradient(circle at 80% 0%, rgba(199, 167, 102, 0.12), transparent 26%);
+      pointer-events: none;
+      animation: shellPulse 9s ease-in-out infinite;
     }
 
     .reader-head {
@@ -263,13 +374,14 @@
       letter-spacing: 0.18em;
       text-transform: uppercase;
       font-size: 0.75rem;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
     }
 
     .reader-title {
       margin: 0;
       color: #f4deb0;
       font-size: clamp(1.4rem, 3vw, 2.2rem);
+      font-family: 'Cinzel', serif;
     }
 
     .reader-author {
@@ -291,9 +403,11 @@
       padding: 14px 16px;
       border-radius: 16px;
       background: rgba(199, 167, 102, 0.08);
+      border: 1px solid rgba(199, 167, 102, 0.16);
       color: #c5b796;
       line-height: 1.7;
       font-size: 0.95rem;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
     }
 
     .book-open {
@@ -307,6 +421,7 @@
       background:
         linear-gradient(90deg, rgba(79, 54, 32, 0.22), rgba(245, 235, 214, 0.06) 7%, rgba(245, 235, 214, 0.06) 49%, rgba(87, 60, 38, 0.28) 50%, rgba(245, 235, 214, 0.05) 52%, rgba(245, 235, 214, 0.05) 100%),
         linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+      animation: codexGlow 10s ease-in-out infinite;
     }
 
     .page {
@@ -317,6 +432,14 @@
       flex-direction: column;
       position: relative;
       overflow: hidden;
+      transform-origin: center center;
+    }
+
+    .page:nth-child(1) { transform: perspective(900px) rotateY(1.8deg); }
+    .page:nth-child(2) { transform: perspective(900px) rotateY(-1.8deg); }
+
+    .page.turning {
+      animation: pageTurnFlash 0.48s ease;
     }
 
     .page::after {
@@ -330,6 +453,18 @@
       opacity: 0.45;
     }
 
+    .page::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 14% 18%, rgba(133, 182, 255, 0.11), transparent 24%),
+        radial-gradient(circle at 82% 84%, rgba(165, 90, 42, 0.12), transparent 22%);
+      opacity: 0.56;
+      pointer-events: none;
+      mix-blend-mode: multiply;
+    }
+
     .page-header {
       position: relative;
       z-index: 1;
@@ -338,7 +473,7 @@
       font-size: 0.75rem;
       letter-spacing: 0.2em;
       text-transform: uppercase;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
     }
 
     .page-body {
@@ -361,7 +496,50 @@
       letter-spacing: 0.22em;
       text-transform: uppercase;
       text-align: center;
-      font-family: Consolas, 'Courier New', monospace;
+      font-family: 'Space Mono', Consolas, monospace;
+    }
+
+    @keyframes stardrift {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(9px); }
+      100% { transform: translateY(0px); }
+    }
+
+    @keyframes haloSpin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    @keyframes codexGlow {
+      0%, 100% { box-shadow: inset 0 0 0 1px rgba(87, 61, 35, 0.25), 0 0 0 rgba(133, 182, 255, 0.05); }
+      50% { box-shadow: inset 0 0 0 1px rgba(87, 61, 35, 0.25), 0 0 24px rgba(133, 182, 255, 0.1); }
+    }
+
+    @keyframes shellPulse {
+      0%, 100% { opacity: 0.75; }
+      50% { opacity: 1; }
+    }
+
+    @keyframes buttonSweep {
+      0% { transform: rotate(24deg) translateX(0); }
+      100% { transform: rotate(24deg) translateX(210px); }
+    }
+
+    @keyframes pageTurnFlash {
+      0% { filter: brightness(1); }
+      35% { filter: brightness(1.08); }
+      100% { filter: brightness(1); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .frame::before,
+      .hero::after,
+      .reader-shell::before,
+      .book-open,
+      .btn:hover::after,
+      .page.turning {
+        animation: none !important;
+      }
     }
 
     @media (max-width: 1080px) {
@@ -671,6 +849,7 @@ S: Who does? Tidus?
     const readerSummaryEl = document.getElementById('reader-summary');
     const pageLeftEl = document.getElementById('page-left');
     const pageRightEl = document.getElementById('page-right');
+    const pageEls = Array.from(document.querySelectorAll('.page'));
     const prevBookBtn = document.getElementById('prev-book-btn');
     const nextBookBtn = document.getElementById('next-book-btn');
     const backWorldsBtn = document.getElementById('back-worlds-btn');
@@ -762,6 +941,11 @@ S: Who does? Tidus?
       readerSummaryEl.textContent = story.summary;
       pageLeftEl.textContent = story.left;
       pageRightEl.textContent = story.right;
+      pageEls.forEach((page) => {
+        page.classList.remove('turning');
+        void page.offsetWidth;
+        page.classList.add('turning');
+      });
       Array.from(bookshelfEl.querySelectorAll('.book')).forEach((button, buttonIndex) => {
         button.setAttribute('aria-pressed', String(buttonIndex === currentIndex));
       });
