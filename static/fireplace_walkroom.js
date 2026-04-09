@@ -8,8 +8,10 @@ const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCI
   ? window.__SOCIAL_ROOM_CONFIG__
   : {};
 const SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
+const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
+const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? '/static/everything_.gltf' : '');
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
-const USE_SCENE_ASSET = Boolean(SCENE_ASSET_URL);
+const USE_SCENE_ASSET = Boolean(RESOLVED_SCENE_ASSET_URL);
 
 const hudPlayerEl = document.getElementById('hud-player');
 const nameGateEl = document.getElementById('name-gate');
@@ -1688,7 +1690,7 @@ const tmpVertical = new THREE.Vector3();
 function loadSceneAssetEnvironment() {
   if (!USE_SCENE_ASSET) return;
   worldSceneLoader.load(
-    SCENE_ASSET_URL,
+    RESOLVED_SCENE_ASSET_URL,
     (gltf) => {
       if (worldSceneRoot) {
         scene.remove(worldSceneRoot);
@@ -1717,7 +1719,7 @@ function loadSceneAssetEnvironment() {
     },
     undefined,
     (error) => {
-      console.warn('[SOCIAL ROOM] Failed to load scene asset:', SCENE_ASSET_URL, error);
+      console.warn('[SOCIAL ROOM] Failed to load scene asset:', RESOLVED_SCENE_ASSET_URL, error);
     }
   );
 }
