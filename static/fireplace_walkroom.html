@@ -278,7 +278,10 @@
     </div>
   </section>
 
+  <script src="/runtime-asset-version.js"></script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-  <script type="module" src="/static/fireplace_walkroom.js"></script>
+  <script type="module">
+    import(window.__assetUrl('/static/fireplace_walkroom.js'));
+  </script>
 </body>
 </html>

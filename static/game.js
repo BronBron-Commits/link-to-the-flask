@@ -1234,7 +1234,9 @@ function draw() {
                     canvas.style.display = 'none';
                     const script = document.createElement('script');
                     script.type = 'module';
-                    script.src = '/static/map3d.js';
+                    script.src = typeof window.__assetUrl === 'function'
+                        ? window.__assetUrl('/static/map3d.js')
+                        : '/static/map3d.js';
                     document.body.appendChild(script);
                 }
             });

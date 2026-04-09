@@ -95,10 +95,13 @@
     <!-- Combat UI overlay -->
     <div id="combat-ui-root"></div>
 
+    <script src="/runtime-asset-version.js"></script>
     <!-- Socket.IO client for multiplayer support -->
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script type="module" src="/static/map3d.js"></script>
-    <script type="module" src="/static/combat-ui.js"></script>
+    <script type="module">
+        import(window.__assetUrl('/static/map3d.js'));
+        import(window.__assetUrl('/static/combat-ui.js'));
+    </script>
     <script>
         // Wire dropdowns once map3d.js has had a tick to register window.map3dRuntime
         window.addEventListener('load', () => {

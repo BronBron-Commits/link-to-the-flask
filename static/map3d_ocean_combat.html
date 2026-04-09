@@ -35,8 +35,11 @@
     <!-- Combat UI overlay -->
     <div id="combat-ui-root"></div>
 
+    <script src="/runtime-asset-version.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    <script type="module" src="/static/map3d.js"></script>
-    <script type="module" src="/static/combat-ui.js"></script>
+    <script type="module">
+        import(window.__assetUrl('/static/map3d.js'));
+        import(window.__assetUrl('/static/combat-ui.js'));
+    </script>
 </body>
 </html>

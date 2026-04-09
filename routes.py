@@ -7,6 +7,7 @@ SocketIO event handlers belong in app.py instead.
 import json
 import os
 import re
+import hashlib
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib import error as urllib_error
@@ -66,6 +67,34 @@ def asset_url(relative_path: str) -> str:
 @app.context_processor
 def inject_asset_helpers():
     return {"asset_url": asset_url}
+
+
+@app.route("/runtime-asset-version.js", methods=["GET"])
+def runtime_asset_version_js():
+    version = gs.SERVER_BUILD_TAG
+    payload = (
+        "(function () {\n"
+        f"  const version = {json.dumps(version)};\n"
+        "  function assetUrl(input) {\n"
+        "    const raw = String(input || '');\n"
+        "    if (!raw) return raw;\n"
+        "    try {\n"
+        "      const url = new URL(raw, window.location.origin);\n"
+        "      if (url.origin === window.location.origin && url.pathname.startsWith('/static/')) {\n"
+        "        url.searchParams.set('v', version);\n"
+        "      }\n"
+        "      return url.pathname + url.search + url.hash;\n"
+        "    } catch (_err) {\n"
+        "      return raw;\n"
+        "    }\n"
+        "  }\n"
+        "  window.__ASSET_VERSION__ = version;\n"
+        "  window.__assetUrl = assetUrl;\n"
+        "})();\n"
+    )
+    response = Response(payload, mimetype="application/javascript")
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 def _supabase_public_config() -> dict:
@@ -662,16 +691,28 @@ def upload_character_model_api():
     bundle_dir = gs.CHARACTER_MODELS_DIR / bundle_id
     bundle_dir.mkdir(parents=True, exist_ok=True)
     saved: list[str] = []
+    entry_name_map: dict[str, str] = {}
     for uploaded in files:
         safe = secure_filename(uploaded.filename)
         if not safe:
             continue
-        (bundle_dir / safe).parent.mkdir(parents=True, exist_ok=True)
-        uploaded.save(bundle_dir / safe)
-        saved.append(safe)
+        data = uploaded.read()
+        if not data:
+            continue
+        digest = hashlib.sha256(data).hexdigest()[:12]
+        source_path = Path(safe)
+        stem = secure_filename(source_path.stem) or "asset"
+        suffix = source_path.suffix.lower()
+        hashed_name = f"{stem}-{digest}{suffix}"
+        target_path = bundle_dir / hashed_name
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(data)
+        saved.append(hashed_name)
+        entry_name_map[safe] = hashed_name
     if not saved:
         return jsonify(ok=False, error="no valid files uploaded"), 400
     entry_name = secure_filename(request.form.get("model_entry", ""))
+    entry_name = entry_name_map.get(entry_name, entry_name)
     if not entry_name or entry_name not in saved:
         glbs = [n for n in saved if n.lower().endswith(".glb")]
         gltfs = [n for n in saved if n.lower().endswith(".gltf")]

@@ -5023,7 +5023,9 @@ function connectFireplaceLobby() {
       if (!document.getElementById('combat-ui-script')) {
         const script = document.createElement('script');
         script.id = 'combat-ui-script';
-        script.src = '/static/combat-ui.js';
+        script.src = typeof window.__assetUrl === 'function'
+          ? window.__assetUrl('/static/combat-ui.js')
+          : '/static/combat-ui.js';
         document.body.appendChild(script);
       }
     }
