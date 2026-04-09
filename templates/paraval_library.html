@@ -1277,6 +1277,9 @@ S: Who does? Tidus?
       roomFilter: null,
       roomLfo: null,
       roomLfoGain: null,
+      shimmerGain: null,
+      shimmerOscA: null,
+      shimmerOscB: null,
     };
 
     const runeSetsByTheme = {
@@ -1471,7 +1474,7 @@ S: Who does? Tidus?
 
       const ctx = new Ctx();
       const masterGain = ctx.createGain();
-      masterGain.gain.value = 0.22;
+      masterGain.gain.value = 0.24;
       masterGain.connect(ctx.destination);
 
       audioState.ctx = ctx;
@@ -1506,9 +1509,9 @@ S: Who does? Tidus?
       source.loop = true;
 
       const filter = ctx.createBiquadFilter();
-      filter.type = 'bandpass';
-      filter.frequency.value = 430;
-      filter.Q.value = 0.8;
+      filter.type = 'lowpass';
+      filter.frequency.value = 760;
+      filter.Q.value = 0.65;
 
       const roomGain = ctx.createGain();
       roomGain.gain.value = 0.0;
@@ -1519,20 +1522,53 @@ S: Who does? Tidus?
       const lfoGain = ctx.createGain();
       lfoGain.gain.value = 0.0028;
 
+      const shimmerGain = ctx.createGain();
+      shimmerGain.gain.value = 0.0;
+      const shimmerA = ctx.createOscillator();
+      shimmerA.type = 'triangle';
+      shimmerA.frequency.value = 612;
+      const shimmerB = ctx.createOscillator();
+      shimmerB.type = 'sine';
+      shimmerB.frequency.value = 904;
+
+      const shimmerFilter = ctx.createBiquadFilter();
+      shimmerFilter.type = 'bandpass';
+      shimmerFilter.frequency.value = 780;
+      shimmerFilter.Q.value = 1.5;
+
+      const shimmerLfo = ctx.createOscillator();
+      shimmerLfo.type = 'sine';
+      shimmerLfo.frequency.value = 0.06;
+      const shimmerLfoGain = ctx.createGain();
+      shimmerLfoGain.gain.value = 14;
+
       source.connect(filter);
       filter.connect(roomGain);
       roomGain.connect(audioState.masterGain);
       lfo.connect(lfoGain);
       lfoGain.connect(roomGain.gain);
 
+      shimmerA.connect(shimmerFilter);
+      shimmerB.connect(shimmerFilter);
+      shimmerFilter.connect(shimmerGain);
+      shimmerGain.connect(audioState.masterGain);
+      shimmerLfo.connect(shimmerLfoGain);
+      shimmerLfoGain.connect(shimmerFilter.frequency);
+
       source.start();
       lfo.start();
+      shimmerA.start();
+      shimmerB.start();
+      shimmerLfo.start();
 
       audioState.roomSource = source;
       audioState.roomFilter = filter;
       audioState.roomGain = roomGain;
       audioState.roomLfo = lfo;
       audioState.roomLfoGain = lfoGain;
+      audioState.shimmerGain = shimmerGain;
+      audioState.shimmerOscA = shimmerA;
+      audioState.shimmerOscB = shimmerB;
     }
 
     function setRoomToneEnabled(enabled) {
@@ -1544,7 +1580,13 @@ S: Who does? Tidus?
       const now = ctx.currentTime;
       audioState.roomGain.gain.cancelScheduledValues(now);
       audioState.roomGain.gain.setValueAtTime(audioState.roomGain.gain.value, now);
-      audioState.roomGain.gain.linearRampToValueAtTime(enabled ? 0.011 : 0.0, now + 0.38);
+      audioState.roomGain.gain.linearRampToValueAtTime(enabled ? 0.013 : 0.0, now + 0.38);
+
+      if (audioState.shimmerGain) {
+        audioState.shimmerGain.gain.cancelScheduledValues(now);
+        audioState.shimmerGain.gain.setValueAtTime(audioState.shimmerGain.gain.value, now);
+        audioState.shimmerGain.gain.linearRampToValueAtTime(enabled ? 0.0018 : 0.0, now + 0.5);
+      }
     }
 
     function playPageTurnSound() {
@@ -1569,30 +1611,74 @@ S: Who does? Tidus?
       hissSource.buffer = hissBuffer;
       const hissFilter = ctx.createBiquadFilter();
       hissFilter.type = 'highpass';
-      hissFilter.frequency.value = 950;
+      hissFilter.frequency.value = 620;
+      const hissLowpass = ctx.createBiquadFilter();
+      hissLowpass.type = 'lowpass';
+      hissLowpass.frequency.value = 2600;
       const hissGain = ctx.createGain();
       hissGain.gain.setValueAtTime(0.0, now);
-      hissGain.gain.linearRampToValueAtTime(0.022, now + 0.012);
-      hissGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      hissGain.gain.linearRampToValueAtTime(0.015, now + 0.012);
+      hissGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
 
       hissSource.connect(hissFilter);
-      hissFilter.connect(hissGain);
+      hissFilter.connect(hissLowpass);
+      hissLowpass.connect(hissGain);
       hissGain.connect(audioState.masterGain);
       hissSource.start(now);
-      hissSource.stop(now + 0.16);
+      hissSource.stop(now + 0.18);
 
       const thump = ctx.createOscillator();
-      thump.type = 'triangle';
-      thump.frequency.setValueAtTime(210, now);
-      thump.frequency.exponentialRampToValueAtTime(118, now + 0.11);
+      thump.type = 'sine';
+      thump.frequency.setValueAtTime(176, now);
+      thump.frequency.exponentialRampToValueAtTime(104, now + 0.14);
       const thumpGain = ctx.createGain();
       thumpGain.gain.setValueAtTime(0.0, now);
-      thumpGain.gain.linearRampToValueAtTime(0.012, now + 0.008);
-      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      thumpGain.gain.linearRampToValueAtTime(0.015, now + 0.01);
+      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
       thump.connect(thumpGain);
       thumpGain.connect(audioState.masterGain);
       thump.start(now);
-      thump.stop(now + 0.14);
+      thump.stop(now + 0.18);
+
+      const rustle = ctx.createBufferSource();
+      const rustleBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.12), ctx.sampleRate);
+      const rustleData = rustleBuffer.getChannelData(0);
+      for (let i = 0; i < rustleData.length; i += 1) {
+        const t = i / rustleData.length;
+        rustleData[i] = (Math.random() * 2 - 1) * (0.5 - Math.abs(t - 0.45));
+      }
+      rustle.buffer = rustleBuffer;
+      const rustleFilter = ctx.createBiquadFilter();
+      rustleFilter.type = 'bandpass';
+      rustleFilter.frequency.value = 720;
+      rustleFilter.Q.value = 0.9;
+      const rustleGain = ctx.createGain();
+      rustleGain.gain.setValueAtTime(0.0, now + 0.015);
+      rustleGain.gain.linearRampToValueAtTime(0.009, now + 0.03);
+      rustleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
+      rustle.connect(rustleFilter);
+      rustleFilter.connect(rustleGain);
+      rustleGain.connect(audioState.masterGain);
+      rustle.start(now + 0.012);
+      rustle.stop(now + 0.2);
+
+      const glyphPing = ctx.createOscillator();
+      glyphPing.type = 'triangle';
+      glyphPing.frequency.setValueAtTime(980, now + 0.025);
+      glyphPing.frequency.exponentialRampToValueAtTime(690, now + 0.11);
+      const glyphGain = ctx.createGain();
+      glyphGain.gain.setValueAtTime(0.0, now + 0.02);
+      glyphGain.gain.linearRampToValueAtTime(0.0025, now + 0.045);
+      glyphGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
+      const glyphFilter = ctx.createBiquadFilter();
+      glyphFilter.type = 'bandpass';
+      glyphFilter.frequency.value = 840;
+      glyphFilter.Q.value = 2.4;
+      glyphPing.connect(glyphFilter);
+      glyphFilter.connect(glyphGain);
+      glyphGain.connect(audioState.masterGain);
+      glyphPing.start(now + 0.02);
+      glyphPing.stop(now + 0.15);
     }
 
     function bindLibraryAudio() {
