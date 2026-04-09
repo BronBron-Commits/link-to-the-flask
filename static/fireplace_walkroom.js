@@ -24,6 +24,7 @@ const socialChatSendEl = document.getElementById('social-chat-send');
 const voiceToggleEl = document.getElementById('voice-toggle');
 const voiceStateEl = document.getElementById('voice-state');
 const coordHudEl = document.getElementById('coord-hud');
+const tmpCameraWorldPosition = new THREE.Vector3();
 
 document.title = `Paraval ${ROOM_TITLE}`;
 if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
@@ -236,7 +237,7 @@ function updateHudPlayerText() {
 
 function updateCoordinateHud() {
   if (!coordHudEl) return;
-  const source = USE_SCENE_ASSET ? camera.position : actor.position;
+  const source = USE_SCENE_ASSET ? camera.getWorldPosition(tmpCameraWorldPosition) : actor.position;
   const x = Number(source.x || 0).toFixed(2);
   const y = Number(source.y || 0).toFixed(2);
   const z = Number(source.z || 0).toFixed(2);
@@ -289,7 +290,6 @@ function loadSelectionContext() {
 }
 
 loadSelectionContext();
-updateCoordinateHud();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(USE_SCENE_ASSET ? 0x2a3442 : 0x0a0d15);
@@ -311,6 +311,7 @@ skyboxTextureLoader.load(
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 2.6, 6.4);
+updateCoordinateHud();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio || 1);
