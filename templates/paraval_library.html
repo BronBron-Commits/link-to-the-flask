@@ -480,8 +480,10 @@
       position: relative;
       z-index: 1;
       white-space: pre-wrap;
-      line-height: 1.95;
-      font-size: 1rem;
+      line-height: 2.02;
+      font-size: clamp(1.08rem, 1.1vw, 1.22rem);
+      font-weight: 500;
+      letter-spacing: 0.01em;
       overflow-y: auto;
       padding-right: 6px;
     }
@@ -570,6 +572,11 @@
 
       .page {
         min-height: 320px;
+      }
+
+      .page-body {
+        font-size: 1.12rem;
+        line-height: 1.9;
       }
     }
   </style>
