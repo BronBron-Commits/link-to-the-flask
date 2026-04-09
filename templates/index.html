@@ -772,22 +772,31 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   console.log('[BOOT] Attaching sign-in event listener...', !!signInBtn);
   if (signInBtn) {
     signInBtn.addEventListener('click', async () => {
-    const email = String(emailEl.value || '').trim();
-    const password = String(passwordEl.value || '');
+      console.log('[SIGN IN] button clicked');
+      const email = String(emailEl.value || '').trim();
+      const password = String(passwordEl.value || '');
+      console.log('[SIGN IN] form values:', { emailLength: email.length, passwordLength: password.length });
     if (!email || !password) {
       setStatus('Enter both email and password.', 'error');
+      console.log('[SIGN IN] missing credentials');
       return;
     }
     setStatus('Signing in...', '');
+    console.log('[SIGN IN] calling supabase.auth.signInWithPassword...');
     const result = await supabase.auth.signInWithPassword({ email, password });
+    console.log('[SIGN IN] supabase returned:', { hasError: !!result.error, hasSession: !!result.data?.session });
     if (result.error) {
       setStatus(result.error.message, 'error');
+      console.log('[SIGN IN] error:', result.error.message);
       return;
     }
+    console.log('[SIGN IN] exchanging session with backend...');
     try {
       await exchangeSession(result.data.session);
+      console.log('[SIGN IN] exchange succeeded, redirecting to /hub');
       window.location.replace('/hub');
     } catch (error) {
+      console.log('[SIGN IN] exchange failed:', error.message);
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
   });
