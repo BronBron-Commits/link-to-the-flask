@@ -25,34 +25,6 @@ const socialChatInputEl = document.getElementById('social-chat-input');
 const socialChatSendEl = document.getElementById('social-chat-send');
 const voiceToggleEl = document.getElementById('voice-toggle');
 const voiceStateEl = document.getElementById('voice-state');
-let coordHudEl = document.getElementById('coord-hud');
-
-function ensureCoordinateHudElement() {
-  if (coordHudEl) return coordHudEl;
-  const el = document.createElement('div');
-  el.id = 'coord-hud';
-  el.setAttribute('aria-live', 'polite');
-  el.style.position = 'fixed';
-  el.style.top = '14px';
-  el.style.right = '14px';
-  el.style.zIndex = '50';
-  el.style.border = '1px solid rgba(170, 192, 255, 0.45)';
-  el.style.borderRadius = '8px';
-  el.style.background = 'rgba(10, 14, 25, 0.78)';
-  el.style.color = '#dfe9ff';
-  el.style.fontSize = '11px';
-  el.style.letterSpacing = '0.04em';
-  el.style.padding = '7px 9px';
-  el.style.minWidth = '160px';
-  el.style.textAlign = 'right';
-  el.style.backdropFilter = 'blur(4px)';
-  el.style.whiteSpace = 'pre';
-  el.style.pointerEvents = 'none';
-  el.textContent = 'X: 0.00\nY: 0.00\nZ: 0.00';
-  document.body.appendChild(el);
-  coordHudEl = el;
-  return coordHudEl;
-}
 
 document.title = `Paraval ${ROOM_TITLE}`;
 if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
@@ -263,17 +235,6 @@ function updateHudPlayerText() {
   hudPlayerEl.textContent = `Player: ${nameText}\nModel: ${selectedModelUrl || 'Procedural fallback'}`;
 }
 
-function updateCoordinateHud() {
-  ensureCoordinateHudElement();
-  if (!coordHudEl) return;
-  const source = camera.position;
-
-  const x = Number.isFinite(source.x) ? source.x.toFixed(2) : '0.00';
-  const y = Number.isFinite(source.y) ? source.y.toFixed(2) : '0.00';
-  const z = Number.isFinite(source.z) ? source.z.toFixed(2) : '0.00';
-  coordHudEl.textContent = `X: ${x}\nY: ${y}\nZ: ${z}`;
-}
-
 function loadSelectionContext() {
   try {
     const raw = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
@@ -341,7 +302,6 @@ skyboxTextureLoader.load(
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 2.6, 6.4);
-updateCoordinateHud();
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio || 1);
@@ -1941,7 +1901,6 @@ function animate() {
   const isMoving = updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
-  updateCoordinateHud();
 
   const nowMs = performance.now();
   if (nowMs >= netState.publishAtMs) {
