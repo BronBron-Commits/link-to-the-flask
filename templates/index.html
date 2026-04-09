@@ -582,6 +582,7 @@ const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim
 let currentMode = 'sign-in';
 let currentUser = null;
 let signInInFlight = false;
+let backendSessionSyncPromise = null;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -757,6 +758,36 @@ async function exchangeSession(session) {
   setStatus('Account session synced with the backend.', 'success');
 }
 
+async function syncBackendSession(session, source = 'unknown') {
+  if (backendSessionSyncPromise) {
+    console.log(`[AUTH SYNC] reusing in-flight backend sync (${source})`);
+    return backendSessionSyncPromise;
+  }
+
+  backendSessionSyncPromise = (async () => {
+    try {
+      await exchangeSession(session);
+      return true;
+    } catch (error) {
+      const msg = String(error && error.message ? error.message : error);
+      console.log(`[AUTH SYNC] exchange failed (${source}):`, msg);
+
+      // Recovery: if backend already has session, treat as success.
+      const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
+      const payload = await response.json().catch(() => null);
+      if (response.ok && payload && payload.authenticated && payload.user) {
+        console.log(`[AUTH SYNC] backend already authenticated (${source}), continuing`);
+        return true;
+      }
+      throw error;
+    } finally {
+      backendSessionSyncPromise = null;
+    }
+  })();
+
+  return backendSessionSyncPromise;
+}
+
 if (!window.__paravalAuth || typeof window.__paravalAuth !== 'object') {
   window.__paravalAuth = {
     page: 'index',
@@ -862,7 +893,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       }
 
       console.log('[SIGN IN] exchanging session with backend...');
-      await exchangeSession(session);
+      await syncBackendSession(session, 'sign-in');
       console.log('[SIGN IN] exchange succeeded, redirecting to /hub');
       window.location.replace('/hub');
     } catch (error) {
@@ -917,7 +948,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     if (result.data.session) {
       try {
-        await exchangeSession(result.data.session);
+        await syncBackendSession(result.data.session, 'sign-up');
         window.location.replace('/hub');
       } catch (error) {
         setStatus(`Backend session failed: ${error.message}`, 'error');
@@ -952,7 +983,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     const refreshed = await supabase.auth.getSession();
     if (refreshed.data.session) {
       try {
-        await exchangeSession(refreshed.data.session);
+        await syncBackendSession(refreshed.data.session, 'profile-update');
       } catch (error) {
         setStatus(`Backend session failed: ${error.message}`, 'error');
         return;
@@ -995,29 +1026,22 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     setStatus('Signed out.', '');
   });
 
-  supabase.auth.onAuthStateChange(async (_event, session) => {
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (event === 'INITIAL_SESSION') {
+      console.log('[AUTH SYNC] onAuthStateChange INITIAL_SESSION');
+    }
     if (!session) {
       renderAccount(null);
       applyMode('sign-in');
       return;
     }
     try {
-      await exchangeSession(session);
+      await syncBackendSession(session, `on-auth-state-change:${event}`);
       window.location.replace('/hub');
     } catch (error) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
   });
-
-  const current = await supabase.auth.getSession();
-  if (current.data.session) {
-    try {
-      await exchangeSession(current.data.session);
-      window.location.replace('/hub');
-    } catch (error) {
-      setStatus(`Session restore failed: ${error.message}`, 'error');
-    }
-  }
   }
 }
 
