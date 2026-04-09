@@ -801,10 +801,16 @@
 
       .book-open {
         grid-template-columns: 1fr;
+        background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
       }
 
       .page {
         min-height: 320px;
+      }
+
+      .page:nth-child(1),
+      .page:nth-child(2) {
+        transform: none;
       }
 
       .page-body {
