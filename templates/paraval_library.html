@@ -724,15 +724,17 @@ S: Who does? Tidus?
         selectedModelUrl = urlModelUrl || '';
       }
 
-      if (selectedCharacter && selectedCharacter.id) {
-        if (selectedModelUrl) {
-          localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
-          contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
-        } else {
-          contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Guest model context`;
-        }
+      const hasSessionContext = Boolean(urlCharacterId && urlModelUrl);
+      if (!hasSessionContext) {
+        selectedCharacter = null;
+        selectedModelUrl = '';
+      }
+
+      if (hasSessionContext && selectedCharacter && selectedCharacter.id && selectedModelUrl) {
+        localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
+        contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
       } else {
-        contextEl.textContent = 'Guest Access: The Paraval Library is open without an account.';
+        contextEl.textContent = 'Welcome guest';
       }
 
       backWorldsBtn.href = buildUrl('/world-select');
