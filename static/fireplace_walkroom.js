@@ -26,7 +26,6 @@ const socialChatSendEl = document.getElementById('social-chat-send');
 const voiceToggleEl = document.getElementById('voice-toggle');
 const voiceStateEl = document.getElementById('voice-state');
 let coordHudEl = document.getElementById('coord-hud');
-const tmpCameraWorldPosition = new THREE.Vector3();
 
 function ensureCoordinateHudElement() {
   if (coordHudEl) return coordHudEl;
@@ -267,11 +266,7 @@ function updateHudPlayerText() {
 function updateCoordinateHud() {
   ensureCoordinateHudElement();
   if (!coordHudEl) return;
-  camera.updateMatrixWorld(true);
-  let source = camera.getWorldPosition(tmpCameraWorldPosition);
-  if (!Number.isFinite(source.x) || !Number.isFinite(source.y) || !Number.isFinite(source.z)) {
-    source = camera.position;
-  }
+  const source = camera.position;
 
   const x = Number.isFinite(source.x) ? source.x.toFixed(2) : '0.00';
   const y = Number.isFinite(source.y) ? source.y.toFixed(2) : '0.00';
