@@ -237,10 +237,18 @@ function updateHudPlayerText() {
 
 function updateCoordinateHud() {
   if (!coordHudEl) return;
-  const source = USE_SCENE_ASSET ? camera.getWorldPosition(tmpCameraWorldPosition) : actor.position;
-  const x = Number(source.x || 0).toFixed(2);
-  const y = Number(source.y || 0).toFixed(2);
-  const z = Number(source.z || 0).toFixed(2);
+  let source = actor.position;
+  if (USE_SCENE_ASSET) {
+    camera.updateMatrixWorld(true);
+    source = camera.getWorldPosition(tmpCameraWorldPosition);
+    if (!Number.isFinite(source.x) || !Number.isFinite(source.y) || !Number.isFinite(source.z)) {
+      source = camera.position;
+    }
+  }
+
+  const x = Number.isFinite(source.x) ? source.x.toFixed(2) : '0.00';
+  const y = Number.isFinite(source.y) ? source.y.toFixed(2) : '0.00';
+  const z = Number.isFinite(source.z) ? source.z.toFixed(2) : '0.00';
   coordHudEl.textContent = `X: ${x}\nY: ${y}\nZ: ${z}`;
 }
 
