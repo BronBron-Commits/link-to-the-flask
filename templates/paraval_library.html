@@ -43,6 +43,17 @@
       padding: 28px;
     }
 
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 3;
+      background: radial-gradient(circle at 50% 45%, transparent 38%, rgba(2, 4, 8, 0.34) 100%);
+      mix-blend-mode: multiply;
+      animation: vignetteBreath 10s ease-in-out infinite;
+    }
+
     .frame {
       position: relative;
       isolation: isolate;
@@ -57,6 +68,33 @@
         linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
       box-shadow: 0 34px 80px rgba(0, 0, 0, 0.48);
       transition: border-color 0.65s ease, box-shadow 0.65s ease;
+    }
+
+    .dust-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    .dust {
+      position: absolute;
+      width: var(--size, 3px);
+      height: var(--size, 3px);
+      border-radius: 50%;
+      left: var(--x, 50%);
+      top: 110%;
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.85), rgba(var(--accent-rgb), 0.26) 60%, transparent 80%);
+      opacity: var(--alpha, 0.18);
+      filter: blur(0.2px);
+      animation: dustFloat var(--dur, 18s) linear infinite;
+      animation-delay: var(--delay, 0s);
+    }
+
+    .dust.gold {
+      background: radial-gradient(circle at 30% 30%, rgba(255, 243, 196, 0.92), rgba(242, 176, 96, 0.35) 58%, transparent 82%);
+      opacity: calc(var(--alpha, 0.18) + 0.07);
     }
 
     .frame[data-theme='divine'] {
@@ -265,6 +303,8 @@
       background:
         linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 24%),
         linear-gradient(180deg, rgba(13, 17, 25, 0.96), rgba(7, 11, 16, 0.98));
+      transform: translate3d(var(--shelf-parallax-x, 0px), var(--shelf-parallax-y, 0px), 0);
+      transition: transform 0.25s ease;
     }
 
     .shelf-title {
@@ -287,6 +327,7 @@
     .bookshelf {
       display: grid;
       gap: 14px;
+      perspective: 760px;
     }
 
     .book {
@@ -300,9 +341,11 @@
       padding: 14px;
       text-align: left;
       cursor: pointer;
-      transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+      transform: perspective(760px) rotateX(var(--tilt-x, 0deg)) rotateY(var(--tilt-y, 0deg)) translateY(var(--lift-y, 0px));
+      transition: transform 0.2s ease, border-color 0.28s ease, box-shadow 0.28s ease;
       position: relative;
       overflow: hidden;
+      will-change: transform;
     }
 
     .book::before {
@@ -330,7 +373,7 @@
 
     .book:hover,
     .book[aria-pressed='true'] {
-      transform: translateY(-2px);
+      --lift-y: -2px;
       border-color: rgba(var(--accent-rgb), 0.56);
       box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), 0 0 26px rgba(var(--accent-rgb), 0.2);
     }
@@ -505,10 +548,37 @@
       border-radius: 22px;
       overflow: hidden;
       box-shadow: inset 0 0 0 1px rgba(87, 61, 35, 0.25);
+      transform-style: preserve-3d;
       background:
         linear-gradient(90deg, rgba(79, 54, 32, 0.22), rgba(245, 235, 214, 0.06) 7%, rgba(245, 235, 214, 0.06) 49%, rgba(87, 60, 38, 0.28) 50%, rgba(245, 235, 214, 0.05) 52%, rgba(245, 235, 214, 0.05) 100%),
         linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
       animation: codexGlow 10s ease-in-out infinite;
+    }
+
+    .book-open::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: calc(50% - 13px);
+      width: 26px;
+      background: linear-gradient(90deg, rgba(24, 15, 10, 0.32), rgba(24, 15, 10, 0.08) 45%, rgba(255, 243, 223, 0.25) 50%, rgba(24, 15, 10, 0.1) 58%, rgba(24, 15, 10, 0.34));
+      opacity: 0.74;
+      pointer-events: none;
+      z-index: 3;
+      filter: blur(0.35px);
+      transform: translateX(var(--seam-shift, 0px));
+      transition: transform 0.22s ease;
+    }
+
+    .book-open::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 2;
+      background: radial-gradient(circle at 50% 35%, rgba(255, 236, 194, 0.08), transparent 55%);
+      animation: paperFlicker 8s ease-in-out infinite;
     }
 
     .page {
@@ -520,6 +590,7 @@
       position: relative;
       overflow: hidden;
       transform-origin: center center;
+      transition: transform 0.22s ease;
     }
 
     .illumination {
@@ -612,11 +683,23 @@
       right: 12px;
     }
 
-    .page:nth-child(1) { transform: perspective(1400px) rotateY(0.65deg); }
-    .page:nth-child(2) { transform: perspective(1400px) rotateY(-0.65deg); }
+    .page:nth-child(1) {
+      transform: perspective(1400px) rotateY(calc(0.65deg + (var(--page-curl-left, 0) * 2.1deg))) rotateX(calc(var(--page-curl-up, 0) * 0.9deg));
+    }
+
+    .page:nth-child(2) {
+      transform: perspective(1400px) rotateY(calc(-0.65deg + (var(--page-curl-right, 0) * -2.1deg))) rotateX(calc(var(--page-curl-up, 0) * 0.9deg));
+    }
 
     .page.turning {
       animation: pageTurnFlash 0.48s ease;
+    }
+
+    .book-open.transitioning {
+      filter: blur(1.2px);
+      opacity: 0.74;
+      transform: scale(0.995);
+      transition: filter 0.18s ease, opacity 0.18s ease, transform 0.18s ease;
     }
 
     .page::after {
@@ -673,6 +756,19 @@
       padding: 0 0.08em;
       border-radius: 0.2em;
       box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 0 1px rgba(var(--accent-rgb), 0.12) inset;
+      transition: box-shadow 0.2s ease, background 0.2s ease, text-shadow 0.2s ease;
+      cursor: default;
+    }
+
+    .name-highlight:hover,
+    .name-highlight.is-glowing {
+      background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.35), rgba(var(--accent-rgb), 0.12));
+      text-shadow: 0 0 10px rgba(var(--accent-rgb), 0.45);
+      box-shadow: 0 0 0 1px rgba(var(--accent-rgb), 0.24) inset, 0 0 16px rgba(var(--accent-rgb), 0.28);
+    }
+
+    .name-highlight.is-pulsing {
+      animation: inkPulse 2.6s ease-in-out infinite;
     }
 
     .page-number {
@@ -761,14 +857,52 @@
       100% { filter: brightness(1); }
     }
 
+    @keyframes vignetteBreath {
+      0%, 100% { opacity: 0.92; }
+      50% { opacity: 0.78; }
+    }
+
+    @keyframes paperFlicker {
+      0%, 100% { opacity: 0.35; }
+      20% { opacity: 0.28; }
+      45% { opacity: 0.4; }
+      68% { opacity: 0.3; }
+    }
+
+    @keyframes dustFloat {
+      0% {
+        transform: translate3d(0, 0, 0) scale(0.92);
+        opacity: 0;
+      }
+      8% {
+        opacity: var(--alpha, 0.18);
+      }
+      70% {
+        opacity: calc(var(--alpha, 0.18) * 0.84);
+      }
+      100% {
+        transform: translate3d(var(--drift-x, 0px), -115vh, 0) scale(1.12);
+        opacity: 0;
+      }
+    }
+
+    @keyframes inkPulse {
+      0%, 100% { filter: brightness(1); }
+      50% { filter: brightness(1.1); }
+    }
+
     @media (prefers-reduced-motion: reduce) {
+      body::before,
       .frame::before,
+      .book-open::after,
       .hero::after,
       .reader-shell::before,
       .rune,
+      .dust,
       .book-open,
       .btn:hover::after,
-      .page.turning {
+      .page.turning,
+      .name-highlight.is-pulsing {
         animation: none !important;
       }
 
@@ -822,6 +956,7 @@
 </head>
 <body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
   <main id="library-frame" class="frame" data-theme="divine">
+    <div class="dust-layer" id="dust-layer" aria-hidden="true"></div>
     <section class="hero">
       <div class="topbar">
         <div>
@@ -1111,6 +1246,9 @@ S: Who does? Tidus?
     const readerSummaryEl = document.getElementById('reader-summary');
     const pageLeftEl = document.getElementById('page-left');
     const pageRightEl = document.getElementById('page-right');
+    const bookOpenEl = document.querySelector('.book-open');
+    const shelfPanelEl = document.querySelector('.shelf-panel');
+    const dustLayerEl = document.getElementById('dust-layer');
     const pageEls = Array.from(document.querySelectorAll('.page'));
     const runeEls = Array.from(document.querySelectorAll('.rune'));
     const prevBookBtn = document.getElementById('prev-book-btn');
@@ -1125,6 +1263,7 @@ S: Who does? Tidus?
     let selectedCharacter = null;
     let selectedModelUrl = '';
     let currentIndex = 0;
+    let activePulseTimer = null;
 
     const runeSetsByTheme = {
       divine: ['SOL', 'AUR', 'VIA', 'HALO', 'ALT', 'SAC'],
@@ -1179,6 +1318,125 @@ S: Who does? Tidus?
       });
 
       return html;
+    }
+
+    function initDustLayer() {
+      if (!dustLayerEl) return;
+      dustLayerEl.innerHTML = '';
+      const count = 22;
+      for (let i = 0; i < count; i += 1) {
+        const mote = document.createElement('span');
+        mote.className = `dust${i % 8 === 0 ? ' gold' : ''}`;
+        mote.style.setProperty('--x', `${Math.random() * 100}%`);
+        mote.style.setProperty('--size', `${(Math.random() * 2.8 + 1.2).toFixed(2)}px`);
+        mote.style.setProperty('--alpha', (Math.random() * 0.18 + 0.08).toFixed(3));
+        mote.style.setProperty('--dur', `${(Math.random() * 14 + 18).toFixed(2)}s`);
+        mote.style.setProperty('--delay', `${(-Math.random() * 24).toFixed(2)}s`);
+        mote.style.setProperty('--drift-x', `${(Math.random() * 80 - 40).toFixed(1)}px`);
+        dustLayerEl.appendChild(mote);
+      }
+    }
+
+    function bindShelfDepth() {
+      if (!bookshelfEl) return;
+      bookshelfEl.addEventListener('pointermove', (event) => {
+        const button = event.target.closest('.book');
+        if (!button) return;
+        const rect = button.getBoundingClientRect();
+        const nx = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        const ny = ((event.clientY - rect.top) / rect.height) * 2 - 1;
+        button.style.setProperty('--tilt-y', `${(nx * 4.2).toFixed(2)}deg`);
+        button.style.setProperty('--tilt-x', `${(-ny * 2.8).toFixed(2)}deg`);
+      });
+
+      bookshelfEl.addEventListener('pointerleave', () => {
+        Array.from(bookshelfEl.querySelectorAll('.book')).forEach((button) => {
+          button.style.removeProperty('--tilt-y');
+          button.style.removeProperty('--tilt-x');
+        });
+      });
+    }
+
+    function bindShelfParallax() {
+      if (!shelfPanelEl) return;
+      shelfPanelEl.addEventListener('pointermove', (event) => {
+        const rect = shelfPanelEl.getBoundingClientRect();
+        const nx = ((event.clientX - rect.left) / rect.width) - 0.5;
+        const ny = ((event.clientY - rect.top) / rect.height) - 0.5;
+        shelfPanelEl.style.setProperty('--shelf-parallax-x', `${(nx * 6).toFixed(2)}px`);
+        shelfPanelEl.style.setProperty('--shelf-parallax-y', `${(ny * 6).toFixed(2)}px`);
+      });
+
+      shelfPanelEl.addEventListener('pointerleave', () => {
+        shelfPanelEl.style.removeProperty('--shelf-parallax-x');
+        shelfPanelEl.style.removeProperty('--shelf-parallax-y');
+      });
+    }
+
+    function bindPageCurl() {
+      if (!bookOpenEl) return;
+
+      bookOpenEl.addEventListener('pointermove', (event) => {
+        const rect = bookOpenEl.getBoundingClientRect();
+        const px = Math.min(1, Math.max(0, (event.clientX - rect.left) / rect.width));
+        const py = Math.min(1, Math.max(0, (event.clientY - rect.top) / rect.height));
+        const fromCenter = (px - 0.5) * 2;
+
+        const leftCurl = Math.max(0, -fromCenter);
+        const rightCurl = Math.max(0, fromCenter);
+        const upCurl = (0.5 - py) * 0.5;
+
+        bookOpenEl.style.setProperty('--page-curl-left', leftCurl.toFixed(3));
+        bookOpenEl.style.setProperty('--page-curl-right', rightCurl.toFixed(3));
+        bookOpenEl.style.setProperty('--page-curl-up', upCurl.toFixed(3));
+        bookOpenEl.style.setProperty('--seam-shift', `${(fromCenter * 1.8).toFixed(2)}px`);
+      });
+
+      bookOpenEl.addEventListener('pointerleave', () => {
+        bookOpenEl.style.removeProperty('--page-curl-left');
+        bookOpenEl.style.removeProperty('--page-curl-right');
+        bookOpenEl.style.removeProperty('--page-curl-up');
+        bookOpenEl.style.removeProperty('--seam-shift');
+      });
+    }
+
+    function wireInkInteractions() {
+      const clearPulse = () => {
+        if (activePulseTimer) {
+          clearTimeout(activePulseTimer);
+          activePulseTimer = null;
+        }
+        Array.from(document.querySelectorAll('.name-highlight.is-pulsing')).forEach((el) => {
+          el.classList.remove('is-pulsing');
+        });
+      };
+
+      const pulseOneName = () => {
+        clearPulse();
+        const names = Array.from(document.querySelectorAll('.name-highlight'));
+        if (!names.length) return;
+        const target = names[Math.floor(Math.random() * names.length)];
+        target.classList.add('is-pulsing');
+        activePulseTimer = setTimeout(() => {
+          target.classList.remove('is-pulsing');
+        }, 1800);
+      };
+
+      [pageLeftEl, pageRightEl].forEach((container) => {
+        container.addEventListener('pointerover', (event) => {
+          const el = event.target.closest('.name-highlight');
+          if (!el) return;
+          el.classList.add('is-glowing');
+        });
+        container.addEventListener('pointerout', (event) => {
+          const el = event.target.closest('.name-highlight');
+          if (!el) return;
+          el.classList.remove('is-glowing');
+        });
+      });
+
+      pulseOneName();
+      window.setInterval(pulseOneName, 5200);
     }
 
     function getStoryTheme(story) {
@@ -1294,16 +1552,26 @@ S: Who does? Tidus?
       currentIndex = (index + stories.length) % stories.length;
       const story = stories[currentIndex];
       applyTheme(story);
-      readerTitleEl.textContent = story.title;
-      readerAuthorEl.textContent = `${story.author} | ${story.tag}`;
-      readerSummaryEl.textContent = story.summary;
-      pageLeftEl.innerHTML = highlightStoryText(story.left);
-      pageRightEl.innerHTML = highlightStoryText(story.right);
-      pageEls.forEach((page) => {
-        page.classList.remove('turning');
-        void page.offsetWidth;
-        page.classList.add('turning');
-      });
+      if (bookOpenEl) {
+        bookOpenEl.classList.add('transitioning');
+      }
+
+      window.setTimeout(() => {
+        readerTitleEl.textContent = story.title;
+        readerAuthorEl.textContent = `${story.author} | ${story.tag}`;
+        readerSummaryEl.textContent = story.summary;
+        pageLeftEl.innerHTML = highlightStoryText(story.left);
+        pageRightEl.innerHTML = highlightStoryText(story.right);
+        pageEls.forEach((page) => {
+          page.classList.remove('turning');
+          void page.offsetWidth;
+          page.classList.add('turning');
+        });
+        if (bookOpenEl) {
+          bookOpenEl.classList.remove('transitioning');
+        }
+      }, 95);
+
       Array.from(bookshelfEl.querySelectorAll('.book')).forEach((button, buttonIndex) => {
         button.setAttribute('aria-pressed', String(buttonIndex === currentIndex));
       });
@@ -1324,8 +1592,13 @@ S: Who does? Tidus?
     nextBookBtn.addEventListener('click', () => renderStory(currentIndex + 1));
 
     loadContext();
+    initDustLayer();
     renderShelf();
     renderStory(0);
+    bindShelfDepth();
+    bindShelfParallax();
+    bindPageCurl();
+    wireInkInteractions();
   </script>
 </body>
 </html>
