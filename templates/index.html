@@ -582,7 +582,6 @@ const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim
 let currentMode = 'sign-in';
 let currentUser = null;
 let signInInFlight = false;
-let backendSessionSyncPromise = null;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -598,6 +597,18 @@ function setInputsDisabled(disabled) {
   signUpBtn.disabled = disabled;
   saveProfileBtn.disabled = disabled;
   resetPasswordBtn.disabled = disabled;
+}
+
+function normalizeSupabaseUser(user) {
+  const safe = (user && typeof user === 'object') ? user : {};
+  const metadata = (safe.user_metadata && typeof safe.user_metadata === 'object') ? safe.user_metadata : {};
+  const displayName = String(metadata.display_name || metadata.full_name || metadata.name || '').trim();
+  return {
+    id: String(safe.id || '').trim(),
+    email: String(safe.email || '').trim(),
+    displayName,
+    emailConfirmed: Boolean(safe.email_confirmed_at || safe.confirmed_at),
+  };
 }
 
 function withTimeout(promise, timeoutMs, label) {
@@ -695,97 +706,15 @@ function applyMode(mode) {
 }
 
 async function readBackendSession() {
-  const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
-  const payload = await response.json();
-  renderAccount(payload.user || null);
-  if (!payload.configured) {
+  const configured = Boolean(supabaseUrl && supabaseAnonKey);
+  renderAccount(null);
+  if (!configured) {
     setStatus('Supabase auth is not configured on this server yet.', 'error');
     setInputsDisabled(true);
-    return payload;
+    return { configured: false, authenticated: false, user: null };
   }
-  if (payload.authenticated && payload.user) {
-    window.location.replace('/hub');
-    return payload;
-  } else {
-    setStatus('Create an account or sign in to manage your player profile.', '');
-  }
-  return payload;
-}
-
-async function exchangeSession(session) {
-  if (!window.__paravalAuth || typeof window.__paravalAuth !== 'object') {
-    window.__paravalAuth = {
-      page: 'index',
-      moduleLoaded: false,
-      clientReady: false,
-      lastError: null,
-      lastSessionExchange: null,
-    };
-  }
-  const response = await fetch('/api/auth/session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'same-origin',
-    body: JSON.stringify({ accessToken: session.access_token }),
-  });
-  let payload = null;
-  let responseSnippet = null;
-  try {
-    payload = await response.json();
-  } catch (_jsonError) {
-    const rawText = await response.text().catch(() => '');
-    responseSnippet = String(rawText || '').slice(0, 240);
-    payload = {
-      ok: false,
-      error: 'invalid-server-response',
-      detail: `status-${response.status}`,
-      responseSnippet,
-    };
-  }
-  if (window.__paravalAuth) {
-    window.__paravalAuth.lastSessionExchange = {
-      ok: !!(response.ok && payload.ok !== false),
-      status: response.status,
-      error: payload && payload.error ? String(payload.error) : null,
-      detail: payload && payload.detail ? String(payload.detail) : null,
-      responseSnippet,
-    };
-  }
-  if (!response.ok || payload.ok === false) {
-    throw new Error(String(payload.detail || payload.error || response.statusText || 'auth-session-failed'));
-  }
-  renderAccount(payload.user || null);
-  setStatus('Account session synced with the backend.', 'success');
-}
-
-async function syncBackendSession(session, source = 'unknown') {
-  if (backendSessionSyncPromise) {
-    console.log(`[AUTH SYNC] reusing in-flight backend sync (${source})`);
-    return backendSessionSyncPromise;
-  }
-
-  backendSessionSyncPromise = (async () => {
-    try {
-      await exchangeSession(session);
-      return true;
-    } catch (error) {
-      const msg = String(error && error.message ? error.message : error);
-      console.log(`[AUTH SYNC] exchange failed (${source}):`, msg);
-
-      // Recovery: if backend already has session, treat as success.
-      const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
-      const payload = await response.json().catch(() => null);
-      if (response.ok && payload && payload.authenticated && payload.user) {
-        console.log(`[AUTH SYNC] backend already authenticated (${source}), continuing`);
-        return true;
-      }
-      throw error;
-    } finally {
-      backendSessionSyncPromise = null;
-    }
-  })();
-
-  return backendSessionSyncPromise;
+  setStatus('Create an account or sign in to manage your player profile.', '');
+  return { configured: true, authenticated: false, user: null };
 }
 
 if (!window.__paravalAuth || typeof window.__paravalAuth !== 'object') {
@@ -892,9 +821,9 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
         return;
       }
 
-      console.log('[SIGN IN] exchanging session with backend...');
-      await syncBackendSession(session, 'sign-in');
-      console.log('[SIGN IN] exchange succeeded, redirecting to /hub');
+      console.log('[SIGN IN] sign-in succeeded, redirecting to /hub');
+      renderAccount(normalizeSupabaseUser(session.user));
+      setStatus('Signed in successfully.', 'success');
       window.location.replace('/hub');
     } catch (error) {
       console.log('[SIGN IN] exchange failed:', error.message);
@@ -904,7 +833,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       } else if (msg.includes('supabase-rest-timeout-')) {
         setStatus('Supabase REST sign-in also timed out. This browser/network cannot reach Supabase auth.', 'error');
       } else {
-        setStatus(`Backend session failed: ${msg}`, 'error');
+        setStatus(`Sign-in failed: ${msg}`, 'error');
       }
     } finally {
       signInInFlight = false;
@@ -948,10 +877,10 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     if (result.data.session) {
       try {
-        await syncBackendSession(result.data.session, 'sign-up');
+        renderAccount(normalizeSupabaseUser(result.data.session.user));
         window.location.replace('/hub');
       } catch (error) {
-        setStatus(`Backend session failed: ${error.message}`, 'error');
+        setStatus(`Sign-up flow failed: ${error.message}`, 'error');
       }
       return;
     }
@@ -982,12 +911,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     }
     const refreshed = await supabase.auth.getSession();
     if (refreshed.data.session) {
-      try {
-        await syncBackendSession(refreshed.data.session, 'profile-update');
-      } catch (error) {
-        setStatus(`Backend session failed: ${error.message}`, 'error');
-        return;
-      }
+      renderAccount(normalizeSupabaseUser(refreshed.data.session.user));
     }
     passwordEl.value = '';
     passwordConfirmEl.value = '';
@@ -1013,11 +937,6 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
 
   signOutBtn.addEventListener('click', async () => {
     await supabase.auth.signOut();
-    await fetch('/api/auth/logout', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json' },
-    });
     renderAccount(null);
     displayNameEl.value = '';
     passwordEl.value = '';
@@ -1035,13 +954,15 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       applyMode('sign-in');
       return;
     }
-    try {
-      await syncBackendSession(session, `on-auth-state-change:${event}`);
-      window.location.replace('/hub');
-    } catch (error) {
-      setStatus(`Backend session failed: ${error.message}`, 'error');
-    }
+    renderAccount(normalizeSupabaseUser(session.user));
+    window.location.replace('/hub');
   });
+
+  const current = await supabase.auth.getSession();
+  if (current.data.session) {
+    renderAccount(normalizeSupabaseUser(current.data.session.user));
+    window.location.replace('/hub');
+  }
   }
 }
 

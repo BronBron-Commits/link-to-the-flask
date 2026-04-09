@@ -358,15 +358,6 @@ function renderSheetCharacters(rows) {
 }
 
 async function boot() {
-  const meRes = await fetch('/api/auth/me', { credentials: 'same-origin' });
-  const me = await meRes.json();
-  if (!me.authenticated || !me.user) {
-    window.location.replace('/');
-    return;
-  }
-
-  whoamiEl.textContent = `Signed in as ${me.user.displayName || me.user.email || me.user.id}`;
-
   try {
     const raw = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
     const parsed = raw ? JSON.parse(raw) : null;
@@ -419,6 +410,18 @@ async function boot() {
   });
   window.supabase = supabase;
   window.__paravalAuth.clientReady = true;
+
+  const current = await supabase.auth.getSession();
+  const session = current && current.data ? current.data.session : null;
+  if (!session || !session.user) {
+    window.location.replace('/');
+    return;
+  }
+
+  const user = session.user;
+  const meta = (user.user_metadata && typeof user.user_metadata === 'object') ? user.user_metadata : {};
+  const displayName = String(meta.display_name || meta.full_name || meta.name || '').trim();
+  whoamiEl.textContent = `Signed in as ${displayName || user.email || user.id}`;
 
   async function loadBackendSheets() {
     const response = await fetch('/api/character-sheets', { credentials: 'same-origin' });
