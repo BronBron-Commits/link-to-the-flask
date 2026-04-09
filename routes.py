@@ -382,7 +382,8 @@ def auth_session_create():
             return jsonify(ok=False, error="invalid-supabase-session", detail=validation_error or "unknown"), 401
         print(f"[AUTH SESSION] user authenticated, storing in session...", flush=True)
         session["auth_user"] = _normalize_auth_user(user)
-        session["supabase_access_token"] = access_token
+        # Flask default sessions are cookie-backed; avoid storing large JWTs in cookies.
+        session.pop("supabase_access_token", None)
         print(f"[AUTH SESSION] session stored successfully", flush=True)
         response_data = jsonify(ok=True, authenticated=True, user=session["auth_user"])
         print(f"[AUTH SESSION] response created, returning now", flush=True)
