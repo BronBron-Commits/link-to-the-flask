@@ -209,10 +209,10 @@ function loadContext() {
 }
 
 function buildWorldUrl(basePath) {
-  const qs = new URLSearchParams();
-  qs.set('characterId', selectedCharacter.id);
-  qs.set('modelUrl', selectedModelUrl);
-  return `${basePath}?${qs.toString()}`;
+  const url = new URL(basePath, window.location.origin);
+  url.searchParams.set('characterId', selectedCharacter.id);
+  url.searchParams.set('modelUrl', selectedModelUrl);
+  return `${url.pathname}${url.search}`;
 }
 
 function renderWorlds() {
@@ -228,14 +228,14 @@ function renderWorlds() {
       id: 'arena',
       title: 'Combat Arena',
       description: 'Jump straight into tactical combat scenarios and encounter testing.',
-      target: '/static/combat_arena.html',
+      target: '{{ asset_url("combat_arena.html") }}',
       tag: 'Battle Instance',
     },
     {
       id: 'fireplace',
       title: 'Fireplace Walkroom',
       description: 'A lightweight fireplace-style room focused only on avatar movement.',
-      target: '/static/fireplace_walkroom.html',
+      target: '{{ asset_url("fireplace_walkroom.html") }}',
       tag: 'Movement Only',
     },
     {

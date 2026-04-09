@@ -8,6 +8,7 @@ import json
 import os
 import re
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import uuid4
@@ -33,6 +34,38 @@ from scripts.pdf_to_tidy_data import (
 
 
 ARTIFACTS_DIR = Path("artifacts")
+
+
+def _asset_version_token(relative_path: str) -> str:
+    safe_relative = str(relative_path or "").replace("\\", "/").lstrip("/")
+    if not safe_relative:
+        return gs.SERVER_BUILD_TAG
+    candidate = (gs.STATIC_DIR / safe_relative).resolve()
+    try:
+        candidate.relative_to(gs.STATIC_DIR.resolve())
+    except ValueError:
+        return gs.SERVER_BUILD_TAG
+    try:
+        mtime = int(candidate.stat().st_mtime)
+    except OSError:
+        mtime = 0
+    return f"{gs.SERVER_BUILD_TAG}-{mtime}"
+
+
+def asset_url(relative_path: str) -> str:
+    raw_path = str(relative_path or "").strip()
+    if not raw_path:
+        return "/static/"
+    normalized = raw_path.replace("\\", "/").lstrip("/")
+    parts = urlsplit(f"/static/{normalized}")
+    query = dict(parse_qsl(parts.query, keep_blank_values=True))
+    query["v"] = _asset_version_token(parts.path.removeprefix("/static/"))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+@app.context_processor
+def inject_asset_helpers():
+    return {"asset_url": asset_url}
 
 
 def _supabase_public_config() -> dict:

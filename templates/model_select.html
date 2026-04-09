@@ -270,8 +270,8 @@
 </script>
 
 <script type="module">
-import * as THREE from '/static/three.module.js';
-import { GLTFLoader } from '/static/GLTFLoader.js';
+import * as THREE from '{{ asset_url("three.module.js") }}';
+import { GLTFLoader } from '{{ asset_url("GLTFLoader.js") }}';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
