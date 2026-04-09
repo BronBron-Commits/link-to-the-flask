@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paraval Library</title>
+  <style>
+    :root {
+      --ink: #2f2217;
+      --gold: #c7a766;
+      --gold-dim: rgba(199, 167, 102, 0.32);
+      --paper: #eadfbe;
+      --paper-deep: #d7c49a;
+      --shelf: #4b3020;
+      --shelf-edge: #2d1a11;
+      --night: #0a1018;
+      --night-blue: #152235;
+      --ember: #a55a2a;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      min-height: 100%;
+      margin: 0;
+      color: #f4ecd8;
+      font-family: Georgia, 'Times New Roman', serif;
+      background:
+        radial-gradient(circle at top, rgba(194, 118, 54, 0.16), transparent 28%),
+        linear-gradient(180deg, #1b2430 0%, var(--night) 42%, #04070c 100%);
+    }
+
+    body {
+      padding: 28px;
+    }
+
+    .frame {
+      max-width: 1380px;
+      margin: 0 auto;
+      border: 1px solid var(--gold-dim);
+      border-radius: 28px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, rgba(11, 16, 24, 0.92), rgba(8, 11, 17, 0.98)),
+        linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
+      box-shadow: 0 34px 80px rgba(0, 0, 0, 0.48);
+    }
+
+    .hero {
+      padding: 28px 30px 18px;
+      border-bottom: 1px solid rgba(199, 167, 102, 0.16);
+      background:
+        linear-gradient(180deg, rgba(199, 167, 102, 0.08), transparent),
+        radial-gradient(circle at right top, rgba(165, 90, 42, 0.14), transparent 38%);
+    }
+
+    .topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow {
+      margin: 0 0 8px;
+      color: #cfbf98;
+      font-size: 0.78rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.1rem, 4vw, 4rem);
+      line-height: 0.96;
+      color: #f7e8ba;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      text-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+    }
+
+    .subtitle {
+      max-width: 840px;
+      margin: 14px 0 0;
+      color: #bcae90;
+      font-size: 1rem;
+      line-height: 1.7;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(199, 167, 102, 0.28);
+      background: rgba(13, 18, 27, 0.9);
+      color: #f4e3b3;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.75rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .btn:hover {
+      border-color: rgba(199, 167, 102, 0.62);
+      background: rgba(24, 30, 43, 0.95);
+    }
+
+    .meta {
+      margin-top: 16px;
+      color: #91856a;
+      min-height: 20px;
+      font-size: 0.85rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      gap: 0;
+      min-height: 70vh;
+    }
+
+    .shelf-panel {
+      position: relative;
+      padding: 24px;
+      border-right: 1px solid rgba(199, 167, 102, 0.12);
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 24%),
+        linear-gradient(180deg, rgba(13, 17, 25, 0.96), rgba(7, 11, 16, 0.98));
+    }
+
+    .shelf-title {
+      margin: 0 0 14px;
+      color: #eed6a2;
+      font-size: 1.1rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .shelf-copy {
+      margin: 0 0 18px;
+      color: #a99b82;
+      line-height: 1.6;
+      font-size: 0.92rem;
+    }
+
+    .bookshelf {
+      display: grid;
+      gap: 14px;
+    }
+
+    .book {
+      width: 100%;
+      border: 1px solid rgba(199, 167, 102, 0.14);
+      border-radius: 16px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 28%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01));
+      color: inherit;
+      padding: 14px;
+      text-align: left;
+      cursor: pointer;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .book::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 12px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.28), rgba(0,0,0,0.12));
+      opacity: 0.45;
+    }
+
+    .book:hover,
+    .book[aria-pressed='true'] {
+      transform: translateY(-2px);
+      border-color: rgba(199, 167, 102, 0.48);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+    }
+
+    .book[aria-pressed='true'] {
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 34%),
+        linear-gradient(180deg, rgba(199, 167, 102, 0.12), rgba(255, 255, 255, 0.03));
+    }
+
+    .book-title {
+      display: block;
+      margin: 0 0 6px 14px;
+      color: #f7e1aa;
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .book-meta,
+    .book-blurb {
+      display: block;
+      margin-left: 14px;
+    }
+
+    .book-meta {
+      color: #9e8f72;
+      font-size: 0.73rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .book-blurb {
+      margin-top: 8px;
+      color: #b7aa90;
+      line-height: 1.5;
+      font-size: 0.9rem;
+    }
+
+    .reader-panel {
+      padding: 28px;
+      background:
+        radial-gradient(circle at top, rgba(234, 223, 190, 0.06), transparent 35%),
+        linear-gradient(180deg, rgba(18, 22, 30, 0.95), rgba(11, 13, 18, 0.98));
+    }
+
+    .reader-shell {
+      height: 100%;
+      border-radius: 24px;
+      border: 1px solid rgba(199, 167, 102, 0.12);
+      padding: 18px;
+      background: rgba(6, 9, 14, 0.4);
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .reader-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .reader-kicker {
+      margin: 0 0 6px;
+      color: #9d9177;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .reader-title {
+      margin: 0;
+      color: #f4deb0;
+      font-size: clamp(1.4rem, 3vw, 2.2rem);
+    }
+
+    .reader-author {
+      margin: 8px 0 0;
+      color: #a89876;
+      font-size: 0.95rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .reader-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .summary {
+      margin: 0;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(199, 167, 102, 0.08);
+      color: #c5b796;
+      line-height: 1.7;
+      font-size: 0.95rem;
+    }
+
+    .book-open {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: inset 0 0 0 1px rgba(87, 61, 35, 0.25);
+      background:
+        linear-gradient(90deg, rgba(79, 54, 32, 0.22), rgba(245, 235, 214, 0.06) 7%, rgba(245, 235, 214, 0.06) 49%, rgba(87, 60, 38, 0.28) 50%, rgba(245, 235, 214, 0.05) 52%, rgba(245, 235, 214, 0.05) 100%),
+        linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
+    }
+
+    .page {
+      min-height: 0;
+      padding: 28px 24px 22px;
+      color: var(--ink);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .page::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.24), transparent 12%),
+        repeating-linear-gradient(180deg, transparent, transparent 31px, rgba(65, 41, 24, 0.06) 32px);
+      pointer-events: none;
+      opacity: 0.45;
+    }
+
+    .page-header {
+      position: relative;
+      z-index: 1;
+      margin-bottom: 14px;
+      color: rgba(47, 34, 23, 0.72);
+      font-size: 0.75rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .page-body {
+      position: relative;
+      z-index: 1;
+      white-space: pre-wrap;
+      line-height: 1.95;
+      font-size: 1rem;
+      overflow-y: auto;
+      padding-right: 6px;
+    }
+
+    .page-number {
+      position: relative;
+      z-index: 1;
+      margin-top: auto;
+      padding-top: 16px;
+      color: rgba(47, 34, 23, 0.66);
+      font-size: 0.74rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      text-align: center;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    @media (max-width: 1080px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .shelf-panel {
+        border-right: 0;
+        border-bottom: 1px solid rgba(199, 167, 102, 0.12);
+      }
+    }
+
+    @media (max-width: 760px) {
+      body {
+        padding: 14px;
+      }
+
+      .hero,
+      .shelf-panel,
+      .reader-panel {
+        padding: 18px;
+      }
+
+      .book-open {
+        grid-template-columns: 1fr;
+      }
+
+      .page {
+        min-height: 320px;
+      }
+    }
+  </style>
+</head>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
+  <main class="frame">
+    <section class="hero">
+      <div class="topbar">
+        <div>
+          <p class="eyebrow">Fourth Game Mode</p>
+          <h1>Paraval Library</h1>
+          <p class="subtitle">A quiet wing of the world built for lore. Browse shelf by shelf, open a volume, and read in a split-page format that leans into the feel of an old fantasy codex rather than a generic web list.</p>
+        </div>
+        <div class="actions">
+          <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
+          <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
+        </div>
+      </div>
+      <div id="context" class="meta"></div>
+    </section>
+
+    <section class="layout">
+      <aside class="shelf-panel">
+        <h2 class="shelf-title">Curated Shelf</h2>
+        <p class="shelf-copy">Each volume is a standalone tale, rumor, diary fragment, or frontier history from Paraval. Select any spine to open it on the reading desk.</p>
+        <div id="bookshelf" class="bookshelf" aria-label="Story selection"></div>
+      </aside>
+
+      <section class="reader-panel">
+        <div class="reader-shell">
+          <div class="reader-head">
+            <div>
+              <p class="reader-kicker">Reading Desk</p>
+              <h2 id="reader-title" class="reader-title">Select a book</h2>
+              <p id="reader-author" class="reader-author"></p>
+            </div>
+            <div class="reader-actions">
+              <button id="prev-book-btn" class="btn" type="button">Previous Volume</button>
+              <button id="next-book-btn" class="btn" type="button">Next Volume</button>
+            </div>
+          </div>
+
+          <p id="reader-summary" class="summary">Choose a title from the shelf to begin reading.</p>
+
+          <div class="book-open" aria-live="polite">
+            <article class="page">
+              <div class="page-header">Left Page</div>
+              <div id="page-left" class="page-body"></div>
+              <div class="page-number">Page I</div>
+            </article>
+            <article class="page">
+              <div class="page-header">Right Page</div>
+              <div id="page-right" class="page-body"></div>
+              <div class="page-number">Page II</div>
+            </article>
+          </div>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+    const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
+
+    const stories = [
+      {
+        id: 'glass-lighthouse',
+        title: 'The Glass Lighthouse',
+        author: 'Archivist Sen Varo',
+        tag: 'Frontier Chronicle',
+        blurb: 'A watchtower that shines inland instead of out to sea becomes the last warning before a city disappears in fog.',
+        summary: 'Recovered from a salt-stiff logbook in the north stacks. The account is commonly cited by navigators who believe Paraval was mapped twice: once by surveyors and once by omens.',
+        left: `The lighthouse at Kerr Vale had no ocean to guard. It stood in the wheat country, blind and impossible, its spiral of greenish glass raised by masons who swore they were following plans delivered in a dream. Farmers joked about it until the first autumn the beacon lit on its own and swept across the fields as if searching for ships hidden beneath the barley.\n\nOn the third night of Harvestwane the beam paused over the eastern road and held there. The horses in every stable kicked through their halters. Dogs barked toward the hills and would not be silenced. Before dawn, fifty-three people abandoned their beds, walked out into the fog, and never returned.`,
+        right: `By noon the elders had climbed the tower to douse the lamp, but the chamber was empty except for warm glass and the smell of rain. No oil, no wick, no keeper. When the mist finally broke, the eastern road was gone for nearly a mile, replaced by pale stone steps descending into the ground at an angle no engineer could explain.\n\nThe town sealed the stair with mortar and prayer. Still, each year when the grain turns silver, the lighthouse shines inland again. Kerr Vale keeps watch not for ships, but for whoever may decide to climb back up.`
+      },
+      {
+        id: 'king-without-shadow',
+        title: 'The King Without a Shadow',
+        author: 'Mara Thenn, court copyist',
+        tag: 'Palace Tale',
+        blurb: 'An old palace rumor about a ruler whose reflection obeyed laws of state more faithfully than the king himself.',
+        summary: 'A favorite among palace servants because every retelling changes which king is meant. The oldest copy ends mid-sentence as if the scribe was interrupted.',
+        left: `When the king returned from the western campaign, the entire court remarked first on his silence and second on the lightness of his step. The marble corridors of Bracken Court had always thrown a shadow behind him, long and sharp as a banner. Now candlelight passed over him cleanly. No shadow crossed the floor. No dark shape clung to the wall.\n\nThe chancellor advised secrecy. The queen advised prayer. The chamberlain advised new draperies and fewer windows. Yet rumors move through kitchens faster than orders move through halls, and within a week the servants were wagering whether the king had sold his shadow for victory or lost it to something still marching home behind him.`,
+        right: `The stranger part came later. Mirrors began to show a different sovereign. In the glass, the king still wore his old expression: patient, severe, impossible to sway. The reflected monarch signed decrees the living king delayed, nodded at petitions he ignored, and turned toward counselors just moments before they spoke.\n\nAt last the queen covered every mirror in the palace, but one remained uncovered in the throne room. On winter court-day the king stood before it and bowed. Those closest heard him whisper, \"If you are the better ruler, then rule.\" The candles went out. When they were relit, the throne was occupied, the court was kneeling, and no one could later agree which king had risen to greet them.`
+      },
+      {
+        id: 'bellmaker-daughter',
+        title: 'The Bellmaker\'s Daughter',
+        author: 'Hollow Market chapbook',
+        tag: 'Street Ballad',
+        blurb: 'A founder\'s daughter casts a bell tuned not to metal, but to grief, and the whole district hears their dead speak once.',
+        summary: 'Often sung in six verses. This prose edition was written down by a tinsmith who insisted the final verse should only be spoken during storms.',
+        left: `In Hollow Market there lived a bellmaker who could make bronze answer to any need. Temple bells for mourning. Dock bells for flood tides. Tiny hand bells for counting out the hour in clinics where no sun could reach. His daughter learned the craft beside him and surpassed him before she turned seventeen, not by striking harder, but by listening longer. She said every ingot already contained a note and only needed permission to remember it.\n\nThen plague winter came. The market closed, the forges cooled, and the bellmaker himself died with soot still under his nails. His daughter burned the accounts, barred the workshop, and did not emerge until spring.`,
+        right: `When she opened the doors, a single bell hung in the center of the room, dark as old honey and wide as a wagon wheel. She would not say what metals went into it. She only asked the district to gather after dusk and bring no lanterns.\n\nShe rang the bell once. The sound was soft, hardly more than a breath on the air, but every person in Hollow Market heard a name spoken just beside them in the voice they had been missing. Mothers straightened. Sailors wept. A baker laughed so hard he fell to his knees. By dawn the daughter was gone, the bell was cold, and no mold or ledger remained to prove it had been cast. Yet every thunderstorm since, the market swears it hears that same note beneath the rain.`
+      },
+      {
+        id: 'snow-below-bridge',
+        title: 'Snow Beneath the Red Bridge',
+        author: 'Captain Elia Drenn',
+        tag: 'Travel Journal',
+        blurb: 'A mercenary captain records a river crossing where winter gathers under one bridge even in midsummer.',
+        summary: 'Filed with route maps used by caravan guards. Marginal notes suggest at least two expeditions tried to melt the frost and failed.',
+        left: `We reached the Red Bridge at noon in weather fit for drying linens. The river ran low. Reeds clicked along the banks. Children from the nearby toll hamlet were swimming upstream and shouting challenges at one another. Yet beneath the bridge itself there hung a curtain of winter so absolute that the stones sweated rime. Frost whitened the underside of the arch. A drift of snow, untouched and clean, sat against the middle pillar as if dropped there from another season.\n\nMy quartermaster crossed himself. The teamsters only cursed because cold makes mules balk, and no mule alive wishes to step from summer into winter over the span of twelve paces.`,
+        right: `The toll keeper told us the snow had been there longer than his grandfather's memory. People chipped pieces away for fever remedies or festival tricks, but by dawn it always returned, smooth and unmarked. I tested it with a torch. The flame bent sideways before it touched the drift, as though a wind blew from inside the bridge.\n\nWe crossed after sunset. Halfway over, every bootfall echoed twice: once from below and once from somewhere ahead where no one walked. I did not look down. Veterans know when curiosity is only hunger wearing a finer coat. By morning summer had found us again, but one wagon axle was rimed white and stayed cold for three days.`
+      },
+      {
+        id: 'ink-feast',
+        title: 'The Ink Feast of Marrow Hall',
+        author: 'Prior Halvek',
+        tag: 'Monastic Record',
+        blurb: 'A monastery saves its history during a siege by eating its own books and rewriting them from memory.',
+        summary: 'Scholars debate whether this is literal or a parable about oral tradition. The surviving parchment bears tooth marks along the bottom edge.',
+        left: `During the siege of Marrow Hall, we were cut off before the spring caravans brought fresh vellum, lamp oil, or grain. The abbot said food would fail before faith, and faith would fail before memory. On the ninth week the shelling set fire to the east archive. We carried out what volumes we could, but sparks had already blackened the annals, and smoke had made the script run in long tears of gray.\n\nBrother Cale, maddened by loss or inspired by it, tore a wet page from the Chronicle of Nine Winters and swallowed it. The novices gasped. The abbot stared a long while, then said only, \"If the words live nowhere else, let them live in us.\"`,
+        right: `So we softened the worst-damaged manuscripts in broth and divided them as communion. Each monk took a text, read until the ink blurred, then consumed what could not be preserved. Afterward we spoke the lines aloud at table, correcting one another until every page had found four human copies.\n\nWhen the siege finally broke, the archive smelled of ash and fennel. We rewrote all we could remember. There are errors in the margins, no doubt. A saint's date moved by a year. A treaty gained an extra witness. Yet if history is a house forever burning at one beam or another, then memory is not a poor mason. It is simply the one who arrives carrying water in his own hands.`
+      },
+      {
+        id: 'last-cartographer',
+        title: 'Letter from the Last Cartographer',
+        author: 'Iven Sere, Royal Survey',
+        tag: 'Sealed Correspondence',
+        blurb: 'A surveyor writes to a lover after realizing his newest map keeps recording places no one has entered yet.',
+        summary: 'Stored under restricted access in the fiction wing because several readers claimed the enclosed sketch changed after sunset.',
+        left: `Lysa, if this reaches you before the inspector does, burn the blue map and tell them I resigned for health. That will be kinder to us both. I have spent twenty-two years measuring roads, escarpments, rivers, and the sullen distance between towns that insist they are closer than they are. I know the discipline. I know what a map owes the truth. Yet the sheet on my desk now will not keep to the present.\n\nYesterday it showed a tower east of Fenbarrow where there is only scrub and shale. Today a rider arrived saying a tower had been found there at dawn, empty except for wet footprints leading upward. Last week the map drew a bridge before engineers even chose the crossing. By month end, masons broke ground exactly where the ink had placed the first stone.`,
+        right: `I thought at first I was anticipating obvious decisions. Then the map began to add names I had never heard and roads that make no strategic sense. One path leads straight through the royal deer preserve into a valley listed on no census roll. The title written over that valley is not in my hand, though I watched my own fingers form it: PARAVAL BELOW.\n\nIf I vanish, understand that I did not flee you. I followed a contour only I could see, because every line ever drawn wishes to become a road and every road eventually demands a traveler. Should I return, hide this letter and deny the shape of my shadow until I ask twice.`
+      }
+    ];
+
+    const contextEl = document.getElementById('context');
+    const bookshelfEl = document.getElementById('bookshelf');
+    const readerTitleEl = document.getElementById('reader-title');
+    const readerAuthorEl = document.getElementById('reader-author');
+    const readerSummaryEl = document.getElementById('reader-summary');
+    const pageLeftEl = document.getElementById('page-left');
+    const pageRightEl = document.getElementById('page-right');
+    const prevBookBtn = document.getElementById('prev-book-btn');
+    const nextBookBtn = document.getElementById('next-book-btn');
+    const backWorldsBtn = document.getElementById('back-worlds-btn');
+    const enterWorldBtn = document.getElementById('enter-world-btn');
+
+    const params = new URLSearchParams(window.location.search || '');
+    const urlCharacterId = String(params.get('characterId') || '').trim();
+    const urlModelUrl = String(params.get('modelUrl') || '').trim();
+
+    let selectedCharacter = null;
+    let selectedModelUrl = '';
+    let currentIndex = 0;
+
+    function buildUrl(basePath) {
+      const query = new URLSearchParams();
+      if (selectedCharacter && selectedCharacter.id) {
+        query.set('characterId', selectedCharacter.id);
+      }
+      if (selectedModelUrl) {
+        query.set('modelUrl', selectedModelUrl);
+      }
+      const qs = query.toString();
+      return qs ? `${basePath}?${qs}` : basePath;
+    }
+
+    function loadContext() {
+      try {
+        const rawCharacter = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
+        const parsed = rawCharacter ? JSON.parse(rawCharacter) : null;
+        if (parsed && typeof parsed === 'object' && parsed.id) {
+          selectedCharacter = {
+            id: String(parsed.id),
+            name: String(parsed.name || ''),
+          };
+        }
+      } catch (_err) {
+        selectedCharacter = null;
+      }
+
+      if (urlCharacterId && selectedCharacter && selectedCharacter.id !== urlCharacterId) {
+        selectedCharacter = {
+          id: urlCharacterId,
+          name: selectedCharacter.name || urlCharacterId,
+        };
+        localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
+      }
+
+      if (!selectedCharacter || !selectedCharacter.id) {
+        window.location.replace('/hub');
+        return false;
+      }
+
+      try {
+        selectedModelUrl = urlModelUrl || String(localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || '').trim();
+      } catch (_err) {
+        selectedModelUrl = urlModelUrl || '';
+      }
+
+      if (!selectedModelUrl) {
+        window.location.replace(`/model-select?characterId=${encodeURIComponent(selectedCharacter.id)}`);
+        return false;
+      }
+
+      localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
+      contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
+      backWorldsBtn.href = buildUrl('/world-select');
+      enterWorldBtn.href = buildUrl('/map3d');
+      return true;
+    }
+
+    function renderShelf() {
+      bookshelfEl.innerHTML = stories.map((story, index) => `
+        <button class="book" type="button" data-index="${index}" aria-pressed="${index === currentIndex}">
+          <span class="book-title">${story.title}</span>
+          <span class="book-meta">${story.tag} | ${story.author}</span>
+          <span class="book-blurb">${story.blurb}</span>
+        </button>
+      `).join('');
+    }
+
+    function renderStory(index) {
+      currentIndex = (index + stories.length) % stories.length;
+      const story = stories[currentIndex];
+      readerTitleEl.textContent = story.title;
+      readerAuthorEl.textContent = `${story.author} | ${story.tag}`;
+      readerSummaryEl.textContent = story.summary;
+      pageLeftEl.textContent = story.left;
+      pageRightEl.textContent = story.right;
+      Array.from(bookshelfEl.querySelectorAll('.book')).forEach((button, buttonIndex) => {
+        button.setAttribute('aria-pressed', String(buttonIndex === currentIndex));
+      });
+    }
+
+    bookshelfEl.addEventListener('click', (event) => {
+      const button = event.target.closest('.book');
+      if (!button) {
+        return;
+      }
+      const index = Number(button.getAttribute('data-index'));
+      if (!Number.isNaN(index)) {
+        renderStory(index);
+      }
+    });
+
+    prevBookBtn.addEventListener('click', () => renderStory(currentIndex - 1));
+    nextBookBtn.addEventListener('click', () => renderStory(currentIndex + 1));
+
+    if (loadContext()) {
+      renderShelf();
+      renderStory(0);
+    }
+  </script>
+</body>
+</html>

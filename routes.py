@@ -266,6 +266,16 @@ def world_select():
     )
 
 
+@app.route("/paraval-library")
+def paraval_library():
+    cfg = _supabase_public_config()
+    return render_template(
+        "paraval_library.html",
+        supabase_url=cfg["url"],
+        supabase_anon_key=cfg["anon_key"],
+    )
+
+
 @app.route("/game")
 def game():
     return render_template("game.html")
