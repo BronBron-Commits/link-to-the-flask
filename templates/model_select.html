@@ -275,6 +275,7 @@ import { GLTFLoader } from '{{ asset_url("GLTFLoader.js") }}';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
+const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_.gltf") }}';
 
 const selectedCharacterLabelEl = document.getElementById('selected-character');
 const statusEl = document.getElementById('status');
@@ -542,8 +543,8 @@ async function loadModels() {
     setStatus(`Loaded ${models.length} model(s).`, 'ok');
     previewModel(selectedModelUrl);
   } else {
-    enterWorldBtn.disabled = true;
-    setStatus(`Loaded ${models.length} model(s). Select one to continue.`, '');
+    enterWorldBtn.disabled = false;
+    setStatus(`Loaded ${models.length} model(s). Open World will use the default everything_.gltf scene for now.`, 'ok');
     previewModel('');
   }
 }
@@ -592,11 +593,8 @@ if (loadSelectedCharacter()) {
   uploadBtn.addEventListener('click', uploadModelFiles);
 
   enterWorldBtn.addEventListener('click', () => {
-    if (!selectedModelUrl) {
-      setStatus('Select a model first.', 'error');
-      return;
-    }
-    const target = `/world-select?characterId=${encodeURIComponent(selectedCharacter.id)}&modelUrl=${encodeURIComponent(selectedModelUrl)}`;
+    const modelUrl = selectedModelUrl || OPEN_WORLD_MODEL_URL;
+    const target = `/world-select?characterId=${encodeURIComponent(selectedCharacter.id)}&modelUrl=${encodeURIComponent(modelUrl)}`;
     window.location.href = target;
   });
 

@@ -154,6 +154,7 @@ const params = new URLSearchParams(window.location.search || '');
 const urlCharacterId = String(params.get('characterId') || '').trim();
 const urlModelUrl = String(params.get('modelUrl') || '').trim();
 const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
+const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_.gltf") }}';
 
 let selectedCharacter = null;
 let selectedModelUrl = '';
@@ -196,22 +197,22 @@ function loadContext() {
     selectedModelUrl = urlModelUrl || '';
   }
 
-  if (!selectedModelUrl) {
-    const modelTarget = `/model-select?characterId=${encodeURIComponent(selectedCharacter.id)}`;
-    window.location.replace(modelTarget);
-    return false;
+  if (selectedModelUrl) {
+    localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
   }
-
-  localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
-  contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
-  backModelBtn.href = `/model-select?characterId=${encodeURIComponent(selectedCharacter.id)}&modelUrl=${encodeURIComponent(selectedModelUrl)}`;
+  contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Open World Model: ${OPEN_WORLD_MODEL_URL}`;
+  backModelBtn.href = `/model-select?characterId=${encodeURIComponent(selectedCharacter.id)}${selectedModelUrl ? `&modelUrl=${encodeURIComponent(selectedModelUrl)}` : ''}`;
   return true;
 }
 
 function buildWorldUrl(basePath) {
   const url = new URL(basePath, window.location.origin);
   url.searchParams.set('characterId', selectedCharacter.id);
-  url.searchParams.set('modelUrl', selectedModelUrl);
+  if (url.pathname === '/map3d') {
+    url.searchParams.set('modelUrl', OPEN_WORLD_MODEL_URL);
+  } else if (selectedModelUrl) {
+    url.searchParams.set('modelUrl', selectedModelUrl);
+  }
   return `${url.pathname}${url.search}`;
 }
 
@@ -220,7 +221,7 @@ function renderWorlds() {
     {
       id: 'overworld',
       title: 'Open World',
-      description: 'Enter the full 3D map and explore with your selected character model.',
+      description: 'Enter the full 3D map and load everything_.gltf for now.',
       target: '/map3d',
       tag: 'Shared World',
     },
