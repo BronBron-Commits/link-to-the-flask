@@ -134,18 +134,32 @@
     }
 
     @media (max-width: 760px) {
+      .shell {
+        height: auto;
+        min-height: 100vh;
+        justify-content: flex-start;
+        overflow-y: auto;
+        padding-top: 20px;
+        padding-bottom: calc(132px + env(safe-area-inset-bottom));
+      }
+
       .guest-access {
         flex-direction: column;
         align-items: stretch;
-        margin-top: 20px;
-        margin-bottom: calc(10px + env(safe-area-inset-bottom));
+        margin-top: 22px;
+        margin-bottom: calc(26px + env(safe-area-inset-bottom));
         gap: 14px;
-        padding: 14px;
+        padding: 16px;
       }
 
       .guest-link {
         width: 100%;
-        min-height: 42px;
+        min-height: 54px;
+        font-size: 0.76rem;
+      }
+
+      .footer {
+        bottom: calc(10px + env(safe-area-inset-bottom));
       }
     }
 
