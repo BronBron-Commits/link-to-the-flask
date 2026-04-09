@@ -755,16 +755,6 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   window.supabase = supabase;
   window.__paravalAuth.clientReady = true;
 
-  const current = await supabase.auth.getSession();
-  if (current.data.session) {
-    try {
-      await exchangeSession(current.data.session);
-      window.location.replace('/hub');
-    } catch (error) {
-      setStatus(`Session restore failed: ${error.message}`, 'error');
-    }
-  }
-
   tabSignInEl.addEventListener('click', () => applyMode('sign-in'));
   tabCreateEl.addEventListener('click', () => applyMode('create'));
   tabManageEl.addEventListener('click', () => applyMode('manage'));
@@ -928,6 +918,16 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       setStatus(`Backend session failed: ${error.message}`, 'error');
     }
   });
+
+  const current = await supabase.auth.getSession();
+  if (current.data.session) {
+    try {
+      await exchangeSession(current.data.session);
+      window.location.replace('/hub');
+    } catch (error) {
+      setStatus(`Session restore failed: ${error.message}`, 'error');
+    }
+  }
   }
 }
 
