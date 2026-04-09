@@ -40,6 +40,7 @@ const voiceState = {
   enabled: false,
   muted: false,
   speaking: false,
+  unavailableReason: '',
 };
 
 const rtcState = {
@@ -123,7 +124,9 @@ function pushChatMessage(message) {
 
 function updateVoiceUi() {
   if (voiceToggleEl) {
-    if (!voiceState.enabled) {
+    if (voiceState.unavailableReason && !voiceState.enabled) {
+      voiceToggleEl.textContent = 'Voice Unavailable';
+    } else if (!voiceState.enabled) {
       voiceToggleEl.textContent = 'Enable Voice';
     } else if (voiceState.muted) {
       voiceToggleEl.textContent = 'Unmute Voice';
@@ -132,11 +135,39 @@ function updateVoiceUi() {
     }
   }
   if (voiceStateEl) {
-    if (!voiceState.enabled) voiceStateEl.textContent = 'Voice Off';
+    if (voiceState.unavailableReason && !voiceState.enabled) voiceStateEl.textContent = 'Unavailable';
+    else if (!voiceState.enabled) voiceStateEl.textContent = 'Voice Off';
     else if (voiceState.speaking && !voiceState.muted) voiceStateEl.textContent = 'Speaking';
     else if (voiceState.muted) voiceStateEl.textContent = 'Muted';
     else voiceStateEl.textContent = 'Listening';
   }
+}
+
+function canUseMicrophoneApis() {
+  return Boolean(navigator.mediaDevices && typeof navigator.mediaDevices.getUserMedia === 'function');
+}
+
+function isMicAllowedByContext() {
+  if (window.isSecureContext) return true;
+  const host = String(window.location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '[::1]';
+}
+
+function formatVoiceInitError(err) {
+  const name = String(err && err.name ? err.name : '').trim();
+  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+    return 'Microphone permission was blocked. Allow mic access for this site and try again.';
+  }
+  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+    return 'No microphone device was found.';
+  }
+  if (name === 'NotReadableError' || name === 'TrackStartError') {
+    return 'Microphone is already in use by another app.';
+  }
+  if (name === 'SecurityError') {
+    return 'Voice requires a secure context (HTTPS or localhost).';
+  }
+  return 'Voice could not start. Check browser permissions and try again.';
 }
 
 function ensureRemoteAudioRoot() {
@@ -1111,6 +1142,20 @@ function startVoiceMeter() {
 
 async function toggleVoiceState() {
   if (!voiceState.enabled) {
+    if (!canUseMicrophoneApis()) {
+      voiceState.unavailableReason = 'browser-api-unavailable';
+      updateVoiceUi();
+      pushChatMessage({ type: 'system', text: 'This browser does not expose microphone APIs (mediaDevices/getUserMedia).' });
+      return;
+    }
+
+    if (!isMicAllowedByContext()) {
+      voiceState.unavailableReason = 'insecure-context';
+      updateVoiceUi();
+      pushChatMessage({ type: 'system', text: 'Voice needs HTTPS (or localhost). Current context is not secure.' });
+      return;
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -1127,13 +1172,15 @@ async function toggleVoiceState() {
       voiceState.enabled = true;
       voiceState.muted = false;
       voiceState.speaking = false;
+      voiceState.unavailableReason = '';
       updateVoiceUi();
       publishLocalPresence(true);
       startVoiceMeter();
       syncVoicePeers();
       pushChatMessage({ type: 'system', text: 'Voice enabled.' });
-    } catch (_err) {
-      pushChatMessage({ type: 'system', text: 'Voice permission denied or unavailable.' });
+    } catch (err) {
+      const detail = formatVoiceInitError(err);
+      pushChatMessage({ type: 'system', text: detail });
       teardownVoiceCapture();
     }
     return;
