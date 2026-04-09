@@ -7,117 +7,12 @@
     <style>
         body { margin: 0; overflow: hidden; background: #222; }
         canvas { display: block; }
-
-        #model-picker {
-            position: fixed;
-            top: 12px;
-            right: 12px;
-            z-index: 999;
-            background: rgba(10, 14, 26, 0.88);
-            border: 1px solid rgba(90, 120, 200, 0.45);
-            border-radius: 8px;
-            padding: 10px 14px 12px;
-            font-family: monospace;
-            font-size: 12px;
-            color: #a8c4f8;
-            min-width: 200px;
-            backdrop-filter: blur(4px);
-        }
-        #model-picker h4 {
-            margin: 0 0 8px;
-            font-size: 11px;
-            letter-spacing: 0.08em;
-            color: #5b8fff;
-            text-transform: uppercase;
-        }
-        #model-picker label {
-            display: block;
-            margin-bottom: 3px;
-            color: #7aa4e8;
-        }
-        #model-picker select {
-            width: 100%;
-            margin-bottom: 9px;
-            background: #0d1324;
-            color: #c8deff;
-            border: 1px solid #2a3d6a;
-            border-radius: 4px;
-            padding: 4px 6px;
-            font-family: monospace;
-            font-size: 12px;
-            cursor: pointer;
-        }
-        #model-picker select:focus {
-            outline: none;
-            border-color: #4a7aff;
-        }
-
-        #combat-ui-root {
-            display: none;
-            position: fixed;
-            inset: 0;
-            z-index: 800;
-            pointer-events: none;
-        }
-        #combat-ui-root * {
-            pointer-events: auto;
-        }
     </style>
 </head>
 <body>
-    <!-- 3D scene will be rendered here -->
-
-    <!-- Model picker overlay -->
-    <div id="model-picker">
-        <h4>Model Picker</h4>
-        <label for="sel-player">Player Model</label>
-        <select id="sel-player">
-            <option value="">— Box (default) —</option>
-            <option value="/static/headsculpt2.glb">headsculpt2.glb</option>
-            <option value="/static/training dummy.glb">training dummy.glb</option>
-            <option value="/static/Untitled.glb">Untitled.glb</option>
-            <option value="/static/untitled2.glb">untitled2.glb</option>
-            <option value="/static/hammer.glb">hammer.glb</option>
-            <option value="/static/barrel.glb">barrel.glb</option>
-        </select>
-        <label for="sel-enemy">Enemy Model</label>
-        <select id="sel-enemy">
-            <option value="">— Box (default) —</option>
-            <option value="/static/headsculpt2.glb">headsculpt2.glb</option>
-            <option value="/static/training dummy.glb">training dummy.glb</option>
-            <option value="/static/Untitled.glb">Untitled.glb</option>
-            <option value="/static/untitled2.glb">untitled2.glb</option>
-            <option value="/static/hammer.glb">hammer.glb</option>
-            <option value="/static/barrel.glb">barrel.glb</option>
-        </select>
-    </div>
-
-    <!-- Combat UI overlay -->
-    <div id="combat-ui-root"></div>
-
     <script src="/runtime-asset-version.js"></script>
-    <!-- Socket.IO client for multiplayer support -->
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script type="module">
         import(window.__assetUrl('/static/map3d.js'));
-        import(window.__assetUrl('/static/combat-ui.js'));
-    </script>
-    <script>
-        // Wire dropdowns once map3d.js has had a tick to register window.map3dRuntime
-        window.addEventListener('load', () => {
-            function bindPicker(selectId, team) {
-                const sel = document.getElementById(selectId);
-                if (!sel) return;
-                sel.addEventListener('change', () => {
-                    const rt = window.map3dRuntime;
-                    if (rt && typeof rt.setModelUrl === 'function') {
-                        rt.setModelUrl(team, sel.value);
-                    }
-                });
-            }
-            bindPicker('sel-player', 'player');
-            bindPicker('sel-enemy', 'enemy');
-        });
     </script>
 </body>
 </html>

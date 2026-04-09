@@ -75,6 +75,7 @@ const controls = createMap3dControls({
     getActorHitObjects: () => runtime.getActorHitObjects(),
     getInputFlags: () => runtime.getInputFlags(),
     emitIntent: (type, payload) => runtime.emitIntent(type, payload),
+    enableFlyControls: sceneKey === 'default',
 });
 controls.start();
 
@@ -145,6 +146,7 @@ const VIEW_PRESETS = {
 };
 const viewKey = VIEW_ALIAS[rawView] || (VIEW_PRESETS[rawView] ? rawView : '');
 const sceneKey = (rawScene === 'forest' || rawScene === 'ocean') ? rawScene : 'default';
+const isStaticOpenWorld = sceneKey === 'default';
 const DESIGN_ALIAS = {
     a: 'tactical',
     b: 'cinematic',
@@ -1306,7 +1308,7 @@ function createSocketBridge() {
     return socket;
 }
 
-const socket = simulationMode ? null : createSocketBridge();
+const socket = (simulationMode || isStaticOpenWorld) ? null : createSocketBridge();
 
 if (simulationMode) {
     simulationReplay.ui = createSimulationPanel();
@@ -1338,64 +1340,66 @@ if (simulationMode) {
         });
 }
 
-runtime.onIntent((intent) => {
-    debugLog('[MAP3D INTENT]', intent);
+if (!isStaticOpenWorld) {
+    runtime.onIntent((intent) => {
+        debugLog('[MAP3D INTENT]', intent);
 
-    if (simulationMode) return;
-    if (!socket || !socket.connected) return;
-    const payload = intent && intent.payload ? intent.payload : {};
+        if (simulationMode) return;
+        if (!socket || !socket.connected) return;
+        const payload = intent && intent.payload ? intent.payload : {};
 
-    if (intent.type === 'attack') {
-        const targetId = String(payload.targetId || '').trim();
-        if (!targetId) return;
-        const actionId = nextIntentId('attack');
-        socket.emit('combat-action-preview', {
-            requestId: nextIntentId('preview'),
-            type: 'attack',
-            targetId,
-        });
-        socket.emit('combat-action', {
-            id: actionId,
-            type: 'attack',
-            targetId,
-        });
-        return;
-    }
+        if (intent.type === 'attack') {
+            const targetId = String(payload.targetId || '').trim();
+            if (!targetId) return;
+            const actionId = nextIntentId('attack');
+            socket.emit('combat-action-preview', {
+                requestId: nextIntentId('preview'),
+                type: 'attack',
+                targetId,
+            });
+            socket.emit('combat-action', {
+                id: actionId,
+                type: 'attack',
+                targetId,
+            });
+            return;
+        }
 
-    if (intent.type === 'move') {
-        socket.emit('combat-action', {
-            id: nextIntentId('move'),
-            type: 'move',
-            position: {
-                x: numberOr(payload.x, 0),
-                y: numberOr(payload.y, 0),
-                z: numberOr(payload.z, 0),
-            },
-        });
-        return;
-    }
+        if (intent.type === 'move') {
+            socket.emit('combat-action', {
+                id: nextIntentId('move'),
+                type: 'move',
+                position: {
+                    x: numberOr(payload.x, 0),
+                    y: numberOr(payload.y, 0),
+                    z: numberOr(payload.z, 0),
+                },
+            });
+            return;
+        }
 
-    if (intent.type === 'move-relative') {
-        const localActor = Array.from(networkState.playersById.values()).find(
-            (actor) => String(actor.ownerSid || '') === String(networkState.localSid || '')
-        );
-        if (!localActor || !localActor.position) return;
-        socket.emit('combat-action', {
-            id: nextIntentId('move'),
-            type: 'move',
-            position: {
-                x: numberOr(localActor.position.x, 0) + numberOr(payload.x, 0),
-                y: numberOr(localActor.position.y, 0),
-                z: numberOr(localActor.position.z, 0) + numberOr(payload.z, 0),
-            },
-        });
-        return;
-    }
+        if (intent.type === 'move-relative') {
+            const localActor = Array.from(networkState.playersById.values()).find(
+                (actor) => String(actor.ownerSid || '') === String(networkState.localSid || '')
+            );
+            if (!localActor || !localActor.position) return;
+            socket.emit('combat-action', {
+                id: nextIntentId('move'),
+                type: 'move',
+                position: {
+                    x: numberOr(localActor.position.x, 0) + numberOr(payload.x, 0),
+                    y: numberOr(localActor.position.y, 0),
+                    z: numberOr(localActor.position.z, 0) + numberOr(payload.z, 0),
+                },
+            });
+            return;
+        }
 
-    if (intent.type === 'end-turn') {
-        socket.emit('end-turn', { source: 'map3d-runtime' });
-    }
-});
+        if (intent.type === 'end-turn') {
+            socket.emit('end-turn', { source: 'map3d-runtime' });
+        }
+    });
+}
 
 window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
@@ -1404,6 +1408,14 @@ window.addEventListener('resize', () => {
 });
 
 function animate(timeMs) {
+    const previousTimeMs = animate._previousTimeMs || timeMs;
+    const deltaSeconds = Math.min(0.05, Math.max(0, (Number(timeMs) - Number(previousTimeMs)) * 0.001));
+    animate._previousTimeMs = timeMs;
+
+    if (controls && typeof controls.update === 'function') {
+        controls.update(deltaSeconds);
+    }
+
     if (sceneEffects.ocean && sceneEffects.ocean.mesh) {
         const t = Number(timeMs) * 0.001;
         const ocean = sceneEffects.ocean;
@@ -1458,6 +1470,7 @@ window.__MAP3D_BOOTSTRAP__ = {
     applyEvent: (event) => runtime.applyEvent(event),
     onIntent: (handler) => runtime.onIntent(handler),
     simulationMode,
+    isStaticOpenWorld,
     simulationReplay: {
         load: (path) => loadSimulationArtifact(path || simulationArtifactPath),
         play: () => playSimulationReplay(),
@@ -1472,5 +1485,7 @@ window.__MAP3D_BOOTSTRAP__ = {
     },
 };
 
-window.dispatchMapSnapshot = (snapshot) => runtime.applySnapshot(snapshot);
-window.dispatchMapEvent = (event) => runtime.applyEvent(event);
+if (!isStaticOpenWorld) {
+    window.dispatchMapSnapshot = (snapshot) => runtime.applySnapshot(snapshot);
+    window.dispatchMapEvent = (event) => runtime.applyEvent(event);
+}
