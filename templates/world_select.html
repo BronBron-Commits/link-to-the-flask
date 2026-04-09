@@ -153,6 +153,7 @@ const backModelBtn = document.getElementById('back-model-btn');
 const params = new URLSearchParams(window.location.search || '');
 const urlCharacterId = String(params.get('characterId') || '').trim();
 const urlModelUrl = String(params.get('modelUrl') || '').trim();
+const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
 
 let selectedCharacter = null;
 let selectedModelUrl = '';
@@ -185,8 +186,8 @@ function loadContext() {
   }
 
   if (!selectedCharacter || !selectedCharacter.id) {
-    window.location.replace('/hub');
-    return false;
+    selectedCharacter = { ...FALLBACK_CHARACTER };
+    localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
   }
 
   try {

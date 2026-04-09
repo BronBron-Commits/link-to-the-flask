@@ -288,6 +288,7 @@ const previewMetaEl = document.getElementById('preview-meta');
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const selectedCharacterId = String(urlSearch.get('characterId') || '').trim();
+const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
 let selectedCharacter = null;
 let selectedModelUrl = '';
 let previewRenderer = null;
@@ -485,8 +486,8 @@ function loadSelectedCharacter() {
   }
 
   if (!selectedCharacter || !selectedCharacter.id) {
-    window.location.replace('/hub');
-    return false;
+    selectedCharacter = { ...FALLBACK_CHARACTER };
+    localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
   }
 
   selectedCharacterLabelEl.textContent = `Selected character: ${selectedCharacter.name || selectedCharacter.id}`;

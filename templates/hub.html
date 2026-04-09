@@ -259,6 +259,7 @@ const pdfFileEl = document.getElementById('pdf-file');
 const pdfUploadBtn = document.getElementById('pdf-upload-btn');
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
 let selectedCharacter = null;
 
 function setStatus(msg, tone = '') {
@@ -277,8 +278,9 @@ function escapeHtml(s) {
 
 function renderCharacters(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    gridEl.innerHTML = '<div class="empty">No characters found yet.</div>';
-    enterWorldBtn.disabled = true;
+    gridEl.innerHTML = '<div class="empty">No characters found yet. You can still enter with a temporary character and upload a PDF later.</div>';
+    enterWorldBtn.disabled = false;
+    setStatus('No character sheet yet. Enter World to continue with a temporary character.', 'ok');
     return;
   }
   gridEl.innerHTML = rows.map((row, idx) => {
@@ -319,8 +321,9 @@ function renderCharacters(rows) {
 
 function renderSheetCharacters(rows) {
   if (!Array.isArray(rows) || rows.length === 0) {
-    gridEl.innerHTML = '<div class="empty">No uploaded character sheets found yet.</div>';
-    enterWorldBtn.disabled = true;
+    gridEl.innerHTML = '<div class="empty">No uploaded character sheets found yet. You can still enter with a temporary character and come back later.</div>';
+    enterWorldBtn.disabled = false;
+    setStatus('No uploaded sheets found. Enter World to continue with a temporary character.', 'ok');
     return;
   }
   gridEl.innerHTML = rows.map((row, idx) => {
@@ -493,8 +496,9 @@ async function boot() {
 
   enterWorldBtn.addEventListener('click', () => {
     if (!selectedCharacter || !selectedCharacter.id) {
-      setStatus('Select a character first.', 'error');
-      return;
+      selectedCharacter = { ...FALLBACK_CHARACTER };
+      localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
+      setStatus('Continuing with a temporary character. You can upload/select a PDF character later.', 'ok');
     }
     localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
     const target = `/model-select?characterId=${encodeURIComponent(String(selectedCharacter.id))}`;
