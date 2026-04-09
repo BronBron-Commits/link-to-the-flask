@@ -11,6 +11,9 @@
       --ink: #2f2217;
       --gold: #c7a766;
       --gold-dim: rgba(199, 167, 102, 0.32);
+      --accent-rgb: 199, 167, 102;
+      --accent: #c7a766;
+      --accent-ink: #f4d89a;
       --paper: #eadfbe;
       --paper-deep: #d7c49a;
       --shelf: #4b3020;
@@ -45,7 +48,7 @@
       isolation: isolate;
       max-width: 1380px;
       margin: 0 auto;
-      border: 1px solid var(--gold-dim);
+      border: 1px solid rgba(var(--accent-rgb), 0.34);
       border-radius: 28px;
       overflow: hidden;
       background:
@@ -53,6 +56,49 @@
         linear-gradient(135deg, rgba(11, 16, 24, 0.92), rgba(8, 11, 17, 0.98)),
         linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
       box-shadow: 0 34px 80px rgba(0, 0, 0, 0.48);
+      transition: border-color 0.65s ease, box-shadow 0.65s ease;
+    }
+
+    .frame[data-theme='divine'] {
+      --accent-rgb: 199, 167, 102;
+      --accent: #c7a766;
+      --accent-ink: #f4d89a;
+    }
+
+    .frame[data-theme='arcane'] {
+      --accent-rgb: 133, 182, 255;
+      --accent: #85b6ff;
+      --accent-ink: #d8e8ff;
+    }
+
+    .frame[data-theme='medical'] {
+      --accent-rgb: 133, 201, 198;
+      --accent: #85c9c6;
+      --accent-ink: #d4f4f0;
+    }
+
+    .frame[data-theme='war'] {
+      --accent-rgb: 198, 96, 76;
+      --accent: #c6604c;
+      --accent-ink: #f0c7bc;
+    }
+
+    .frame[data-theme='nature'] {
+      --accent-rgb: 124, 174, 112;
+      --accent: #7cae70;
+      --accent-ink: #d8ebc9;
+    }
+
+    .frame[data-theme='history'] {
+      --accent-rgb: 171, 137, 99;
+      --accent: #ab8963;
+      --accent-ink: #ecd9bf;
+    }
+
+    .frame[data-theme='tragedy'] {
+      --accent-rgb: 175, 118, 138;
+      --accent: #af768a;
+      --accent-ink: #f1d1dd;
     }
 
     .frame::before,
@@ -78,7 +124,7 @@
     .frame::after {
       background:
         radial-gradient(circle at 50% -10%, rgba(133, 182, 255, 0.14), transparent 45%),
-        radial-gradient(circle at 50% 120%, rgba(199, 167, 102, 0.1), transparent 42%);
+        radial-gradient(circle at 50% 120%, rgba(var(--accent-rgb), 0.16), transparent 42%);
       mix-blend-mode: screen;
       opacity: 0.72;
     }
@@ -87,10 +133,11 @@
       position: relative;
       overflow: hidden;
       padding: 28px 30px 18px;
-      border-bottom: 1px solid rgba(199, 167, 102, 0.16);
+      border-bottom: 1px solid rgba(var(--accent-rgb), 0.22);
       background:
-        linear-gradient(180deg, rgba(199, 167, 102, 0.08), transparent),
+        linear-gradient(180deg, rgba(var(--accent-rgb), 0.1), transparent),
         radial-gradient(circle at right top, rgba(165, 90, 42, 0.14), transparent 38%);
+      transition: border-color 0.65s ease;
     }
 
     .hero::after {
@@ -102,7 +149,7 @@
       right: -100px;
       border-radius: 50%;
       background:
-        conic-gradient(from 100deg, rgba(133, 182, 255, 0.24), rgba(199, 167, 102, 0.1), rgba(133, 182, 255, 0.24));
+        conic-gradient(from 100deg, rgba(133, 182, 255, 0.24), rgba(var(--accent-rgb), 0.24), rgba(133, 182, 255, 0.24));
       filter: blur(18px);
       opacity: 0.36;
       animation: haloSpin 20s linear infinite;
@@ -130,11 +177,12 @@
       margin: 0;
       font-size: clamp(2.1rem, 4vw, 4rem);
       line-height: 0.96;
-      color: #f7e8ba;
+      color: var(--accent-ink);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       font-family: 'Cinzel', serif;
       text-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+      transition: color 0.65s ease;
     }
 
     .subtitle {
@@ -158,9 +206,9 @@
       min-height: 42px;
       padding: 10px 14px;
       border-radius: 12px;
-      border: 1px solid rgba(199, 167, 102, 0.28);
+      border: 1px solid rgba(var(--accent-rgb), 0.34);
       background: linear-gradient(180deg, rgba(16, 22, 33, 0.95), rgba(9, 14, 22, 0.95));
-      color: #f4e3b3;
+      color: var(--accent-ink);
       text-decoration: none;
       text-transform: uppercase;
       letter-spacing: 0.12em;
@@ -185,7 +233,7 @@
     }
 
     .btn:hover {
-      border-color: rgba(199, 167, 102, 0.62);
+      border-color: rgba(var(--accent-rgb), 0.78);
       transform: translateY(-1px);
       box-shadow: 0 10px 18px rgba(0, 0, 0, 0.22);
     }
@@ -221,11 +269,12 @@
 
     .shelf-title {
       margin: 0 0 14px;
-      color: #eed6a2;
+      color: var(--accent-ink);
       font-size: 1.1rem;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       font-family: 'Cinzel', serif;
+      transition: color 0.65s ease;
     }
 
     .shelf-copy {
@@ -242,7 +291,7 @@
 
     .book {
       width: 100%;
-      border: 1px solid rgba(199, 167, 102, 0.14);
+      border: 1px solid rgba(var(--accent-rgb), 0.2);
       border-radius: 16px;
       background:
         linear-gradient(90deg, rgba(255, 255, 255, 0.04), transparent 28%),
@@ -282,8 +331,8 @@
     .book:hover,
     .book[aria-pressed='true'] {
       transform: translateY(-2px);
-      border-color: rgba(199, 167, 102, 0.48);
-      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), 0 0 26px rgba(133, 182, 255, 0.08);
+      border-color: rgba(var(--accent-rgb), 0.56);
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28), 0 0 26px rgba(var(--accent-rgb), 0.2);
     }
 
     .book:hover::after,
@@ -294,17 +343,18 @@
     .book[aria-pressed='true'] {
       background:
         linear-gradient(90deg, rgba(255, 255, 255, 0.08), transparent 34%),
-        linear-gradient(180deg, rgba(199, 167, 102, 0.12), rgba(255, 255, 255, 0.03));
+        linear-gradient(180deg, rgba(var(--accent-rgb), 0.18), rgba(255, 255, 255, 0.03));
     }
 
     .book-title {
       display: block;
       margin: 0 0 6px 14px;
-      color: #f7e1aa;
+      color: var(--accent-ink);
       font-size: 1rem;
       letter-spacing: 0.05em;
       text-transform: uppercase;
       font-family: 'Cinzel', serif;
+      transition: color 0.65s ease;
     }
 
     .book-meta,
@@ -338,7 +388,7 @@
     .reader-shell {
       height: 100%;
       border-radius: 24px;
-      border: 1px solid rgba(199, 167, 102, 0.12);
+      border: 1px solid rgba(var(--accent-rgb), 0.24);
       padding: 18px;
       background: rgba(6, 9, 14, 0.4);
       backdrop-filter: blur(2px);
@@ -347,7 +397,42 @@
       gap: 16px;
       position: relative;
       overflow: hidden;
+      transition: border-color 0.65s ease;
     }
+
+    .reader-shell > * {
+      position: relative;
+      z-index: 2;
+    }
+
+    .rune-field {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+      overflow: hidden;
+      mix-blend-mode: screen;
+    }
+
+    .rune {
+      position: absolute;
+      color: rgba(var(--accent-rgb), 0.46);
+      font-family: 'Space Mono', Consolas, monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      text-shadow: 0 0 12px rgba(var(--accent-rgb), 0.45);
+      opacity: 0;
+      animation: runeFloat 12s ease-in-out infinite, runeFlicker 5.5s ease-in-out infinite;
+      transition: color 0.65s ease, text-shadow 0.65s ease;
+    }
+
+    .rune:nth-child(1) { left: 9%; top: 14%; animation-delay: 0.2s; }
+    .rune:nth-child(2) { left: 20%; top: 62%; animation-delay: 1.1s; }
+    .rune:nth-child(3) { left: 44%; top: 18%; animation-delay: 2s; }
+    .rune:nth-child(4) { left: 56%; top: 68%; animation-delay: 2.8s; }
+    .rune:nth-child(5) { left: 73%; top: 22%; animation-delay: 3.7s; }
+    .rune:nth-child(6) { left: 85%; top: 58%; animation-delay: 4.6s; }
 
     .reader-shell::before {
       content: '';
@@ -379,9 +464,10 @@
 
     .reader-title {
       margin: 0;
-      color: #f4deb0;
+      color: var(--accent-ink);
       font-size: clamp(1.4rem, 3vw, 2.2rem);
       font-family: 'Cinzel', serif;
+      transition: color 0.65s ease;
     }
 
     .reader-author {
@@ -402,12 +488,13 @@
       margin: 0;
       padding: 14px 16px;
       border-radius: 16px;
-      background: rgba(199, 167, 102, 0.08);
-      border: 1px solid rgba(199, 167, 102, 0.16);
+      background: rgba(var(--accent-rgb), 0.12);
+      border: 1px solid rgba(var(--accent-rgb), 0.28);
       color: #c5b796;
       line-height: 1.7;
       font-size: 0.95rem;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+      transition: background-color 0.65s ease, border-color 0.65s ease;
     }
 
     .book-open {
@@ -517,6 +604,20 @@
       50% { box-shadow: inset 0 0 0 1px rgba(87, 61, 35, 0.25), 0 0 24px rgba(133, 182, 255, 0.1); }
     }
 
+    @keyframes runeFloat {
+      0% { transform: translateY(14px) scale(0.95); opacity: 0; }
+      18% { opacity: 0.42; }
+      50% { transform: translateY(0px) scale(1); opacity: 0.65; }
+      82% { opacity: 0.38; }
+      100% { transform: translateY(-16px) scale(1.03); opacity: 0; }
+    }
+
+    @keyframes runeFlicker {
+      0%, 100% { filter: brightness(0.95); }
+      35% { filter: brightness(1.2); }
+      68% { filter: brightness(0.86); }
+    }
+
     @keyframes shellPulse {
       0%, 100% { opacity: 0.75; }
       50% { opacity: 1; }
@@ -537,6 +638,7 @@
       .frame::before,
       .hero::after,
       .reader-shell::before,
+      .rune,
       .book-open,
       .btn:hover::after,
       .page.turning {
@@ -582,7 +684,7 @@
   </style>
 </head>
 <body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
-  <main class="frame">
+  <main id="library-frame" class="frame" data-theme="divine">
     <section class="hero">
       <div class="topbar">
         <div>
@@ -606,6 +708,15 @@
 
       <section class="reader-panel">
         <div class="reader-shell">
+          <div class="rune-field" aria-hidden="true">
+            <span class="rune">AER</span>
+            <span class="rune">NTH</span>
+            <span class="rune">SOL</span>
+            <span class="rune">LYR</span>
+            <span class="rune">VIA</span>
+            <span class="rune">ASH</span>
+          </div>
+
           <div class="reader-head">
             <div>
               <p class="reader-kicker">Reading Desk</p>
@@ -850,6 +961,7 @@ S: Who does? Tidus?
     ];
 
     const contextEl = document.getElementById('context');
+    const frameEl = document.getElementById('library-frame');
     const bookshelfEl = document.getElementById('bookshelf');
     const readerTitleEl = document.getElementById('reader-title');
     const readerAuthorEl = document.getElementById('reader-author');
@@ -857,6 +969,7 @@ S: Who does? Tidus?
     const pageLeftEl = document.getElementById('page-left');
     const pageRightEl = document.getElementById('page-right');
     const pageEls = Array.from(document.querySelectorAll('.page'));
+    const runeEls = Array.from(document.querySelectorAll('.rune'));
     const prevBookBtn = document.getElementById('prev-book-btn');
     const nextBookBtn = document.getElementById('next-book-btn');
     const backWorldsBtn = document.getElementById('back-worlds-btn');
@@ -869,6 +982,55 @@ S: Who does? Tidus?
     let selectedCharacter = null;
     let selectedModelUrl = '';
     let currentIndex = 0;
+
+    const runeSetsByTheme = {
+      divine: ['SOL', 'AUR', 'VIA', 'HALO', 'ALT', 'SAC'],
+      arcane: ['HEX', 'AST', 'RUNE', 'NTH', 'SIG', 'WARP'],
+      medical: ['VIT', 'MND', 'CLIN', 'A1+', 'PSI', 'WARD'],
+      war: ['ASH', 'IRON', 'OATH', 'BLADE', 'RED', 'VOW'],
+      nature: ['ROOT', 'THRN', 'WILD', 'GROVE', 'MOSS', 'SEED'],
+      history: ['ARCH', 'SEAL', 'AGE', 'SCRIBE', 'TOME', 'BIND'],
+      tragedy: ['ECHO', 'VEIL', 'LOSS', 'WISP', 'MOURN', 'DUSK'],
+    };
+
+    function getStoryTheme(story) {
+      const tag = String(story.tag || '').toLowerCase();
+      const title = String(story.title || '').toLowerCase();
+      const tagAndTitle = `${tag} ${title}`;
+
+      if (tagAndTitle.includes('medical') || tagAndTitle.includes('patient') || tagAndTitle.includes('screening') || tagAndTitle.includes('clinical')) {
+        return 'medical';
+      }
+      if (tagAndTitle.includes('war') || tagAndTitle.includes('iron') || tagAndTitle.includes('blazing')) {
+        return 'war';
+      }
+      if (tagAndTitle.includes('nature') || tagAndTitle.includes('garden') || tagAndTitle.includes('forbidden') || tagAndTitle.includes('earth')) {
+        return 'nature';
+      }
+      if (tagAndTitle.includes('magic') || tagAndTitle.includes('cosmos') || tagAndTitle.includes('primordial') || tagAndTitle.includes('star')) {
+        return 'arcane';
+      }
+      if (tagAndTitle.includes('tragic') || tagAndTitle.includes('love')) {
+        return 'tragedy';
+      }
+      if (tagAndTitle.includes('history') || tagAndTitle.includes('chronicle') || tagAndTitle.includes('city') || tagAndTitle.includes('lore') || tagAndTitle.includes('record')) {
+        return 'history';
+      }
+      if (tagAndTitle.includes('divine') || tagAndTitle.includes('holy') || tagAndTitle.includes('god') || tagAndTitle.includes('goddess')) {
+        return 'divine';
+      }
+      return 'divine';
+    }
+
+    function applyTheme(story) {
+      const theme = getStoryTheme(story);
+      frameEl.setAttribute('data-theme', theme);
+
+      const runeSet = runeSetsByTheme[theme] || runeSetsByTheme.divine;
+      runeEls.forEach((runeEl, index) => {
+        runeEl.textContent = runeSet[index % runeSet.length];
+      });
+    }
 
     function buildUrl(basePath) {
       const query = new URLSearchParams();
@@ -943,6 +1105,7 @@ S: Who does? Tidus?
     function renderStory(index) {
       currentIndex = (index + stories.length) % stories.length;
       const story = stories[currentIndex];
+      applyTheme(story);
       readerTitleEl.textContent = story.title;
       readerAuthorEl.textContent = `${story.author} | ${story.tag}`;
       readerSummaryEl.textContent = story.summary;
