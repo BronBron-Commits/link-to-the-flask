@@ -307,7 +307,10 @@ Z: 0.00</div>
     <script src="/runtime-asset-version.js"></script>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <script type="module">
-        import(window.__assetUrl('/static/fireplace_walkroom.js'));
+        const runtimeUrl = window.__assetUrl('/static/fireplace_walkroom.js');
+        const cacheBust = `cb=${Date.now()}`;
+        const sep = runtimeUrl.includes('?') ? '&' : '?';
+        import(`${runtimeUrl}${sep}${cacheBust}`);
     </script>
 </body>
 </html>
