@@ -1,6 +1,9 @@
 import * as THREE from './three.module.js';
+import { GLTFLoader } from './GLTFLoader.js';
 import { createMap3dRuntime } from './map3d_runtime.js';
 import { createMap3dControls } from './map3d_controls.js';
+
+const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_.gltf';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x10141f);
@@ -17,6 +20,9 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(window.devicePixelRatio || 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
+
+const worldLoader = new GLTFLoader();
+let worldSceneRoot = null;
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
 scene.add(ambientLight);
@@ -81,10 +87,6 @@ const selectedModelUrl = String(
     || localStorage.getItem(SELECTED_MODEL_STORAGE_KEY)
     || ''
 ).trim();
-
-if (selectedModelUrl) {
-    runtime.setModelUrl('player', selectedModelUrl);
-}
 
 let selectedCharacterProfile = null;
 try {
@@ -457,6 +459,80 @@ function applyViewPreset(presetKey) {
     camera.lookAt(preset.lookAt[0], preset.lookAt[1], preset.lookAt[2]);
 }
 
+function disposeWorldSceneRoot(root) {
+    if (!root) return;
+    root.traverse((child) => {
+        if (child.geometry && typeof child.geometry.dispose === 'function') {
+            child.geometry.dispose();
+        }
+        const material = child.material;
+        const disposeMaterial = (entry) => {
+            if (!entry) return;
+            Object.values(entry).forEach((value) => {
+                if (value && value.isTexture && typeof value.dispose === 'function') {
+                    value.dispose();
+                }
+            });
+            if (typeof entry.dispose === 'function') {
+                entry.dispose();
+            }
+        };
+        if (Array.isArray(material)) material.forEach(disposeMaterial);
+        else disposeMaterial(material);
+    });
+}
+
+function frameWorldScene(root) {
+    const box = new THREE.Box3().setFromObject(root);
+    if (box.isEmpty()) {
+        camera.position.set(6, 4, 8);
+        camera.lookAt(0, 1, 0);
+        return;
+    }
+
+    const center = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z, 1);
+    const fov = THREE.MathUtils.degToRad(camera.fov);
+    const distance = (maxDim * 1.2) / Math.tan(fov * 0.5);
+
+    camera.position.set(
+        center.x + distance * 0.55,
+        center.y + Math.max(size.y * 0.45, 2.5),
+        center.z + distance * 0.75
+    );
+    camera.lookAt(center.x, center.y + Math.max(size.y * 0.15, 0.6), center.z);
+}
+
+function loadDefaultOpenWorldScene() {
+    grid.visible = false;
+    floor.visible = false;
+    scene.background = new THREE.Color(0x0c1016);
+
+    worldLoader.load(
+        DEFAULT_OPEN_WORLD_ASSET_URL,
+        (gltf) => {
+            if (worldSceneRoot) {
+                scene.remove(worldSceneRoot);
+                disposeWorldSceneRoot(worldSceneRoot);
+                worldSceneRoot = null;
+            }
+            worldSceneRoot = gltf.scene || null;
+            if (!worldSceneRoot) {
+                console.warn('[MAP3D] Open world asset loaded without scene root');
+                return;
+            }
+            scene.add(worldSceneRoot);
+            frameWorldScene(worldSceneRoot);
+            console.log('[MAP3D] Loaded default open world asset:', DEFAULT_OPEN_WORLD_ASSET_URL);
+        },
+        undefined,
+        (error) => {
+            console.warn('[MAP3D] Failed to load default open world asset:', DEFAULT_OPEN_WORLD_ASSET_URL, error);
+        }
+    );
+}
+
 if (simulationMode && !viewKey) {
     // Top-down tactical framing for simulation playback.
     applyViewPreset('top');
@@ -464,6 +540,14 @@ if (simulationMode && !viewKey) {
 
 if (viewKey) {
     applyViewPreset(viewKey);
+}
+
+if (sceneKey !== 'default' && selectedModelUrl) {
+    runtime.setModelUrl('player', selectedModelUrl);
+}
+
+if (sceneKey === 'default') {
+    loadDefaultOpenWorldScene();
 }
 
 if (sceneKey === 'forest') {
