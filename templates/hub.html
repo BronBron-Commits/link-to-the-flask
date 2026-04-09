@@ -512,10 +512,10 @@ async function boot() {
     window.location.replace('/');
   });
 
-  supabase.auth.onAuthStateChange((_event, session) => {
-    if (!session) {
-      window.location.replace('/');
-    }
+  // Avoid redirect loops: the backend /api/auth/me gate above is authoritative.
+  // Some browsers/ad blockers may report transient null Supabase sessions.
+  supabase.auth.onAuthStateChange((_event, _session) => {
+    // Intentionally no redirect here.
   });
 
   await loadCharacters();
