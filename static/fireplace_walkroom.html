@@ -29,37 +29,6 @@
       letter-spacing: 0.04em;
       backdrop-filter: blur(4px);
     }
-    #hud {
-      position: fixed;
-      top: 14px;
-      right: 14px;
-      z-index: 12;
-      min-width: 260px;
-      border: 1px solid rgba(255, 255, 255, 0.14);
-      border-radius: 10px;
-      background: rgba(10, 14, 25, 0.74);
-      padding: 10px 12px;
-      backdrop-filter: blur(4px);
-    }
-    #hud-title {
-      color: #e9d8a4;
-      font-size: 12px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      margin-bottom: 6px;
-    }
-    #hud-player {
-      color: #9db0e6;
-      font-size: 11px;
-      line-height: 1.5;
-      margin-bottom: 6px;
-      white-space: pre-wrap;
-    }
-    #hud-controls {
-      color: #96a2c4;
-      font-size: 10px;
-      line-height: 1.45;
-    }
     #name-gate {
       position: fixed;
       inset: 0;
@@ -134,12 +103,6 @@
 </head>
 <body>
   <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
-
-  <section id="hud">
-    <div id="hud-title">Paraval Social Room</div>
-    <div id="hud-player">Loading player...</div>
-    <div id="hud-controls">Click scene to lock camera. Mouse look. Mouse wheel zoom. WASD move. Shift sprint.</div>
-  </section>
 
   <section id="name-gate" aria-label="Display name prompt">
     <div class="name-card">
