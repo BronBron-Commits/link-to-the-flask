@@ -718,27 +718,25 @@ S: Who does? Tidus?
         localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
       }
 
-      if (!selectedCharacter || !selectedCharacter.id) {
-        window.location.replace('/hub');
-        return false;
-      }
-
       try {
         selectedModelUrl = urlModelUrl || String(localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || '').trim();
       } catch (_err) {
         selectedModelUrl = urlModelUrl || '';
       }
 
-      if (!selectedModelUrl) {
-        window.location.replace(`/model-select?characterId=${encodeURIComponent(selectedCharacter.id)}`);
-        return false;
+      if (selectedCharacter && selectedCharacter.id) {
+        if (selectedModelUrl) {
+          localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
+          contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
+        } else {
+          contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Guest model context`;
+        }
+      } else {
+        contextEl.textContent = 'Guest Access: The Paraval Library is open without an account.';
       }
 
-      localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
-      contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Model: ${selectedModelUrl}`;
       backWorldsBtn.href = buildUrl('/world-select');
       enterWorldBtn.href = buildUrl('/map3d');
-      return true;
     }
 
     function renderShelf() {
@@ -778,10 +776,9 @@ S: Who does? Tidus?
     prevBookBtn.addEventListener('click', () => renderStory(currentIndex - 1));
     nextBookBtn.addEventListener('click', () => renderStory(currentIndex + 1));
 
-    if (loadContext()) {
-      renderShelf();
-      renderStory(0);
-    }
+    loadContext();
+    renderShelf();
+    renderStory(0);
   </script>
 </body>
 </html>
