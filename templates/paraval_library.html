@@ -665,6 +665,16 @@
       padding-right: 6px;
     }
 
+    .name-highlight {
+      color: rgba(53, 31, 12, 0.98);
+      font-weight: 700;
+      border-bottom: 1px solid rgba(var(--accent-rgb), 0.5);
+      background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.2), rgba(var(--accent-rgb), 0.06));
+      padding: 0 0.08em;
+      border-radius: 0.2em;
+      box-shadow: 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 0 1px rgba(var(--accent-rgb), 0.12) inset;
+    }
+
     .page-number {
       position: relative;
       z-index: 1;
@@ -947,7 +957,7 @@ S: Who does? Tidus?
       F: No. Him.
       S: Father who is this "Him" you speak of?
       F: Z… Zoyrth
-      *8Note: After this, Father would not respond to any more questions and returned to mumbling prayers.`
+      *Note: After this, Father would not respond to any more questions and returned to mumbling prayers.`
             },
             {
         id: 'keith-mental-screening',
@@ -1120,6 +1130,51 @@ S: Who does? Tidus?
       tragedy: ['ECHO', 'VEIL', 'LOSS', 'WISP', 'MOURN', 'DUSK'],
     };
 
+    const highlightedNames = [
+      'Amara',
+      'Astralis',
+      'Cardinal Roger Keith',
+      'Coriselle',
+      'Dezzarc',
+      'Driftfolk',
+      'Fiammetta',
+      'Franz Fredstien',
+      'Helena',
+      'Keith',
+      'Maridon',
+      'Nekravol',
+      'Salazar',
+      'Seloquin',
+      'Shaidos',
+      'Tideborn',
+      'Tidus',
+      'Vonos',
+      'Zoryth',
+      'Zoyrth',
+    ];
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function highlightStoryText(text) {
+      let html = escapeHtml(text);
+      const namesByLength = [...highlightedNames].sort((a, b) => b.length - a.length);
+
+      namesByLength.forEach((name) => {
+        const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const pattern = new RegExp(`(^|[^A-Za-z])(${escapedName})(?=[^A-Za-z]|$)`, 'gi');
+        html = html.replace(pattern, (_match, prefix, matchedName) => `${prefix}<span class="name-highlight">${matchedName}</span>`);
+      });
+
+      return html;
+    }
+
     function getStoryTheme(story) {
       const tag = String(story.tag || '').toLowerCase();
       const title = String(story.title || '').toLowerCase();
@@ -1236,8 +1291,8 @@ S: Who does? Tidus?
       readerTitleEl.textContent = story.title;
       readerAuthorEl.textContent = `${story.author} | ${story.tag}`;
       readerSummaryEl.textContent = story.summary;
-      pageLeftEl.textContent = story.left;
-      pageRightEl.textContent = story.right;
+      pageLeftEl.innerHTML = highlightStoryText(story.left);
+      pageRightEl.innerHTML = highlightStoryText(story.right);
       pageEls.forEach((page) => {
         page.classList.remove('turning');
         void page.offsetWidth;
