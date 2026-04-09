@@ -608,6 +608,47 @@ function withTimeout(promise, timeoutMs, label) {
   ]);
 }
 
+async function signInViaSupabaseRest(email, password, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/token?grant_type=password`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+      credentials: 'omit',
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg = String(payload.error_description || payload.msg || payload.error || response.statusText || 'supabase-rest-signin-failed');
+      throw new Error(msg);
+    }
+    const accessToken = String(payload.access_token || '').trim();
+    if (!accessToken) {
+      throw new Error('supabase-rest-missing-access-token');
+    }
+    return {
+      access_token: accessToken,
+      refresh_token: String(payload.refresh_token || ''),
+      expires_in: Number(payload.expires_in || 0),
+      token_type: String(payload.token_type || 'bearer'),
+      user: payload.user || null,
+    };
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw new Error(`supabase-rest-timeout-${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function renderAccount(user) {
   currentUser = user || null;
   if (user && (user.email || user.id)) {
@@ -790,24 +831,38 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     try {
       signInInFlight = true;
       signInBtn.disabled = true;
-      const result = await withTimeout(
-        supabase.auth.signInWithPassword({ email, password }),
-        15000,
-        'supabase-sign-in'
-      );
-      console.log('[SIGN IN] supabase returned:', { hasError: !!result.error, hasSession: !!result.data?.session });
-      if (result.error) {
-        setStatus(result.error.message, 'error');
-        console.log('[SIGN IN] error:', result.error.message);
-        return;
+      let session = null;
+      try {
+        const result = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password }),
+          15000,
+          'supabase-sign-in'
+        );
+        console.log('[SIGN IN] supabase returned:', { hasError: !!result.error, hasSession: !!result.data?.session });
+        if (result.error) {
+          setStatus(result.error.message, 'error');
+          console.log('[SIGN IN] error:', result.error.message);
+          return;
+        }
+        session = result.data && result.data.session ? result.data.session : null;
+      } catch (sdkError) {
+        const sdkMessage = String(sdkError && sdkError.message ? sdkError.message : sdkError);
+        if (!sdkMessage.includes('supabase-sign-in-timeout-')) {
+          throw sdkError;
+        }
+        console.log('[SIGN IN] supabase-js timed out, trying direct REST fallback...');
+        const restSession = await signInViaSupabaseRest(email, password, 10000);
+        session = restSession;
       }
-      if (!result.data || !result.data.session) {
+
+      if (!session) {
         setStatus('Sign-in succeeded but no session was returned.', 'error');
-        console.log('[SIGN IN] missing session in sign-in result');
+        console.log('[SIGN IN] missing session after sdk/rest sign-in');
         return;
       }
+
       console.log('[SIGN IN] exchanging session with backend...');
-      await exchangeSession(result.data.session);
+      await exchangeSession(session);
       console.log('[SIGN IN] exchange succeeded, redirecting to /hub');
       window.location.replace('/hub');
     } catch (error) {
@@ -815,6 +870,8 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       const msg = String(error && error.message ? error.message : error);
       if (msg.includes('supabase-sign-in-timeout-')) {
         setStatus('Supabase sign-in timed out. Check browser network/ad-blocking and try again.', 'error');
+      } else if (msg.includes('supabase-rest-timeout-')) {
+        setStatus('Supabase REST sign-in also timed out. This browser/network cannot reach Supabase auth.', 'error');
       } else {
         setStatus(`Backend session failed: ${msg}`, 'error');
       }
