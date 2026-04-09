@@ -18,6 +18,12 @@ from werkzeug.utils import secure_filename
 from extensions import app
 import game_state as gs
 from state_sync import broadcast_world
+
+try:
+    import httpx
+    HAS_HTTPX = True
+except ImportError:
+    HAS_HTTPX = False
 from scripts.pdf_to_tidy_data import (
     parse_character_tables,
     write_outputs,
@@ -48,40 +54,61 @@ def _fetch_supabase_user(access_token: str) -> tuple[dict | None, str | None]:
         print(f"[SUPABASE FETCH] missing token or config", flush=True)
         return None, "missing-config-or-token"
     base_url = config["url"].rstrip("/")
-    print(f"[SUPABASE FETCH] attempting user fetch from {base_url}/auth/v1/user", flush=True)
-    req = urllib_request.Request(
-        f"{base_url}/auth/v1/user",
-        headers={
-            "apikey": config["anon_key"],
-            "Authorization": f"Bearer {token}",
-        },
-        method="GET",
-    )
+    url = f"{base_url}/auth/v1/user"
+    headers = {
+        "apikey": config["anon_key"],
+        "Authorization": f"Bearer {token}",
+    }
+    
+    print(f"[SUPABASE FETCH] attempting user fetch from {url}", flush=True)
+    
+    # Try httpx if available (gevent-friendly)
+    if HAS_HTTPX:
+        try:
+            print(f"[SUPABASE FETCH] using httpx client with 10s timeout", flush=True)
+            with httpx.Client(verify=True, timeout=10.0) as client:
+                response = client.get(url, headers=headers)
+                print(f"[SUPABASE FETCH] got httpx response: status={response.status_code}", flush=True)
+                if response.status_code != 200:
+                    return None, f"supabase-http-{response.status_code}"
+                payload = response.json()
+                print(f"[SUPABASE FETCH] success, user_id={payload.get('id', 'unknown')}", flush=True)
+                return payload, None
+        except httpx.TimeoutException:
+            print(f"[SUPABASE FETCH] httpx timeout", flush=True)
+            return None, "supabase-timeout"
+        except Exception as exc:
+            print(f"[SUPABASE FETCH] httpx error: {type(exc).__name__}: {exc}", flush=True)
+            return None, "supabase-network-error"
+    
+    # Fallback to urllib
+    print(f"[SUPABASE FETCH] httpx not available, using urllib (may hang under gevent)", flush=True)
+    req = urllib_request.Request(url, headers=headers, method="GET")
     try:
-        print(f"[SUPABASE FETCH] sending request...", flush=True)
+        print(f"[SUPABASE FETCH] urllib sending request...", flush=True)
         with urllib_request.urlopen(req, timeout=10) as response:
-            print(f"[SUPABASE FETCH] got response, reading...", flush=True)
+            print(f"[SUPABASE FETCH] urllib got response, reading...", flush=True)
             payload = json.loads(response.read().decode("utf-8"))
     except urllib_error.HTTPError as exc:
-        print(f"[SUPABASE FETCH] HTTP error {exc.code}: {exc}", flush=True)
+        print(f"[SUPABASE FETCH] urllib HTTP error {exc.code}: {exc}", flush=True)
         return None, f"supabase-http-{int(getattr(exc, 'code', 0) or 0)}"
     except urllib_error.URLError as exc:
-        print(f"[SUPABASE FETCH] URL error (network/DNS): {exc}", flush=True)
+        print(f"[SUPABASE FETCH] urllib URL error (network/DNS): {exc}", flush=True)
         return None, "supabase-network-error"
     except TimeoutError as exc:
-        print(f"[SUPABASE FETCH] timeout waiting for Supabase: {exc}", flush=True)
+        print(f"[SUPABASE FETCH] urllib timeout waiting for Supabase: {exc}", flush=True)
         return None, "supabase-timeout"
     except json.JSONDecodeError as exc:
-        print(f"[SUPABASE FETCH] invalid JSON from Supabase: {exc}", flush=True)
+        print(f"[SUPABASE FETCH] urllib invalid JSON from Supabase: {exc}", flush=True)
         return None, "supabase-invalid-json"
     except OSError as exc:
-        print(f"[SUPABASE FETCH] OS error: {exc}", flush=True)
+        print(f"[SUPABASE FETCH] urllib OS error: {exc}", flush=True)
         return None, "supabase-os-error"
 
     if not isinstance(payload, dict):
         print(f"[SUPABASE FETCH] payload is not dict, got {type(payload)}", flush=True)
         return None, "supabase-invalid-payload"
-    print(f"[SUPABASE FETCH] success, user_id={payload.get('id', 'unknown')}", flush=True)
+    print(f"[SUPABASE FETCH] urllib success, user_id={payload.get('id', 'unknown')}", flush=True)
     return payload, None
 
 
@@ -357,7 +384,9 @@ def auth_session_create():
         session["auth_user"] = _normalize_auth_user(user)
         session["supabase_access_token"] = access_token
         print(f"[AUTH SESSION] session stored successfully", flush=True)
-        return jsonify(ok=True, authenticated=True, user=session["auth_user"])
+        response_data = jsonify(ok=True, authenticated=True, user=session["auth_user"])
+        print(f"[AUTH SESSION] response created, returning now", flush=True)
+        return response_data
     except Exception as exc:
         print(f"[AUTH SESSION ERROR] {type(exc).__name__}: {exc}", flush=True)
         return jsonify(ok=False, error="auth-session-internal-error", detail=type(exc).__name__), 500
