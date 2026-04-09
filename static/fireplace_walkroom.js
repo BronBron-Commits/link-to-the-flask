@@ -351,7 +351,30 @@ function recenterSceneAsset(root) {
   const size = box.getSize(new THREE.Vector3());
   root.position.set(-center.x, -box.min.y, -center.z);
   root.updateMatrixWorld(true);
-  return { size };
+  const reframedBox = new THREE.Box3().setFromObject(root);
+  const reframedCenter = reframedBox.getCenter(new THREE.Vector3());
+  return { size, box: reframedBox, center: reframedCenter };
+}
+
+function frameSceneAsset(layout) {
+  if (!layout || !layout.box || layout.box.isEmpty()) {
+    camera.position.set(6, 4, 8);
+    camera.lookAt(0, 1, 0);
+    return;
+  }
+
+  const center = layout.center || layout.box.getCenter(new THREE.Vector3());
+  const size = layout.size || layout.box.getSize(new THREE.Vector3());
+  const maxDim = Math.max(size.x, size.y, size.z, 1);
+  const fov = THREE.MathUtils.degToRad(camera.fov);
+  const distance = (maxDim * 1.15) / Math.tan(fov * 0.5);
+
+  camera.position.set(
+    center.x + distance * 0.55,
+    center.y + Math.max(size.y * 0.4, 3),
+    center.z + distance * 0.75,
+  );
+  camera.lookAt(center.x, center.y + Math.max(size.y * 0.12, 1.2), center.z);
 }
 
 if (!USE_SCENE_ASSET) {
@@ -416,7 +439,9 @@ if (!USE_SCENE_ASSET) {
 
 const actor = new THREE.Group();
 actor.position.set(0, 0, USE_SCENE_ASSET ? 0 : 2.1);
-scene.add(actor);
+if (!USE_SCENE_ASSET) {
+  scene.add(actor);
+}
 
 const remoteActorsLayer = new THREE.Group();
 scene.add(remoteActorsLayer);
@@ -426,7 +451,9 @@ const fallbackSkinMat = new THREE.MeshStandardMaterial({ color: 0xe8ccb2, roughn
 const fallbackClothMat = new THREE.MeshStandardMaterial({ color: 0x2b304d, roughness: 0.9, metalness: 0.02 });
 
 const fallbackAvatar = new THREE.Group();
-actor.add(fallbackAvatar);
+if (!USE_SCENE_ASSET) {
+  actor.add(fallbackAvatar);
+}
 
 const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.56, 6, 12), fallbackBodyMat);
 torso.position.y = 1.03;
@@ -1615,17 +1642,17 @@ function loadSceneAssetEnvironment() {
       scene.add(root);
       worldSceneRoot = root;
 
-      if (layout && layout.size) {
-        const halfX = Math.max(layout.size.x * 0.48, 8);
-        const halfZ = Math.max(layout.size.z * 0.48, 8);
+      if (layout && layout.size && layout.box) {
+        const boxSize = layout.box.getSize(new THREE.Vector3());
+        const halfX = Math.max(boxSize.x * 0.52, 8);
+        const halfZ = Math.max(boxSize.z * 0.52, 8);
         moveBounds.minX = -halfX;
         moveBounds.maxX = halfX;
         moveBounds.minZ = -halfZ;
         moveBounds.maxZ = halfZ;
-        actor.position.set(0, Math.max(layout.size.y * 0.18, 2.4), THREE.MathUtils.clamp(halfZ * 0.35, -halfZ + 2, halfZ - 2));
-        orbitDistance = THREE.MathUtils.clamp(Math.max(layout.size.x, layout.size.y, layout.size.z) * 0.16, 5.2, 10.5);
-        camera.position.copy(actor.position);
-        camera.lookAt(actor.position.x, actor.position.y, actor.position.z - 1);
+        frameSceneAsset(layout);
+        actor.position.copy(camera.position);
+        orbitDistance = THREE.MathUtils.clamp(Math.max(boxSize.x, boxSize.y, boxSize.z) * 0.14, 5.2, 10.5);
       }
     },
     undefined,
@@ -1640,6 +1667,9 @@ loadSceneAssetEnvironment();
 if (USE_SCENE_ASSET) {
   actor.visible = false;
   fallbackAvatar.visible = false;
+  if (actor.parent) {
+    actor.parent.remove(actor);
+  }
 }
 
 function setMoveState(code, value) {
