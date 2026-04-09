@@ -4,18 +4,28 @@ import { GLTFLoader } from '/static/GLTFLoader.js';
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
 const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
+const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCIAL_ROOM_CONFIG__ === 'object'
+  ? window.__SOCIAL_ROOM_CONFIG__
+  : {};
+const SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
+const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
+const USE_SCENE_ASSET = Boolean(SCENE_ASSET_URL);
 
 const hudPlayerEl = document.getElementById('hud-player');
 const nameGateEl = document.getElementById('name-gate');
 const displayNameInputEl = document.getElementById('display-name-input');
 const displayNameSubmitEl = document.getElementById('display-name-submit');
 const displayNameErrorEl = document.getElementById('display-name-error');
+const socialTitleEl = document.querySelector('.social-title');
 const socialPlayersEl = document.getElementById('social-players');
 const socialChatLogEl = document.getElementById('social-chat-log');
 const socialChatInputEl = document.getElementById('social-chat-input');
 const socialChatSendEl = document.getElementById('social-chat-send');
 const voiceToggleEl = document.getElementById('voice-toggle');
 const voiceStateEl = document.getElementById('voice-state');
+
+document.title = `Paraval ${ROOM_TITLE}`;
+if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const queryCharacterId = String(urlSearch.get('characterId') || '').trim();
@@ -266,8 +276,8 @@ function loadSelectionContext() {
 loadSelectionContext();
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0d15);
-scene.fog = new THREE.Fog(0x0a0d15, 10, 34);
+scene.background = new THREE.Color(USE_SCENE_ASSET ? 0x2a3442 : 0x0a0d15);
+scene.fog = USE_SCENE_ASSET ? null : new THREE.Fog(0x0a0d15, 10, 34);
 
 const skyboxTextureLoader = new THREE.TextureLoader();
 skyboxTextureLoader.load(
@@ -291,76 +301,121 @@ renderer.setPixelRatio(window.devicePixelRatio || 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.24;
+renderer.toneMappingExposure = USE_SCENE_ASSET ? 1.34 : 1.24;
 document.body.appendChild(renderer.domElement);
 
-const hemi = new THREE.HemisphereLight(0x6f84ad, 0x241d17, 0.68);
+const hemi = new THREE.HemisphereLight(
+  USE_SCENE_ASSET ? 0xddefff : 0x6f84ad,
+  USE_SCENE_ASSET ? 0x44505f : 0x241d17,
+  USE_SCENE_ASSET ? 1.35 : 0.68,
+);
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(0xa3b7dd, 0.86);
-key.position.set(-3.4, 4.4, 2.8);
+const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 2.1 : 0.86);
+key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
 scene.add(key);
 
-const fireGlow = new THREE.PointLight(0xff9a45, 2.9, 13, 2);
-fireGlow.position.set(0, 1.3, -3.1);
-scene.add(fireGlow);
+const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 1.15 : 0.25);
+fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
+scene.add(fill);
 
-const roomMat = new THREE.MeshStandardMaterial({ color: 0x202532, roughness: 0.93, metalness: 0.03 });
-const floorMat = new THREE.MeshStandardMaterial({ color: 0x2f221d, roughness: 0.9, metalness: 0.02 });
-const stoneMat = new THREE.MeshStandardMaterial({ color: 0x525765, roughness: 0.88, metalness: 0.02 });
-const woodMat = new THREE.MeshStandardMaterial({ color: 0x654d39, roughness: 0.86, metalness: 0.05 });
+const worldSceneLoader = new GLTFLoader();
+let worldSceneRoot = null;
 
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
-floor.rotation.x = -Math.PI / 2;
-scene.add(floor);
+let fireGlow = null;
+let flameCore = null;
+let flameOuter = null;
 
-const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), roomMat);
-backWall.position.set(0, 3, -4.5);
-scene.add(backWall);
+function tuneSceneAssetMaterials(root) {
+  if (!root) return;
+  root.traverse((child) => {
+    if (!child || !child.isMesh || !child.material) return;
+    child.castShadow = false;
+    child.receiveShadow = false;
+    const tuneMaterial = (material) => {
+      if (!material) return;
+      if ('side' in material) material.side = THREE.DoubleSide;
+      if ('needsUpdate' in material) material.needsUpdate = true;
+    };
+    if (Array.isArray(child.material)) child.material.forEach(tuneMaterial);
+    else tuneMaterial(child.material);
+  });
+}
 
-const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), roomMat);
-leftWall.position.set(-5.8, 3, 0);
-leftWall.rotation.y = Math.PI / 2;
-scene.add(leftWall);
+function recenterSceneAsset(root) {
+  if (!root) return null;
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  if (box.isEmpty()) return null;
+  const center = box.getCenter(new THREE.Vector3());
+  const size = box.getSize(new THREE.Vector3());
+  root.position.set(-center.x, -box.min.y, -center.z);
+  root.updateMatrixWorld(true);
+  return { size };
+}
 
-const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), roomMat);
-rightWall.position.set(5.8, 3, 0);
-rightWall.rotation.y = -Math.PI / 2;
-scene.add(rightWall);
+if (!USE_SCENE_ASSET) {
+  const roomMat = new THREE.MeshStandardMaterial({ color: 0x202532, roughness: 0.93, metalness: 0.03 });
+  const floorMat = new THREE.MeshStandardMaterial({ color: 0x2f221d, roughness: 0.9, metalness: 0.02 });
+  const stoneMat = new THREE.MeshStandardMaterial({ color: 0x525765, roughness: 0.88, metalness: 0.02 });
+  const woodMat = new THREE.MeshStandardMaterial({ color: 0x654d39, roughness: 0.86, metalness: 0.05 });
 
-const hearth = new THREE.Mesh(new THREE.BoxGeometry(4.8, 2.4, 1.2), stoneMat);
-hearth.position.set(0, 1.2, -4.0);
-scene.add(hearth);
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(16, 16), floorMat);
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
 
-const opening = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.6, 0.85), new THREE.MeshStandardMaterial({ color: 0x12141b, roughness: 0.9 }));
-opening.position.set(0, 1.04, -3.42);
-scene.add(opening);
+  const backWall = new THREE.Mesh(new THREE.PlaneGeometry(12, 6), roomMat);
+  backWall.position.set(0, 3, -4.5);
+  scene.add(backWall);
 
-const mantle = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.26, 1.4), woodMat);
-mantle.position.set(0, 2.42, -3.9);
-scene.add(mantle);
+  const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), roomMat);
+  leftWall.position.set(-5.8, 3, 0);
+  leftWall.rotation.y = Math.PI / 2;
+  scene.add(leftWall);
 
-const rug = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.8), new THREE.MeshStandardMaterial({ color: 0x2c1318, roughness: 0.88 }));
-rug.rotation.x = -Math.PI / 2;
-rug.position.set(0, 0.01, -1.35);
-scene.add(rug);
+  const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(10, 6), roomMat);
+  rightWall.position.set(5.8, 3, 0);
+  rightWall.rotation.y = -Math.PI / 2;
+  scene.add(rightWall);
 
-const flameCore = new THREE.Mesh(
-  new THREE.ConeGeometry(0.22, 0.72, 14),
-  new THREE.MeshBasicMaterial({ color: 0xffb468, transparent: true, opacity: 0.75 })
-);
-flameCore.position.set(0, 1.04, -3.15);
-scene.add(flameCore);
+  const hearth = new THREE.Mesh(new THREE.BoxGeometry(4.8, 2.4, 1.2), stoneMat);
+  hearth.position.set(0, 1.2, -4.0);
+  scene.add(hearth);
 
-const flameOuter = new THREE.Mesh(
-  new THREE.ConeGeometry(0.34, 0.95, 14),
-  new THREE.MeshBasicMaterial({ color: 0xff7c2b, transparent: true, opacity: 0.4 })
-);
-flameOuter.position.set(0, 1.08, -3.16);
-scene.add(flameOuter);
+  const opening = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.6, 0.85), new THREE.MeshStandardMaterial({ color: 0x12141b, roughness: 0.9 }));
+  opening.position.set(0, 1.04, -3.42);
+  scene.add(opening);
+
+  const mantle = new THREE.Mesh(new THREE.BoxGeometry(5.2, 0.26, 1.4), woodMat);
+  mantle.position.set(0, 2.42, -3.9);
+  scene.add(mantle);
+
+  const rug = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.8), new THREE.MeshStandardMaterial({ color: 0x2c1318, roughness: 0.88 }));
+  rug.rotation.x = -Math.PI / 2;
+  rug.position.set(0, 0.01, -1.35);
+  scene.add(rug);
+
+  fireGlow = new THREE.PointLight(0xff9a45, 2.9, 13, 2);
+  fireGlow.position.set(0, 1.3, -3.1);
+  scene.add(fireGlow);
+
+  flameCore = new THREE.Mesh(
+    new THREE.ConeGeometry(0.22, 0.72, 14),
+    new THREE.MeshBasicMaterial({ color: 0xffb468, transparent: true, opacity: 0.75 })
+  );
+  flameCore.position.set(0, 1.04, -3.15);
+  scene.add(flameCore);
+
+  flameOuter = new THREE.Mesh(
+    new THREE.ConeGeometry(0.34, 0.95, 14),
+    new THREE.MeshBasicMaterial({ color: 0xff7c2b, transparent: true, opacity: 0.4 })
+  );
+  flameOuter.position.set(0, 1.08, -3.16);
+  scene.add(flameOuter);
+}
 
 const actor = new THREE.Group();
-actor.position.set(0, 0, 2.1);
+actor.position.set(0, 0, USE_SCENE_ASSET ? 0 : 2.1);
 scene.add(actor);
 
 const remoteActorsLayer = new THREE.Group();
@@ -1514,10 +1569,10 @@ const moveState = {
 };
 
 const moveBounds = {
-  minX: -5.25,
-  maxX: 5.25,
-  minZ: -4.95,
-  maxZ: 3.25,
+  minX: USE_SCENE_ASSET ? -20 : -5.25,
+  maxX: USE_SCENE_ASSET ? 20 : 5.25,
+  minZ: USE_SCENE_ASSET ? -20 : -4.95,
+  maxZ: USE_SCENE_ASSET ? 20 : 3.25,
 };
 
 let pointerLocked = false;
@@ -1535,6 +1590,43 @@ const tmpMove = new THREE.Vector3();
 const tmpTarget = new THREE.Vector3();
 const tmpDesiredCam = new THREE.Vector3();
 const worldUp = new THREE.Vector3(0, 1, 0);
+
+function loadSceneAssetEnvironment() {
+  if (!USE_SCENE_ASSET) return;
+  worldSceneLoader.load(
+    SCENE_ASSET_URL,
+    (gltf) => {
+      if (worldSceneRoot) {
+        scene.remove(worldSceneRoot);
+      }
+
+      const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
+      if (!root) return;
+
+      tuneSceneAssetMaterials(root);
+      const layout = recenterSceneAsset(root);
+      scene.add(root);
+      worldSceneRoot = root;
+
+      if (layout && layout.size) {
+        const halfX = Math.max(layout.size.x * 0.48, 8);
+        const halfZ = Math.max(layout.size.z * 0.48, 8);
+        moveBounds.minX = -halfX;
+        moveBounds.maxX = halfX;
+        moveBounds.minZ = -halfZ;
+        moveBounds.maxZ = halfZ;
+        actor.position.set(0, 0, THREE.MathUtils.clamp(halfZ * 0.35, -halfZ + 2, halfZ - 2));
+        orbitDistance = THREE.MathUtils.clamp(Math.max(layout.size.x, layout.size.y, layout.size.z) * 0.16, 5.2, 10.5);
+      }
+    },
+    undefined,
+    (error) => {
+      console.warn('[SOCIAL ROOM] Failed to load scene asset:', SCENE_ASSET_URL, error);
+    }
+  );
+}
+
+loadSceneAssetEnvironment();
 
 function setMoveState(code, value) {
   if (code === 'KeyW') moveState.forward = value;
@@ -1686,9 +1778,11 @@ function animate() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
-  fireGlow.intensity = 2.65 + Math.sin(elapsed * 6.8) * 0.34 + Math.sin(elapsed * 10.4) * 0.2;
-  flameCore.scale.set(1 + Math.sin(elapsed * 8.1) * 0.07, 1 + Math.sin(elapsed * 10.5 + 0.4) * 0.12, 1 + Math.sin(elapsed * 6.3) * 0.06);
-  flameOuter.scale.set(1 + Math.sin(elapsed * 6.7 + 0.6) * 0.09, 1 + Math.sin(elapsed * 9.7) * 0.14, 1 + Math.sin(elapsed * 5.7) * 0.07);
+  if (fireGlow && flameCore && flameOuter) {
+    fireGlow.intensity = 2.65 + Math.sin(elapsed * 6.8) * 0.34 + Math.sin(elapsed * 10.4) * 0.2;
+    flameCore.scale.set(1 + Math.sin(elapsed * 8.1) * 0.07, 1 + Math.sin(elapsed * 10.5 + 0.4) * 0.12, 1 + Math.sin(elapsed * 6.3) * 0.06);
+    flameOuter.scale.set(1 + Math.sin(elapsed * 6.7 + 0.6) * 0.09, 1 + Math.sin(elapsed * 9.7) * 0.14, 1 + Math.sin(elapsed * 5.7) * 0.07);
+  }
 
   const isMoving = updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
