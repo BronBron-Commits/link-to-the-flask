@@ -265,13 +265,10 @@ function updateHudPlayerText() {
 function updateCoordinateHud() {
   ensureCoordinateHudElement();
   if (!coordHudEl) return;
-  let source = actor.position;
-  if (USE_SCENE_ASSET) {
-    camera.updateMatrixWorld(true);
-    source = camera.getWorldPosition(tmpCameraWorldPosition);
-    if (!Number.isFinite(source.x) || !Number.isFinite(source.y) || !Number.isFinite(source.z)) {
-      source = camera.position;
-    }
+  camera.updateMatrixWorld(true);
+  let source = camera.getWorldPosition(tmpCameraWorldPosition);
+  if (!Number.isFinite(source.x) || !Number.isFinite(source.y) || !Number.isFinite(source.z)) {
+    source = camera.position;
   }
 
   const x = Number.isFinite(source.x) ? source.x.toFixed(2) : '0.00';
