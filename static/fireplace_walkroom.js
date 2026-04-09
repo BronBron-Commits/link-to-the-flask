@@ -23,8 +23,35 @@ const socialChatInputEl = document.getElementById('social-chat-input');
 const socialChatSendEl = document.getElementById('social-chat-send');
 const voiceToggleEl = document.getElementById('voice-toggle');
 const voiceStateEl = document.getElementById('voice-state');
-const coordHudEl = document.getElementById('coord-hud');
+let coordHudEl = document.getElementById('coord-hud');
 const tmpCameraWorldPosition = new THREE.Vector3();
+
+function ensureCoordinateHudElement() {
+  if (coordHudEl) return coordHudEl;
+  const el = document.createElement('div');
+  el.id = 'coord-hud';
+  el.setAttribute('aria-live', 'polite');
+  el.style.position = 'fixed';
+  el.style.top = '14px';
+  el.style.right = '14px';
+  el.style.zIndex = '50';
+  el.style.border = '1px solid rgba(170, 192, 255, 0.45)';
+  el.style.borderRadius = '8px';
+  el.style.background = 'rgba(10, 14, 25, 0.78)';
+  el.style.color = '#dfe9ff';
+  el.style.fontSize = '11px';
+  el.style.letterSpacing = '0.04em';
+  el.style.padding = '7px 9px';
+  el.style.minWidth = '160px';
+  el.style.textAlign = 'right';
+  el.style.backdropFilter = 'blur(4px)';
+  el.style.whiteSpace = 'pre';
+  el.style.pointerEvents = 'none';
+  el.textContent = 'X: 0.00\nY: 0.00\nZ: 0.00';
+  document.body.appendChild(el);
+  coordHudEl = el;
+  return coordHudEl;
+}
 
 document.title = `Paraval ${ROOM_TITLE}`;
 if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
@@ -236,6 +263,7 @@ function updateHudPlayerText() {
 }
 
 function updateCoordinateHud() {
+  ensureCoordinateHudElement();
   if (!coordHudEl) return;
   let source = actor.position;
   if (USE_SCENE_ASSET) {
