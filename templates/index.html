@@ -670,19 +670,29 @@ const backendState = await readBackendSession();
 if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
 } else {
+  window.__paravalAuth = {
+    page: 'index',
+    moduleLoaded: false,
+    clientReady: false,
+    lastError: null,
+  };
   let createClient = null;
   try {
     ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+    window.__paravalAuth.moduleLoaded = true;
   } catch (_primaryImportError) {
     try {
       ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+      window.__paravalAuth.moduleLoaded = true;
     } catch (_fallbackImportError) {
+      window.__paravalAuth.lastError = 'supabase-module-load-failed';
       setStatus('Could not load auth module in this browser. Disable content blocking or use the guest library entry.', 'error');
       setInputsDisabled(true);
     }
   }
 
   if (!createClient) {
+    window.__paravalAuth.lastError = window.__paravalAuth.lastError || 'missing-create-client';
     signOutBtn.disabled = true;
   } else {
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
@@ -692,6 +702,8 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       detectSessionInUrl: true,
     },
   });
+  window.supabase = supabase;
+  window.__paravalAuth.clientReady = true;
 
   const current = await supabase.auth.getSession();
   if (current.data.session) {

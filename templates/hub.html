@@ -386,10 +386,39 @@ async function boot() {
     return;
   }
 
-  const { createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+  window.__paravalAuth = {
+    page: 'hub',
+    moduleLoaded: false,
+    clientReady: false,
+    lastError: null,
+  };
+
+  let createClient = null;
+  try {
+    ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+    window.__paravalAuth.moduleLoaded = true;
+  } catch (_primaryImportError) {
+    try {
+      ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+      window.__paravalAuth.moduleLoaded = true;
+    } catch (_fallbackImportError) {
+      window.__paravalAuth.lastError = 'supabase-module-load-failed';
+      setStatus('Could not load Supabase auth module in this browser. Disable content blocking and refresh.', 'error');
+      return;
+    }
+  }
+
+  if (!createClient) {
+    window.__paravalAuth.lastError = window.__paravalAuth.lastError || 'missing-create-client';
+    setStatus('Supabase auth module loaded without createClient export.', 'error');
+    return;
+  }
+
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
   });
+  window.supabase = supabase;
+  window.__paravalAuth.clientReady = true;
 
   async function loadBackendSheets() {
     const response = await fetch('/api/character-sheets', { credentials: 'same-origin' });
