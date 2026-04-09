@@ -167,6 +167,23 @@
             padding: 0 10px;
             cursor: pointer;
         }
+        #coord-hud {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            z-index: 14;
+            border: 1px solid rgba(170, 192, 255, 0.45);
+            border-radius: 8px;
+            background: rgba(10, 14, 25, 0.78);
+            color: #dfe9ff;
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            padding: 7px 9px;
+            min-width: 160px;
+            text-align: right;
+            backdrop-filter: blur(4px);
+            white-space: pre;
+        }
         @media (max-width: 760px) {
             #social-overlay {
                 right: 10px;
@@ -249,6 +266,9 @@
 </head>
 <body>
     <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
+    <div id="coord-hud" aria-live="polite">X: 0.00
+Y: 0.00
+Z: 0.00</div>
 
     <section id="name-gate" aria-label="Display name prompt">
         <div class="name-card">

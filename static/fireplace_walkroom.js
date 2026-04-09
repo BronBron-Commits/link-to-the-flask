@@ -23,6 +23,7 @@ const socialChatInputEl = document.getElementById('social-chat-input');
 const socialChatSendEl = document.getElementById('social-chat-send');
 const voiceToggleEl = document.getElementById('voice-toggle');
 const voiceStateEl = document.getElementById('voice-state');
+const coordHudEl = document.getElementById('coord-hud');
 
 document.title = `Paraval ${ROOM_TITLE}`;
 if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
@@ -233,6 +234,15 @@ function updateHudPlayerText() {
   hudPlayerEl.textContent = `Player: ${nameText}\nModel: ${selectedModelUrl || 'Procedural fallback'}`;
 }
 
+function updateCoordinateHud() {
+  if (!coordHudEl) return;
+  const source = USE_SCENE_ASSET ? camera.position : actor.position;
+  const x = Number(source.x || 0).toFixed(2);
+  const y = Number(source.y || 0).toFixed(2);
+  const z = Number(source.z || 0).toFixed(2);
+  coordHudEl.textContent = `X: ${x}\nY: ${y}\nZ: ${z}`;
+}
+
 function loadSelectionContext() {
   try {
     const raw = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
@@ -279,6 +289,7 @@ function loadSelectionContext() {
 }
 
 loadSelectionContext();
+updateCoordinateHud();
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(USE_SCENE_ASSET ? 0x2a3442 : 0x0a0d15);
@@ -1899,6 +1910,7 @@ function animate() {
   const isMoving = updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
+  updateCoordinateHud();
 
   const nowMs = performance.now();
   if (nowMs >= netState.publishAtMs) {
