@@ -658,9 +658,31 @@ async function exchangeSession(session) {
     credentials: 'same-origin',
     body: JSON.stringify({ accessToken: session.access_token }),
   });
-  const payload = await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }));
+  let payload = null;
+  let responseSnippet = null;
+  try {
+    payload = await response.json();
+  } catch (_jsonError) {
+    const rawText = await response.text().catch(() => '');
+    responseSnippet = String(rawText || '').slice(0, 240);
+    payload = {
+      ok: false,
+      error: 'invalid-server-response',
+      detail: `status-${response.status}`,
+      responseSnippet,
+    };
+  }
+  if (window.__paravalAuth) {
+    window.__paravalAuth.lastSessionExchange = {
+      ok: !!(response.ok && payload.ok !== false),
+      status: response.status,
+      error: payload && payload.error ? String(payload.error) : null,
+      detail: payload && payload.detail ? String(payload.detail) : null,
+      responseSnippet,
+    };
+  }
   if (!response.ok || payload.ok === false) {
-    throw new Error(String(payload.error || response.statusText || 'auth-session-failed'));
+    throw new Error(String(payload.detail || payload.error || response.statusText || 'auth-session-failed'));
   }
   renderAccount(payload.user || null);
   setStatus('Account session synced with the backend.', 'success');

@@ -41,11 +41,11 @@ def _supabase_is_configured() -> bool:
     return bool(cfg["url"] and cfg["anon_key"])
 
 
-def _fetch_supabase_user(access_token: str) -> dict | None:
+def _fetch_supabase_user(access_token: str) -> tuple[dict | None, str | None]:
     token = str(access_token or "").strip()
     config = _supabase_public_config()
     if not token or not config["url"] or not config["anon_key"]:
-        return None
+        return None, "missing-config-or-token"
     base_url = config["url"].rstrip("/")
     req = urllib_request.Request(
         f"{base_url}/auth/v1/user",
@@ -58,9 +58,20 @@ def _fetch_supabase_user(access_token: str) -> dict | None:
     try:
         with urllib_request.urlopen(req, timeout=10) as response:
             payload = json.loads(response.read().decode("utf-8"))
-    except (urllib_error.URLError, urllib_error.HTTPError, TimeoutError, json.JSONDecodeError, OSError):
-        return None
-    return payload if isinstance(payload, dict) else None
+    except urllib_error.HTTPError as exc:
+        return None, f"supabase-http-{int(getattr(exc, 'code', 0) or 0)}"
+    except urllib_error.URLError:
+        return None, "supabase-network-error"
+    except TimeoutError:
+        return None, "supabase-timeout"
+    except json.JSONDecodeError:
+        return None, "supabase-invalid-json"
+    except OSError:
+        return None, "supabase-os-error"
+
+    if not isinstance(payload, dict):
+        return None, "supabase-invalid-payload"
+    return payload, None
 
 
 def _current_auth_user() -> dict | None:
@@ -300,20 +311,32 @@ def auth_me():
 
 @app.route("/api/auth/session", methods=["POST"])
 def auth_session_create():
-    if not _supabase_is_configured():
-        return jsonify(ok=False, error="supabase-not-configured"), 503
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        return jsonify(ok=False, error="invalid-payload"), 400
-    access_token = str(payload.get("accessToken") or "").strip()
-    if not access_token:
-        return jsonify(ok=False, error="missing-access-token"), 400
-    user = _fetch_supabase_user(access_token)
-    if not user:
-        return jsonify(ok=False, error="invalid-supabase-session"), 401
-    session["auth_user"] = _normalize_auth_user(user)
-    session["supabase_access_token"] = access_token
-    return jsonify(ok=True, authenticated=True, user=session["auth_user"])
+    try:
+        if not _supabase_is_configured():
+            return jsonify(ok=False, error="supabase-not-configured"), 503
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(ok=False, error="invalid-payload"), 400
+        access_token = str(payload.get("accessToken") or "").strip()
+        if not access_token:
+            return jsonify(ok=False, error="missing-access-token"), 400
+        user, validation_error = _fetch_supabase_user(access_token)
+        if not user:
+            if validation_error == "supabase-http-401":
+                return jsonify(ok=False, error="invalid-supabase-session", detail=validation_error), 401
+            if validation_error == "supabase-http-403":
+                return jsonify(ok=False, error="supabase-key-rejected", detail=validation_error), 502
+            if validation_error and validation_error.startswith("supabase-http-"):
+                return jsonify(ok=False, error="supabase-user-fetch-failed", detail=validation_error), 502
+            if validation_error in ("supabase-network-error", "supabase-timeout", "supabase-os-error"):
+                return jsonify(ok=False, error="supabase-unreachable", detail=validation_error), 502
+            return jsonify(ok=False, error="invalid-supabase-session", detail=validation_error or "unknown"), 401
+        session["auth_user"] = _normalize_auth_user(user)
+        session["supabase_access_token"] = access_token
+        return jsonify(ok=True, authenticated=True, user=session["auth_user"])
+    except Exception as exc:
+        print(f"[AUTH SESSION ERROR] {type(exc).__name__}: {exc}", flush=True)
+        return jsonify(ok=False, error="auth-session-internal-error", detail=type(exc).__name__), 500
 
 
 @app.route("/api/auth/logout", methods=["POST"])
