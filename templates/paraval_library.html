@@ -966,7 +966,6 @@
         <div class="actions">
           <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
           <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
-          <button id="audio-toggle-btn" class="btn" type="button" aria-pressed="false">Sound: Off</button>
         </div>
       </div>
       <div id="context" class="meta"></div>
@@ -1276,6 +1275,7 @@ S: Who does? Tidus?
     let selectedModelUrl = '';
     let currentIndex = 0;
     let activePulseTimer = null;
+    const LIBRARY_AUDIO_ENABLED = false;
 
     const audioState = {
       enabled: false,
@@ -1724,6 +1724,10 @@ S: Who does? Tidus?
     }
 
     function playPageTurnSound() {
+      if (!LIBRARY_AUDIO_ENABLED) {
+        return;
+      }
+
       if (!audioState.enabled || !audioState.unlocked) {
         return;
       }
@@ -1816,6 +1820,10 @@ S: Who does? Tidus?
     }
 
     function bindLibraryAudio() {
+      if (!LIBRARY_AUDIO_ENABLED) {
+        return;
+      }
+
       updateAudioToggleUi();
 
       const unlockHandler = () => {
