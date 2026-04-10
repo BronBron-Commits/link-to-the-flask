@@ -930,23 +930,39 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       }
     };
 
-    // Prime the OAuth URL so iOS can deep-link synchronously in the click gesture.
-    void fetchDiscordOauthUrl().catch(() => {});
+    const warmDiscordOauthUrl = () => {
+      void fetchDiscordOauthUrl().catch(() => {});
+    };
+
+    // Warm cache as early as possible and when user starts interacting.
+    warmDiscordOauthUrl();
+    signInDiscordBtn.addEventListener('pointerdown', warmDiscordOauthUrl, { passive: true });
+    signInDiscordBtn.addEventListener('touchstart', warmDiscordOauthUrl, { passive: true });
 
     signInDiscordBtn.addEventListener('click', async () => {
+      const ua = String(navigator.userAgent || '');
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+
+      // iOS Safari is strict about app launches from user gestures.
+      // If cache is ready, deep-link immediately in this click handler.
+      if (isIOS && cachedDiscordOauthUrl && cachedDiscordAppUrl) {
+        setStatus('Opening Discord app...', '');
+        const oauthUrl = cachedDiscordOauthUrl;
+        window.location.assign(cachedDiscordAppUrl);
+        window.setTimeout(() => {
+          if (!document.hidden) {
+            window.location.assign(oauthUrl);
+          }
+        }, 900);
+        return;
+      }
+
       setStatus('Redirecting to Discord sign-in...', '');
       try {
-        const ua = String(navigator.userAgent || '');
-        const isIOS = /iPhone|iPad|iPod/i.test(ua);
         const { oauthUrl, appUrl } = await fetchDiscordOauthUrl();
 
         if (isIOS && appUrl) {
-          window.location.assign(appUrl);
-          window.setTimeout(() => {
-            if (!document.hidden) {
-              window.location.assign(oauthUrl);
-            }
-          }, 900);
+          setStatus('Discord link prepared. Tap "Sign In With Discord" again to open the app.', '');
           return;
         }
 
