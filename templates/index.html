@@ -324,6 +324,17 @@
       background: linear-gradient(155deg, rgba(80,61,20,0.98), rgba(39,31,14,0.98));
     }
 
+    .auth-btn.discord {
+      border-color: rgba(124, 142, 255, 0.62);
+      background: linear-gradient(155deg, rgba(39, 47, 94, 0.98), rgba(28, 35, 72, 0.98));
+      color: #e2e9ff;
+    }
+
+    .auth-btn.discord:hover {
+      border-color: rgba(155, 170, 255, 0.88);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.32), 0 0 0 1px rgba(124, 142, 255, 0.35) inset;
+    }
+
     .auth-status {
       min-height: 20px;
       margin-top: 14px;
@@ -480,6 +491,7 @@
     </div>
     <div class="auth-actions">
       <button id="auth-sign-in" class="auth-btn primary" type="button">Sign In</button>
+      <button id="auth-sign-in-discord" class="auth-btn discord" type="button">Sign In With Discord</button>
       <button id="auth-sign-up" class="auth-btn" type="button">Create Account</button>
       <button id="auth-save-profile" class="auth-btn is-hidden" type="button">Save Profile</button>
       <button id="auth-reset-password" class="auth-btn is-hidden" type="button">Reset Password</button>
@@ -566,6 +578,7 @@ const passwordEl = document.getElementById('auth-password');
 const passwordConfirmEl = document.getElementById('auth-password-confirm');
 const displayNameEl = document.getElementById('auth-display-name');
 const signInBtn = document.getElementById('auth-sign-in');
+const signInDiscordBtn = document.getElementById('auth-sign-in-discord');
 const signUpBtn = document.getElementById('auth-sign-up');
 const saveProfileBtn = document.getElementById('auth-save-profile');
 const resetPasswordBtn = document.getElementById('auth-reset-password');
@@ -608,6 +621,7 @@ function setInputsDisabled(disabled) {
   passwordEl.disabled = disabled;
   passwordConfirmEl.disabled = disabled;
   signInBtn.disabled = disabled;
+  if (signInDiscordBtn) signInDiscordBtn.disabled = disabled;
   signUpBtn.disabled = disabled;
   saveProfileBtn.disabled = disabled;
   resetPasswordBtn.disabled = disabled;
@@ -709,6 +723,7 @@ function applyMode(mode) {
   tabManageEl.classList.toggle('is-active', isManage);
   confirmWrapEl.classList.toggle('is-hidden', !isCreate);
   signInBtn.classList.toggle('is-hidden', mode !== 'sign-in');
+  if (signInDiscordBtn) signInDiscordBtn.classList.toggle('is-hidden', mode !== 'sign-in');
   signUpBtn.classList.toggle('is-hidden', !isCreate);
   saveProfileBtn.classList.toggle('is-hidden', !isManage);
   resetPasswordBtn.classList.toggle('is-hidden', !isManage);
@@ -856,6 +871,26 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   });
   } else {
     console.error('[BOOT] ERROR: signInBtn not found! Sign-in button will not work.');
+  }
+
+  if (signInDiscordBtn) {
+    signInDiscordBtn.addEventListener('click', async () => {
+      setStatus('Redirecting to Discord sign-in...', '');
+      try {
+        const result = await supabase.auth.signInWithOAuth({
+          provider: 'discord',
+          options: {
+            redirectTo: `${window.location.origin}/hub`,
+          },
+        });
+        if (result.error) {
+          setStatus(result.error.message, 'error');
+        }
+      } catch (error) {
+        const msg = String(error && error.message ? error.message : error);
+        setStatus(`Discord sign-in failed: ${msg}`, 'error');
+      }
+    });
   }
 
   signUpBtn.addEventListener('click', async () => {
