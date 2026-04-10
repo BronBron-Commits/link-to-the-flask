@@ -874,9 +874,33 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   }
 
   if (signInDiscordBtn) {
-    signInDiscordBtn.addEventListener('click', async () => {
-      setStatus('Redirecting to Discord sign-in...', '');
+    let cachedDiscordOauthUrl = '';
+    let cachedDiscordAppUrl = '';
+    let discordUrlFetchInFlight = null;
+
+    const toDiscordAppUrl = (oauthUrl) => {
       try {
+        const parsed = new URL(String(oauthUrl || '').trim());
+        const isDiscordAuthorize = /(^|\.)discord\.com$/i.test(parsed.hostname) && /\/oauth2\/authorize$/i.test(parsed.pathname);
+        if (!isDiscordAuthorize) {
+          return '';
+        }
+        const qp = parsed.searchParams.toString();
+        return `discord://-/oauth2/authorize${qp ? `?${qp}` : ''}`;
+      } catch {
+        return '';
+      }
+    };
+
+    const fetchDiscordOauthUrl = async () => {
+      if (cachedDiscordOauthUrl) {
+        return { oauthUrl: cachedDiscordOauthUrl, appUrl: cachedDiscordAppUrl };
+      }
+      if (discordUrlFetchInFlight) {
+        return discordUrlFetchInFlight;
+      }
+
+      discordUrlFetchInFlight = (async () => {
         const result = await supabase.auth.signInWithOAuth({
           provider: 'discord',
           options: {
@@ -885,34 +909,39 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
           },
         });
         if (result.error) {
-          setStatus(result.error.message, 'error');
-          return;
+          throw new Error(result.error.message || 'Could not start Discord sign-in.');
         }
 
         const oauthUrl = String(result?.data?.url || '').trim();
         if (!oauthUrl) {
-          setStatus('Discord sign-in URL was not returned.', 'error');
-          return;
+          throw new Error('Discord sign-in URL was not returned.');
         }
 
+        const appUrl = toDiscordAppUrl(oauthUrl);
+        cachedDiscordOauthUrl = oauthUrl;
+        cachedDiscordAppUrl = appUrl;
+        return { oauthUrl, appUrl };
+      })();
+
+      try {
+        return await discordUrlFetchInFlight;
+      } finally {
+        discordUrlFetchInFlight = null;
+      }
+    };
+
+    // Prime the OAuth URL so iOS can deep-link synchronously in the click gesture.
+    void fetchDiscordOauthUrl().catch(() => {});
+
+    signInDiscordBtn.addEventListener('click', async () => {
+      setStatus('Redirecting to Discord sign-in...', '');
+      try {
         const ua = String(navigator.userAgent || '');
         const isIOS = /iPhone|iPad|iPod/i.test(ua);
+        const { oauthUrl, appUrl } = await fetchDiscordOauthUrl();
 
-        // Discord on iOS expects the app oauth route format, not a raw host swap.
-        let discordAppUrl = '';
-        try {
-          const parsed = new URL(oauthUrl);
-          const isDiscordAuthorize = /(^|\.)discord\.com$/i.test(parsed.hostname) && /\/oauth2\/authorize$/i.test(parsed.pathname);
-          if (isDiscordAuthorize) {
-            const qp = parsed.searchParams.toString();
-            discordAppUrl = `discord://-/oauth2/authorize${qp ? `?${qp}` : ''}`;
-          }
-        } catch {
-          discordAppUrl = '';
-        }
-
-        if (isIOS && discordAppUrl) {
-          window.location.assign(discordAppUrl);
+        if (isIOS && appUrl) {
+          window.location.assign(appUrl);
           window.setTimeout(() => {
             if (!document.hidden) {
               window.location.assign(oauthUrl);
