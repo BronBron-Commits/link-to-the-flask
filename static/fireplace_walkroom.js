@@ -6,12 +6,20 @@ import { KTX2Loader } from '/static/three-addons/loaders/KTX2Loader.js';
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
 const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
+const USER_AGENT = String(navigator.userAgent || '');
+const IOS_WEBKIT = /iPad|iPhone|iPod/i.test(USER_AGENT) || (/Macintosh/i.test(USER_AGENT) && navigator.maxTouchPoints > 1);
+const IS_SAFARI_ENGINE = /Safari/i.test(USER_AGENT) && !/Chrome|CriOS|Chromium|Edg|OPR|FxiOS|Firefox/i.test(USER_AGENT);
+const SAFARI_SAFE_MODE = IOS_WEBKIT || IS_SAFARI_ENGINE;
 const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCIAL_ROOM_CONFIG__ === 'object'
   ? window.__SOCIAL_ROOM_CONFIG__
   : {};
-const SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
+const REQUESTED_SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
+const DEFAULT_OPEN_WORLD_ASSET_URL = SAFARI_SAFE_MODE ? '/static/everything_.gltf' : '/static/everything_optimized_draco.glb';
+const SCENE_ASSET_URL = (SAFARI_SAFE_MODE && /everything_optimized_draco\.glb$/i.test(REQUESTED_SCENE_ASSET_URL))
+  ? '/static/everything_.gltf'
+  : REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
-const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? '/static/everything_optimized_draco.glb' : '');
+const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = Boolean(RESOLVED_SCENE_ASSET_URL);
 const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
@@ -339,13 +347,13 @@ skyboxTextureLoader.load(
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 2.6, 6.4);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setPixelRatio(window.devicePixelRatio || 1);
+const renderer = new THREE.WebGLRenderer({ antialias: !SAFARI_SAFE_MODE });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, SAFARI_SAFE_MODE ? 1.25 : 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = USE_SCENE_ASSET ? 1.95 : 1.24;
-renderer.shadowMap.enabled = USE_SCENE_ASSET;
+renderer.toneMappingExposure = USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 1.72 : 1.95) : 1.24;
+renderer.shadowMap.enabled = USE_SCENE_ASSET && !SAFARI_SAFE_MODE;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
@@ -426,13 +434,13 @@ function _drawCompass() {
 const hemi = new THREE.HemisphereLight(
   USE_SCENE_ASSET ? 0xddefff : 0x6f84ad,
   USE_SCENE_ASSET ? 0x44505f : 0x241d17,
-  USE_SCENE_ASSET ? 0.90 : 0.68,
+  USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 0.72 : 0.90) : 0.68,
 );
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 1.38 : 0.86);
+const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 1.05 : 1.38) : 0.86);
 key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
-if (USE_SCENE_ASSET) {
+if (USE_SCENE_ASSET && !SAFARI_SAFE_MODE) {
   key.castShadow = true;
   key.shadow.mapSize.set(2048, 2048);
   key.shadow.camera.near = 1;
@@ -445,18 +453,20 @@ if (USE_SCENE_ASSET) {
 }
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.72 : 0.25);
+const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 0.50 : 0.72) : 0.25);
 fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
 scene.add(fill);
 
 const worldSceneLoader = new GLTFLoader();
-const worldSceneDracoLoader = new DRACOLoader();
-worldSceneDracoLoader.setDecoderPath('/static/three-addons/libs/draco/gltf/');
-const worldSceneKtx2Loader = new KTX2Loader();
-worldSceneKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
-worldSceneKtx2Loader.detectSupport(renderer);
-worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
-worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
+if (!SAFARI_SAFE_MODE) {
+  const worldSceneDracoLoader = new DRACOLoader();
+  worldSceneDracoLoader.setDecoderPath('/static/three-addons/libs/draco/gltf/');
+  const worldSceneKtx2Loader = new KTX2Loader();
+  worldSceneKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
+  worldSceneKtx2Loader.detectSupport(renderer);
+  worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
+  worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
+}
 let worldSceneRoot = null;
 
 let fireGlow = null;
@@ -467,8 +477,8 @@ function tuneSceneAssetMaterials(root) {
   if (!root) return;
   root.traverse((child) => {
     if (!child || !child.isMesh || !child.material) return;
-    child.castShadow = USE_SCENE_ASSET;
-    child.receiveShadow = USE_SCENE_ASSET;
+    child.castShadow = USE_SCENE_ASSET && !SAFARI_SAFE_MODE;
+    child.receiveShadow = USE_SCENE_ASSET && !SAFARI_SAFE_MODE;
     const tuneMaterial = (material) => {
       if (!material) return;
       if ('side' in material) material.side = THREE.DoubleSide;
