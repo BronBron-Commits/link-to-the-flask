@@ -175,6 +175,11 @@
                 bottom: 10px;
             }
         }
+        @media (hover: none), (pointer: coarse) {
+            #social-overlay {
+                bottom: 182px;
+            }
+        }
         #name-gate {
             position: fixed;
             inset: 0;
@@ -271,12 +276,105 @@
             text-align: right;
             backdrop-filter: blur(4px);
         }
+        #mobile-controls {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 14;
+            padding: 10px;
+            display: none;
+            align-items: flex-end;
+            justify-content: space-between;
+            pointer-events: none;
+            gap: 12px;
+        }
+        .mobile-panel {
+            pointer-events: auto;
+            border: 1px solid rgba(145, 162, 210, 0.32);
+            background: rgba(8, 12, 22, 0.58);
+            backdrop-filter: blur(4px);
+            border-radius: 12px;
+            padding: 8px;
+            touch-action: none;
+            user-select: none;
+        }
+        #mobile-move-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 46px);
+            gap: 6px;
+        }
+        .mobile-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 10px;
+            border: 1px solid rgba(158, 177, 235, 0.45);
+            background: rgba(28, 39, 64, 0.9);
+            color: #dbe5ff;
+            font-family: inherit;
+            font-size: 15px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .mobile-btn.active {
+            background: rgba(88, 116, 194, 0.95);
+            box-shadow: 0 0 0 2px rgba(170, 192, 255, 0.36) inset;
+        }
+        .mobile-btn.blank {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #mobile-vertical {
+            margin-top: 8px;
+            display: grid;
+            grid-template-columns: repeat(3, 46px);
+            gap: 6px;
+        }
+        #mobile-lookpad {
+            width: min(42vw, 260px);
+            height: min(34vw, 190px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a9b9e9;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        @media (hover: none), (pointer: coarse) {
+            #mobile-controls {
+                display: flex;
+            }
+        }
     </style>
 </head>
 <body>
     <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
     <canvas id="compass-gizmo" width="90" height="90" aria-label="Compass"></canvas>
     <div id="hud-coords">X&nbsp;0.00<br>Y&nbsp;0.00<br>Z&nbsp;0.00</div>
+
+    <section id="mobile-controls" aria-label="Mobile controls">
+        <div class="mobile-panel">
+            <div id="mobile-move-grid">
+                <button class="mobile-btn blank" type="button" aria-hidden="true">&nbsp;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyW" aria-label="Move forward">&#9650;</button>
+                <button class="mobile-btn blank" type="button" aria-hidden="true">&nbsp;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyA" aria-label="Move left">&#9664;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyS" aria-label="Move backward">&#9660;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyD" aria-label="Move right">&#9654;</button>
+            </div>
+            <div id="mobile-vertical">
+                <button class="mobile-btn" type="button" data-move-code="KeyQ" aria-label="Move down">-</button>
+                <button class="mobile-btn" type="button" data-move-code="ShiftLeft" aria-label="Boost">B</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyE" aria-label="Move up">+</button>
+            </div>
+        </div>
+        <div id="mobile-lookpad" class="mobile-panel" aria-label="Look control">Look</div>
+    </section>
 
     <section id="name-gate" aria-label="Display name prompt">
         <div class="name-card">

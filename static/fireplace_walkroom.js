@@ -311,6 +311,8 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = USE_SCENE_ASSET ? 1.34 : 1.24;
+renderer.shadowMap.enabled = USE_SCENE_ASSET;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
 // --- Compass gizmo ---
@@ -390,15 +392,26 @@ function _drawCompass() {
 const hemi = new THREE.HemisphereLight(
   USE_SCENE_ASSET ? 0xddefff : 0x6f84ad,
   USE_SCENE_ASSET ? 0x44505f : 0x241d17,
-  USE_SCENE_ASSET ? 0.38 : 0.68,
+  USE_SCENE_ASSET ? 0.46 : 0.68,
 );
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 0.62 : 0.86);
+const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 0.74 : 0.86);
 key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
+if (USE_SCENE_ASSET) {
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 120;
+  key.shadow.camera.left = -40;
+  key.shadow.camera.right = 40;
+  key.shadow.camera.top = 40;
+  key.shadow.camera.bottom = -40;
+  key.shadow.bias = -0.0002;
+}
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.30 : 0.25);
+const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.36 : 0.25);
 fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
 scene.add(fill);
 
@@ -420,8 +433,8 @@ function tuneSceneAssetMaterials(root) {
   if (!root) return;
   root.traverse((child) => {
     if (!child || !child.isMesh || !child.material) return;
-    child.castShadow = false;
-    child.receiveShadow = false;
+    child.castShadow = USE_SCENE_ASSET;
+    child.receiveShadow = USE_SCENE_ASSET;
     const tuneMaterial = (material) => {
       if (!material) return;
       if ('side' in material) material.side = THREE.DoubleSide;
@@ -1760,6 +1773,99 @@ function setMoveState(code, value) {
   if (code === 'KeyE') moveState.up = value;
   if (code === 'ShiftLeft' || code === 'ShiftRight') moveState.boost = value;
 }
+
+function initMobileControls() {
+  const controlsEl = document.getElementById('mobile-controls');
+  const lookPadEl = document.getElementById('mobile-lookpad');
+  if (!controlsEl || !lookPadEl) return;
+
+  const coarsePointer = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+  const touchCapable = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (!coarsePointer && !touchCapable) return;
+
+  const activeButtons = new Map();
+  const resetAllMobileInputs = () => {
+    for (const [pointerId, info] of activeButtons.entries()) {
+      setMoveState(info.code, false);
+      if (info.element) info.element.classList.remove('active');
+      activeButtons.delete(pointerId);
+    }
+  };
+
+  const bindMoveButton = (buttonEl) => {
+    if (!buttonEl) return;
+    const code = String(buttonEl.dataset.moveCode || '').trim();
+    if (!code) return;
+
+    const press = (event) => {
+      event.preventDefault();
+      buttonEl.setPointerCapture(event.pointerId);
+      activeButtons.set(event.pointerId, { code, element: buttonEl });
+      buttonEl.classList.add('active');
+      setMoveState(code, true);
+    };
+
+    const release = (event) => {
+      const current = activeButtons.get(event.pointerId);
+      if (!current) return;
+      setMoveState(current.code, false);
+      if (current.element) current.element.classList.remove('active');
+      activeButtons.delete(event.pointerId);
+    };
+
+    buttonEl.addEventListener('pointerdown', press);
+    buttonEl.addEventListener('pointerup', release);
+    buttonEl.addEventListener('pointercancel', release);
+    buttonEl.addEventListener('lostpointercapture', release);
+  };
+
+  controlsEl.querySelectorAll('[data-move-code]').forEach((buttonEl) => bindMoveButton(buttonEl));
+
+  let lookPointerId = null;
+  let lookLastX = 0;
+  let lookLastY = 0;
+
+  const releaseLook = (event) => {
+    if (event.pointerId !== lookPointerId) return;
+    lookPointerId = null;
+  };
+
+  lookPadEl.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    lookPointerId = event.pointerId;
+    lookLastX = event.clientX;
+    lookLastY = event.clientY;
+    lookPadEl.setPointerCapture(event.pointerId);
+  });
+
+  lookPadEl.addEventListener('pointermove', (event) => {
+    if (event.pointerId !== lookPointerId) return;
+    event.preventDefault();
+    const dx = event.clientX - lookLastX;
+    const dy = event.clientY - lookLastY;
+    lookLastX = event.clientX;
+    lookLastY = event.clientY;
+    orbitYaw -= dx * (lookSensitivity * 1.15);
+    orbitPitch = THREE.MathUtils.clamp(
+      orbitPitch - dy * (lookSensitivity * 1.15),
+      -verticalLookLimit,
+      verticalLookLimit,
+    );
+  });
+
+  lookPadEl.addEventListener('pointerup', releaseLook);
+  lookPadEl.addEventListener('pointercancel', releaseLook);
+  lookPadEl.addEventListener('lostpointercapture', releaseLook);
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      resetAllMobileInputs();
+      lookPointerId = null;
+    }
+  });
+}
+
+initMobileControls();
 
 renderer.domElement.addEventListener('click', () => {
   if (!pointerLocked) renderer.domElement.requestPointerLock();
