@@ -388,15 +388,15 @@ function _drawCompass() {
 const hemi = new THREE.HemisphereLight(
   USE_SCENE_ASSET ? 0xddefff : 0x6f84ad,
   USE_SCENE_ASSET ? 0x44505f : 0x241d17,
-  USE_SCENE_ASSET ? 0.22 : 0.68,
+  USE_SCENE_ASSET ? 0.38 : 0.68,
 );
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 0.38 : 0.86);
+const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 0.62 : 0.86);
 key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.18 : 0.25);
+const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.30 : 0.25);
 fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
 scene.add(fill);
 
