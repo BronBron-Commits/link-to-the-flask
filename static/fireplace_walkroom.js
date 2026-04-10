@@ -14,12 +14,17 @@ const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCI
   ? window.__SOCIAL_ROOM_CONFIG__
   : {};
 const REQUESTED_SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
-const DEFAULT_OPEN_WORLD_ASSET_URL = SAFARI_SAFE_MODE ? '/static/everything_.gltf' : '/static/everything_optimized_draco.glb';
-const SCENE_ASSET_URL = (SAFARI_SAFE_MODE && /everything_optimized_draco\.glb$/i.test(REQUESTED_SCENE_ASSET_URL))
-  ? '/static/everything_.gltf'
-  : REQUESTED_SCENE_ASSET_URL;
+const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
+const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
 const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
+const SCENE_ASSET_FALLBACK_URLS = Array.from(new Set(
+  [
+    RESOLVED_SCENE_ASSET_URL,
+    '/static/everything_optimized_draco.glb',
+    '/static/everything_.gltf',
+  ].filter(Boolean)
+));
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = Boolean(RESOLVED_SCENE_ASSET_URL);
 const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
@@ -458,15 +463,13 @@ fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
 scene.add(fill);
 
 const worldSceneLoader = new GLTFLoader();
-if (!SAFARI_SAFE_MODE) {
-  const worldSceneDracoLoader = new DRACOLoader();
-  worldSceneDracoLoader.setDecoderPath('/static/three-addons/libs/draco/gltf/');
-  const worldSceneKtx2Loader = new KTX2Loader();
-  worldSceneKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
-  worldSceneKtx2Loader.detectSupport(renderer);
-  worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
-  worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
-}
+const worldSceneDracoLoader = new DRACOLoader();
+worldSceneDracoLoader.setDecoderPath('/static/three-addons/libs/draco/gltf/');
+const worldSceneKtx2Loader = new KTX2Loader();
+worldSceneKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
+worldSceneKtx2Loader.detectSupport(renderer);
+worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
+worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
 let worldSceneRoot = null;
 
 let fireGlow = null;
@@ -1778,40 +1781,53 @@ const tmpVertical = new THREE.Vector3();
 
 function loadSceneAssetEnvironment() {
   if (!USE_SCENE_ASSET) return;
-  worldSceneLoader.load(
-    RESOLVED_SCENE_ASSET_URL,
-    (gltf) => {
-      if (worldSceneRoot) {
-        scene.remove(worldSceneRoot);
-      }
-
-      const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
-      if (!root) return;
-
-      tuneSceneAssetMaterials(root);
-      const layout = recenterSceneAsset(root);
-      scene.add(root);
-      worldSceneRoot = root;
-
-      if (layout && layout.size && layout.box) {
-        const boxSize = layout.box.getSize(new THREE.Vector3());
-        const halfX = Math.max(boxSize.x * 0.52, 8);
-        const halfZ = Math.max(boxSize.z * 0.52, 8);
-        moveBounds.minX = -halfX;
-        moveBounds.maxX = halfX;
-        moveBounds.minZ = -halfZ;
-        moveBounds.maxZ = halfZ;
-        actor.position.set(-690, 50, 786);
-        camera.position.set(-690, 52.6, 792.4);
-        camera.lookAt(-690, 51, 786);
-        orbitDistance = THREE.MathUtils.clamp(Math.max(boxSize.x, boxSize.y, boxSize.z) * 0.14, 5.2, 10.5);
-      }
-    },
-    undefined,
-    (error) => {
-      console.warn('[SOCIAL ROOM] Failed to load scene asset:', RESOLVED_SCENE_ASSET_URL, error);
+  const onLoaded = (gltf) => {
+    if (worldSceneRoot) {
+      scene.remove(worldSceneRoot);
     }
-  );
+
+    const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
+    if (!root) return;
+
+    tuneSceneAssetMaterials(root);
+    const layout = recenterSceneAsset(root);
+    scene.add(root);
+    worldSceneRoot = root;
+
+    if (layout && layout.size && layout.box) {
+      const boxSize = layout.box.getSize(new THREE.Vector3());
+      const halfX = Math.max(boxSize.x * 0.52, 8);
+      const halfZ = Math.max(boxSize.z * 0.52, 8);
+      moveBounds.minX = -halfX;
+      moveBounds.maxX = halfX;
+      moveBounds.minZ = -halfZ;
+      moveBounds.maxZ = halfZ;
+      actor.position.set(-690, 50, 786);
+      camera.position.set(-690, 52.6, 792.4);
+      camera.lookAt(-690, 51, 786);
+      orbitDistance = THREE.MathUtils.clamp(Math.max(boxSize.x, boxSize.y, boxSize.z) * 0.14, 5.2, 10.5);
+    }
+  };
+
+  const tryLoadAt = (index, previousError = null) => {
+    if (index >= SCENE_ASSET_FALLBACK_URLS.length) {
+      console.warn('[SOCIAL ROOM] Failed to load scene asset after fallbacks:', SCENE_ASSET_FALLBACK_URLS, previousError);
+      return;
+    }
+
+    const url = SCENE_ASSET_FALLBACK_URLS[index];
+    worldSceneLoader.load(
+      url,
+      onLoaded,
+      undefined,
+      (error) => {
+        console.warn('[SOCIAL ROOM] Failed scene asset candidate:', url, error);
+        tryLoadAt(index + 1, error);
+      }
+    );
+  };
+
+  tryLoadAt(0);
 }
 
 loadSceneAssetEnvironment();
