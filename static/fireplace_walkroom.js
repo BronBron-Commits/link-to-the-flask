@@ -1,5 +1,7 @@
 import * as THREE from '/static/three.module.js';
 import { GLTFLoader } from '/static/GLTFLoader.js';
+import { DRACOLoader } from '/static/three-addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from '/static/three-addons/loaders/KTX2Loader.js';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
@@ -9,7 +11,7 @@ const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCI
   : {};
 const SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
-const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? '/static/everything_.gltf' : '');
+const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? '/static/everything_optimized_draco.glb' : '');
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = Boolean(RESOLVED_SCENE_ASSET_URL);
 
@@ -401,6 +403,13 @@ fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
 scene.add(fill);
 
 const worldSceneLoader = new GLTFLoader();
+const worldSceneDracoLoader = new DRACOLoader();
+worldSceneDracoLoader.setDecoderPath('/static/three-addons/libs/draco/gltf/');
+const worldSceneKtx2Loader = new KTX2Loader();
+worldSceneKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
+worldSceneKtx2Loader.detectSupport(renderer);
+worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
+worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
 let worldSceneRoot = null;
 
 let fireGlow = null;

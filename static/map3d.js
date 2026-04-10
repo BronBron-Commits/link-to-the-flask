@@ -1,9 +1,11 @@
 import * as THREE from './three.module.js';
 import { GLTFLoader } from './GLTFLoader.js';
+import { DRACOLoader } from './three-addons/loaders/DRACOLoader.js';
+import { KTX2Loader } from './three-addons/loaders/KTX2Loader.js';
 import { createMap3dRuntime } from './map3d_runtime.js';
 import { createMap3dControls } from './map3d_controls.js';
 
-const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_.gltf';
+const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x10141f);
@@ -22,6 +24,13 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const worldLoader = new GLTFLoader();
+const worldDracoLoader = new DRACOLoader();
+worldDracoLoader.setDecoderPath('/static/three-addons/libs/draco/gltf/');
+const worldKtx2Loader = new KTX2Loader();
+worldKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
+worldKtx2Loader.detectSupport(renderer);
+worldLoader.setDRACOLoader(worldDracoLoader);
+worldLoader.setKTX2Loader(worldKtx2Loader);
 let worldSceneRoot = null;
 
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
