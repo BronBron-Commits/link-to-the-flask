@@ -333,7 +333,7 @@ renderer.setPixelRatio(window.devicePixelRatio || 1);
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = USE_SCENE_ASSET ? 1.34 : 1.24;
+renderer.toneMappingExposure = USE_SCENE_ASSET ? 1.52 : 1.24;
 renderer.shadowMap.enabled = USE_SCENE_ASSET;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
@@ -415,11 +415,11 @@ function _drawCompass() {
 const hemi = new THREE.HemisphereLight(
   USE_SCENE_ASSET ? 0xddefff : 0x6f84ad,
   USE_SCENE_ASSET ? 0x44505f : 0x241d17,
-  USE_SCENE_ASSET ? 0.46 : 0.68,
+  USE_SCENE_ASSET ? 0.56 : 0.68,
 );
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 0.74 : 0.86);
+const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? 0.90 : 0.86);
 key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
 if (USE_SCENE_ASSET) {
   key.castShadow = true;
@@ -434,7 +434,7 @@ if (USE_SCENE_ASSET) {
 }
 scene.add(key);
 
-const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.36 : 0.25);
+const fill = new THREE.DirectionalLight(0xbfd6ff, USE_SCENE_ASSET ? 0.45 : 0.25);
 fill.position.set(...(USE_SCENE_ASSET ? [-12, 10, -10] : [3.6, 2.4, -2.6]));
 scene.add(fill);
 
