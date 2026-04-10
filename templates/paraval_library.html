@@ -1628,8 +1628,8 @@ S: Who does? Tidus?
 
       const voiceGain = ctx.createGain();
       voiceGain.gain.setValueAtTime(0.0001, when);
-      voiceGain.gain.linearRampToValueAtTime(0.0062, when + 0.03);
-      voiceGain.gain.exponentialRampToValueAtTime(0.0034, when + 0.18);
+      voiceGain.gain.linearRampToValueAtTime(0.0102, when + 0.03);
+      voiceGain.gain.exponentialRampToValueAtTime(0.0056, when + 0.18);
       voiceGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
       const vibrato = ctx.createOscillator();
@@ -1652,7 +1652,7 @@ S: Who does? Tidus?
       breathFilter.Q.value = 0.7;
       const breathGain = ctx.createGain();
       breathGain.gain.setValueAtTime(0.0001, when);
-      breathGain.gain.linearRampToValueAtTime(0.0015, when + 0.02);
+      breathGain.gain.linearRampToValueAtTime(0.0024, when + 0.02);
       breathGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
 
       vibrato.connect(vibratoGain);
@@ -1700,7 +1700,7 @@ S: Who does? Tidus?
       const now = ctx.currentTime;
       melodyBus.gain.cancelScheduledValues(now);
       melodyBus.gain.setValueAtTime(melodyBus.gain.value, now);
-      melodyBus.gain.linearRampToValueAtTime(enabled ? 1.0 : 0.0, now + 0.45);
+      melodyBus.gain.linearRampToValueAtTime(enabled ? 1.32 : 0.0, now + 0.45);
 
       if (enabled) {
         if (audioState.melodySchedulerId) return;
