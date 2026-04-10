@@ -897,19 +897,31 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
 
         const ua = String(navigator.userAgent || '');
         const isIOS = /iPhone|iPad|iPod/i.test(ua);
-        const discordAppUrl = oauthUrl.replace(/^https:\/\/(?:www\.)?discord\.com/i, 'discord://');
 
-        if (isIOS && discordAppUrl.startsWith('discord://')) {
-          window.location.href = discordAppUrl;
+        // Discord on iOS expects the app oauth route format, not a raw host swap.
+        let discordAppUrl = '';
+        try {
+          const parsed = new URL(oauthUrl);
+          const isDiscordAuthorize = /(^|\.)discord\.com$/i.test(parsed.hostname) && /\/oauth2\/authorize$/i.test(parsed.pathname);
+          if (isDiscordAuthorize) {
+            const qp = parsed.searchParams.toString();
+            discordAppUrl = `discord://-/oauth2/authorize${qp ? `?${qp}` : ''}`;
+          }
+        } catch {
+          discordAppUrl = '';
+        }
+
+        if (isIOS && discordAppUrl) {
+          window.location.assign(discordAppUrl);
           window.setTimeout(() => {
             if (!document.hidden) {
-              window.location.href = oauthUrl;
+              window.location.assign(oauthUrl);
             }
           }, 900);
           return;
         }
 
-        window.location.href = oauthUrl;
+        window.location.assign(oauthUrl);
       } catch (error) {
         const msg = String(error && error.message ? error.message : error);
         setStatus(`Discord sign-in failed: ${msg}`, 'error');
