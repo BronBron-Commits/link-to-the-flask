@@ -546,10 +546,7 @@ const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 32, 24), orbMat);
 orbMesh.position.y = 1.0;
 fallbackAvatar.add(orbMesh);
 
-// Soft point light riding on the orb
-const orbLight = new THREE.PointLight(0x7755ff, 1.8, 4.5);
-orbLight.position.y = 1.0;
-fallbackAvatar.add(orbLight);
+
 
 let customAvatarRoot = null;
 let avatarMixer = null;
@@ -1955,10 +1952,9 @@ function animate() {
   }
 
   // Orb pulse
-  if (orbMesh && orbLight) {
+  if (orbMesh) {
     const pulse = 1 + Math.sin(elapsed * 2.3) * 0.06 + Math.sin(elapsed * 5.1) * 0.03;
     orbMesh.scale.setScalar(pulse);
-    orbLight.intensity = 1.8 + Math.sin(elapsed * 2.3) * 0.5 + Math.sin(elapsed * 5.1) * 0.2;
     orbMesh.rotation.y = elapsed * 0.7;
   }
 
