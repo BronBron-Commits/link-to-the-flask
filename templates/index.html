@@ -881,11 +881,35 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
           provider: 'discord',
           options: {
             redirectTo: `${window.location.origin}/hub`,
+            skipBrowserRedirect: true,
           },
         });
         if (result.error) {
           setStatus(result.error.message, 'error');
+          return;
         }
+
+        const oauthUrl = String(result?.data?.url || '').trim();
+        if (!oauthUrl) {
+          setStatus('Discord sign-in URL was not returned.', 'error');
+          return;
+        }
+
+        const ua = String(navigator.userAgent || '');
+        const isIOS = /iPhone|iPad|iPod/i.test(ua);
+        const discordAppUrl = oauthUrl.replace(/^https:\/\/(?:www\.)?discord\.com/i, 'discord://');
+
+        if (isIOS && discordAppUrl.startsWith('discord://')) {
+          window.location.href = discordAppUrl;
+          window.setTimeout(() => {
+            if (!document.hidden) {
+              window.location.href = oauthUrl;
+            }
+          }, 900);
+          return;
+        }
+
+        window.location.href = oauthUrl;
       } catch (error) {
         const msg = String(error && error.message ? error.message : error);
         setStatus(`Discord sign-in failed: ${msg}`, 'error');
