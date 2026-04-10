@@ -156,6 +156,13 @@
       box-shadow: 0 8px 18px rgba(0,0,0,0.28);
     }
 
+    .guest-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
     @media (max-width: 760px) {
       .shell {
         height: auto;
@@ -182,6 +189,10 @@
         min-height: 64px;
         padding: 14px 16px;
         font-size: 0.82rem;
+      }
+
+      .guest-links {
+        justify-content: stretch;
       }
 
       .footer {
@@ -486,7 +497,10 @@
 
   <div class="guest-access" aria-label="Guest shortcuts">
     <span>Skip account login and open the library now</span>
-    <a class="guest-link" href="/paraval-library">Enter Library as Guest</a>
+    <div class="guest-links">
+      <a class="guest-link" href="/paraval-library">Enter Library as Guest</a>
+      <a class="guest-link" href="/map3d-single">Single Player Open World</a>
+    </div>
   </div>
 </div>
 

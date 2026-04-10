@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paraval Single Player Open World</title>
+    <style>
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #090b12;
+            color: #e8edf7;
+            font-family: Consolas, 'Courier New', monospace;
+        }
+        #back-link {
+            position: fixed;
+            top: 14px;
+            left: 14px;
+            z-index: 12;
+            text-decoration: none;
+            border: 1px solid rgba(130, 146, 208, 0.46);
+            background: rgba(10, 14, 25, 0.78);
+            color: #d6def4;
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            letter-spacing: 0.04em;
+            backdrop-filter: blur(4px);
+        }
+        #social-overlay {
+            position: fixed;
+            right: 14px;
+            bottom: 14px;
+            z-index: 13;
+            width: min(420px, calc(100vw - 28px));
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 12px;
+            background: rgba(10, 14, 25, 0.8);
+            backdrop-filter: blur(6px);
+            box-shadow: 0 14px 30px rgba(0, 0, 0, 0.34);
+            display: grid;
+            gap: 8px;
+            padding: 10px;
+            transition: transform 0.24s ease, opacity 0.24s ease;
+            transform: translateY(0);
+            opacity: 1;
+        }
+        #social-overlay.collapsed {
+            transform: translateY(calc(100% + 28px));
+            opacity: 0.88;
+        }
+        #social-drawer-toggle {
+            position: fixed;
+            right: 14px;
+            bottom: 14px;
+            z-index: 15;
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            border: 1px solid rgba(170, 192, 255, 0.56);
+            background: rgba(34, 46, 79, 0.9);
+            color: #eaf0ff;
+            font-family: inherit;
+            font-size: 17px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            transition: background 0.2s ease;
+        }
+        #social-drawer-toggle:hover {
+            background: rgba(56, 74, 124, 0.95);
+        }
+        .social-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .social-title {
+            color: #e9d8a4;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        #voice-controls {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        #voice-toggle {
+            border: 1px solid rgba(170, 192, 255, 0.56);
+            border-radius: 8px;
+            background: rgba(34, 46, 79, 0.9);
+            color: #eaf0ff;
+            font-family: inherit;
+            font-size: 11px;
+            padding: 6px 8px;
+            cursor: pointer;
+        }
+        #voice-state {
+            font-size: 10px;
+            color: #95a6d4;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            min-width: 76px;
+            text-align: right;
+        }
+        #social-players {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            background: rgba(7, 10, 18, 0.55);
+            padding: 8px;
+            max-height: 122px;
+            overflow-y: auto;
+            display: grid;
+            gap: 4px;
+        }
+        .social-player-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            color: #b7c5ec;
+            font-size: 11px;
+            line-height: 1.4;
+        }
+        .social-player-name {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 260px;
+        }
+        .social-player-voice {
+            font-size: 10px;
+            color: #8ea0cd;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .voice-speaking {
+            color: #9be6a4;
+            font-weight: 700;
+        }
+        #social-chat-log {
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            background: rgba(7, 10, 18, 0.55);
+            padding: 8px;
+            min-height: 86px;
+            max-height: 170px;
+            overflow-y: auto;
+            display: grid;
+            gap: 5px;
+            align-content: start;
+        }
+        .chat-line {
+            color: #d8e0f8;
+            font-size: 11px;
+            line-height: 1.4;
+            word-break: break-word;
+        }
+        .chat-name {
+            color: #f4d99c;
+            font-weight: 700;
+            margin-right: 6px;
+        }
+        .chat-system {
+            color: #9bb2df;
+            font-style: italic;
+        }
+        .social-chat-entry {
+            display: flex;
+            gap: 6px;
+        }
+        #social-chat-input {
+            flex: 1;
+            border-radius: 8px;
+            border: 1px solid rgba(130, 146, 208, 0.5);
+            background: rgba(10, 14, 25, 0.85);
+            color: #e8edf7;
+            padding: 7px 8px;
+            font-family: inherit;
+            font-size: 12px;
+            outline: none;
+        }
+        #social-chat-send {
+            border: 1px solid rgba(170, 192, 255, 0.56);
+            border-radius: 8px;
+            background: rgba(34, 46, 79, 0.9);
+            color: #eaf0ff;
+            font-family: inherit;
+            font-size: 11px;
+            letter-spacing: 0.04em;
+            padding: 0 10px;
+            cursor: pointer;
+        }
+        @media (max-width: 760px) {
+            #social-overlay {
+                right: 10px;
+                left: 10px;
+                width: auto;
+                bottom: 10px;
+            }
+            #social-drawer-toggle {
+                right: 10px;
+                bottom: 10px;
+            }
+        }
+        @media (hover: none), (pointer: coarse) {
+            #social-overlay {
+                bottom: 182px;
+            }
+            #social-overlay.collapsed {
+                transform: translateY(calc(100% + 196px));
+            }
+            #social-drawer-toggle {
+                bottom: 182px;
+            }
+        }
+        #name-gate {
+            position: fixed;
+            inset: 0;
+            z-index: 24;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: radial-gradient(circle at center, rgba(18, 24, 38, 0.72), rgba(4, 6, 11, 0.92));
+            backdrop-filter: blur(6px);
+        }
+        .name-card {
+            width: min(460px, calc(100vw - 36px));
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            border-radius: 12px;
+            background: rgba(8, 12, 22, 0.9);
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.56);
+            padding: 16px;
+        }
+        .name-title {
+            color: #e9d8a4;
+            font-size: 12px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+        .name-sub {
+            color: #9fb0da;
+            font-size: 12px;
+            line-height: 1.45;
+            margin-bottom: 10px;
+        }
+        #display-name-input {
+            width: 100%;
+            box-sizing: border-box;
+            border-radius: 10px;
+            border: 1px solid rgba(130, 146, 208, 0.52);
+            background: rgba(12, 16, 28, 0.92);
+            color: #e8edf7;
+            padding: 10px 12px;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: 14px;
+            outline: none;
+        }
+        #display-name-input:focus {
+            border-color: rgba(184, 202, 255, 0.82);
+            box-shadow: 0 0 0 2px rgba(138, 161, 230, 0.25);
+        }
+        .name-actions {
+            margin-top: 10px;
+            display: flex;
+            justify-content: flex-end;
+        }
+        #display-name-submit {
+            border: 1px solid rgba(170, 192, 255, 0.7);
+            border-radius: 10px;
+            background: rgba(47, 64, 107, 0.94);
+            color: #eaf0ff;
+            padding: 9px 14px;
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+            cursor: pointer;
+        }
+        #display-name-error {
+            min-height: 16px;
+            margin-top: 8px;
+            color: #e0a8a8;
+            font-size: 11px;
+        }
+        #compass-gizmo {
+            position: fixed;
+            top: 14px;
+            right: 14px;
+            z-index: 12;
+            border-radius: 50%;
+            pointer-events: none;
+            filter: drop-shadow(0 2px 8px rgba(0,0,0,0.55));
+        }
+        #hud-coords {
+            position: fixed;
+            top: 110px;
+            right: 14px;
+            z-index: 12;
+            pointer-events: none;
+            font-family: Consolas, 'Courier New', monospace;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #b7c5ec;
+            background: rgba(8, 12, 22, 0.72);
+            border: 1px solid rgba(130, 146, 208, 0.28);
+            border-radius: 6px;
+            padding: 5px 9px;
+            text-align: right;
+            backdrop-filter: blur(4px);
+        }
+        #mobile-controls {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 14;
+            padding: 10px;
+            display: none;
+            align-items: flex-end;
+            justify-content: space-between;
+            pointer-events: none;
+            gap: 12px;
+        }
+        .mobile-panel {
+            pointer-events: auto;
+            border: 1px solid rgba(145, 162, 210, 0.32);
+            background: rgba(8, 12, 22, 0.58);
+            backdrop-filter: blur(4px);
+            border-radius: 12px;
+            padding: 8px;
+            touch-action: none;
+            user-select: none;
+        }
+        #mobile-move-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 46px);
+            gap: 6px;
+        }
+        .mobile-btn {
+            width: 46px;
+            height: 46px;
+            border-radius: 10px;
+            border: 1px solid rgba(158, 177, 235, 0.45);
+            background: rgba(28, 39, 64, 0.9);
+            color: #dbe5ff;
+            font-family: inherit;
+            font-size: 15px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+        .mobile-btn.active {
+            background: rgba(88, 116, 194, 0.95);
+            box-shadow: 0 0 0 2px rgba(170, 192, 255, 0.36) inset;
+        }
+        .mobile-btn.blank {
+            opacity: 0;
+            pointer-events: none;
+        }
+        #mobile-vertical {
+            margin-top: 8px;
+            display: grid;
+            grid-template-columns: repeat(3, 46px);
+            gap: 6px;
+        }
+        #mobile-lookpad {
+            width: min(42vw, 260px);
+            height: min(34vw, 190px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #a9b9e9;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        @media (hover: none), (pointer: coarse) {
+            #mobile-controls {
+                display: flex;
+            }
+        }
+    </style>
+</head>
+<body>
+    <a id="back-link" href="/world-select">&larr; Back to Worlds</a>
+    <canvas id="compass-gizmo" width="90" height="90" aria-label="Compass"></canvas>
+    <div id="hud-coords">X&nbsp;0.00<br>Y&nbsp;0.00<br>Z&nbsp;0.00</div>
+
+    <section id="mobile-controls" aria-label="Mobile controls">
+        <div class="mobile-panel">
+            <div id="mobile-move-grid">
+                <button class="mobile-btn blank" type="button" aria-hidden="true">&nbsp;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyW" aria-label="Move forward">&#9650;</button>
+                <button class="mobile-btn blank" type="button" aria-hidden="true">&nbsp;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyA" aria-label="Move left">&#9664;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyS" aria-label="Move backward">&#9660;</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyD" aria-label="Move right">&#9654;</button>
+            </div>
+            <div id="mobile-vertical">
+                <button class="mobile-btn" type="button" data-move-code="KeyQ" aria-label="Move down">-</button>
+                <button class="mobile-btn" type="button" data-move-code="ShiftLeft" aria-label="Boost">B</button>
+                <button class="mobile-btn" type="button" data-move-code="KeyE" aria-label="Move up">+</button>
+            </div>
+        </div>
+        <div id="mobile-lookpad" class="mobile-panel" aria-label="Look control">Look</div>
+    </section>
+
+    <script>
+        window.__SOCIAL_ROOM_CONFIG__ = {
+            roomTitle: 'Single Player Open World',
+            sceneAssetUrl: '/static/everything_optimized_draco.glb',
+            singlePlayer: true,
+        };
+    </script>
+    <script src="/runtime-asset-version.js"></script>
+    <script type="module">
+        const runtimeUrl = window.__assetUrl('/static/fireplace_walkroom.js');
+        const cacheBust = `cb=${Date.now()}`;
+        const sep = runtimeUrl.includes('?') ? '&' : '?';
+        import(`${runtimeUrl}${sep}${cacheBust}`);
+    </script>
+</body>
+</html>

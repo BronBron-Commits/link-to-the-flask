@@ -470,6 +470,14 @@ def map3d_page():
     return send_from_directory(gs.STATIC_DIR, "map3d.html")
 
 
+@app.route("/map3d-single")
+def map3d_single_page():
+    # Canonicalize single-player Open World URL for stable caching behavior.
+    if request.query_string:
+        return redirect("/map3d-single", code=302)
+    return send_from_directory(gs.STATIC_DIR, "map3d_single.html")
+
+
 # ---------------------------------------------------------------------------
 # Legacy compatibility
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '
 const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? '/static/everything_optimized_draco.glb' : '');
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = Boolean(RESOLVED_SCENE_ASSET_URL);
+const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
 
 const hudPlayerEl = document.getElementById('hud-player');
 const nameGateEl = document.getElementById('name-gate');
@@ -35,6 +36,12 @@ if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
 
 function initSocialDrawer() {
   if (!socialOverlayEl || !socialDrawerToggleEl) return;
+
+  if (SINGLE_PLAYER_MODE) {
+    socialOverlayEl.style.display = 'none';
+    socialDrawerToggleEl.style.display = 'none';
+    return;
+  }
 
   let isOpen = false;
   const applyDrawerState = () => {
@@ -161,7 +168,10 @@ function pushChatMessage(message) {
 
 function updateVoiceUi() {
   if (voiceToggleEl) {
-    if (voiceState.unavailableReason && !voiceState.enabled) {
+    if (SINGLE_PLAYER_MODE) {
+      voiceToggleEl.textContent = 'Voice Disabled';
+      voiceToggleEl.disabled = true;
+    } else if (voiceState.unavailableReason && !voiceState.enabled) {
       voiceToggleEl.textContent = 'Voice Unavailable';
     } else if (!voiceState.enabled) {
       voiceToggleEl.textContent = 'Enable Voice';
@@ -172,7 +182,8 @@ function updateVoiceUi() {
     }
   }
   if (voiceStateEl) {
-    if (voiceState.unavailableReason && !voiceState.enabled) voiceStateEl.textContent = 'Unavailable';
+    if (SINGLE_PLAYER_MODE) voiceStateEl.textContent = 'Disabled';
+    else if (voiceState.unavailableReason && !voiceState.enabled) voiceStateEl.textContent = 'Unavailable';
     else if (!voiceState.enabled) voiceStateEl.textContent = 'Voice Off';
     else if (voiceState.speaking && !voiceState.muted) voiceStateEl.textContent = 'Speaking';
     else if (voiceState.muted) voiceStateEl.textContent = 'Muted';
@@ -1204,6 +1215,7 @@ function publishLocalPresence(force = false) {
 }
 
 function connectMultiplayer() {
+  if (SINGLE_PLAYER_MODE) return;
   if (netState.socket || typeof window.io !== 'function') return;
   const socket = window.io();
   netState.socket = socket;
@@ -1343,6 +1355,13 @@ function startVoiceMeter() {
 }
 
 async function toggleVoiceState() {
+  if (SINGLE_PLAYER_MODE) {
+    voiceState.unavailableReason = 'single-player';
+    updateVoiceUi();
+    pushChatMessage({ type: 'system', text: 'Voice chat is disabled in single-player mode.' });
+    return;
+  }
+
   if (!voiceState.enabled) {
     if (!isMicAllowedByContext()) {
       voiceState.unavailableReason = 'insecure-context';
@@ -1441,6 +1460,14 @@ function clipHasUsableMotion(clip) {
 }
 
 function initDisplayNameGate() {
+  if (SINGLE_PLAYER_MODE) {
+    chosenDisplayName = sanitizeDisplayName(selectedCharacter?.name || selectedCharacter?.id || '') || 'Traveler';
+    if (nameGateEl) nameGateEl.style.display = 'none';
+    updateHudPlayerText();
+    renderSocialPlayers();
+    return;
+  }
+
   const storedName = sanitizeDisplayName(localStorage.getItem(DISPLAY_NAME_STORAGE_KEY) || '');
   const suggested = storedName || sanitizeDisplayName(selectedCharacter?.name || selectedCharacter?.id || '');
 
