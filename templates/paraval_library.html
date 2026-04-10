@@ -1280,6 +1280,10 @@ S: Who does? Tidus?
       shimmerGain: null,
       shimmerOscA: null,
       shimmerOscB: null,
+      melodyGain: null,
+      melodySchedulerId: null,
+      melodyNextNoteTime: 0,
+      melodyStep: 0,
     };
 
     const runeSetsByTheme = {
@@ -1589,6 +1593,126 @@ S: Who does? Tidus?
       }
     }
 
+    function midiToFrequency(midi) {
+      return 440 * (2 ** ((Number(midi) - 69) / 12));
+    }
+
+    function ensureMelodyBus() {
+      const ctx = ensureAudioContext();
+      if (!ctx || !audioState.masterGain) return null;
+      if (audioState.melodyGain) return audioState.melodyGain;
+
+      const melodyGain = ctx.createGain();
+      melodyGain.gain.value = 0.0;
+      melodyGain.connect(audioState.masterGain);
+      audioState.melodyGain = melodyGain;
+      return melodyGain;
+    }
+
+    function scheduleRecorderNote(when, midi, durationSeconds) {
+      const ctx = ensureAudioContext();
+      const melodyBus = ensureMelodyBus();
+      if (!ctx || !melodyBus || midi == null) return;
+
+      const baseFreq = midiToFrequency(midi);
+      const noteEnd = when + durationSeconds;
+
+      const voice = ctx.createOscillator();
+      voice.type = 'triangle';
+      voice.frequency.setValueAtTime(baseFreq, when);
+
+      const voiceFilter = ctx.createBiquadFilter();
+      voiceFilter.type = 'bandpass';
+      voiceFilter.frequency.setValueAtTime(1550, when);
+      voiceFilter.Q.value = 1.05;
+
+      const voiceGain = ctx.createGain();
+      voiceGain.gain.setValueAtTime(0.0001, when);
+      voiceGain.gain.linearRampToValueAtTime(0.0062, when + 0.03);
+      voiceGain.gain.exponentialRampToValueAtTime(0.0034, when + 0.18);
+      voiceGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+
+      const vibrato = ctx.createOscillator();
+      vibrato.type = 'sine';
+      vibrato.frequency.value = 5.1;
+      const vibratoGain = ctx.createGain();
+      vibratoGain.gain.value = 4.6;
+
+      const breathBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * Math.max(0.05, durationSeconds)), ctx.sampleRate);
+      const breathData = breathBuffer.getChannelData(0);
+      for (let i = 0; i < breathData.length; i += 1) {
+        const t = i / breathData.length;
+        breathData[i] = (Math.random() * 2 - 1) * (0.24 - Math.abs(t - 0.48) * 0.22);
+      }
+      const breath = ctx.createBufferSource();
+      breath.buffer = breathBuffer;
+      const breathFilter = ctx.createBiquadFilter();
+      breathFilter.type = 'bandpass';
+      breathFilter.frequency.value = 2100;
+      breathFilter.Q.value = 0.7;
+      const breathGain = ctx.createGain();
+      breathGain.gain.setValueAtTime(0.0001, when);
+      breathGain.gain.linearRampToValueAtTime(0.0015, when + 0.02);
+      breathGain.gain.exponentialRampToValueAtTime(0.0001, noteEnd);
+
+      vibrato.connect(vibratoGain);
+      vibratoGain.connect(voice.frequency);
+
+      voice.connect(voiceFilter);
+      voiceFilter.connect(voiceGain);
+      voiceGain.connect(melodyBus);
+
+      breath.connect(breathFilter);
+      breathFilter.connect(breathGain);
+      breathGain.connect(melodyBus);
+
+      voice.start(when);
+      voice.stop(noteEnd + 0.03);
+      vibrato.start(when);
+      vibrato.stop(noteEnd + 0.03);
+      breath.start(when);
+      breath.stop(noteEnd + 0.01);
+    }
+
+    function scheduleRecorderMelody() {
+      const ctx = ensureAudioContext();
+      if (!ctx || !audioState.enabled || !audioState.unlocked) return;
+
+      const bpm = 54;
+      const beat = 60 / bpm;
+      const stepDuration = beat * 0.5;
+      const lookAhead = 0.5;
+      const phrase = [69, 72, 74, 76, 74, 72, 71, 72, 69, 67, 69, 71, 72, 71, 69, null];
+
+      while (audioState.melodyNextNoteTime < ctx.currentTime + lookAhead) {
+        const note = phrase[audioState.melodyStep % phrase.length];
+        scheduleRecorderNote(audioState.melodyNextNoteTime, note, stepDuration * 0.94);
+        audioState.melodyNextNoteTime += stepDuration;
+        audioState.melodyStep += 1;
+      }
+    }
+
+    function setRecorderMelodyEnabled(enabled) {
+      const ctx = ensureAudioContext();
+      const melodyBus = ensureMelodyBus();
+      if (!ctx || !melodyBus) return;
+
+      const now = ctx.currentTime;
+      melodyBus.gain.cancelScheduledValues(now);
+      melodyBus.gain.setValueAtTime(melodyBus.gain.value, now);
+      melodyBus.gain.linearRampToValueAtTime(enabled ? 1.0 : 0.0, now + 0.45);
+
+      if (enabled) {
+        if (audioState.melodySchedulerId) return;
+        audioState.melodyNextNoteTime = now + 0.08;
+        audioState.melodyStep = 0;
+        audioState.melodySchedulerId = window.setInterval(scheduleRecorderMelody, 130);
+      } else if (audioState.melodySchedulerId) {
+        window.clearInterval(audioState.melodySchedulerId);
+        audioState.melodySchedulerId = null;
+      }
+    }
+
     function playPageTurnSound() {
       if (!audioState.enabled || !audioState.unlocked) {
         return;
@@ -1702,6 +1826,7 @@ S: Who does? Tidus?
         audioState.enabled = !audioState.enabled;
         updateAudioToggleUi();
         setRoomToneEnabled(audioState.enabled);
+        setRecorderMelodyEnabled(audioState.enabled);
         if (audioState.enabled) {
           playPageTurnSound();
         }
