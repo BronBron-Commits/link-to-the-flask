@@ -527,48 +527,29 @@ if (!USE_SCENE_ASSET) {
 const remoteActorsLayer = new THREE.Group();
 scene.add(remoteActorsLayer);
 
-const fallbackBodyMat = new THREE.MeshStandardMaterial({ color: 0x7f6bff, roughness: 0.62, metalness: 0.08, emissive: 0x121425 });
-const fallbackSkinMat = new THREE.MeshStandardMaterial({ color: 0xe8ccb2, roughness: 0.72, metalness: 0.01 });
-const fallbackClothMat = new THREE.MeshStandardMaterial({ color: 0x2b304d, roughness: 0.9, metalness: 0.02 });
-
 const fallbackAvatar = new THREE.Group();
 if (!USE_SCENE_ASSET) {
   actor.add(fallbackAvatar);
 }
 
-const torso = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 0.56, 6, 12), fallbackBodyMat);
-torso.position.y = 1.03;
-fallbackAvatar.add(torso);
+// Player orb
+const orbMat = new THREE.MeshStandardMaterial({
+  color: 0x9b7fff,
+  emissive: 0x5533cc,
+  emissiveIntensity: 1.4,
+  roughness: 0.08,
+  metalness: 0.22,
+  transparent: true,
+  opacity: 0.88,
+});
+const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 32, 24), orbMat);
+orbMesh.position.y = 1.0;
+fallbackAvatar.add(orbMesh);
 
-const head = new THREE.Mesh(new THREE.SphereGeometry(0.2, 24, 20), fallbackSkinMat);
-head.position.y = 1.59;
-fallbackAvatar.add(head);
-
-const cloak = new THREE.Mesh(new THREE.ConeGeometry(0.43, 1.05, 14), fallbackClothMat);
-cloak.position.y = 0.64;
-fallbackAvatar.add(cloak);
-
-const leftArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.4, 4, 8), fallbackSkinMat);
-leftArm.position.set(-0.34, 1.03, 0.02);
-leftArm.rotation.z = Math.PI / 10;
-fallbackAvatar.add(leftArm);
-
-const rightArm = new THREE.Mesh(new THREE.CapsuleGeometry(0.08, 0.4, 4, 8), fallbackSkinMat);
-rightArm.position.set(0.34, 1.03, 0.02);
-rightArm.rotation.z = -Math.PI / 10;
-fallbackAvatar.add(rightArm);
-
-const leftLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.72, 4, 8), fallbackBodyMat);
-leftLeg.position.set(-0.14, 0.4, 0.02);
-fallbackAvatar.add(leftLeg);
-
-const rightLeg = new THREE.Mesh(new THREE.CapsuleGeometry(0.09, 0.72, 4, 8), fallbackBodyMat);
-rightLeg.position.set(0.14, 0.4, 0.02);
-fallbackAvatar.add(rightLeg);
-
-const boots = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.08, 0.3), new THREE.MeshStandardMaterial({ color: 0x1a1520, roughness: 0.86, metalness: 0.03 }));
-boots.position.set(0, 0.06, 0.07);
-fallbackAvatar.add(boots);
+// Soft point light riding on the orb
+const orbLight = new THREE.PointLight(0x7755ff, 1.8, 4.5);
+orbLight.position.y = 1.0;
+fallbackAvatar.add(orbLight);
 
 let customAvatarRoot = null;
 let avatarMixer = null;
@@ -1971,6 +1952,14 @@ function animate() {
     fireGlow.intensity = 2.65 + Math.sin(elapsed * 6.8) * 0.34 + Math.sin(elapsed * 10.4) * 0.2;
     flameCore.scale.set(1 + Math.sin(elapsed * 8.1) * 0.07, 1 + Math.sin(elapsed * 10.5 + 0.4) * 0.12, 1 + Math.sin(elapsed * 6.3) * 0.06);
     flameOuter.scale.set(1 + Math.sin(elapsed * 6.7 + 0.6) * 0.09, 1 + Math.sin(elapsed * 9.7) * 0.14, 1 + Math.sin(elapsed * 5.7) * 0.07);
+  }
+
+  // Orb pulse
+  if (orbMesh && orbLight) {
+    const pulse = 1 + Math.sin(elapsed * 2.3) * 0.06 + Math.sin(elapsed * 5.1) * 0.03;
+    orbMesh.scale.setScalar(pulse);
+    orbLight.intensity = 1.8 + Math.sin(elapsed * 2.3) * 0.5 + Math.sin(elapsed * 5.1) * 0.2;
+    orbMesh.rotation.y = elapsed * 0.7;
   }
 
   const isMoving = updatePlayerMovement(dt);
