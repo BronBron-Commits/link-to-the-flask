@@ -43,6 +43,37 @@
             display: grid;
             gap: 8px;
             padding: 10px;
+            transition: transform 0.24s ease, opacity 0.24s ease;
+            transform: translateY(0);
+            opacity: 1;
+        }
+        #social-overlay.collapsed {
+            transform: translateY(calc(100% + 28px));
+            opacity: 0.88;
+        }
+        #social-drawer-toggle {
+            position: fixed;
+            right: 14px;
+            bottom: 14px;
+            z-index: 15;
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            border: 1px solid rgba(170, 192, 255, 0.56);
+            background: rgba(34, 46, 79, 0.9);
+            color: #eaf0ff;
+            font-family: inherit;
+            font-size: 17px;
+            line-height: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+            transition: background 0.2s ease;
+        }
+        #social-drawer-toggle:hover {
+            background: rgba(56, 74, 124, 0.95);
         }
         .social-head {
             display: flex;
@@ -174,9 +205,19 @@
                 width: auto;
                 bottom: 10px;
             }
+            #social-drawer-toggle {
+                right: 10px;
+                bottom: 10px;
+            }
         }
         @media (hover: none), (pointer: coarse) {
             #social-overlay {
+                bottom: 182px;
+            }
+            #social-overlay.collapsed {
+                transform: translateY(calc(100% + 196px));
+            }
+            #social-drawer-toggle {
                 bottom: 182px;
             }
         }
@@ -388,7 +429,9 @@
         </div>
     </section>
 
-    <section id="social-overlay" aria-label="Social overlay">
+    <button id="social-drawer-toggle" type="button" aria-controls="social-overlay" aria-expanded="false" aria-label="Show voice and chat panel">&#9650;</button>
+
+    <section id="social-overlay" class="collapsed" aria-label="Social overlay" aria-hidden="true">
         <div class="social-head">
             <div class="social-title">Open World</div>
             <div id="voice-controls">

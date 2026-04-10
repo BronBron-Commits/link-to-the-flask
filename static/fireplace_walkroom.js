@@ -21,6 +21,8 @@ const displayNameInputEl = document.getElementById('display-name-input');
 const displayNameSubmitEl = document.getElementById('display-name-submit');
 const displayNameErrorEl = document.getElementById('display-name-error');
 const socialTitleEl = document.querySelector('.social-title');
+const socialOverlayEl = document.getElementById('social-overlay');
+const socialDrawerToggleEl = document.getElementById('social-drawer-toggle');
 const socialPlayersEl = document.getElementById('social-players');
 const socialChatLogEl = document.getElementById('social-chat-log');
 const socialChatInputEl = document.getElementById('social-chat-input');
@@ -30,6 +32,27 @@ const voiceStateEl = document.getElementById('voice-state');
 
 document.title = `Paraval ${ROOM_TITLE}`;
 if (socialTitleEl) socialTitleEl.textContent = ROOM_TITLE;
+
+function initSocialDrawer() {
+  if (!socialOverlayEl || !socialDrawerToggleEl) return;
+
+  let isOpen = false;
+  const applyDrawerState = () => {
+    socialOverlayEl.classList.toggle('collapsed', !isOpen);
+    socialOverlayEl.setAttribute('aria-hidden', isOpen ? 'false' : 'true');
+    socialDrawerToggleEl.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    socialDrawerToggleEl.textContent = isOpen ? '\u25BC' : '\u25B2';
+    socialDrawerToggleEl.setAttribute('aria-label', isOpen ? 'Hide voice and chat panel' : 'Show voice and chat panel');
+  };
+
+  applyDrawerState();
+  socialDrawerToggleEl.addEventListener('click', () => {
+    isOpen = !isOpen;
+    applyDrawerState();
+  });
+}
+
+initSocialDrawer();
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const queryCharacterId = String(urlSearch.get('characterId') || '').trim();
