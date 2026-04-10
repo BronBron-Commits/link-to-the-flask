@@ -409,7 +409,7 @@ async function boot() {
   }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false },
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
   window.supabase = supabase;
   window.__paravalAuth.clientReady = true;
