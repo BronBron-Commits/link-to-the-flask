@@ -582,15 +582,26 @@
 
     .summary {
       margin: 0;
-      padding: 14px 16px;
+      padding: 12px 14px;
       border-radius: 16px;
       background: rgba(var(--accent-rgb), 0.12);
       border: 1px solid rgba(var(--accent-rgb), 0.28);
       color: #c5b796;
-      line-height: 1.7;
-      font-size: 0.95rem;
+      line-height: 1.55;
+      font-size: 0.88rem;
+      max-height: 6.6rem;
+      overflow-y: auto;
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03);
       transition: background-color 0.65s ease, border-color 0.65s ease;
+    }
+
+    .summary::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    .summary::-webkit-scrollbar-thumb {
+      background: rgba(var(--accent-rgb), 0.45);
+      border-radius: 999px;
     }
 
     .book-open {
@@ -1169,6 +1180,7 @@
         <div class="actions">
           <button id="ambient-toggle-btn" class="btn" type="button" aria-pressed="false">Ambient: Off</button>
           <button id="page-sfx-toggle-btn" class="btn" type="button" aria-pressed="false">Page SFX: Off</button>
+          <button id="accessible-reader-fx-btn" class="btn" type="button" aria-pressed="false">Hyper Reader</button>
           <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
           <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
         </div>
@@ -1479,6 +1491,7 @@ S: Who does? Tidus?
     const progressFillEl = document.getElementById('reading-progress-fill');
     const progressLabelEl = document.getElementById('reading-progress-label');
     const accessibleReaderBtn = document.getElementById('accessible-reader-btn');
+    const accessibleReaderFxBtn = document.getElementById('accessible-reader-fx-btn');
     const accessibilityStatusEl = document.getElementById('a11y-status');
     const focusModeBtn = document.getElementById('focus-mode-btn');
     const autoFlipBtn = document.getElementById('auto-flip-btn');
@@ -2194,6 +2207,12 @@ S: Who does? Tidus?
         accessibleReaderBtn.textContent = accessibleModeEnabled ? 'Hyper Reader: On' : 'Hyper Reader';
       }
 
+      if (accessibleReaderFxBtn) {
+        accessibleReaderFxBtn.classList.toggle('is-active', accessibleModeEnabled);
+        accessibleReaderFxBtn.setAttribute('aria-pressed', String(accessibleModeEnabled));
+        accessibleReaderFxBtn.textContent = accessibleModeEnabled ? 'Hyper Reader: On' : 'Hyper Reader';
+      }
+
       if (focusModeBtn) {
         focusModeBtn.disabled = accessibleModeEnabled;
       }
@@ -2317,6 +2336,11 @@ S: Who does? Tidus?
     nextBookBtn.addEventListener('click', () => renderStory(currentIndex + 1));
     if (accessibleReaderBtn) {
       accessibleReaderBtn.addEventListener('click', () => {
+        setAccessibleMode(!accessibleModeEnabled);
+      });
+    }
+    if (accessibleReaderFxBtn) {
+      accessibleReaderFxBtn.addEventListener('click', () => {
         setAccessibleMode(!accessibleModeEnabled);
       });
     }
