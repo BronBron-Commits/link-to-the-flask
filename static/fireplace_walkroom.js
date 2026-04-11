@@ -18,15 +18,26 @@ const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
 const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
-const SCENE_ASSET_FALLBACK_URLS = Array.from(new Set(
+const SAFARI_LEGACY_EVERYTHING_PATTERN = /\/everything_\.gltf$/i;
+const SCENE_ASSET_PRIMARY_URL = (() => {
+  if (!RESOLVED_SCENE_ASSET_URL) return '';
+  if (!SAFARI_SAFE_MODE) return RESOLVED_SCENE_ASSET_URL;
+  if (SAFARI_LEGACY_EVERYTHING_PATTERN.test(RESOLVED_SCENE_ASSET_URL)) {
+    console.warn('[SOCIAL ROOM] Safari safe mode: forcing optimized open-world asset.');
+    return DEFAULT_OPEN_WORLD_ASSET_URL;
+  }
+  return RESOLVED_SCENE_ASSET_URL;
+})();
+const SCENE_ASSET_CANDIDATE_URLS = Array.from(new Set(
   [
-    RESOLVED_SCENE_ASSET_URL,
+    SCENE_ASSET_PRIMARY_URL,
     '/static/everything_optimized_draco.glb',
-    '/static/everything_.gltf',
+    // Avoid legacy 145MB binary fallback on Safari to reduce repeated crash loops.
+    ...(SAFARI_SAFE_MODE ? [] : ['/static/everything_.gltf']),
   ].filter(Boolean)
 ));
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
-const USE_SCENE_ASSET = Boolean(RESOLVED_SCENE_ASSET_URL);
+const USE_SCENE_ASSET = SCENE_ASSET_CANDIDATE_URLS.length > 0;
 const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
 
 const hudPlayerEl = document.getElementById('hud-player');
@@ -1810,12 +1821,12 @@ function loadSceneAssetEnvironment() {
   };
 
   const tryLoadAt = (index, previousError = null) => {
-    if (index >= SCENE_ASSET_FALLBACK_URLS.length) {
-      console.warn('[SOCIAL ROOM] Failed to load scene asset after fallbacks:', SCENE_ASSET_FALLBACK_URLS, previousError);
+    if (index >= SCENE_ASSET_CANDIDATE_URLS.length) {
+      console.warn('[SOCIAL ROOM] Failed to load scene asset after fallbacks:', SCENE_ASSET_CANDIDATE_URLS, previousError);
       return;
     }
 
-    const url = SCENE_ASSET_FALLBACK_URLS[index];
+    const url = SCENE_ASSET_CANDIDATE_URLS[index];
     worldSceneLoader.load(
       url,
       onLoaded,
