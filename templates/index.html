@@ -335,6 +335,17 @@
       box-shadow: 0 10px 24px rgba(0,0,0,0.32), 0 0 0 1px rgba(124, 142, 255, 0.35) inset;
     }
 
+    .auth-btn.google {
+      border-color: rgba(133, 197, 255, 0.6);
+      background: linear-gradient(155deg, rgba(24, 57, 100, 0.98), rgba(17, 41, 75, 0.98));
+      color: #e8f3ff;
+    }
+
+    .auth-btn.google:hover {
+      border-color: rgba(163, 216, 255, 0.88);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.32), 0 0 0 1px rgba(133, 197, 255, 0.32) inset;
+    }
+
     .auth-status {
       min-height: 20px;
       margin-top: 14px;
@@ -492,6 +503,7 @@
     <div class="auth-actions">
       <button id="auth-sign-in" class="auth-btn primary" type="button">Sign In</button>
       <button id="auth-sign-in-discord" class="auth-btn discord" type="button">Sign In With Discord</button>
+      <button id="auth-sign-in-google" class="auth-btn google" type="button">Sign In With Google</button>
       <button id="auth-sign-up" class="auth-btn" type="button">Create Account</button>
       <button id="auth-save-profile" class="auth-btn is-hidden" type="button">Save Profile</button>
       <button id="auth-reset-password" class="auth-btn is-hidden" type="button">Reset Password</button>
@@ -579,6 +591,7 @@ const passwordConfirmEl = document.getElementById('auth-password-confirm');
 const displayNameEl = document.getElementById('auth-display-name');
 const signInBtn = document.getElementById('auth-sign-in');
 const signInDiscordBtn = document.getElementById('auth-sign-in-discord');
+const signInGoogleBtn = document.getElementById('auth-sign-in-google');
 const signUpBtn = document.getElementById('auth-sign-up');
 const saveProfileBtn = document.getElementById('auth-save-profile');
 const resetPasswordBtn = document.getElementById('auth-reset-password');
@@ -622,6 +635,7 @@ function setInputsDisabled(disabled) {
   passwordConfirmEl.disabled = disabled;
   signInBtn.disabled = disabled;
   if (signInDiscordBtn) signInDiscordBtn.disabled = disabled;
+  if (signInGoogleBtn) signInGoogleBtn.disabled = disabled;
   signUpBtn.disabled = disabled;
   saveProfileBtn.disabled = disabled;
   resetPasswordBtn.disabled = disabled;
@@ -724,6 +738,7 @@ function applyMode(mode) {
   confirmWrapEl.classList.toggle('is-hidden', !isCreate);
   signInBtn.classList.toggle('is-hidden', mode !== 'sign-in');
   if (signInDiscordBtn) signInDiscordBtn.classList.toggle('is-hidden', mode !== 'sign-in');
+  if (signInGoogleBtn) signInGoogleBtn.classList.toggle('is-hidden', mode !== 'sign-in');
   signUpBtn.classList.toggle('is-hidden', !isCreate);
   saveProfileBtn.classList.toggle('is-hidden', !isManage);
   resetPasswordBtn.classList.toggle('is-hidden', !isManage);
@@ -970,6 +985,26 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       } catch (error) {
         const msg = String(error && error.message ? error.message : error);
         setStatus(`Discord sign-in failed: ${msg}`, 'error');
+      }
+    });
+  }
+
+  if (signInGoogleBtn) {
+    signInGoogleBtn.addEventListener('click', async () => {
+      setStatus('Redirecting to Google sign-in...', '');
+      try {
+        const result = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/hub`,
+          },
+        });
+        if (result.error) {
+          setStatus(result.error.message, 'error');
+        }
+      } catch (error) {
+        const msg = String(error && error.message ? error.message : error);
+        setStatus(`Google sign-in failed: ${msg}`, 'error');
       }
     });
   }
