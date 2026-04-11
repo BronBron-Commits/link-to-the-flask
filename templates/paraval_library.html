@@ -1044,7 +1044,8 @@
           <p class="subtitle">A quiet wing of the world built for lore. Browse shelf by shelf, open a volume, and read in a split-page format that leans into the feel of an old fantasy codex rather than a generic web list.</p>
         </div>
         <div class="actions">
-          <button id="audio-toggle-btn" class="btn" type="button" aria-pressed="false">Sound: Off</button>
+          <button id="ambient-toggle-btn" class="btn" type="button" aria-pressed="false">Ambient: Off</button>
+          <button id="page-sfx-toggle-btn" class="btn" type="button" aria-pressed="false">Page SFX: Off</button>
           <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
           <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
         </div>
@@ -1357,7 +1358,8 @@ S: Who does? Tidus?
     const nextBookBtn = document.getElementById('next-book-btn');
     const backWorldsBtn = document.getElementById('back-worlds-btn');
     const enterWorldBtn = document.getElementById('enter-world-btn');
-    const audioToggleBtn = document.getElementById('audio-toggle-btn');
+    const ambientToggleBtn = document.getElementById('ambient-toggle-btn');
+    const pageSfxToggleBtn = document.getElementById('page-sfx-toggle-btn');
 
     const params = new URLSearchParams(window.location.search || '');
     const urlCharacterId = String(params.get('characterId') || '').trim();
@@ -1375,7 +1377,8 @@ S: Who does? Tidus?
     const LIBRARY_PAGE_TURN_TRACK_URL = '/static/Pageturn.m4a';
 
     const audioState = {
-      enabled: false,
+      ambientEnabled: false,
+      pageSfxEnabled: false,
       unlocked: false,
       ctx: null,
       masterGain: null,
@@ -1586,10 +1589,16 @@ S: Who does? Tidus?
       window.setInterval(pulseOneName, 5200);
     }
 
-    function updateAudioToggleUi() {
-      if (!audioToggleBtn) return;
-      audioToggleBtn.setAttribute('aria-pressed', String(audioState.enabled));
-      audioToggleBtn.textContent = audioState.enabled ? 'Sound: On' : 'Sound: Off';
+    function updateAmbientToggleUi() {
+      if (!ambientToggleBtn) return;
+      ambientToggleBtn.setAttribute('aria-pressed', String(audioState.ambientEnabled));
+      ambientToggleBtn.textContent = audioState.ambientEnabled ? 'Ambient: On' : 'Ambient: Off';
+    }
+
+    function updatePageSfxToggleUi() {
+      if (!pageSfxToggleBtn) return;
+      pageSfxToggleBtn.setAttribute('aria-pressed', String(audioState.pageSfxEnabled));
+      pageSfxToggleBtn.textContent = audioState.pageSfxEnabled ? 'Page SFX: On' : 'Page SFX: Off';
     }
 
     function ensureAudioContext() {
@@ -1841,7 +1850,7 @@ S: Who does? Tidus?
 
     function scheduleRecorderMelody() {
       const ctx = ensureAudioContext();
-      if (!ctx || !audioState.enabled || !audioState.unlocked) return;
+      if (!ctx || !audioState.ambientEnabled || !audioState.unlocked) return;
 
       const bpm = 54;
       const beat = 60 / bpm;
@@ -1870,7 +1879,7 @@ S: Who does? Tidus?
         return;
       }
 
-      if (!audioState.enabled || !audioState.unlocked) {
+      if (!audioState.pageSfxEnabled || !audioState.unlocked) {
         return;
       }
 
@@ -1887,12 +1896,13 @@ S: Who does? Tidus?
         return;
       }
 
-      updateAudioToggleUi();
+      updateAmbientToggleUi();
+      updatePageSfxToggleUi();
 
       const unlockHandler = () => {
         if (audioState.unlocked) return;
         unlockAudio();
-        if (audioState.enabled) {
+        if (audioState.ambientEnabled) {
           setRoomToneEnabled(true);
         }
       };
@@ -1900,18 +1910,26 @@ S: Who does? Tidus?
       window.addEventListener('pointerdown', unlockHandler, { passive: true });
       window.addEventListener('keydown', unlockHandler, { passive: true });
 
-      if (!audioToggleBtn) return;
+      if (ambientToggleBtn) {
+        ambientToggleBtn.addEventListener('click', () => {
+          unlockAudio();
+          audioState.ambientEnabled = !audioState.ambientEnabled;
+          updateAmbientToggleUi();
+          setRoomToneEnabled(audioState.ambientEnabled);
+          setRecorderMelodyEnabled(audioState.ambientEnabled);
+        });
+      }
 
-      audioToggleBtn.addEventListener('click', () => {
-        unlockAudio();
-        audioState.enabled = !audioState.enabled;
-        updateAudioToggleUi();
-        setRoomToneEnabled(audioState.enabled);
-        setRecorderMelodyEnabled(audioState.enabled);
-        if (audioState.enabled) {
-          playPageTurnSound();
-        }
-      });
+      if (pageSfxToggleBtn) {
+        pageSfxToggleBtn.addEventListener('click', () => {
+          unlockAudio();
+          audioState.pageSfxEnabled = !audioState.pageSfxEnabled;
+          updatePageSfxToggleUi();
+          if (audioState.pageSfxEnabled) {
+            playPageTurnSound();
+          }
+        });
+      }
     }
 
     function getStoryTheme(story) {
