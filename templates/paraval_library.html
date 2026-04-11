@@ -1371,6 +1371,8 @@ S: Who does? Tidus?
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
     const LIBRARY_AUDIO_ENABLED = true;
+    const LIBRARY_AMBIENT_TRACK_URL = '/static/ambient.wav';
+    const LIBRARY_PAGE_TURN_TRACK_URL = '/static/Pageturn.m4a';
 
     const audioState = {
       enabled: false,
@@ -1389,6 +1391,9 @@ S: Who does? Tidus?
       melodySchedulerId: null,
       melodyNextNoteTime: 0,
       melodyStep: 0,
+      ambientTrackEl: null,
+      pageTurnTrackEl: null,
+      ambientFadeTimer: null,
     };
 
     const runeSetsByTheme = {
@@ -1607,12 +1612,34 @@ S: Who does? Tidus?
       return ctx;
     }
 
+    function ensureAudioTracks() {
+      if (!audioState.ambientTrackEl) {
+        const ambient = new Audio(LIBRARY_AMBIENT_TRACK_URL);
+        ambient.loop = true;
+        ambient.preload = 'auto';
+        ambient.volume = 0;
+        audioState.ambientTrackEl = ambient;
+      }
+
+      if (!audioState.pageTurnTrackEl) {
+        const pageTurn = new Audio(LIBRARY_PAGE_TURN_TRACK_URL);
+        pageTurn.preload = 'auto';
+        pageTurn.volume = 0.6;
+        audioState.pageTurnTrackEl = pageTurn;
+      }
+
+      return {
+        ambientTrackEl: audioState.ambientTrackEl,
+        pageTurnTrackEl: audioState.pageTurnTrackEl,
+      };
+    }
+
     function unlockAudio() {
       const ctx = ensureAudioContext();
-      if (!ctx) return false;
-      if (ctx.state === 'suspended') {
-        ctx.resume();
+      if (ctx && ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
       }
+      ensureAudioTracks();
       audioState.unlocked = true;
       return true;
     }
@@ -1697,21 +1724,38 @@ S: Who does? Tidus?
     }
 
     function setRoomToneEnabled(enabled) {
-      const ctx = ensureAudioContext();
-      if (!ctx) return;
-      createRoomTone();
-      if (!audioState.roomGain) return;
+      const { ambientTrackEl } = ensureAudioTracks();
+      if (!ambientTrackEl) return;
 
-      const now = ctx.currentTime;
-      audioState.roomGain.gain.cancelScheduledValues(now);
-      audioState.roomGain.gain.setValueAtTime(audioState.roomGain.gain.value, now);
-      audioState.roomGain.gain.linearRampToValueAtTime(enabled ? 0.013 : 0.0, now + 0.38);
-
-      if (audioState.shimmerGain) {
-        audioState.shimmerGain.gain.cancelScheduledValues(now);
-        audioState.shimmerGain.gain.setValueAtTime(audioState.shimmerGain.gain.value, now);
-        audioState.shimmerGain.gain.linearRampToValueAtTime(enabled ? 0.0018 : 0.0, now + 0.5);
+      if (audioState.ambientFadeTimer) {
+        window.clearInterval(audioState.ambientFadeTimer);
+        audioState.ambientFadeTimer = null;
       }
+
+      const targetVolume = enabled ? 0.34 : 0;
+      const step = enabled ? 0.02 : -0.03;
+
+      if (enabled && ambientTrackEl.paused) {
+        ambientTrackEl.play().catch(() => {});
+      }
+
+      audioState.ambientFadeTimer = window.setInterval(() => {
+        const next = Math.max(0, Math.min(targetVolume, ambientTrackEl.volume + step));
+        ambientTrackEl.volume = Number(next.toFixed(3));
+
+        const done = enabled
+          ? ambientTrackEl.volume >= targetVolume
+          : ambientTrackEl.volume <= 0.001;
+
+        if (done) {
+          if (!enabled) {
+            ambientTrackEl.pause();
+            ambientTrackEl.currentTime = 0;
+          }
+          window.clearInterval(audioState.ambientFadeTimer);
+          audioState.ambientFadeTimer = null;
+        }
+      }, 55);
     }
 
     function midiToFrequency(midi) {
@@ -1814,21 +1858,8 @@ S: Who does? Tidus?
     }
 
     function setRecorderMelodyEnabled(enabled) {
-      const ctx = ensureAudioContext();
-      const melodyBus = ensureMelodyBus();
-      if (!ctx || !melodyBus) return;
-
-      const now = ctx.currentTime;
-      melodyBus.gain.cancelScheduledValues(now);
-      melodyBus.gain.setValueAtTime(melodyBus.gain.value, now);
-      melodyBus.gain.linearRampToValueAtTime(enabled ? 1.72 : 0.0, now + 0.45);
-
-      if (enabled) {
-        if (audioState.melodySchedulerId) return;
-        audioState.melodyNextNoteTime = now + 0.08;
-        audioState.melodyStep = 0;
-        audioState.melodySchedulerId = window.setInterval(scheduleRecorderMelody, 130);
-      } else if (audioState.melodySchedulerId) {
+      // Melody synth is disabled in favor of the ambient track file.
+      if (!enabled && audioState.melodySchedulerId) {
         window.clearInterval(audioState.melodySchedulerId);
         audioState.melodySchedulerId = null;
       }
@@ -1843,91 +1874,12 @@ S: Who does? Tidus?
         return;
       }
 
-      const ctx = ensureAudioContext();
-      if (!ctx || !audioState.masterGain) {
-        return;
-      }
+      const { pageTurnTrackEl } = ensureAudioTracks();
+      if (!pageTurnTrackEl) return;
 
-      const now = ctx.currentTime;
-
-      const hissBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.13), ctx.sampleRate);
-      const hissData = hissBuffer.getChannelData(0);
-      for (let i = 0; i < hissData.length; i += 1) {
-        hissData[i] = (Math.random() * 2 - 1) * (1 - (i / hissData.length));
-      }
-
-      const hissSource = ctx.createBufferSource();
-      hissSource.buffer = hissBuffer;
-      const hissFilter = ctx.createBiquadFilter();
-      hissFilter.type = 'highpass';
-      hissFilter.frequency.value = 620;
-      const hissLowpass = ctx.createBiquadFilter();
-      hissLowpass.type = 'lowpass';
-      hissLowpass.frequency.value = 2600;
-      const hissGain = ctx.createGain();
-      hissGain.gain.setValueAtTime(0.0, now);
-      hissGain.gain.linearRampToValueAtTime(0.015, now + 0.012);
-      hissGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-
-      hissSource.connect(hissFilter);
-      hissFilter.connect(hissLowpass);
-      hissLowpass.connect(hissGain);
-      hissGain.connect(audioState.masterGain);
-      hissSource.start(now);
-      hissSource.stop(now + 0.18);
-
-      const thump = ctx.createOscillator();
-      thump.type = 'sine';
-      thump.frequency.setValueAtTime(176, now);
-      thump.frequency.exponentialRampToValueAtTime(104, now + 0.14);
-      const thumpGain = ctx.createGain();
-      thumpGain.gain.setValueAtTime(0.0, now);
-      thumpGain.gain.linearRampToValueAtTime(0.015, now + 0.01);
-      thumpGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-      thump.connect(thumpGain);
-      thumpGain.connect(audioState.masterGain);
-      thump.start(now);
-      thump.stop(now + 0.18);
-
-      const rustle = ctx.createBufferSource();
-      const rustleBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.12), ctx.sampleRate);
-      const rustleData = rustleBuffer.getChannelData(0);
-      for (let i = 0; i < rustleData.length; i += 1) {
-        const t = i / rustleData.length;
-        rustleData[i] = (Math.random() * 2 - 1) * (0.5 - Math.abs(t - 0.45));
-      }
-      rustle.buffer = rustleBuffer;
-      const rustleFilter = ctx.createBiquadFilter();
-      rustleFilter.type = 'bandpass';
-      rustleFilter.frequency.value = 720;
-      rustleFilter.Q.value = 0.9;
-      const rustleGain = ctx.createGain();
-      rustleGain.gain.setValueAtTime(0.0, now + 0.015);
-      rustleGain.gain.linearRampToValueAtTime(0.009, now + 0.03);
-      rustleGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
-      rustle.connect(rustleFilter);
-      rustleFilter.connect(rustleGain);
-      rustleGain.connect(audioState.masterGain);
-      rustle.start(now + 0.012);
-      rustle.stop(now + 0.2);
-
-      const glyphPing = ctx.createOscillator();
-      glyphPing.type = 'triangle';
-      glyphPing.frequency.setValueAtTime(980, now + 0.025);
-      glyphPing.frequency.exponentialRampToValueAtTime(690, now + 0.11);
-      const glyphGain = ctx.createGain();
-      glyphGain.gain.setValueAtTime(0.0, now + 0.02);
-      glyphGain.gain.linearRampToValueAtTime(0.0025, now + 0.045);
-      glyphGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.14);
-      const glyphFilter = ctx.createBiquadFilter();
-      glyphFilter.type = 'bandpass';
-      glyphFilter.frequency.value = 840;
-      glyphFilter.Q.value = 2.4;
-      glyphPing.connect(glyphFilter);
-      glyphFilter.connect(glyphGain);
-      glyphGain.connect(audioState.masterGain);
-      glyphPing.start(now + 0.02);
-      glyphPing.stop(now + 0.15);
+      pageTurnTrackEl.pause();
+      pageTurnTrackEl.currentTime = 0;
+      pageTurnTrackEl.play().catch(() => {});
     }
 
     function bindLibraryAudio() {
