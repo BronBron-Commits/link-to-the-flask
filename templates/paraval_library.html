@@ -561,6 +561,19 @@
       flex-wrap: wrap;
     }
 
+    .a11y-status {
+      margin: 0;
+      min-height: 20px;
+      color: #a89a7f;
+      font-size: 0.82rem;
+      letter-spacing: 0.06em;
+      font-family: 'Courier Prime', Consolas, monospace;
+    }
+
+    .a11y-status.is-on {
+      color: #cfe2ff;
+    }
+
     .btn.is-active {
       border-color: rgba(var(--accent-rgb), 0.88);
       background: linear-gradient(180deg, rgba(var(--accent-rgb), 0.3), rgba(9, 14, 22, 0.95));
@@ -851,6 +864,116 @@
       filter: drop-shadow(0 0 12px rgba(var(--accent-rgb), 0.3));
     }
 
+    .frame.is-accessible {
+      border-color: #f5f5f5;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.45);
+      background: #0f1318;
+    }
+
+    .frame.is-accessible::before,
+    .frame.is-accessible::after,
+    .frame.is-accessible .dust-layer,
+    .frame.is-accessible .rune-field,
+    .frame.is-accessible .hero::after,
+    .frame.is-accessible .book-open::before,
+    .frame.is-accessible .book-open::after,
+    .frame.is-accessible .illumination,
+    .frame.is-accessible .margin-accent {
+      display: none !important;
+    }
+
+    .frame.is-accessible,
+    .frame.is-accessible * {
+      animation: none !important;
+      transition: none !important;
+      scroll-behavior: auto !important;
+    }
+
+    .frame.is-accessible .layout {
+      grid-template-columns: 1fr;
+    }
+
+    .frame.is-accessible .shelf-panel {
+      display: none;
+    }
+
+    .frame.is-accessible .hero,
+    .frame.is-accessible .reader-panel,
+    .frame.is-accessible .reader-shell,
+    .frame.is-accessible .book-open,
+    .frame.is-accessible .page {
+      background: #ffffff;
+      color: #121212;
+      border-color: #121212;
+      backdrop-filter: none;
+    }
+
+    .frame.is-accessible h1,
+    .frame.is-accessible .reader-title,
+    .frame.is-accessible .book-title,
+    .frame.is-accessible .reader-kicker,
+    .frame.is-accessible .reader-author,
+    .frame.is-accessible .summary,
+    .frame.is-accessible .meta,
+    .frame.is-accessible .subtitle,
+    .frame.is-accessible .a11y-status {
+      color: #121212;
+      text-shadow: none;
+    }
+
+    .frame.is-accessible .book-open {
+      grid-template-columns: 1fr;
+      box-shadow: inset 0 0 0 2px #121212;
+    }
+
+    .frame.is-accessible .page,
+    .frame.is-accessible .page:nth-child(1),
+    .frame.is-accessible .page:nth-child(2) {
+      transform: none !important;
+      padding: 24px 22px;
+    }
+
+    .frame.is-accessible .page::before,
+    .frame.is-accessible .page::after {
+      display: none;
+    }
+
+    .frame.is-accessible .page-body {
+      font-size: clamp(1.2rem, 2.4vw, 1.5rem);
+      line-height: 2.05;
+      letter-spacing: 0.015em;
+      color: #141414;
+      font-weight: 600;
+    }
+
+    .frame.is-accessible .name-highlight,
+    .frame.is-accessible .name-highlight:hover,
+    .frame.is-accessible .name-highlight.is-glowing,
+    .frame.is-accessible .name-highlight.is-pulsing {
+      color: #111;
+      background: #ffef9f;
+      border-bottom: 2px solid #7a5d00;
+      box-shadow: none;
+      text-shadow: none;
+    }
+
+    .frame.is-accessible .btn,
+    .frame.is-accessible .book {
+      background: #fff;
+      color: #111;
+      border: 2px solid #111;
+      box-shadow: none;
+      letter-spacing: 0.08em;
+    }
+
+    .frame.is-accessible .btn:hover,
+    .frame.is-accessible .book:hover,
+    .frame.is-accessible .book[aria-pressed='true'] {
+      transform: none;
+      box-shadow: none;
+      border-color: #000;
+    }
+
     .layout.focused {
       grid-template-columns: 1fr;
     }
@@ -1082,12 +1205,15 @@
               <p id="reader-author" class="reader-author"></p>
             </div>
             <div class="reader-actions">
+              <button id="accessible-reader-btn" class="btn" type="button" aria-pressed="false">Hyper Reader</button>
               <button id="focus-mode-btn" class="btn" type="button" aria-pressed="false">Focus Mode</button>
               <button id="auto-flip-btn" class="btn" type="button" aria-pressed="false">Auto Flip</button>
               <button id="prev-book-btn" class="btn" type="button">Previous Volume</button>
               <button id="next-book-btn" class="btn" type="button">Next Volume</button>
             </div>
           </div>
+
+          <p id="a11y-status" class="a11y-status" aria-live="polite"></p>
 
           <p id="reader-summary" class="summary">Choose a title from the shelf to begin reading.</p>
 
@@ -1352,6 +1478,8 @@ S: Who does? Tidus?
     const runeEls = Array.from(document.querySelectorAll('.rune'));
     const progressFillEl = document.getElementById('reading-progress-fill');
     const progressLabelEl = document.getElementById('reading-progress-label');
+    const accessibleReaderBtn = document.getElementById('accessible-reader-btn');
+    const accessibilityStatusEl = document.getElementById('a11y-status');
     const focusModeBtn = document.getElementById('focus-mode-btn');
     const autoFlipBtn = document.getElementById('auto-flip-btn');
     const prevBookBtn = document.getElementById('prev-book-btn');
@@ -1369,10 +1497,13 @@ S: Who does? Tidus?
     let selectedModelUrl = '';
     let currentIndex = 0;
     let activePulseTimer = null;
+    let accessibleModeEnabled = false;
+    let focusModeBeforeAccessible = false;
     let focusModeEnabled = false;
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
     const LIBRARY_AUDIO_ENABLED = true;
+    const ACCESSIBLE_READER_STORAGE_KEY = 'paraval_accessible_reader_mode';
     const LIBRARY_AMBIENT_TRACK_URL = '/static/ambient.wav';
     const LIBRARY_PAGE_TURN_TRACK_URL = '/static/Pageturn.m4a';
 
@@ -2056,6 +2187,57 @@ S: Who does? Tidus?
       focusModeBtn.textContent = focusModeEnabled ? 'Exit Focus' : 'Focus Mode';
     }
 
+    function updateAccessibleReaderUi() {
+      if (accessibleReaderBtn) {
+        accessibleReaderBtn.classList.toggle('is-active', accessibleModeEnabled);
+        accessibleReaderBtn.setAttribute('aria-pressed', String(accessibleModeEnabled));
+        accessibleReaderBtn.textContent = accessibleModeEnabled ? 'Hyper Reader: On' : 'Hyper Reader';
+      }
+
+      if (focusModeBtn) {
+        focusModeBtn.disabled = accessibleModeEnabled;
+      }
+
+      if (autoFlipBtn) {
+        autoFlipBtn.disabled = accessibleModeEnabled;
+      }
+
+      if (accessibilityStatusEl) {
+        accessibilityStatusEl.classList.toggle('is-on', accessibleModeEnabled);
+        accessibilityStatusEl.textContent = accessibleModeEnabled
+          ? 'Hyper Reader is ON: high contrast, reduced motion, enlarged text, single-column layout.'
+          : 'Hyper Reader is OFF.';
+      }
+    }
+
+    function setAccessibleMode(enabled) {
+      const next = Boolean(enabled);
+      if (next === accessibleModeEnabled) return;
+
+      if (next) {
+        focusModeBeforeAccessible = focusModeEnabled;
+        if (autoFlipEnabled) {
+          setAutoFlip(false);
+        }
+        setFocusMode(true);
+      } else {
+        setFocusMode(focusModeBeforeAccessible);
+      }
+
+      accessibleModeEnabled = next;
+      if (frameEl) {
+        frameEl.classList.toggle('is-accessible', accessibleModeEnabled);
+      }
+
+      try {
+        localStorage.setItem(ACCESSIBLE_READER_STORAGE_KEY, accessibleModeEnabled ? '1' : '0');
+      } catch (_err) {
+        // Ignore storage failures in private browsing or restricted environments.
+      }
+
+      updateAccessibleReaderUi();
+    }
+
     function setFocusMode(enabled) {
       focusModeEnabled = Boolean(enabled);
       if (layoutEl) {
@@ -2133,6 +2315,11 @@ S: Who does? Tidus?
 
     prevBookBtn.addEventListener('click', () => renderStory(currentIndex - 1));
     nextBookBtn.addEventListener('click', () => renderStory(currentIndex + 1));
+    if (accessibleReaderBtn) {
+      accessibleReaderBtn.addEventListener('click', () => {
+        setAccessibleMode(!accessibleModeEnabled);
+      });
+    }
     if (focusModeBtn) {
       focusModeBtn.addEventListener('click', () => {
         setFocusMode(!focusModeEnabled);
@@ -2155,8 +2342,18 @@ S: Who does? Tidus?
     bindPageCurl();
     wireInkInteractions();
     updateReadingProgress();
+    updateAccessibleReaderUi();
     updateFocusButtonUi();
     updateAutoFlipButtonUi();
+
+    try {
+      const persistedMode = localStorage.getItem(ACCESSIBLE_READER_STORAGE_KEY) === '1';
+      if (persistedMode) {
+        setAccessibleMode(true);
+      }
+    } catch (_err) {
+      // Ignore storage failures.
+    }
   </script>
 </body>
 </html>
