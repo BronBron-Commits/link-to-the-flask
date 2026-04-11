@@ -991,8 +991,17 @@
         background: linear-gradient(180deg, var(--paper) 0%, var(--paper-deep) 100%);
       }
 
+      .book-open::before {
+        display: none;
+      }
+
+      .book-open::after {
+        background: radial-gradient(circle at 50% 18%, rgba(255, 236, 194, 0.06), transparent 58%);
+      }
+
       .page {
         min-height: 320px;
+        padding: 24px 18px 20px;
       }
 
       .page:nth-child(1),
@@ -1000,9 +1009,27 @@
         transform: none;
       }
 
+      .page::after {
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.2), transparent 12%),
+          repeating-linear-gradient(180deg, transparent, transparent 31px, rgba(65, 41, 24, 0.045) 32px);
+      }
+
+      .margin-accent {
+        left: 8px;
+        width: 12px;
+        opacity: 0.22;
+      }
+
+      .page:nth-child(2) .margin-accent {
+        right: auto;
+        left: 8px;
+      }
+
       .page-body {
         font-size: 1.12rem;
         line-height: 1.9;
+        padding-right: 2px;
       }
     }
   </style>
