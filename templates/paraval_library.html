@@ -1044,6 +1044,7 @@
           <p class="subtitle">A quiet wing of the world built for lore. Browse shelf by shelf, open a volume, and read in a split-page format that leans into the feel of an old fantasy codex rather than a generic web list.</p>
         </div>
         <div class="actions">
+          <button id="audio-toggle-btn" class="btn" type="button" aria-pressed="false">Sound: Off</button>
           <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
           <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
         </div>
@@ -1369,7 +1370,7 @@ S: Who does? Tidus?
     let focusModeEnabled = false;
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
-    const LIBRARY_AUDIO_ENABLED = false;
+    const LIBRARY_AUDIO_ENABLED = true;
 
     const audioState = {
       enabled: false,
