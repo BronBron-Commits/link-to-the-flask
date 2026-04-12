@@ -94,6 +94,39 @@
       overflow: hidden;
     }
 
+    .celestial-body {
+      position: absolute;
+      top: 36px;
+      right: 56px;
+      width: 86px;
+      height: 86px;
+      border-radius: 50%;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.88;
+      filter: drop-shadow(0 0 18px rgba(255, 214, 130, 0.3));
+      transition: background 0.5s ease, box-shadow 0.5s ease, filter 0.5s ease, opacity 0.5s ease;
+    }
+
+    .celestial-body.is-sun {
+      background:
+        radial-gradient(circle at 32% 28%, rgba(255, 248, 218, 0.95), rgba(255, 221, 136, 0.96) 46%, rgba(242, 162, 74, 0.94) 78%, rgba(215, 118, 44, 0.9) 100%);
+      box-shadow: 0 0 0 9px rgba(255, 184, 96, 0.12), 0 0 34px rgba(255, 196, 114, 0.32);
+      filter: drop-shadow(0 0 20px rgba(255, 202, 112, 0.38));
+    }
+
+    .celestial-body.is-moon {
+      background:
+        radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.94), rgba(214, 225, 246, 0.95) 52%, rgba(154, 174, 214, 0.94) 82%, rgba(112, 132, 170, 0.9) 100%);
+      box-shadow: inset -10px -12px 0 rgba(107, 124, 160, 0.24), inset 10px 8px 0 rgba(255, 255, 255, 0.14), 0 0 0 8px rgba(150, 176, 223, 0.1), 0 0 30px rgba(165, 194, 241, 0.24);
+      filter: drop-shadow(0 0 16px rgba(167, 197, 246, 0.3));
+    }
+
+    .celestial-body.is-dawn {
+      opacity: 0.72;
+      filter: drop-shadow(0 0 18px rgba(255, 162, 110, 0.35));
+    }
+
     .dust {
       position: absolute;
       width: var(--size, 3px);
@@ -1242,6 +1275,13 @@
         padding-right: 2px;
       }
 
+      .celestial-body {
+        top: 20px;
+        right: 20px;
+        width: 64px;
+        height: 64px;
+      }
+
       .tts-controls {
         grid-template-columns: 1fr;
       }
@@ -1250,6 +1290,7 @@
 </head>
 <body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
   <main id="library-frame" class="frame" data-theme="divine">
+    <div id="celestial-body" class="celestial-body is-sun" aria-hidden="true"></div>
     <div class="dust-layer" id="dust-layer" aria-hidden="true"></div>
     <section class="hero">
       <div class="topbar">
@@ -1588,6 +1629,7 @@ S: Who does? Tidus?
     const bookOpenEl = document.querySelector('.book-open');
     const shelfPanelEl = document.querySelector('.shelf-panel');
     const layoutEl = document.querySelector('.layout');
+    const celestialBodyEl = document.getElementById('celestial-body');
     const dustLayerEl = document.getElementById('dust-layer');
     const pageEls = Array.from(document.querySelectorAll('.page'));
     const runeEls = Array.from(document.querySelectorAll('.rune'));
@@ -1736,6 +1778,18 @@ S: Who does? Tidus?
         mote.style.setProperty('--drift-x', `${(Math.random() * 80 - 40).toFixed(1)}px`);
         dustLayerEl.appendChild(mote);
       }
+    }
+
+    function updateCelestialBodyByLocalTime() {
+      if (!celestialBodyEl) return;
+      const now = new Date();
+      const hour = now.getHours();
+      const isDay = hour >= 6 && hour < 18;
+      const isDawnOrDusk = hour === 6 || hour === 7 || hour === 17 || hour === 18;
+
+      celestialBodyEl.classList.toggle('is-sun', isDay);
+      celestialBodyEl.classList.toggle('is-moon', !isDay);
+      celestialBodyEl.classList.toggle('is-dawn', isDawnOrDusk);
     }
 
     function bindShelfDepth() {
@@ -2674,6 +2728,8 @@ S: Who does? Tidus?
     }
 
     loadContext();
+    updateCelestialBodyByLocalTime();
+    window.setInterval(updateCelestialBodyByLocalTime, 10 * 60 * 1000);
     initDustLayer();
     bindLibraryAudio();
     renderShelf();
