@@ -1541,7 +1541,7 @@ S: Who does? Tidus?
     let activePulseTimer = null;
     let accessibleModeEnabled = false;
     let focusModeBeforeAccessible = false;
-    let focusModeEnabled = false;
+    let focusModeEnabled = true;
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
     const LIBRARY_AUDIO_ENABLED = true;
@@ -2395,8 +2395,8 @@ S: Who does? Tidus?
     bindPageCurl();
     wireInkInteractions();
     updateReadingProgress();
+    setFocusMode(true);
     updateAccessibleReaderUi();
-    updateFocusButtonUi();
     updateAutoFlipButtonUi();
 
     try {
