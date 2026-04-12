@@ -68,11 +68,11 @@ describe('Combat System Logic', () => {
       ];
 
       invalidPayloads.forEach(payload => {
-        const isValid = !!(payload && 
+        const isValid = payload && 
           payload !== null &&
           typeof payload === 'object' &&
           String(payload.timelineId || '').trim().length > 0 &&
-          Number.isFinite(payload.startTimeMs));
+          Number.isFinite(payload.startTimeMs);
         
         expect(isValid).toBe(false);
       });

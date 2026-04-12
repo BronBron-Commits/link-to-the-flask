@@ -1,32 +1,5 @@
 // Global test setup
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-
 global.THREE = require('./__mocks__/three.mock.js');
-
-const verificationRecordsFile = process.env.LTF_VERIFICATION_RECORDS_FILE
-  || path.join(os.tmpdir(), 'ltf-verification-records.ndjson');
-
-global.recordVerification = (meta = {}) => {
-  try {
-    const state = (typeof expect !== 'undefined' && expect.getState)
-      ? expect.getState()
-      : {};
-
-    const payload = {
-      ...meta,
-      label: String(meta.label || state.currentTestName || '').trim(),
-      testName: state.currentTestName || null,
-      testPath: state.testPath || null,
-      at: Date.now(),
-    };
-
-    fs.appendFileSync(verificationRecordsFile, `${JSON.stringify(payload)}\n`, 'utf8');
-  } catch (_err) {
-    // Best-effort observability; never fail tests due to telemetry writes.
-  }
-};
 
 // Mock Socket.IO
 global.io = jest.fn(() => ({
