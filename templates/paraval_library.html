@@ -40,8 +40,12 @@
     }
 
     @media (min-width: 1081px) {
+      html {
+        font-size: 18px;
+      }
+
       body {
-        zoom: 2.5;
+        padding: 20px 2vw;
       }
     }
 
@@ -74,6 +78,12 @@
         linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
       box-shadow: 0 34px 80px rgba(0, 0, 0, 0.48);
       transition: border-color 0.65s ease, box-shadow 0.65s ease;
+    }
+
+    @media (min-width: 1081px) {
+      .frame {
+        max-width: min(96vw, 1680px);
+      }
     }
 
     .dust-layer {
@@ -332,6 +342,13 @@
       grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
       gap: 0;
       min-height: 70vh;
+    }
+
+    @media (min-width: 1081px) {
+      .layout {
+        grid-template-columns: minmax(340px, 430px) minmax(0, 1fr);
+        min-height: calc(100vh - 96px);
+      }
     }
 
     .shelf-panel {
@@ -619,6 +636,12 @@
       animation: codexGlow 10s ease-in-out infinite;
     }
 
+    @media (min-width: 1081px) {
+      .book-open {
+        min-height: 56vh;
+      }
+    }
+
     .book-open::before {
       content: '';
       position: absolute;
@@ -810,6 +833,12 @@
       letter-spacing: 0.01em;
       overflow-y: auto;
       padding-right: 6px;
+    }
+
+    @media (min-width: 1081px) {
+      .page-body {
+        font-size: clamp(1.15rem, 0.7vw + 0.8rem, 1.4rem);
+      }
     }
 
     .name-highlight {
