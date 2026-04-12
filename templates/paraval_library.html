@@ -31,6 +31,7 @@
     html, body {
       min-height: 100%;
       margin: 0;
+      font-size: clamp(16px, 0.35vw + 14px, 26px);
       color: #f4ecd8;
       font-family: 'Playfair Display', Georgia, serif;
       background:
@@ -57,7 +58,7 @@
     .frame {
       position: relative;
       isolation: isolate;
-      max-width: 1380px;
+      max-width: 1760px;
       margin: 0 auto;
       border: 1px solid rgba(var(--accent-rgb), 0.34);
       border-radius: 28px;
@@ -323,7 +324,7 @@
 
     .layout {
       display: grid;
-      grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+      grid-template-columns: minmax(340px, 420px) minmax(0, 1fr);
       gap: 0;
       min-height: 70vh;
     }
@@ -1104,6 +1105,11 @@
     }
 
     @media (max-width: 760px) {
+      html,
+      body {
+        font-size: 16px;
+      }
+
       body {
         padding: 14px;
       }
