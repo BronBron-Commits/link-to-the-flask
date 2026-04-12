@@ -584,6 +584,53 @@
       flex-wrap: wrap;
     }
 
+    .tts-controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      align-items: end;
+    }
+
+    .tts-field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .tts-label {
+      color: #9d9177;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      font-family: 'Courier Prime', Consolas, monospace;
+    }
+
+    .tts-select,
+    .tts-range {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid rgba(var(--accent-rgb), 0.34);
+      background: rgba(6, 10, 16, 0.75);
+      color: #e7dabc;
+      padding: 9px 10px;
+      font-family: 'Courier Prime', Consolas, monospace;
+      font-size: 0.8rem;
+    }
+
+    .tts-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      grid-column: 1 / -1;
+    }
+
+    .tts-status {
+      grid-column: 1 / -1;
+      color: #9f957f;
+      font-size: 0.8rem;
+      min-height: 18px;
+      font-family: 'Courier Prime', Consolas, monospace;
+    }
+
     .a11y-status {
       margin: 0;
       min-height: 20px;
@@ -1194,6 +1241,10 @@
         line-height: 1.9;
         padding-right: 2px;
       }
+
+      .tts-controls {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -1255,6 +1306,29 @@
           </div>
 
           <p id="a11y-status" class="a11y-status" aria-live="polite"></p>
+
+          <div class="tts-controls" aria-label="Story narration controls">
+            <div class="tts-field">
+              <label class="tts-label" for="tts-voice">Voice</label>
+              <select id="tts-voice" class="tts-select"></select>
+            </div>
+            <div class="tts-field">
+              <label class="tts-label" for="tts-rate">Rate</label>
+              <input id="tts-rate" class="tts-range" type="range" min="0.7" max="1.3" step="0.05" value="1" />
+            </div>
+            <div class="tts-field">
+              <label class="tts-label" for="tts-pitch">Pitch</label>
+              <input id="tts-pitch" class="tts-range" type="range" min="0.8" max="1.3" step="0.05" value="1" />
+            </div>
+            <div class="tts-actions">
+              <button id="tts-read-story" class="btn" type="button">Read Story</button>
+              <button id="tts-read-left" class="btn" type="button">Read Left Page</button>
+              <button id="tts-read-right" class="btn" type="button">Read Right Page</button>
+              <button id="tts-pause-resume" class="btn" type="button">Pause</button>
+              <button id="tts-stop" class="btn" type="button">Stop</button>
+            </div>
+            <div id="tts-status" class="tts-status" aria-live="polite"></div>
+          </div>
 
           <p id="reader-summary" class="summary">Choose a title from the shelf to begin reading.</p>
 
@@ -1530,6 +1604,15 @@ S: Who does? Tidus?
     const enterWorldBtn = document.getElementById('enter-world-btn');
     const ambientToggleBtn = document.getElementById('ambient-toggle-btn');
     const pageSfxToggleBtn = document.getElementById('page-sfx-toggle-btn');
+    const ttsVoiceEl = document.getElementById('tts-voice');
+    const ttsRateEl = document.getElementById('tts-rate');
+    const ttsPitchEl = document.getElementById('tts-pitch');
+    const ttsReadStoryBtn = document.getElementById('tts-read-story');
+    const ttsReadLeftBtn = document.getElementById('tts-read-left');
+    const ttsReadRightBtn = document.getElementById('tts-read-right');
+    const ttsPauseResumeBtn = document.getElementById('tts-pause-resume');
+    const ttsStopBtn = document.getElementById('tts-stop');
+    const ttsStatusEl = document.getElementById('tts-status');
 
     const params = new URLSearchParams(window.location.search || '');
     const urlCharacterId = String(params.get('characterId') || '').trim();
@@ -1545,6 +1628,7 @@ S: Who does? Tidus?
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
     const LIBRARY_AUDIO_ENABLED = true;
+    const SUPPORTS_TTS = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
     const ACCESSIBLE_READER_STORAGE_KEY = 'paraval_accessible_reader_mode';
     const LIBRARY_AMBIENT_TRACK_URL = '/static/ambient.wav';
     const LIBRARY_PAGE_TURN_TRACK_URL = '/static/Pageturn.m4a';
@@ -1570,6 +1654,15 @@ S: Who does? Tidus?
       ambientTrackEl: null,
       pageTurnTrackEl: null,
       ambientFadeTimer: null,
+    };
+
+    const ttsState = {
+      voices: [],
+      voiceName: '',
+      rate: 1,
+      pitch: 1,
+      speaking: false,
+      paused: false,
     };
 
     const runeSetsByTheme = {
@@ -1792,6 +1885,193 @@ S: Who does? Tidus?
       audioState.ctx = ctx;
       audioState.masterGain = masterGain;
       return ctx;
+    }
+
+    function setTtsStatus(message) {
+      if (!ttsStatusEl) return;
+      ttsStatusEl.textContent = message;
+    }
+
+    function cleanSpeechText(text) {
+      return String(text || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function getCurrentStory() {
+      return stories[(currentIndex + stories.length) % stories.length] || null;
+    }
+
+    function buildStorySpeechText(story) {
+      if (!story) return '';
+      const title = cleanSpeechText(story.title);
+      const author = cleanSpeechText(story.author);
+      const left = cleanSpeechText(story.left);
+      const right = cleanSpeechText(story.right);
+      return `${title}. By ${author}. Left page. ${left} Right page. ${right}`;
+    }
+
+    function selectedTtsVoice() {
+      const target = String(ttsState.voiceName || '').trim();
+      return ttsState.voices.find((v) => v.name === target) || null;
+    }
+
+    function updateTtsControlsUi() {
+      const unsupported = !SUPPORTS_TTS;
+      if (ttsPauseResumeBtn) {
+        ttsPauseResumeBtn.disabled = unsupported || (!ttsState.speaking && !ttsState.paused);
+        ttsPauseResumeBtn.textContent = ttsState.paused ? 'Resume' : 'Pause';
+      }
+      if (ttsStopBtn) {
+        ttsStopBtn.disabled = unsupported || (!ttsState.speaking && !ttsState.paused);
+      }
+      if (unsupported) {
+        setTtsStatus('Narration unavailable in this browser.');
+      }
+    }
+
+    function stopNarration() {
+      if (!SUPPORTS_TTS) return;
+      window.speechSynthesis.cancel();
+      ttsState.speaking = false;
+      ttsState.paused = false;
+      updateTtsControlsUi();
+    }
+
+    function speakText(text) {
+      if (!SUPPORTS_TTS) return;
+      const content = cleanSpeechText(text);
+      if (!content) {
+        setTtsStatus('No text to narrate.');
+        return;
+      }
+
+      stopNarration();
+
+      const utterance = new SpeechSynthesisUtterance(content);
+      utterance.rate = ttsState.rate;
+      utterance.pitch = ttsState.pitch;
+      utterance.lang = 'en-US';
+      const voice = selectedTtsVoice();
+      if (voice) utterance.voice = voice;
+
+      utterance.onstart = () => {
+        ttsState.speaking = true;
+        ttsState.paused = false;
+        setTtsStatus('Narration playing...');
+        updateTtsControlsUi();
+      };
+      utterance.onend = () => {
+        ttsState.speaking = false;
+        ttsState.paused = false;
+        setTtsStatus('Narration complete.');
+        updateTtsControlsUi();
+      };
+      utterance.onerror = () => {
+        ttsState.speaking = false;
+        ttsState.paused = false;
+        setTtsStatus('Narration failed in this browser session.');
+        updateTtsControlsUi();
+      };
+
+      window.speechSynthesis.speak(utterance);
+    }
+
+    function toggleNarrationPause() {
+      if (!SUPPORTS_TTS) return;
+      if (ttsState.paused) {
+        window.speechSynthesis.resume();
+        ttsState.paused = false;
+        ttsState.speaking = true;
+        setTtsStatus('Narration resumed.');
+      } else if (ttsState.speaking) {
+        window.speechSynthesis.pause();
+        ttsState.paused = true;
+        setTtsStatus('Narration paused.');
+      }
+      updateTtsControlsUi();
+    }
+
+    function populateVoices() {
+      if (!SUPPORTS_TTS || !ttsVoiceEl) return;
+      const voices = window.speechSynthesis.getVoices() || [];
+      const englishVoices = voices.filter((v) => /^en(-|$)/i.test(String(v.lang || '')));
+      const candidates = englishVoices.length ? englishVoices : voices;
+      ttsState.voices = candidates;
+
+      const existing = ttsState.voiceName;
+      const fallback = candidates[0] ? candidates[0].name : '';
+      const nextVoice = candidates.some((v) => v.name === existing) ? existing : fallback;
+      ttsState.voiceName = nextVoice;
+
+      ttsVoiceEl.innerHTML = candidates.length
+        ? candidates.map((v) => {
+            const selected = v.name === nextVoice ? ' selected' : '';
+            return `<option value="${escapeHtml(v.name)}"${selected}>${escapeHtml(`${v.name} (${v.lang})`)}</option>`;
+          }).join('')
+        : '<option value="">Default voice</option>';
+    }
+
+    function bindNarrationControls() {
+      if (!ttsStatusEl) return;
+      if (!SUPPORTS_TTS) {
+        setTtsStatus('Narration unavailable in this browser.');
+        [ttsVoiceEl, ttsRateEl, ttsPitchEl, ttsReadStoryBtn, ttsReadLeftBtn, ttsReadRightBtn, ttsPauseResumeBtn, ttsStopBtn]
+          .forEach((el) => {
+            if (el) el.disabled = true;
+          });
+        return;
+      }
+
+      populateVoices();
+      if (typeof window.speechSynthesis.addEventListener === 'function') {
+        window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
+      }
+
+      if (ttsVoiceEl) {
+        ttsVoiceEl.addEventListener('change', () => {
+          ttsState.voiceName = String(ttsVoiceEl.value || '');
+        });
+      }
+      if (ttsRateEl) {
+        ttsRateEl.addEventListener('input', () => {
+          ttsState.rate = Number(ttsRateEl.value || 1);
+        });
+      }
+      if (ttsPitchEl) {
+        ttsPitchEl.addEventListener('input', () => {
+          ttsState.pitch = Number(ttsPitchEl.value || 1);
+        });
+      }
+
+      if (ttsReadStoryBtn) {
+        ttsReadStoryBtn.addEventListener('click', () => {
+          const story = getCurrentStory();
+          speakText(buildStorySpeechText(story));
+        });
+      }
+      if (ttsReadLeftBtn) {
+        ttsReadLeftBtn.addEventListener('click', () => {
+          const story = getCurrentStory();
+          speakText(story ? cleanSpeechText(story.left) : '');
+        });
+      }
+      if (ttsReadRightBtn) {
+        ttsReadRightBtn.addEventListener('click', () => {
+          const story = getCurrentStory();
+          speakText(story ? cleanSpeechText(story.right) : '');
+        });
+      }
+      if (ttsPauseResumeBtn) {
+        ttsPauseResumeBtn.addEventListener('click', toggleNarrationPause);
+      }
+      if (ttsStopBtn) {
+        ttsStopBtn.addEventListener('click', () => {
+          stopNarration();
+          setTtsStatus('Narration stopped.');
+        });
+      }
+
+      setTtsStatus('Narration ready.');
+      updateTtsControlsUi();
     }
 
     function ensureAudioTracks() {
@@ -2317,6 +2597,7 @@ S: Who does? Tidus?
 
     function renderStory(index, options = {}) {
       const { silent = false } = options;
+      stopNarration();
       currentIndex = (index + stories.length) % stories.length;
       const story = stories[currentIndex];
       if (!silent) {
@@ -2394,6 +2675,7 @@ S: Who does? Tidus?
     bindFrameGlow();
     bindPageCurl();
     wireInkInteractions();
+    bindNarrationControls();
     updateReadingProgress();
     setFocusMode(true);
     updateAccessibleReaderUi();
