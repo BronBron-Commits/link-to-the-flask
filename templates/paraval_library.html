@@ -1630,6 +1630,7 @@ S: Who does? Tidus?
     const LIBRARY_AUDIO_ENABLED = true;
     const SUPPORTS_TTS = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
     const ACCESSIBLE_READER_STORAGE_KEY = 'paraval_accessible_reader_mode';
+    const PREFERRED_TTS_VOICE_LABEL = 'microsoft roger online (natural)';
     const LIBRARY_AMBIENT_TRACK_URL = '/static/ambient.wav';
     const LIBRARY_PAGE_TURN_TRACK_URL = '/static/Pageturn.m4a';
 
@@ -1999,7 +2000,14 @@ S: Who does? Tidus?
 
       const existing = ttsState.voiceName;
       const fallback = candidates[0] ? candidates[0].name : '';
-      const nextVoice = candidates.some((v) => v.name === existing) ? existing : fallback;
+      const preferredVoice = candidates.find((v) => {
+        const name = String(v.name || '').trim().toLowerCase();
+        return name === PREFERRED_TTS_VOICE_LABEL || name.includes(PREFERRED_TTS_VOICE_LABEL);
+      });
+      const preferred = preferredVoice ? preferredVoice.name : '';
+      const nextVoice = candidates.some((v) => v.name === existing)
+        ? existing
+        : (preferred || fallback);
       ttsState.voiceName = nextVoice;
 
       ttsVoiceEl.innerHTML = candidates.length
