@@ -1350,16 +1350,12 @@
 
           <div class="tts-controls" aria-label="Story narration controls">
             <div class="tts-field">
-              <label class="tts-label" for="tts-voice">Voice</label>
-              <select id="tts-voice" class="tts-select"></select>
+              <span class="tts-label">Voice</span>
+              <span class="tts-select" style="padding:0.25em 0.5em;opacity:0.7;">Server TTS &mdash; English</span>
             </div>
             <div class="tts-field">
-              <label class="tts-label" for="tts-rate">Rate</label>
-              <input id="tts-rate" class="tts-range" type="range" min="0.7" max="1.3" step="0.05" value="1" />
-            </div>
-            <div class="tts-field">
-              <label class="tts-label" for="tts-pitch">Pitch</label>
-              <input id="tts-pitch" class="tts-range" type="range" min="0.8" max="1.3" step="0.05" value="1" />
+              <label class="tts-label" for="tts-rate">Speed</label>
+              <input id="tts-rate" class="tts-range" type="range" min="0.7" max="1.5" step="0.05" value="1" />
             </div>
             <div class="tts-actions">
               <button id="tts-read-story" class="btn" type="button">Read Story</button>
@@ -1646,9 +1642,7 @@ S: Who does? Tidus?
     const enterWorldBtn = document.getElementById('enter-world-btn');
     const ambientToggleBtn = document.getElementById('ambient-toggle-btn');
     const pageSfxToggleBtn = document.getElementById('page-sfx-toggle-btn');
-    const ttsVoiceEl = document.getElementById('tts-voice');
     const ttsRateEl = document.getElementById('tts-rate');
-    const ttsPitchEl = document.getElementById('tts-pitch');
     const ttsReadStoryBtn = document.getElementById('tts-read-story');
     const ttsReadLeftBtn = document.getElementById('tts-read-left');
     const ttsReadRightBtn = document.getElementById('tts-read-right');
@@ -1670,9 +1664,8 @@ S: Who does? Tidus?
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
     const LIBRARY_AUDIO_ENABLED = true;
-    const SUPPORTS_TTS = 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window;
+    const TTS_API_URL = '/api/tts';
     const ACCESSIBLE_READER_STORAGE_KEY = 'paraval_accessible_reader_mode';
-    const PREFERRED_TTS_VOICE_LABEL = 'microsoft ryan online (natural) - english (united kingdom)';
     const LIBRARY_AMBIENT_TRACK_URL = '/static/ambient.wav';
     const LIBRARY_PAGE_TURN_TRACK_URL = '/static/Pageturn.m4a';
 
@@ -1700,12 +1693,12 @@ S: Who does? Tidus?
     };
 
     const ttsState = {
-      voices: [],
-      voiceName: '',
       rate: 1,
-      pitch: 1,
       speaking: false,
       paused: false,
+      loading: false,
+      audioEl: null,
+      blobUrl: null,
     };
 
     const runeSetsByTheme = {
@@ -1964,146 +1957,119 @@ S: Who does? Tidus?
       return `${title}. By ${author}. Left page. ${left} Right page. ${right}`;
     }
 
-    function selectedTtsVoice() {
-      const target = String(ttsState.voiceName || '').trim();
-      return ttsState.voices.find((v) => v.name === target) || null;
-    }
-
     function updateTtsControlsUi() {
-      const unsupported = !SUPPORTS_TTS;
+      const busy = ttsState.speaking || ttsState.paused || ttsState.loading;
       if (ttsPauseResumeBtn) {
-        ttsPauseResumeBtn.disabled = unsupported || (!ttsState.speaking && !ttsState.paused);
+        ttsPauseResumeBtn.disabled = !busy || ttsState.loading;
         ttsPauseResumeBtn.textContent = ttsState.paused ? 'Resume' : 'Pause';
       }
       if (ttsStopBtn) {
-        ttsStopBtn.disabled = unsupported || (!ttsState.speaking && !ttsState.paused);
+        ttsStopBtn.disabled = !busy;
       }
-      if (unsupported) {
-        setTtsStatus('Narration unavailable in this browser.');
-      }
+      if (ttsReadStoryBtn) ttsReadStoryBtn.disabled = ttsState.loading;
+      if (ttsReadLeftBtn) ttsReadLeftBtn.disabled = ttsState.loading;
+      if (ttsReadRightBtn) ttsReadRightBtn.disabled = ttsState.loading;
     }
 
     function stopNarration() {
-      if (!SUPPORTS_TTS) return;
-      window.speechSynthesis.cancel();
+      if (ttsState.audioEl) {
+        ttsState.audioEl.pause();
+        ttsState.audioEl.src = '';
+        ttsState.audioEl = null;
+      }
+      if (ttsState.blobUrl) {
+        URL.revokeObjectURL(ttsState.blobUrl);
+        ttsState.blobUrl = null;
+      }
       ttsState.speaking = false;
       ttsState.paused = false;
+      ttsState.loading = false;
       updateTtsControlsUi();
     }
 
-    function speakText(text) {
-      if (!SUPPORTS_TTS) return;
+    async function speakText(text) {
       const content = cleanSpeechText(text);
       if (!content) {
         setTtsStatus('No text to narrate.');
         return;
       }
-
       stopNarration();
-
-      const utterance = new SpeechSynthesisUtterance(content);
-      utterance.rate = ttsState.rate;
-      utterance.pitch = ttsState.pitch;
-      utterance.lang = 'en-US';
-      const voice = selectedTtsVoice();
-      if (voice) utterance.voice = voice;
-
-      utterance.onstart = () => {
-        ttsState.speaking = true;
-        ttsState.paused = false;
-        setTtsStatus('Narration playing...');
-        updateTtsControlsUi();
-      };
-      utterance.onend = () => {
+      ttsState.loading = true;
+      setTtsStatus('Fetching narration…');
+      updateTtsControlsUi();
+      try {
+        const resp = await fetch(TTS_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: content }),
+        });
+        if (!resp.ok) throw new Error(`TTS request failed: ${resp.status}`);
+        const blob = await resp.blob();
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        audio.playbackRate = ttsState.rate;
+        ttsState.audioEl = audio;
+        ttsState.blobUrl = url;
+        ttsState.loading = false;
+        audio.onplay = () => {
+          ttsState.speaking = true;
+          ttsState.paused = false;
+          setTtsStatus('Narration playing…');
+          updateTtsControlsUi();
+        };
+        audio.onended = () => {
+          ttsState.speaking = false;
+          ttsState.paused = false;
+          URL.revokeObjectURL(url);
+          ttsState.audioEl = null;
+          ttsState.blobUrl = null;
+          setTtsStatus('Narration complete.');
+          updateTtsControlsUi();
+        };
+        audio.onerror = () => {
+          ttsState.speaking = false;
+          ttsState.paused = false;
+          ttsState.loading = false;
+          setTtsStatus('Audio playback error.');
+          updateTtsControlsUi();
+        };
+        audio.play().catch(() => {
+          setTtsStatus('Playback blocked. Try clicking the page first.');
+          stopNarration();
+        });
+      } catch (err) {
+        ttsState.loading = false;
         ttsState.speaking = false;
-        ttsState.paused = false;
-        setTtsStatus('Narration complete.');
+        setTtsStatus('Narration unavailable. Check server connection.');
         updateTtsControlsUi();
-      };
-      utterance.onerror = () => {
-        ttsState.speaking = false;
-        ttsState.paused = false;
-        setTtsStatus('Narration failed in this browser session.');
-        updateTtsControlsUi();
-      };
-
-      window.speechSynthesis.speak(utterance);
+      }
     }
 
     function toggleNarrationPause() {
-      if (!SUPPORTS_TTS) return;
+      const audio = ttsState.audioEl;
+      if (!audio) return;
       if (ttsState.paused) {
-        window.speechSynthesis.resume();
+        audio.play();
         ttsState.paused = false;
         ttsState.speaking = true;
         setTtsStatus('Narration resumed.');
       } else if (ttsState.speaking) {
-        window.speechSynthesis.pause();
+        audio.pause();
         ttsState.paused = true;
         setTtsStatus('Narration paused.');
       }
       updateTtsControlsUi();
     }
 
-    function populateVoices() {
-      if (!SUPPORTS_TTS || !ttsVoiceEl) return;
-      const voices = window.speechSynthesis.getVoices() || [];
-      const englishVoices = voices.filter((v) => /^en(-|$)/i.test(String(v.lang || '')));
-      const candidates = englishVoices.length ? englishVoices : voices;
-      ttsState.voices = candidates;
-
-      const existing = ttsState.voiceName;
-      const fallback = candidates[0] ? candidates[0].name : '';
-      const preferredVoice = candidates.find((v) => {
-        const name = String(v.name || '').trim().toLowerCase();
-        return name === PREFERRED_TTS_VOICE_LABEL || name.includes(PREFERRED_TTS_VOICE_LABEL);
-      });
-      const preferred = preferredVoice ? preferredVoice.name : '';
-      const nextVoice = candidates.some((v) => v.name === existing)
-        ? existing
-        : (preferred || fallback);
-      ttsState.voiceName = nextVoice;
-
-      ttsVoiceEl.innerHTML = candidates.length
-        ? candidates.map((v) => {
-            const selected = v.name === nextVoice ? ' selected' : '';
-            return `<option value="${escapeHtml(v.name)}"${selected}>${escapeHtml(`${v.name} (${v.lang})`)}</option>`;
-          }).join('')
-        : '<option value="">Default voice</option>';
-    }
-
     function bindNarrationControls() {
       if (!ttsStatusEl) return;
-      if (!SUPPORTS_TTS) {
-        setTtsStatus('Narration unavailable in this browser.');
-        [ttsVoiceEl, ttsRateEl, ttsPitchEl, ttsReadStoryBtn, ttsReadLeftBtn, ttsReadRightBtn, ttsPauseResumeBtn, ttsStopBtn]
-          .forEach((el) => {
-            if (el) el.disabled = true;
-          });
-        return;
-      }
 
-      populateVoices();
-      if (typeof window.speechSynthesis.addEventListener === 'function') {
-        window.speechSynthesis.addEventListener('voiceschanged', populateVoices);
-      }
-
-      if (ttsVoiceEl) {
-        ttsVoiceEl.addEventListener('change', () => {
-          ttsState.voiceName = String(ttsVoiceEl.value || '');
-        });
-      }
       if (ttsRateEl) {
         ttsRateEl.addEventListener('input', () => {
           ttsState.rate = Number(ttsRateEl.value || 1);
+          if (ttsState.audioEl) ttsState.audioEl.playbackRate = ttsState.rate;
         });
       }
-      if (ttsPitchEl) {
-        ttsPitchEl.addEventListener('input', () => {
-          ttsState.pitch = Number(ttsPitchEl.value || 1);
-        });
-      }
-
       if (ttsReadStoryBtn) {
         ttsReadStoryBtn.addEventListener('click', () => {
           const story = getCurrentStory();

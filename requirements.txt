@@ -4,3 +4,4 @@ gevent==24.11.1
 gevent-websocket==0.10.1
 pypdf==6.0.0
 PyMuPDF==1.26.4
+gTTS==2.5.4

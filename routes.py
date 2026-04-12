@@ -14,6 +14,8 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import uuid4
 
+from io import BytesIO
+
 from flask import request, jsonify, render_template, send_file, send_from_directory, Response, session, redirect
 from werkzeug.utils import secure_filename
 
@@ -26,6 +28,12 @@ try:
     HAS_HTTPX = True
 except ImportError:
     HAS_HTTPX = False
+
+try:
+    from gtts import gTTS as _gTTS
+    HAS_GTTS = True
+except ImportError:
+    HAS_GTTS = False
 from scripts.pdf_to_tidy_data import (
     parse_character_tables,
     write_outputs,
@@ -385,6 +393,27 @@ def paraval_library():
         supabase_url=cfg["url"],
         supabase_anon_key=cfg["anon_key"],
     )
+
+
+@app.route("/api/tts", methods=["POST"])
+def api_tts():
+    """Server-side TTS: consistent audio across all browsers."""
+    if not HAS_GTTS:
+        return jsonify(ok=False, error="TTS not available on server"), 503
+    payload = request.get_json(silent=True) or {}
+    text = str(payload.get("text") or "").strip()
+    if not text:
+        return jsonify(ok=False, error="No text provided"), 400
+    # Limit input size
+    text = text[:4000]
+    try:
+        tts = _gTTS(text=text, lang="en", slow=False)
+        buf = BytesIO()
+        tts.write_to_fp(buf)
+        buf.seek(0)
+        return Response(buf.read(), mimetype="audio/mpeg")
+    except Exception:
+        return jsonify(ok=False, error="TTS generation failed"), 500
 
 
 @app.route("/game")
