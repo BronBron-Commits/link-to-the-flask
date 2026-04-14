@@ -626,7 +626,7 @@ const orbMat = new THREE.MeshStandardMaterial({
   transparent: true,
   opacity: 0.88,
 });
-const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.24, 32, 24), orbMat);
+const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.18, 32, 24), orbMat);
 orbMesh.position.y = 1.0;
 fallbackAvatar.add(orbMesh);
 
@@ -895,7 +895,7 @@ function buildProceduralAvatar(colorHex = '#7f6bff') {
 function buildSphereAvatar(colorHex = '#7f8fff') {
   const root = new THREE.Group();
   const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(0.26, 24, 18),
+    new THREE.SphereGeometry(0.2, 24, 18),
     new THREE.MeshStandardMaterial({
       color: colorHex,
       emissive: 0x1c2f66,
