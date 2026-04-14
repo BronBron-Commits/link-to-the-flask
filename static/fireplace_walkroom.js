@@ -2100,6 +2100,13 @@ function updatePlayerMovement(dt) {
 
 function updateAvatarAnimation(dt, elapsed, isMoving) {
   if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) return;
+
+  if (FORCE_SPHERE_AVATARS) {
+    const idleBreath = Math.sin(elapsed * 2.1);
+    fallbackAvatar.position.y = isMoving ? 0 : idleBreath * 0.02;
+    return;
+  }
+
   if (customMixerUsable && avatarMixer && (customIdleAction || customWalkAction)) {
     if (isMoving && customWalkAction) {
       switchCustomAction(customWalkAction);
