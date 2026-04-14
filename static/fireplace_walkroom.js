@@ -624,7 +624,7 @@ if (!USE_SCENE_ASSET) {
 }
 
 const actor = new THREE.Group();
-actor.position.set(0, 0, USE_SCENE_ASSET ? 0 : 2.1);
+actor.position.set(0, 2, USE_SCENE_ASSET ? 3 : 2.1);
 if (!USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) {
   scene.add(actor);
 }
