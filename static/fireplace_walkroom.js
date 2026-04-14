@@ -23,6 +23,7 @@ const MAP_GRID_OVERLAY = Boolean(SOCIAL_ROOM_CONFIG.mapGridOverlay);
 const MAP_SPACE_TRACKING = Boolean(SOCIAL_ROOM_CONFIG.mapSpaceTracking || MAP_GRID_OVERLAY);
 const MAP_CROSSHAIR = Boolean(SOCIAL_ROOM_CONFIG.mapCrosshair || MAP_SPACE_TRACKING);
 const MAP_HOVER_HIGHLIGHT = Boolean(SOCIAL_ROOM_CONFIG.mapHoverHighlight || MAP_SPACE_TRACKING);
+const ENABLE_WEBXR = Boolean(SOCIAL_ROOM_CONFIG.enableWebXR);
 const MAP_GRID_CELL_SIZE = (() => {
   const raw = Number(SOCIAL_ROOM_CONFIG.mapGridCellSize);
   if (!Number.isFinite(raw)) return 0.2;
@@ -429,6 +430,77 @@ renderer.toneMappingExposure = USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 1.72 : 1.95
 renderer.shadowMap.enabled = USE_SCENE_ASSET && !SAFARI_SAFE_MODE;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
+
+function initWebXR() {
+  if (!ENABLE_WEBXR) return;
+  if (!navigator.xr) return;
+
+  renderer.xr.enabled = true;
+  renderer.xr.setReferenceSpaceType('local-floor');
+
+  const xrBtn = document.createElement('button');
+  xrBtn.id = 'xr-enter-btn';
+  xrBtn.type = 'button';
+  xrBtn.textContent = 'Enter VR';
+  xrBtn.style.position = 'fixed';
+  xrBtn.style.top = '14px';
+  xrBtn.style.right = '14px';
+  xrBtn.style.zIndex = '25';
+  xrBtn.style.border = '1px solid rgba(130, 146, 208, 0.46)';
+  xrBtn.style.background = 'rgba(10, 14, 25, 0.78)';
+  xrBtn.style.color = '#d6def4';
+  xrBtn.style.borderRadius = '8px';
+  xrBtn.style.padding = '8px 10px';
+  xrBtn.style.fontSize = '12px';
+  xrBtn.style.letterSpacing = '0.04em';
+  xrBtn.style.backdropFilter = 'blur(4px)';
+  xrBtn.style.cursor = 'pointer';
+  document.body.appendChild(xrBtn);
+
+  const setBtnState = (label, disabled = false) => {
+    xrBtn.textContent = label;
+    xrBtn.disabled = disabled;
+    xrBtn.style.opacity = disabled ? '0.65' : '1';
+    xrBtn.style.cursor = disabled ? 'default' : 'pointer';
+  };
+
+  navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+    if (!supported) {
+      setBtnState('VR Unavailable', true);
+    }
+  }).catch(() => {
+    setBtnState('VR Unavailable', true);
+  });
+
+  const attachSessionListeners = (session) => {
+    if (!session) return;
+    session.addEventListener('end', () => {
+      setBtnState('Enter VR', false);
+    });
+  };
+
+  xrBtn.addEventListener('click', async () => {
+    const activeSession = renderer.xr.getSession();
+    if (activeSession) {
+      await activeSession.end();
+      return;
+    }
+
+    try {
+      setBtnState('Entering VR...', true);
+      const session = await navigator.xr.requestSession('immersive-vr', {
+        optionalFeatures: ['local-floor', 'bounded-floor', 'hand-tracking'],
+      });
+      attachSessionListeners(session);
+      await renderer.xr.setSession(session);
+      setBtnState('Exit VR', false);
+    } catch (_err) {
+      setBtnState('Enter VR', false);
+    }
+  });
+}
+
+initWebXR();
 
 // --- Compass gizmo ---
 const _compassCanvas = document.getElementById('compass-gizmo');
@@ -2603,7 +2675,7 @@ function updateCamera(dt) {
   camera.lookAt(tmpTarget);
 }
 
-function animate() {
+function animateFrame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
@@ -2656,10 +2728,9 @@ function animate() {
 
   renderer.render(scene, camera);
   _drawCompass();
-  requestAnimationFrame(animate);
 }
 
-animate();
+renderer.setAnimationLoop(animateFrame);
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
