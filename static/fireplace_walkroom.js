@@ -21,6 +21,8 @@ const SHOW_AVATAR_SPHERE = Boolean(SOCIAL_ROOM_CONFIG.showAvatarSphere);
 const DUST_PARTICLES = Boolean(SOCIAL_ROOM_CONFIG.dustParticles);
 const MAP_GRID_OVERLAY = Boolean(SOCIAL_ROOM_CONFIG.mapGridOverlay);
 const MAP_SPACE_TRACKING = Boolean(SOCIAL_ROOM_CONFIG.mapSpaceTracking || MAP_GRID_OVERLAY);
+const MAP_CROSSHAIR = Boolean(SOCIAL_ROOM_CONFIG.mapCrosshair || MAP_SPACE_TRACKING);
+const MAP_HOVER_HIGHLIGHT = Boolean(SOCIAL_ROOM_CONFIG.mapHoverHighlight || MAP_SPACE_TRACKING);
 const MAP_GRID_CELL_SIZE = (() => {
   const raw = Number(SOCIAL_ROOM_CONFIG.mapGridCellSize);
   if (!Number.isFinite(raw)) return 0.2;
@@ -594,6 +596,65 @@ const mapSpaceDatabase = {
   occupancyBySpaceId: new Map(),
   pieceToSpaceId: new Map(),
 };
+let mapTargetMeshes = [];
+let hoveredMapSpaceId = '';
+const hoverRaycaster = new THREE.Raycaster();
+const hoverRayNdc = new THREE.Vector2(0, 0);
+let hoverHighlightMesh = null;
+
+function ensureCrosshair() {
+  if (!MAP_CROSSHAIR || document.getElementById('map-crosshair')) return;
+  const root = document.createElement('div');
+  root.id = 'map-crosshair';
+  root.setAttribute('aria-hidden', 'true');
+  root.style.position = 'fixed';
+  root.style.left = '50%';
+  root.style.top = '50%';
+  root.style.width = '20px';
+  root.style.height = '20px';
+  root.style.transform = 'translate(-50%, -50%)';
+  root.style.pointerEvents = 'none';
+  root.style.zIndex = '30';
+
+  const h = document.createElement('div');
+  h.style.position = 'absolute';
+  h.style.left = '0';
+  h.style.top = '9px';
+  h.style.width = '20px';
+  h.style.height = '2px';
+  h.style.background = 'rgba(255, 240, 185, 0.92)';
+  h.style.boxShadow = '0 0 8px rgba(255, 220, 140, 0.65)';
+
+  const v = document.createElement('div');
+  v.style.position = 'absolute';
+  v.style.left = '9px';
+  v.style.top = '0';
+  v.style.width = '2px';
+  v.style.height = '20px';
+  v.style.background = 'rgba(255, 240, 185, 0.92)';
+  v.style.boxShadow = '0 0 8px rgba(255, 220, 140, 0.65)';
+
+  root.appendChild(h);
+  root.appendChild(v);
+  document.body.appendChild(root);
+}
+
+function ensureHoverHighlightMesh() {
+  if (!MAP_HOVER_HIGHLIGHT || hoverHighlightMesh) return;
+  const geom = new THREE.PlaneGeometry(MAP_GRID_CELL_SIZE * 0.94, MAP_GRID_CELL_SIZE * 0.94);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x7af6ff,
+    transparent: true,
+    opacity: 0.42,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  });
+  hoverHighlightMesh = new THREE.Mesh(geom, mat);
+  hoverHighlightMesh.rotation.x = -Math.PI / 2;
+  hoverHighlightMesh.visible = false;
+  hoverHighlightMesh.renderOrder = 8;
+  scene.add(hoverHighlightMesh);
+}
 
 let fireGlow = null;
 let flameCore = null;
@@ -655,6 +716,9 @@ function clearMapSpaceDatabase() {
   mapSpaceDatabase.byId.clear();
   mapSpaceDatabase.occupancyBySpaceId.clear();
   mapSpaceDatabase.pieceToSpaceId.clear();
+  mapTargetMeshes = [];
+  hoveredMapSpaceId = '';
+  if (hoverHighlightMesh) hoverHighlightMesh.visible = false;
 }
 
 function setPieceSpace(pieceId, spaceId) {
@@ -711,6 +775,11 @@ window.tabletopSpaces = {
   occupy: (pieceId, spaceId) => setPieceSpace(pieceId, spaceId),
   release: (pieceId) => releasePieceSpace(pieceId),
   getOccupancy: () => Object.fromEntries(mapSpaceDatabase.occupancyBySpaceId.entries()),
+  getHovered: () => {
+    if (!hoveredMapSpaceId) return null;
+    const cell = mapSpaceDatabase.byId.get(hoveredMapSpaceId);
+    return cell ? { ...cell } : null;
+  },
   snapObjectToSpace: (object3d, spaceId, yOffset = 0.06) => {
     const cell = mapSpaceDatabase.byId.get(String(spaceId || '').trim());
     if (!cell || !object3d || typeof object3d.position?.set !== 'function') return false;
@@ -723,6 +792,8 @@ function buildMapGridOverlay(root) {
   if (!root) return;
 
   clearMapSpaceDatabase();
+  ensureCrosshair();
+  ensureHoverHighlightMesh();
   if (mapGridOverlayGroup) {
     scene.remove(mapGridOverlayGroup);
     mapGridOverlayGroup.traverse((obj) => {
@@ -743,6 +814,7 @@ function buildMapGridOverlay(root) {
   if (!mapMeshes.length) return;
 
   mapMeshes.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  mapTargetMeshes = mapMeshes.slice();
 
   const overlay = new THREE.Group();
   overlay.name = 'MapGridOverlay';
@@ -825,6 +897,35 @@ function buildMapGridOverlay(root) {
     mapGridOverlayGroup = overlay;
     scene.add(mapGridOverlayGroup);
   }
+}
+
+function updateHoveredMapSpaceFromCrosshair() {
+  if (!MAP_HOVER_HIGHLIGHT || !hoverHighlightMesh) return;
+  if (!mapTargetMeshes.length || !mapSpaceDatabase.spaces.length) {
+    hoveredMapSpaceId = '';
+    hoverHighlightMesh.visible = false;
+    return;
+  }
+
+  hoverRaycaster.setFromCamera(hoverRayNdc, camera);
+  const hits = hoverRaycaster.intersectObjects(mapTargetMeshes, true);
+  if (!hits.length || !hits[0] || !hits[0].point) {
+    hoveredMapSpaceId = '';
+    hoverHighlightMesh.visible = false;
+    return;
+  }
+
+  const hit = hits[0].point;
+  const cell = getNearestMapSpace(hit.x, hit.z);
+  if (!cell) {
+    hoveredMapSpaceId = '';
+    hoverHighlightMesh.visible = false;
+    return;
+  }
+
+  hoveredMapSpaceId = cell.id;
+  hoverHighlightMesh.visible = true;
+  hoverHighlightMesh.position.set(cell.center.x, cell.y + 0.028, cell.center.z);
 }
 
 if (!USE_SCENE_ASSET) {
@@ -2545,6 +2646,7 @@ function animate() {
   const isMoving = updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
+  updateHoveredMapSpaceFromCrosshair();
 
   const nowMs = performance.now();
   if (nowMs >= netState.publishAtMs) {
