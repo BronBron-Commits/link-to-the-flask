@@ -18,6 +18,7 @@ const DISABLE_SCENE_ASSET_FALLBACK = Boolean(SOCIAL_ROOM_CONFIG.disableSceneFall
 const DISABLE_SKYBOX = Boolean(SOCIAL_ROOM_CONFIG.disableSkybox);
 const SKYBOX_URL = String(SOCIAL_ROOM_CONFIG.skyboxUrl || '/static/skybox_night.jpg').trim();
 const SHOW_AVATAR_SPHERE = Boolean(SOCIAL_ROOM_CONFIG.showAvatarSphere);
+const DUST_PARTICLES = Boolean(SOCIAL_ROOM_CONFIG.dustParticles);
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
@@ -479,6 +480,47 @@ scene.add(hemi);
 const sunLight = new THREE.DirectionalLight(0xffd280, 1.2);
 sunLight.position.set(8, 12, 8);
 scene.add(sunLight);
+
+// Floating dust particle system (opt-in via dustParticles config)
+const DUST_COUNT = 420;
+let dustPoints = null;
+let dustVelocities = null;
+let dustOrigins = null;
+if (DUST_PARTICLES) {
+  const dustPositions = new Float32Array(DUST_COUNT * 3);
+  dustVelocities = new Float32Array(DUST_COUNT * 3);
+  dustOrigins = new Float32Array(DUST_COUNT * 3);
+  const RANGE = 14;
+  const HEIGHT_MIN = 0.2;
+  const HEIGHT_MAX = 6.0;
+  for (let i = 0; i < DUST_COUNT; i++) {
+    const x = (Math.random() - 0.5) * RANGE * 2;
+    const y = HEIGHT_MIN + Math.random() * (HEIGHT_MAX - HEIGHT_MIN);
+    const z = (Math.random() - 0.5) * RANGE * 2;
+    dustPositions[i * 3]     = x;
+    dustPositions[i * 3 + 1] = y;
+    dustPositions[i * 3 + 2] = z;
+    dustOrigins[i * 3]     = x;
+    dustOrigins[i * 3 + 1] = y;
+    dustOrigins[i * 3 + 2] = z;
+    // Gentle random drift velocity
+    dustVelocities[i * 3]     = (Math.random() - 0.5) * 0.006;
+    dustVelocities[i * 3 + 1] = (Math.random() - 0.5) * 0.003;
+    dustVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.006;
+  }
+  const dustGeom = new THREE.BufferGeometry();
+  dustGeom.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+  const dustMat = new THREE.PointsMaterial({
+    color: 0xf5e8c8,
+    size: 0.045,
+    sizeAttenuation: true,
+    transparent: true,
+    opacity: 0.55,
+    depthWrite: false,
+  });
+  dustPoints = new THREE.Points(dustGeom, dustMat);
+  scene.add(dustPoints);
+}
 
 const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 0.70 : 0.90) : 0.86);
 key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
@@ -2246,6 +2288,29 @@ function animate() {
     const pulse = 1 + Math.sin(elapsed * 2.3) * 0.06 + Math.sin(elapsed * 5.1) * 0.03;
     orbMesh.scale.setScalar(pulse);
     orbMesh.rotation.y = elapsed * 0.7;
+  }
+
+  // Animate floating dust particles
+  if (dustPoints && dustVelocities && dustOrigins) {
+    const pos = dustPoints.geometry.attributes.position.array;
+    const RANGE = 14;
+    const HEIGHT_MIN = 0.2;
+    const HEIGHT_MAX = 6.0;
+    for (let i = 0; i < DUST_COUNT; i++) {
+      const i3 = i * 3;
+      // Drift + gentle sine wobble
+      pos[i3]     += dustVelocities[i3]     + Math.sin(elapsed * 0.4 + i * 0.7) * 0.0012;
+      pos[i3 + 1] += dustVelocities[i3 + 1] + Math.sin(elapsed * 0.6 + i * 1.1) * 0.0008;
+      pos[i3 + 2] += dustVelocities[i3 + 2] + Math.cos(elapsed * 0.5 + i * 0.9) * 0.0012;
+      // Wrap within bounds
+      if (pos[i3]     >  RANGE) pos[i3]     = -RANGE;
+      if (pos[i3]     < -RANGE) pos[i3]     =  RANGE;
+      if (pos[i3 + 2] >  RANGE) pos[i3 + 2] = -RANGE;
+      if (pos[i3 + 2] < -RANGE) pos[i3 + 2] =  RANGE;
+      if (pos[i3 + 1] > HEIGHT_MAX) pos[i3 + 1] = HEIGHT_MIN;
+      if (pos[i3 + 1] < HEIGHT_MIN) pos[i3 + 1] = HEIGHT_MAX;
+    }
+    dustPoints.geometry.attributes.position.needsUpdate = true;
   }
 
   const isMoving = updatePlayerMovement(dt);
