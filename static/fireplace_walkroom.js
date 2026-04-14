@@ -1984,10 +1984,41 @@ document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === renderer.domElement;
 });
 
+let mouseLookDragging = false;
+let mouseLookLastX = 0;
+let mouseLookLastY = 0;
+
+renderer.domElement.addEventListener('mousedown', (event) => {
+  if (event.button !== 0) return;
+  mouseLookDragging = true;
+  mouseLookLastX = event.clientX;
+  mouseLookLastY = event.clientY;
+});
+
+window.addEventListener('mouseup', (event) => {
+  if (event.button !== 0) return;
+  mouseLookDragging = false;
+});
+
+window.addEventListener('blur', () => {
+  mouseLookDragging = false;
+});
+
 document.addEventListener('mousemove', (event) => {
-  if (!pointerLocked) return;
-  orbitYaw -= event.movementX * lookSensitivity;
-  orbitPitch = THREE.MathUtils.clamp(orbitPitch - event.movementY * lookSensitivity, -verticalLookLimit, verticalLookLimit);
+  if (pointerLocked) {
+    orbitYaw -= event.movementX * lookSensitivity;
+    orbitPitch = THREE.MathUtils.clamp(orbitPitch - event.movementY * lookSensitivity, -verticalLookLimit, verticalLookLimit);
+    return;
+  }
+
+  if (!mouseLookDragging) return;
+  const dx = event.clientX - mouseLookLastX;
+  const dy = event.clientY - mouseLookLastY;
+  mouseLookLastX = event.clientX;
+  mouseLookLastY = event.clientY;
+
+  orbitYaw -= dx * lookSensitivity;
+  orbitPitch = THREE.MathUtils.clamp(orbitPitch - dy * lookSensitivity, -verticalLookLimit, verticalLookLimit);
 });
 
 renderer.domElement.addEventListener('wheel', (event) => {
