@@ -20,6 +20,11 @@ const SKYBOX_URL = String(SOCIAL_ROOM_CONFIG.skyboxUrl || '/static/skybox_night.
 const SHOW_AVATAR_SPHERE = Boolean(SOCIAL_ROOM_CONFIG.showAvatarSphere);
 const DUST_PARTICLES = Boolean(SOCIAL_ROOM_CONFIG.dustParticles);
 const MAP_GRID_OVERLAY = Boolean(SOCIAL_ROOM_CONFIG.mapGridOverlay);
+const MAP_GRID_CELL_SIZE = (() => {
+  const raw = Number(SOCIAL_ROOM_CONFIG.mapGridCellSize);
+  if (!Number.isFinite(raw)) return 0.2;
+  return THREE.MathUtils.clamp(raw, 0.05, 2.0);
+})();
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
@@ -666,18 +671,40 @@ function buildMapGridOverlay(root) {
     const box = new THREE.Box3().setFromObject(mesh);
     if (box.isEmpty()) continue;
 
-    const size = box.getSize(new THREE.Vector3());
-    const center = box.getCenter(new THREE.Vector3());
-    const gridSize = Math.max(size.x, size.z, 2);
-    const divisions = THREE.MathUtils.clamp(Math.round(gridSize * 2), 12, 200);
+    const minX = box.min.x;
+    const maxX = box.max.x;
+    const minZ = box.min.z;
+    const maxZ = box.max.z;
+    const y = box.max.y + 0.02;
 
-    const grid = new THREE.GridHelper(gridSize, divisions, 0xffde8c, 0xb9964d);
-    grid.position.set(center.x, box.max.y + 0.04, center.z);
-    grid.material.opacity = 0.45;
-    grid.material.transparent = true;
-    grid.renderOrder = 6;
+    const vertices = [];
+    const cell = MAP_GRID_CELL_SIZE;
+    const epsilon = cell * 0.2;
 
-    overlay.add(grid);
+    // X-aligned spans across Z, clipped to the map mesh footprint.
+    for (let x = minX; x <= maxX + epsilon; x += cell) {
+      const lineX = Math.min(x, maxX);
+      vertices.push(lineX, y, minZ, lineX, y, maxZ);
+    }
+    // Z-aligned spans across X, clipped to the map mesh footprint.
+    for (let z = minZ; z <= maxZ + epsilon; z += cell) {
+      const lineZ = Math.min(z, maxZ);
+      vertices.push(minX, y, lineZ, maxX, y, lineZ);
+    }
+
+    if (!vertices.length) continue;
+
+    const gridGeom = new THREE.BufferGeometry();
+    gridGeom.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+    const gridMat = new THREE.LineBasicMaterial({
+      color: 0xffde8c,
+      transparent: true,
+      opacity: 0.52,
+      depthWrite: false,
+    });
+    const gridLines = new THREE.LineSegments(gridGeom, gridMat);
+    gridLines.renderOrder = 6;
+    overlay.add(gridLines);
   }
 
   if (!overlay.children.length) return;
