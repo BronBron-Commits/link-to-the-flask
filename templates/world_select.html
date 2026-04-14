@@ -120,6 +120,16 @@
       text-transform: uppercase;
       font-family: Consolas, 'Courier New', monospace;
     }
+    @keyframes gridLeave {
+      from { opacity: 1; transform: translateY(0px); }
+      to   { opacity: 0; transform: translateY(-10px); }
+    }
+    @keyframes gridEnter {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0px); }
+    }
+    .grid.is-leaving { animation: gridLeave 0.2s ease forwards; }
+    .grid.is-entering { animation: gridEnter 0.22s ease forwards; }
   </style>
 </head>
 <body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
@@ -234,79 +244,108 @@ function buildWorldUrl(basePath) {
   return `${url.pathname}${url.search}`;
 }
 
-function renderSceneMenu() {
-  currentView = 'scenes';
-  backWorldsBtn.style.display = 'inline-flex';
-  worldGridEl.innerHTML = SCENES.map((scene) => {
-    const href = buildWorldUrl(scene.target);
-    return `
-      <article class="card">
-        <h2>${scene.title}</h2>
-        <p class="desc">${scene.description}</p>
-        <a class="btn" href="${href}">Enter ${scene.title}</a>
-        <div class="meta">${scene.tag}</div>
-      </article>
-    `;
-  }).join('');
+function animateGridSwap(callback) {
+  worldGridEl.classList.remove('is-entering');
+  worldGridEl.classList.add('is-leaving');
+  var done = false;
+  function finish() {
+    if (done) return; done = true;
+    worldGridEl.classList.remove('is-leaving');
+    callback();
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        worldGridEl.classList.add('is-entering');
+        worldGridEl.addEventListener('animationend', function h() {
+          worldGridEl.removeEventListener('animationend', h);
+          worldGridEl.classList.remove('is-entering');
+        });
+      });
+    });
+  }
+  worldGridEl.addEventListener('animationend', function h() {
+    worldGridEl.removeEventListener('animationend', h);
+    finish();
+  });
+  // Fallback timeout in case animationend doesn't fire
+  setTimeout(finish, 280);
+}
 
-  setStatus('Explore scenes and pick where to travel.');
+function renderSceneMenu() {
+  animateGridSwap(function () {
+    currentView = 'scenes';
+    backWorldsBtn.style.display = 'inline-flex';
+    worldGridEl.innerHTML = SCENES.map((scene) => {
+      const href = buildWorldUrl(scene.target);
+      return `
+        <article class="card">
+          <h2>${scene.title}</h2>
+          <p class="desc">${scene.description}</p>
+          <a class="btn" href="${href}">Enter ${scene.title}</a>
+          <div class="meta">${scene.tag}</div>
+        </article>
+      `;
+    }).join('');
+    setStatus('Explore scenes and pick where to travel.');
+  });
 }
 
 function renderWorlds() {
-  currentView = 'worlds';
-  backWorldsBtn.style.display = 'none';
-  const worlds = [
-    {
-      id: 'explore',
-      title: 'Explore World',
-      description: 'Browse scene destinations and enter a specific world instance.',
-      action: 'open-scenes',
-      tag: 'Scene Menu',
-    },
-    {
-      id: 'arena',
-      title: 'Combat Arena',
-      description: 'Jump straight into tactical combat scenarios and encounter testing.',
-      target: '{{ asset_url("combat_arena.html") }}',
-      tag: 'Battle Instance',
-    },
-    {
-      id: 'paraval-library',
-      title: 'Paraval Library',
-      description: 'Step into a lore hall filled with Skyrim-style books, short fiction, and in-world chronicles.',
-      target: '/paraval-library',
-      tag: 'Lore Archive',
-    },
-  ];
+  animateGridSwap(function () {
+    currentView = 'worlds';
+    backWorldsBtn.style.display = 'none';
+    const worlds = [
+      {
+        id: 'explore',
+        title: 'Explore World',
+        description: 'Browse scene destinations and enter a specific world instance.',
+        action: 'open-scenes',
+        tag: 'Scene Menu',
+      },
+      {
+        id: 'arena',
+        title: 'Combat Arena',
+        description: 'Jump straight into tactical combat scenarios and encounter testing.',
+        target: '{{ asset_url("combat_arena.html") }}',
+        tag: 'Battle Instance',
+      },
+      {
+        id: 'paraval-library',
+        title: 'Paraval Library',
+        description: 'Step into a lore hall filled with Skyrim-style books, short fiction, and in-world chronicles.',
+        target: '/paraval-library',
+        tag: 'Lore Archive',
+      },
+    ];
 
-  worldGridEl.innerHTML = worlds.map((world) => {
-    if (world.action === 'open-scenes') {
+    worldGridEl.innerHTML = worlds.map((world) => {
+      if (world.action === 'open-scenes') {
+        return `
+          <article class="card">
+            <h2>${world.title}</h2>
+            <p class="desc">${world.description}</p>
+            <button class="btn js-open-scenes" type="button">Open Scene Menu</button>
+            <div class="meta">${world.tag}</div>
+          </article>
+        `;
+      }
+
+      const href = buildWorldUrl(world.target);
       return `
         <article class="card">
           <h2>${world.title}</h2>
           <p class="desc">${world.description}</p>
-          <button class="btn js-open-scenes" type="button">Open Scene Menu</button>
+          <a class="btn" href="${href}">Enter ${world.title}</a>
           <div class="meta">${world.tag}</div>
         </article>
       `;
-    }
+    }).join('');
 
-    const href = buildWorldUrl(world.target);
-    return `
-      <article class="card">
-        <h2>${world.title}</h2>
-        <p class="desc">${world.description}</p>
-        <a class="btn" href="${href}">Enter ${world.title}</a>
-        <div class="meta">${world.tag}</div>
-      </article>
-    `;
-  }).join('');
+    worldGridEl.querySelectorAll('.js-open-scenes').forEach((btn) => {
+      btn.addEventListener('click', renderSceneMenu);
+    });
 
-  worldGridEl.querySelectorAll('.js-open-scenes').forEach((btn) => {
-    btn.addEventListener('click', renderSceneMenu);
+    setStatus('Choose where you want to go next.');
   });
-
-  setStatus('Choose where you want to go next.');
 }
 
 backWorldsBtn.addEventListener('click', () => {
@@ -319,5 +358,6 @@ if (loadContext()) {
   renderWorlds();
 }
 </script>
+<script src="/static/transition.js"></script>
 </body>
 </html>
