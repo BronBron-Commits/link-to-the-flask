@@ -1878,8 +1878,8 @@ function setMoveState(code, value) {
   if (code === 'KeyS') moveState.back = value;
   if (code === 'KeyA') moveState.left = value;
   if (code === 'KeyD') moveState.right = value;
-  if (code === 'KeyQ') moveState.down = value;
-  if (code === 'KeyE') moveState.up = value;
+  if (code === 'KeyQ') moveState.up = value;
+  if (code === 'KeyE') moveState.down = value;
   if (code === 'ShiftLeft' || code === 'ShiftRight') moveState.boost = value;
 }
 
