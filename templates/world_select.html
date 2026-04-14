@@ -132,6 +132,7 @@
       </div>
       <div class="actions">
         <a id="back-model-btn" class="btn" href="/model-select">Back to Model Select</a>
+        <button id="back-worlds-btn" class="btn" type="button" style="display:none;">Back to Worlds</button>
       </div>
     </div>
 
@@ -149,6 +150,7 @@ const contextEl = document.getElementById('context');
 const statusEl = document.getElementById('status');
 const worldGridEl = document.getElementById('world-grid');
 const backModelBtn = document.getElementById('back-model-btn');
+const backWorldsBtn = document.getElementById('back-worlds-btn');
 
 const params = new URLSearchParams(window.location.search || '');
 const urlCharacterId = String(params.get('characterId') || '').trim();
@@ -158,6 +160,17 @@ const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_.gltf") }}';
 
 let selectedCharacter = null;
 let selectedModelUrl = '';
+let currentView = 'worlds';
+
+const SCENES = [
+  {
+    id: 'maridon',
+    title: 'Maridon',
+    description: 'Load the current full 3D world scene powered by everything_.gltf.',
+    target: '/map3d',
+    tag: 'Full Scene',
+  },
+];
 
 function setStatus(msg, tone) {
   statusEl.textContent = msg || '';
@@ -214,14 +227,34 @@ function buildWorldUrl(basePath) {
   return `${url.pathname}${url.search}`;
 }
 
+function renderSceneMenu() {
+  currentView = 'scenes';
+  backWorldsBtn.style.display = 'inline-flex';
+  worldGridEl.innerHTML = SCENES.map((scene) => {
+    const href = buildWorldUrl(scene.target);
+    return `
+      <article class="card">
+        <h2>${scene.title}</h2>
+        <p class="desc">${scene.description}</p>
+        <a class="btn" href="${href}">Enter ${scene.title}</a>
+        <div class="meta">${scene.tag}</div>
+      </article>
+    `;
+  }).join('');
+
+  setStatus('Explore scenes and pick where to travel.');
+}
+
 function renderWorlds() {
+  currentView = 'worlds';
+  backWorldsBtn.style.display = 'none';
   const worlds = [
     {
-      id: 'overworld',
-      title: 'Open World',
-      description: 'Enter the full 3D map and load everything_.gltf for now.',
-      target: '/map3d',
-      tag: 'Shared World',
+      id: 'explore',
+      title: 'Explore World',
+      description: 'Browse scene destinations and enter a specific world instance.',
+      action: 'open-scenes',
+      tag: 'Scene Menu',
     },
     {
       id: 'arena',
@@ -240,6 +273,17 @@ function renderWorlds() {
   ];
 
   worldGridEl.innerHTML = worlds.map((world) => {
+    if (world.action === 'open-scenes') {
+      return `
+        <article class="card">
+          <h2>${world.title}</h2>
+          <p class="desc">${world.description}</p>
+          <button class="btn js-open-scenes" type="button">Open Scene Menu</button>
+          <div class="meta">${world.tag}</div>
+        </article>
+      `;
+    }
+
     const href = buildWorldUrl(world.target);
     return `
       <article class="card">
@@ -251,8 +295,18 @@ function renderWorlds() {
     `;
   }).join('');
 
+  worldGridEl.querySelectorAll('.js-open-scenes').forEach((btn) => {
+    btn.addEventListener('click', renderSceneMenu);
+  });
+
   setStatus('Choose where you want to go next.');
 }
+
+backWorldsBtn.addEventListener('click', () => {
+  if (currentView === 'scenes') {
+    renderWorlds();
+  }
+});
 
 if (loadContext()) {
   renderWorlds();
