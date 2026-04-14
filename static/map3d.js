@@ -753,6 +753,17 @@ const networkState = {
     inCombat: false,
 };
 
+const followCameraState = {
+    enabled: isStaticOpenWorld && !viewKey && !simulationMode,
+    initialized: false,
+    cameraPos: new THREE.Vector3(),
+    lookAt: new THREE.Vector3(),
+    desiredPos: new THREE.Vector3(),
+    desiredLookAt: new THREE.Vector3(),
+    upAxis: new THREE.Vector3(0, 1, 0),
+    baseOffset: new THREE.Vector3(0, 2.15, 4.6),
+};
+
 const simulationReplay = {
     data: null,
     tickStates: [],
@@ -859,6 +870,55 @@ function publishSnapshot() {
         canAttack: canInput,
         canEndTurn: canInput,
     });
+}
+
+function getLocalPlayerActor() {
+    if (!networkState.localSid) return null;
+    for (const actor of networkState.playersById.values()) {
+        if (String(actor?.ownerSid || '') === String(networkState.localSid || '')) {
+            return actor;
+        }
+    }
+    return null;
+}
+
+function updateFollowCamera(deltaSeconds) {
+    if (!followCameraState.enabled) return;
+
+    const localActor = getLocalPlayerActor();
+    if (!localActor || !localActor.position) return;
+
+    const yaw = numberOr(localActor.rotation?.y, 0);
+    const offset = followCameraState.baseOffset.clone().applyAxisAngle(followCameraState.upAxis, yaw);
+
+    followCameraState.desiredPos.set(
+        numberOr(localActor.position.x, 0),
+        numberOr(localActor.position.y, 0.7),
+        numberOr(localActor.position.z, 0)
+    ).add(offset);
+
+    followCameraState.desiredLookAt.set(
+        numberOr(localActor.position.x, 0),
+        numberOr(localActor.position.y, 0.7) + 0.75,
+        numberOr(localActor.position.z, 0)
+    );
+
+    const t = followCameraState.initialized
+        ? (1 - Math.exp(-Math.max(0, deltaSeconds) * 10))
+        : 1;
+
+    if (!followCameraState.initialized) {
+        followCameraState.cameraPos.copy(followCameraState.desiredPos);
+        followCameraState.lookAt.copy(followCameraState.desiredLookAt);
+        followCameraState.initialized = true;
+    } else {
+        followCameraState.cameraPos.lerp(followCameraState.desiredPos, t);
+        followCameraState.lookAt.lerp(followCameraState.desiredLookAt, t);
+    }
+
+    camera.position.copy(followCameraState.cameraPos);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(followCameraState.lookAt);
 }
 
 function stopSimulationReplay() {
@@ -1522,6 +1582,8 @@ function animate(timeMs) {
     if (controls && typeof controls.update === 'function') {
         controls.update(deltaSeconds);
     }
+
+    updateFollowCamera(deltaSeconds);
 
     if (sceneEffects.ocean && sceneEffects.ocean.mesh) {
         const t = Number(timeMs) * 0.001;
