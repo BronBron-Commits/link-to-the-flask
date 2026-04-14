@@ -19,6 +19,7 @@ const DISABLE_SKYBOX = Boolean(SOCIAL_ROOM_CONFIG.disableSkybox);
 const SKYBOX_URL = String(SOCIAL_ROOM_CONFIG.skyboxUrl || '/static/skybox_night.jpg').trim();
 const SHOW_AVATAR_SPHERE = Boolean(SOCIAL_ROOM_CONFIG.showAvatarSphere);
 const DUST_PARTICLES = Boolean(SOCIAL_ROOM_CONFIG.dustParticles);
+const MAP_GRID_OVERLAY = Boolean(SOCIAL_ROOM_CONFIG.mapGridOverlay);
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
@@ -579,6 +580,7 @@ worldSceneKtx2Loader.detectSupport(renderer);
 worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
 worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
 let worldSceneRoot = null;
+let mapGridOverlayGroup = null;
 
 let fireGlow = null;
 let flameCore = null;
@@ -633,6 +635,54 @@ function frameSceneAsset(layout) {
     center.z + distance * 0.75,
   );
   camera.lookAt(center.x, center.y + Math.max(size.y * 0.12, 1.2), center.z);
+}
+
+function buildMapGridOverlay(root) {
+  if (!root || !MAP_GRID_OVERLAY) return;
+
+  if (mapGridOverlayGroup) {
+    scene.remove(mapGridOverlayGroup);
+    mapGridOverlayGroup.traverse((obj) => {
+      if (obj.geometry && typeof obj.geometry.dispose === 'function') obj.geometry.dispose();
+      if (obj.material && typeof obj.material.dispose === 'function') obj.material.dispose();
+    });
+    mapGridOverlayGroup = null;
+  }
+
+  const mapMeshes = [];
+  root.traverse((child) => {
+    if (!child || !child.isMesh) return;
+    const meshName = String(child.name || '').toLowerCase();
+    if (meshName.includes('map')) {
+      mapMeshes.push(child);
+    }
+  });
+  if (!mapMeshes.length) return;
+
+  const overlay = new THREE.Group();
+  overlay.name = 'MapGridOverlay';
+
+  for (const mesh of mapMeshes) {
+    const box = new THREE.Box3().setFromObject(mesh);
+    if (box.isEmpty()) continue;
+
+    const size = box.getSize(new THREE.Vector3());
+    const center = box.getCenter(new THREE.Vector3());
+    const gridSize = Math.max(size.x, size.z, 2);
+    const divisions = THREE.MathUtils.clamp(Math.round(gridSize * 2), 12, 200);
+
+    const grid = new THREE.GridHelper(gridSize, divisions, 0xffde8c, 0xb9964d);
+    grid.position.set(center.x, box.max.y + 0.04, center.z);
+    grid.material.opacity = 0.45;
+    grid.material.transparent = true;
+    grid.renderOrder = 6;
+
+    overlay.add(grid);
+  }
+
+  if (!overlay.children.length) return;
+  mapGridOverlayGroup = overlay;
+  scene.add(mapGridOverlayGroup);
 }
 
 if (!USE_SCENE_ASSET) {
@@ -1914,6 +1964,10 @@ function loadSceneAssetEnvironment() {
     if (worldSceneRoot) {
       scene.remove(worldSceneRoot);
     }
+    if (mapGridOverlayGroup) {
+      scene.remove(mapGridOverlayGroup);
+      mapGridOverlayGroup = null;
+    }
 
     const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
     if (!root) return;
@@ -1922,6 +1976,7 @@ function loadSceneAssetEnvironment() {
     const layout = recenterSceneAsset(root);
     scene.add(root);
     worldSceneRoot = root;
+    buildMapGridOverlay(root);
 
     if (layout && layout.size && layout.box) {
       const boxSize = layout.box.getSize(new THREE.Vector3());
