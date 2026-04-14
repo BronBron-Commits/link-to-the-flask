@@ -24,6 +24,7 @@ const MAP_SPACE_TRACKING = Boolean(SOCIAL_ROOM_CONFIG.mapSpaceTracking || MAP_GR
 const MAP_CROSSHAIR = Boolean(SOCIAL_ROOM_CONFIG.mapCrosshair || MAP_SPACE_TRACKING);
 const MAP_HOVER_HIGHLIGHT = Boolean(SOCIAL_ROOM_CONFIG.mapHoverHighlight || MAP_SPACE_TRACKING);
 const ENABLE_WEBXR = Boolean(SOCIAL_ROOM_CONFIG.enableWebXR);
+const ENABLE_VR_CONTROLS = Boolean(SOCIAL_ROOM_CONFIG.enableVrControls || ENABLE_WEBXR);
 const MAP_GRID_CELL_SIZE = (() => {
   const raw = Number(SOCIAL_ROOM_CONFIG.mapGridCellSize);
   if (!Number.isFinite(raw)) return 0.2;
@@ -431,6 +432,17 @@ renderer.shadowMap.enabled = USE_SCENE_ASSET && !SAFARI_SAFE_MODE;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.body.appendChild(renderer.domElement);
 
+const xrState = {
+  active: false,
+  baseReferenceSpace: null,
+  offsetPosition: new THREE.Vector3(),
+  yawOffset: 0,
+  moveSpeed: 2.7,
+  boostMultiplier: 2.0,
+  turnSpeed: 2.2,
+  deadZone: 0.18,
+};
+
 function initWebXR() {
   if (!ENABLE_WEBXR) return;
   if (!navigator.xr) return;
@@ -475,6 +487,10 @@ function initWebXR() {
   const attachSessionListeners = (session) => {
     if (!session) return;
     session.addEventListener('end', () => {
+      xrState.active = false;
+      xrState.baseReferenceSpace = null;
+      xrState.offsetPosition.set(0, 0, 0);
+      xrState.yawOffset = 0;
       setBtnState('Enter VR', false);
     });
   };
@@ -493,6 +509,10 @@ function initWebXR() {
       });
       attachSessionListeners(session);
       await renderer.xr.setSession(session);
+      xrState.active = true;
+      xrState.baseReferenceSpace = renderer.xr.getReferenceSpace();
+      xrState.offsetPosition.set(0, 0, 0);
+      xrState.yawOffset = 0;
       setBtnState('Exit VR', false);
     } catch (_err) {
       setBtnState('Enter VR', false);
@@ -2272,6 +2292,116 @@ const worldUp = new THREE.Vector3(0, 1, 0);
 const tmpLookForward = new THREE.Vector3();
 const tmpFlatForward = new THREE.Vector3();
 const tmpVertical = new THREE.Vector3();
+const xrTmpForward = new THREE.Vector3();
+const xrTmpRight = new THREE.Vector3();
+const xrTmpWorldPos = new THREE.Vector3();
+const xrTmpQuat = new THREE.Quaternion();
+
+function readThumbstickAxes(gamepad) {
+  if (!gamepad || !Array.isArray(gamepad.axes) || gamepad.axes.length === 0) return [0, 0];
+  let x = 0;
+  let y = 0;
+  if (gamepad.axes.length >= 4) {
+    x = Number(gamepad.axes[2] || 0);
+    y = Number(gamepad.axes[3] || 0);
+    // Some controllers place primary stick on axes 0/1.
+    if (Math.abs(x) + Math.abs(y) < 0.05) {
+      x = Number(gamepad.axes[0] || 0);
+      y = Number(gamepad.axes[1] || 0);
+    }
+  } else {
+    x = Number(gamepad.axes[0] || 0);
+    y = Number(gamepad.axes[1] || 0);
+  }
+  return [x, y];
+}
+
+function applyXrReferenceSpaceOffset() {
+  if (!xrState.baseReferenceSpace || typeof XRRigidTransform === 'undefined') return;
+  xrTmpQuat.setFromAxisAngle(worldUp, xrState.yawOffset);
+  const transform = new XRRigidTransform(
+    { x: xrState.offsetPosition.x, y: xrState.offsetPosition.y, z: xrState.offsetPosition.z },
+    { x: xrTmpQuat.x, y: xrTmpQuat.y, z: xrTmpQuat.z, w: xrTmpQuat.w },
+  );
+  const shifted = xrState.baseReferenceSpace.getOffsetReferenceSpace(transform);
+  renderer.xr.setReferenceSpace(shifted);
+}
+
+function applyDeadzone(value, deadZone) {
+  return Math.abs(value) < deadZone ? 0 : value;
+}
+
+function updateXrControls(dt) {
+  if (!ENABLE_VR_CONTROLS || !renderer.xr.isPresenting || !xrState.active) return false;
+  const session = renderer.xr.getSession();
+  if (!session) return false;
+
+  let moveX = 0;
+  let moveY = 0;
+  let turnX = 0;
+  let rise = 0;
+  let boost = false;
+
+  for (const inputSource of session.inputSources) {
+    const gamepad = inputSource && inputSource.gamepad;
+    if (!gamepad) continue;
+    const [sx, sy] = readThumbstickAxes(gamepad);
+
+    if (inputSource.handedness === 'left') {
+      moveX += sx;
+      moveY += sy;
+      boost = boost || Boolean(gamepad.buttons && gamepad.buttons[1] && gamepad.buttons[1].pressed);
+      if (gamepad.buttons && gamepad.buttons[4] && gamepad.buttons[4].pressed) rise += 1;
+      if (gamepad.buttons && gamepad.buttons[5] && gamepad.buttons[5].pressed) rise -= 1;
+    } else if (inputSource.handedness === 'right') {
+      turnX += sx;
+      if (gamepad.buttons && gamepad.buttons[4] && gamepad.buttons[4].pressed) rise += 1;
+      if (gamepad.buttons && gamepad.buttons[5] && gamepad.buttons[5].pressed) rise -= 1;
+    }
+  }
+
+  moveX = applyDeadzone(moveX, xrState.deadZone);
+  moveY = applyDeadzone(moveY, xrState.deadZone);
+  turnX = applyDeadzone(turnX, xrState.deadZone);
+
+  let didMove = false;
+  if (Math.abs(turnX) > 0) {
+    xrState.yawOffset -= turnX * xrState.turnSpeed * dt;
+    didMove = true;
+  }
+
+  if (Math.abs(moveX) > 0 || Math.abs(moveY) > 0 || rise !== 0) {
+    camera.getWorldDirection(xrTmpForward);
+    xrTmpForward.y = 0;
+    if (xrTmpForward.lengthSq() < 1e-6) {
+      xrTmpForward.set(Math.sin(orbitYaw), 0, Math.cos(orbitYaw));
+    }
+    xrTmpForward.normalize();
+    xrTmpRight.crossVectors(xrTmpForward, worldUp).normalize();
+
+    const speed = xrState.moveSpeed * (boost ? xrState.boostMultiplier : 1);
+    xrState.offsetPosition.addScaledVector(xrTmpForward, (-moveY) * speed * dt);
+    xrState.offsetPosition.addScaledVector(xrTmpRight, moveX * speed * dt);
+    xrState.offsetPosition.y += rise * speed * dt;
+
+    xrState.offsetPosition.x = THREE.MathUtils.clamp(xrState.offsetPosition.x, moveBounds.minX, moveBounds.maxX);
+    xrState.offsetPosition.z = THREE.MathUtils.clamp(xrState.offsetPosition.z, moveBounds.minZ, moveBounds.maxZ);
+    xrState.offsetPosition.y = THREE.MathUtils.clamp(xrState.offsetPosition.y, -3, 120);
+    didMove = true;
+  }
+
+  if (didMove) {
+    applyXrReferenceSpaceOffset();
+  }
+
+  const xrCam = renderer.xr.getCamera(camera);
+  xrCam.getWorldPosition(xrTmpWorldPos);
+  actor.position.copy(xrTmpWorldPos);
+  xrCam.getWorldDirection(tmpLookForward);
+  actor.rotation.y = Math.atan2(tmpLookForward.x, tmpLookForward.z);
+
+  return didMove;
+}
 
 function loadSceneAssetEnvironment() {
   if (!USE_SCENE_ASSET) return;
@@ -2544,6 +2674,10 @@ function switchCustomAction(nextAction, fadeSeconds = 0.18) {
 }
 
 function updatePlayerMovement(dt) {
+  if (ENABLE_VR_CONTROLS && renderer.xr.isPresenting) {
+    return false;
+  }
+
   if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
     tmpLookForward.set(
       Math.sin(orbitYaw) * Math.cos(orbitPitch),
@@ -2667,6 +2801,10 @@ function updateAvatarAnimation(dt, elapsed, isMoving) {
 }
 
 function updateCamera(dt) {
+  if (ENABLE_VR_CONTROLS && renderer.xr.isPresenting) {
+    return;
+  }
+
   if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
     tmpTarget.copy(camera.position).add(tmpLookForward.set(
       Math.sin(orbitYaw) * Math.cos(orbitPitch),
@@ -2732,7 +2870,8 @@ function animateFrame() {
     dustPoints.geometry.attributes.position.needsUpdate = true;
   }
 
-  const isMoving = updatePlayerMovement(dt);
+  const xrIsMoving = updateXrControls(dt);
+  const isMoving = xrIsMoving || updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
   updateHoveredMapSpaceFromCrosshair();
