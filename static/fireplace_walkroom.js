@@ -2383,7 +2383,7 @@ function updateXrControls(dt) {
 
     const speed = xrState.moveSpeed * (boost ? xrState.boostMultiplier : 1);
     xrState.offsetPosition.addScaledVector(xrTmpForward, (-moveY) * speed * dt);
-    xrState.offsetPosition.addScaledVector(xrTmpRight, moveX * speed * dt);
+    xrState.offsetPosition.addScaledVector(xrTmpRight, (-moveX) * speed * dt);
     xrState.offsetPosition.y += rise * speed * dt;
 
     xrState.offsetPosition.x = THREE.MathUtils.clamp(xrState.offsetPosition.x, moveBounds.minX, moveBounds.maxX);
