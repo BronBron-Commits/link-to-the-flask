@@ -443,8 +443,11 @@ function _drawCompass() {
 
   if (_coordsEl && (_coordsFrame++ % 3 === 0)) {
     const pos = USE_SCENE_ASSET ? camera.position : actor.position;
+    const modeLabel = (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) ? 'fly' : 'sphere-third';
     _coordsEl.innerHTML =
-      `X&nbsp;${pos.x.toFixed(2)}<br>Y&nbsp;${pos.y.toFixed(2)}<br>Z&nbsp;${pos.z.toFixed(2)}`;
+      `X&nbsp;${pos.x.toFixed(2)}<br>Y&nbsp;${pos.y.toFixed(2)}<br>Z&nbsp;${pos.z.toFixed(2)}<br>`
+      + `Q(up):&nbsp;${moveState.up ? '1' : '0'}&nbsp;E(down):&nbsp;${moveState.down ? '1' : '0'}<br>`
+      + `Mode:&nbsp;${modeLabel}`;
   }
 }
 
