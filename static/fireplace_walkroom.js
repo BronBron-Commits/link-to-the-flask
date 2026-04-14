@@ -626,7 +626,7 @@ const orbMat = new THREE.MeshStandardMaterial({
   transparent: true,
   opacity: 0.88,
 });
-const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 32, 24), orbMat);
+const orbMesh = new THREE.Mesh(new THREE.SphereGeometry(0.24, 32, 24), orbMat);
 orbMesh.position.y = 1.0;
 fallbackAvatar.add(orbMesh);
 
@@ -895,7 +895,7 @@ function buildProceduralAvatar(colorHex = '#7f6bff') {
 function buildSphereAvatar(colorHex = '#7f8fff') {
   const root = new THREE.Group();
   const sphere = new THREE.Mesh(
-    new THREE.SphereGeometry(0.34, 24, 18),
+    new THREE.SphereGeometry(0.26, 24, 18),
     new THREE.MeshStandardMaterial({
       color: colorHex,
       emissive: 0x1c2f66,
@@ -1800,8 +1800,8 @@ let orbitYaw = 0;
 let orbitPitch = -0.12;
 let orbitDistance = 5.2;
 
-const moveSpeed = USE_SCENE_ASSET ? 8.5 : 3.4;
-const boostMultiplier = USE_SCENE_ASSET ? 2.8 : 2.2;
+const moveSpeed = FORCE_SPHERE_AVATARS ? 5.2 : (USE_SCENE_ASSET ? 8.5 : 3.4);
+const boostMultiplier = FORCE_SPHERE_AVATARS ? 2.0 : (USE_SCENE_ASSET ? 2.8 : 2.2);
 const lookSensitivity = 0.0022;
 const verticalLookLimit = USE_SCENE_ASSET ? 1.52 : 0.72;
 
