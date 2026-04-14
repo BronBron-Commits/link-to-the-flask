@@ -2295,6 +2295,7 @@ const tmpVertical = new THREE.Vector3();
 const xrTmpForward = new THREE.Vector3();
 const xrTmpRight = new THREE.Vector3();
 const xrTmpWorldPos = new THREE.Vector3();
+const xrTmpHeadBeforeTurn = new THREE.Vector3();
 const xrTmpQuat = new THREE.Quaternion();
 
 function readThumbstickAxes(gamepad) {
@@ -2329,6 +2330,17 @@ function applyXrReferenceSpaceOffset() {
 
 function applyDeadzone(value, deadZone) {
   return Math.abs(value) < deadZone ? 0 : value;
+}
+
+function compensateXrTurnPivot(headWorldPos, deltaYaw) {
+  // Keep the player's current head position fixed while snap/smooth turning,
+  // so turning pivots in place instead of orbiting around world origin.
+  const c = Math.cos(deltaYaw);
+  const s = Math.sin(deltaYaw);
+  const rx = c * headWorldPos.x - s * headWorldPos.z;
+  const rz = s * headWorldPos.x + c * headWorldPos.z;
+  xrState.offsetPosition.x += (headWorldPos.x - rx);
+  xrState.offsetPosition.z += (headWorldPos.z - rz);
 }
 
 function updateXrControls(dt) {
@@ -2367,7 +2379,10 @@ function updateXrControls(dt) {
 
   let didMove = false;
   if (Math.abs(turnX) > 0) {
-    xrState.yawOffset += turnX * xrState.turnSpeed * dt;
+    xrCam.getWorldPosition(xrTmpHeadBeforeTurn);
+    const deltaYaw = turnX * xrState.turnSpeed * dt;
+    xrState.yawOffset += deltaYaw;
+    compensateXrTurnPivot(xrTmpHeadBeforeTurn, deltaYaw);
     didMove = true;
   }
 
