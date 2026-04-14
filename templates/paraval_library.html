@@ -1340,7 +1340,6 @@
             <div class="reader-actions">
               <button id="accessible-reader-btn" class="btn" type="button" aria-pressed="false">Hyper Reader</button>
               <button id="focus-mode-btn" class="btn" type="button" aria-pressed="false">Focus Mode</button>
-              <button id="auto-flip-btn" class="btn" type="button" aria-pressed="false">Auto Flip</button>
               <button id="prev-book-btn" class="btn" type="button">Previous Volume</button>
               <button id="next-book-btn" class="btn" type="button">Next Volume</button>
             </div>
@@ -1348,16 +1347,10 @@
 
           <p id="a11y-status" class="a11y-status" aria-live="polite"></p>
 
-          <button id="tts-toggle-btn" class="btn" type="button" aria-controls="tts-controls" aria-expanded="false" aria-label="Show narration menu">Show</button>
-
-          <div id="tts-controls" class="tts-controls" aria-label="Story narration controls" hidden>
+          <div class="tts-controls" aria-label="Story narration controls">
             <div class="tts-field">
               <span class="tts-label">Voice</span>
               <span class="tts-select" style="padding:0.25em 0.5em;opacity:0.7;">Server TTS &mdash; English</span>
-            </div>
-            <div class="tts-field">
-              <label class="tts-label" for="tts-rate">Speed</label>
-              <input id="tts-rate" class="tts-range" type="range" min="0.7" max="1.5" step="0.05" value="1" />
             </div>
             <div class="tts-actions">
               <button id="tts-read-story" class="btn" type="button">Read Story</button>
@@ -1644,9 +1637,6 @@ S: Who does? Tidus?
     const enterWorldBtn = document.getElementById('enter-world-btn');
     const ambientToggleBtn = document.getElementById('ambient-toggle-btn');
     const pageSfxToggleBtn = document.getElementById('page-sfx-toggle-btn');
-    const ttsRateEl = document.getElementById('tts-rate');
-    const ttsControlsEl = document.getElementById('tts-controls');
-    const ttsToggleBtn = document.getElementById('tts-toggle-btn');
     const ttsReadStoryBtn = document.getElementById('tts-read-story');
     const ttsReadLeftBtn = document.getElementById('tts-read-left');
     const ttsReadRightBtn = document.getElementById('tts-read-right');
@@ -1667,7 +1657,6 @@ S: Who does? Tidus?
     let focusModeEnabled = true;
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
-    let ttsMenuVisible = false;
     const LIBRARY_AUDIO_ENABLED = true;
     const TTS_API_URL = '/api/tts';
     const ACCESSIBLE_READER_STORAGE_KEY = 'paraval_accessible_reader_mode';
@@ -1945,16 +1934,6 @@ S: Who does? Tidus?
       ttsStatusEl.textContent = message;
     }
 
-    function updateTtsMenuUi() {
-      if (ttsControlsEl) {
-        ttsControlsEl.hidden = !ttsMenuVisible;
-      }
-      if (ttsToggleBtn) {
-        ttsToggleBtn.setAttribute('aria-expanded', String(ttsMenuVisible));
-        ttsToggleBtn.textContent = ttsMenuVisible ? 'Hide' : 'Show';
-      }
-    }
-
     function cleanSpeechText(text) {
       return String(text || '').replace(/\s+/g, ' ').trim();
     }
@@ -2077,23 +2056,8 @@ S: Who does? Tidus?
     }
 
     function bindNarrationControls() {
-      if (ttsToggleBtn) {
-        ttsToggleBtn.addEventListener('click', () => {
-          ttsMenuVisible = !ttsMenuVisible;
-          updateTtsMenuUi();
-        });
-      }
-
-      updateTtsMenuUi();
-
       if (!ttsStatusEl) return;
 
-      if (ttsRateEl) {
-        ttsRateEl.addEventListener('input', () => {
-          ttsState.rate = Number(ttsRateEl.value || 1);
-          if (ttsState.audioEl) ttsState.audioEl.playbackRate = ttsState.rate;
-        });
-      }
       if (ttsReadStoryBtn) {
         ttsReadStoryBtn.addEventListener('click', () => {
           const story = getCurrentStory();
