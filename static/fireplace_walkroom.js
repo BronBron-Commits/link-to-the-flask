@@ -2295,7 +2295,6 @@ const tmpVertical = new THREE.Vector3();
 const xrTmpForward = new THREE.Vector3();
 const xrTmpRight = new THREE.Vector3();
 const xrTmpWorldPos = new THREE.Vector3();
-const xrTmpHeadBeforeTurn = new THREE.Vector3();
 const xrTmpQuat = new THREE.Quaternion();
 
 function readThumbstickAxes(gamepad) {
@@ -2328,37 +2327,46 @@ function applyXrReferenceSpaceOffset() {
   renderer.xr.setReferenceSpace(shifted);
 }
 
+function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) {
+  if (typeof XRRigidTransform === 'undefined') return false;
+  if (!xrFrame) return false;
+
+  const currentRef = renderer.xr.getReferenceSpace();
+  if (!currentRef) return false;
+
+  const pose = xrFrame.getViewerPose(currentRef);
+  if (!pose || !pose.transform || !pose.transform.position) return false;
+
+  const px = Number(pose.transform.position.x || 0);
+  const pz = Number(pose.transform.position.z || 0);
+
+  let tx = Number(deltaX || 0);
+  let ty = Number(deltaY || 0);
+  let tz = Number(deltaZ || 0);
+
+  if (Math.abs(deltaYaw) > 1e-6) {
+    const c = Math.cos(deltaYaw);
+    const s = Math.sin(deltaYaw);
+    // Translation needed so yaw rotates around current viewer position.
+    tx += px - (c * px - s * pz);
+    tz += pz - (s * px + c * pz);
+  }
+
+  xrTmpQuat.setFromAxisAngle(worldUp, Number(deltaYaw || 0));
+  const step = new XRRigidTransform(
+    { x: tx, y: ty, z: tz },
+    { x: xrTmpQuat.x, y: xrTmpQuat.y, z: xrTmpQuat.z, w: xrTmpQuat.w },
+  );
+
+  renderer.xr.setReferenceSpace(currentRef.getOffsetReferenceSpace(step));
+  return true;
+}
+
 function applyDeadzone(value, deadZone) {
   return Math.abs(value) < deadZone ? 0 : value;
 }
 
-function applyHeadAnchoredXrYawTurn(headWorldPos, deltaYaw) {
-  // Solve exact transform update so the player's current head world position
-  // stays fixed while yaw changes. This prevents any orbiting around origin.
-  const oldYaw = xrState.yawOffset;
-  const newYaw = oldYaw + deltaYaw;
-
-  const dx = headWorldPos.x - xrState.offsetPosition.x;
-  const dz = headWorldPos.z - xrState.offsetPosition.z;
-
-  // Recover headset position in base-reference coordinates (before offsets).
-  const cInv = Math.cos(-oldYaw);
-  const sInv = Math.sin(-oldYaw);
-  const baseX = cInv * dx - sInv * dz;
-  const baseZ = sInv * dx + cInv * dz;
-
-  // Reapply with new yaw and solve new translation keeping head fixed.
-  const cNew = Math.cos(newYaw);
-  const sNew = Math.sin(newYaw);
-  const rotatedX = cNew * baseX - sNew * baseZ;
-  const rotatedZ = sNew * baseX + cNew * baseZ;
-
-  xrState.yawOffset = newYaw;
-  xrState.offsetPosition.x = headWorldPos.x - rotatedX;
-  xrState.offsetPosition.z = headWorldPos.z - rotatedZ;
-}
-
-function updateXrControls(dt) {
+function updateXrControls(dt, xrFrame) {
   if (!ENABLE_VR_CONTROLS || !renderer.xr.isPresenting || !xrState.active) return false;
   const session = renderer.xr.getSession();
   if (!session) return false;
@@ -2392,13 +2400,11 @@ function updateXrControls(dt) {
   moveY = applyDeadzone(moveY, xrState.deadZone);
   turnX = applyDeadzone(turnX, xrState.deadZone);
 
+  const deltaYaw = Math.abs(turnX) > 0 ? (turnX * xrState.turnSpeed * dt) : 0;
   let didMove = false;
-  if (Math.abs(turnX) > 0) {
-    xrCam.getWorldPosition(xrTmpHeadBeforeTurn);
-    const deltaYaw = turnX * xrState.turnSpeed * dt;
-    applyHeadAnchoredXrYawTurn(xrTmpHeadBeforeTurn, deltaYaw);
-    didMove = true;
-  }
+  let moveDx = 0;
+  let moveDy = 0;
+  let moveDz = 0;
 
   if (Math.abs(moveX) > 0 || Math.abs(moveY) > 0 || rise !== 0) {
     // Head-relative movement: derive locomotion basis from current XR headset direction.
@@ -2411,18 +2417,15 @@ function updateXrControls(dt) {
     xrTmpRight.crossVectors(worldUp, xrTmpForward).normalize();
 
     const speed = xrState.moveSpeed * (boost ? xrState.boostMultiplier : 1);
-    xrState.offsetPosition.addScaledVector(xrTmpForward, (-moveY) * speed * dt);
-    xrState.offsetPosition.addScaledVector(xrTmpRight, (-moveX) * speed * dt);
-    xrState.offsetPosition.y += rise * speed * dt;
-
-    xrState.offsetPosition.x = THREE.MathUtils.clamp(xrState.offsetPosition.x, moveBounds.minX, moveBounds.maxX);
-    xrState.offsetPosition.z = THREE.MathUtils.clamp(xrState.offsetPosition.z, moveBounds.minZ, moveBounds.maxZ);
-    xrState.offsetPosition.y = THREE.MathUtils.clamp(xrState.offsetPosition.y, -3, 120);
-    didMove = true;
+    moveDx += xrTmpForward.x * ((-moveY) * speed * dt);
+    moveDz += xrTmpForward.z * ((-moveY) * speed * dt);
+    moveDx += xrTmpRight.x * ((-moveX) * speed * dt);
+    moveDz += xrTmpRight.z * ((-moveX) * speed * dt);
+    moveDy += rise * speed * dt;
   }
 
-  if (didMove) {
-    applyXrReferenceSpaceOffset();
+  if (Math.abs(deltaYaw) > 0 || Math.abs(moveDx) > 0 || Math.abs(moveDy) > 0 || Math.abs(moveDz) > 0) {
+    didMove = applyIncrementalXrTransform(moveDx, moveDy, moveDz, deltaYaw, xrFrame);
   }
 
   xrCam.getWorldPosition(xrTmpWorldPos);
@@ -2860,7 +2863,7 @@ function updateCamera(dt) {
   camera.lookAt(tmpTarget);
 }
 
-function animateFrame() {
+function animateFrame(_time, xrFrame) {
   const dt = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
 
@@ -2900,7 +2903,7 @@ function animateFrame() {
     dustPoints.geometry.attributes.position.needsUpdate = true;
   }
 
-  const xrIsMoving = updateXrControls(dt);
+  const xrIsMoving = updateXrControls(dt, xrFrame);
   const isMoving = xrIsMoving || updatePlayerMovement(dt);
   updateAvatarAnimation(dt, elapsed, isMoving);
   updateCamera(dt);
