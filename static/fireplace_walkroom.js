@@ -2377,7 +2377,7 @@ function updateXrControls(dt) {
       xrTmpForward.set(Math.sin(orbitYaw), 0, Math.cos(orbitYaw));
     }
     xrTmpForward.normalize();
-    xrTmpRight.crossVectors(xrTmpForward, worldUp).normalize();
+    xrTmpRight.crossVectors(worldUp, xrTmpForward).normalize();
 
     const speed = xrState.moveSpeed * (boost ? xrState.boostMultiplier : 1);
     xrState.offsetPosition.addScaledVector(xrTmpForward, (-moveY) * speed * dt);
@@ -2690,7 +2690,7 @@ function updatePlayerMovement(dt) {
       tmpFlatForward.set(Math.sin(orbitYaw), 0, Math.cos(orbitYaw));
     }
     tmpFlatForward.normalize();
-    tmpRight.crossVectors(tmpFlatForward, worldUp).normalize();
+    tmpRight.crossVectors(worldUp, tmpFlatForward).normalize();
     tmpVertical.copy(worldUp);
 
     tmpMove.set(0, 0, 0);
@@ -2726,7 +2726,7 @@ function updatePlayerMovement(dt) {
   ).normalize();
 
   tmpForward.copy(cameraForward);
-  tmpRight.crossVectors(tmpForward, worldUp).normalize();
+  tmpRight.crossVectors(worldUp, tmpForward).normalize();
 
   tmpMove.set(0, 0, 0);
   if (moveState.forward) tmpMove.add(tmpForward);
