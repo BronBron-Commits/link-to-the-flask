@@ -574,7 +574,7 @@ function _drawCompass() {
     const modeLabel = (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) ? 'fly' : 'sphere-third';
     _coordsEl.innerHTML =
       `X&nbsp;${pos.x.toFixed(2)}<br>Y&nbsp;${pos.y.toFixed(2)}<br>Z&nbsp;${pos.z.toFixed(2)}<br>`
-      + `Q(up):&nbsp;${moveState.up ? '1' : '0'}&nbsp;E(down):&nbsp;${moveState.down ? '1' : '0'}<br>`
+      + `Up(Space/Q):&nbsp;${moveState.up ? '1' : '0'}&nbsp;Down(Ctrl/E):&nbsp;${moveState.down ? '1' : '0'}<br>`
       + `Mode:&nbsp;${modeLabel}`;
   }
 }
@@ -2343,12 +2343,12 @@ if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
 }
 
 function setMoveState(code, value) {
-  if (code === 'KeyW') moveState.forward = value;
-  if (code === 'KeyS') moveState.back = value;
-  if (code === 'KeyA') moveState.left = value;
-  if (code === 'KeyD') moveState.right = value;
-  if (code === 'KeyQ') moveState.up = value;
-  if (code === 'KeyE') moveState.down = value;
+  if (code === 'KeyW' || code === 'ArrowUp') moveState.forward = value;
+  if (code === 'KeyS' || code === 'ArrowDown') moveState.back = value;
+  if (code === 'KeyA' || code === 'ArrowLeft') moveState.left = value;
+  if (code === 'KeyD' || code === 'ArrowRight') moveState.right = value;
+  if (code === 'KeyQ' || code === 'Space' || code === 'PageUp') moveState.up = value;
+  if (code === 'KeyE' || code === 'ControlLeft' || code === 'ControlRight' || code === 'PageDown') moveState.down = value;
   if (code === 'ShiftLeft' || code === 'ShiftRight') moveState.boost = value;
 }
 
@@ -2449,6 +2449,11 @@ renderer.domElement.addEventListener('click', () => {
   if (!pointerLocked) renderer.domElement.requestPointerLock();
 });
 
+renderer.domElement.addEventListener('contextmenu', (event) => {
+  // Reserve right-click for mouse-look drag in fly mode.
+  event.preventDefault();
+});
+
 document.addEventListener('pointerlockchange', () => {
   pointerLocked = document.pointerLockElement === renderer.domElement;
 });
@@ -2458,14 +2463,14 @@ let mouseLookLastX = 0;
 let mouseLookLastY = 0;
 
 renderer.domElement.addEventListener('mousedown', (event) => {
-  if (event.button !== 0) return;
+  if (event.button !== 0 && event.button !== 2) return;
   mouseLookDragging = true;
   mouseLookLastX = event.clientX;
   mouseLookLastY = event.clientY;
 });
 
 window.addEventListener('mouseup', (event) => {
-  if (event.button !== 0) return;
+  if (event.button !== 0 && event.button !== 2) return;
   mouseLookDragging = false;
 });
 
@@ -2502,14 +2507,26 @@ document.addEventListener('keydown', (event) => {
   const tag = document.activeElement ? document.activeElement.tagName : '';
   if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
 
-  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD' || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+  if (
+    event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD'
+    || event.code === 'ArrowUp' || event.code === 'ArrowLeft' || event.code === 'ArrowDown' || event.code === 'ArrowRight'
+    || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'Space'
+    || event.code === 'ControlLeft' || event.code === 'ControlRight' || event.code === 'PageUp' || event.code === 'PageDown'
+    || event.code === 'ShiftLeft' || event.code === 'ShiftRight'
+  ) {
     event.preventDefault();
   }
   setMoveState(event.code, true);
 });
 
 document.addEventListener('keyup', (event) => {
-  if (event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD' || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+  if (
+    event.code === 'KeyW' || event.code === 'KeyA' || event.code === 'KeyS' || event.code === 'KeyD'
+    || event.code === 'ArrowUp' || event.code === 'ArrowLeft' || event.code === 'ArrowDown' || event.code === 'ArrowRight'
+    || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'Space'
+    || event.code === 'ControlLeft' || event.code === 'ControlRight' || event.code === 'PageUp' || event.code === 'PageDown'
+    || event.code === 'ShiftLeft' || event.code === 'ShiftRight'
+  ) {
     event.preventDefault();
   }
   setMoveState(event.code, false);
