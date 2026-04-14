@@ -2113,6 +2113,8 @@ function updatePlayerMovement(dt) {
   if (moveState.back) tmpMove.sub(tmpForward);
   if (moveState.right) tmpMove.add(tmpRight);
   if (moveState.left) tmpMove.sub(tmpRight);
+  if (moveState.up) tmpMove.y += 1;
+  if (moveState.down) tmpMove.y -= 1;
 
   let isMoving = false;
   if (tmpMove.lengthSq() > 0) {
@@ -2123,6 +2125,7 @@ function updatePlayerMovement(dt) {
 
     actor.position.x = THREE.MathUtils.clamp(actor.position.x, moveBounds.minX, moveBounds.maxX);
     actor.position.z = THREE.MathUtils.clamp(actor.position.z, moveBounds.minZ, moveBounds.maxZ);
+    actor.position.y = THREE.MathUtils.clamp(actor.position.y, 0.5, 250);
 
     actor.rotation.y = Math.atan2(tmpMove.x, tmpMove.z);
   }
