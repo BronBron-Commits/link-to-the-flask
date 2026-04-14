@@ -20,6 +20,7 @@ const SKYBOX_URL = String(SOCIAL_ROOM_CONFIG.skyboxUrl || '/static/skybox_night.
 const SHOW_AVATAR_SPHERE = Boolean(SOCIAL_ROOM_CONFIG.showAvatarSphere);
 const DUST_PARTICLES = Boolean(SOCIAL_ROOM_CONFIG.dustParticles);
 const MAP_GRID_OVERLAY = Boolean(SOCIAL_ROOM_CONFIG.mapGridOverlay);
+const MAP_SPACE_TRACKING = Boolean(SOCIAL_ROOM_CONFIG.mapSpaceTracking || MAP_GRID_OVERLAY);
 const MAP_GRID_CELL_SIZE = (() => {
   const raw = Number(SOCIAL_ROOM_CONFIG.mapGridCellSize);
   if (!Number.isFinite(raw)) return 0.2;
@@ -586,6 +587,13 @@ worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
 worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
 let worldSceneRoot = null;
 let mapGridOverlayGroup = null;
+const mapSpaceDatabase = {
+  cellSize: MAP_GRID_CELL_SIZE,
+  spaces: [],
+  byId: new Map(),
+  occupancyBySpaceId: new Map(),
+  pieceToSpaceId: new Map(),
+};
 
 let fireGlow = null;
 let flameCore = null;
@@ -642,9 +650,79 @@ function frameSceneAsset(layout) {
   camera.lookAt(center.x, center.y + Math.max(size.y * 0.12, 1.2), center.z);
 }
 
-function buildMapGridOverlay(root) {
-  if (!root || !MAP_GRID_OVERLAY) return;
+function clearMapSpaceDatabase() {
+  mapSpaceDatabase.spaces = [];
+  mapSpaceDatabase.byId.clear();
+  mapSpaceDatabase.occupancyBySpaceId.clear();
+  mapSpaceDatabase.pieceToSpaceId.clear();
+}
 
+function setPieceSpace(pieceId, spaceId) {
+  const normalizedPieceId = String(pieceId || '').trim();
+  const normalizedSpaceId = String(spaceId || '').trim();
+  if (!normalizedPieceId || !normalizedSpaceId) return false;
+  if (!mapSpaceDatabase.byId.has(normalizedSpaceId)) return false;
+
+  const existingSpaceId = mapSpaceDatabase.pieceToSpaceId.get(normalizedPieceId);
+  if (existingSpaceId) {
+    mapSpaceDatabase.occupancyBySpaceId.delete(existingSpaceId);
+  }
+
+  mapSpaceDatabase.pieceToSpaceId.set(normalizedPieceId, normalizedSpaceId);
+  mapSpaceDatabase.occupancyBySpaceId.set(normalizedSpaceId, normalizedPieceId);
+  return true;
+}
+
+function releasePieceSpace(pieceId) {
+  const normalizedPieceId = String(pieceId || '').trim();
+  if (!normalizedPieceId) return false;
+  const existingSpaceId = mapSpaceDatabase.pieceToSpaceId.get(normalizedPieceId);
+  if (!existingSpaceId) return false;
+  mapSpaceDatabase.pieceToSpaceId.delete(normalizedPieceId);
+  mapSpaceDatabase.occupancyBySpaceId.delete(existingSpaceId);
+  return true;
+}
+
+function getNearestMapSpace(x, z) {
+  let best = null;
+  let bestDistSq = Infinity;
+  for (const cell of mapSpaceDatabase.spaces) {
+    const dx = x - cell.center.x;
+    const dz = z - cell.center.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < bestDistSq) {
+      bestDistSq = d2;
+      best = cell;
+    }
+  }
+  return best;
+}
+
+window.tabletopSpaces = {
+  getAll: () => mapSpaceDatabase.spaces.map((cell) => ({ ...cell })),
+  getById: (spaceId) => {
+    const cell = mapSpaceDatabase.byId.get(String(spaceId || '').trim());
+    return cell ? { ...cell } : null;
+  },
+  getNearest: (x, z) => {
+    const cell = getNearestMapSpace(Number(x), Number(z));
+    return cell ? { ...cell } : null;
+  },
+  occupy: (pieceId, spaceId) => setPieceSpace(pieceId, spaceId),
+  release: (pieceId) => releasePieceSpace(pieceId),
+  getOccupancy: () => Object.fromEntries(mapSpaceDatabase.occupancyBySpaceId.entries()),
+  snapObjectToSpace: (object3d, spaceId, yOffset = 0.06) => {
+    const cell = mapSpaceDatabase.byId.get(String(spaceId || '').trim());
+    if (!cell || !object3d || typeof object3d.position?.set !== 'function') return false;
+    object3d.position.set(cell.center.x, cell.y + Number(yOffset || 0), cell.center.z);
+    return true;
+  },
+};
+
+function buildMapGridOverlay(root) {
+  if (!root) return;
+
+  clearMapSpaceDatabase();
   if (mapGridOverlayGroup) {
     scene.remove(mapGridOverlayGroup);
     mapGridOverlayGroup.traverse((obj) => {
@@ -664,32 +742,68 @@ function buildMapGridOverlay(root) {
   });
   if (!mapMeshes.length) return;
 
+  mapMeshes.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+
   const overlay = new THREE.Group();
   overlay.name = 'MapGridOverlay';
 
-  for (const mesh of mapMeshes) {
+  let globalSpaceNumber = 1;
+
+  for (let meshIndex = 0; meshIndex < mapMeshes.length; meshIndex += 1) {
+    const mesh = mapMeshes[meshIndex];
     const box = new THREE.Box3().setFromObject(mesh);
     if (box.isEmpty()) continue;
 
-    const minX = box.min.x;
-    const maxX = box.max.x;
-    const minZ = box.min.z;
-    const maxZ = box.max.z;
+    const width = Math.max(box.max.x - box.min.x, MAP_GRID_CELL_SIZE);
+    const depth = Math.max(box.max.z - box.min.z, MAP_GRID_CELL_SIZE);
+    const cols = Math.max(1, Math.floor(width / MAP_GRID_CELL_SIZE));
+    const rows = Math.max(1, Math.floor(depth / MAP_GRID_CELL_SIZE));
+    const usableWidth = cols * MAP_GRID_CELL_SIZE;
+    const usableDepth = rows * MAP_GRID_CELL_SIZE;
+    const startX = box.min.x + (width - usableWidth) * 0.5;
+    const startZ = box.min.z + (depth - usableDepth) * 0.5;
+    const endX = startX + usableWidth;
+    const endZ = startZ + usableDepth;
     const y = box.max.y + 0.02;
 
+    if (MAP_SPACE_TRACKING) {
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const centerX = startX + (col + 0.5) * MAP_GRID_CELL_SIZE;
+          const centerZ = startZ + (row + 0.5) * MAP_GRID_CELL_SIZE;
+          const id = `M${meshIndex + 1}-S${globalSpaceNumber}`;
+          const cell = {
+            id,
+            n: globalSpaceNumber,
+            mapMesh: String(mesh.name || `map-${meshIndex + 1}`),
+            mapIndex: meshIndex + 1,
+            row: row + 1,
+            col: col + 1,
+            y,
+            size: MAP_GRID_CELL_SIZE,
+            center: { x: centerX, z: centerZ },
+          };
+          mapSpaceDatabase.spaces.push(cell);
+          mapSpaceDatabase.byId.set(id, cell);
+          globalSpaceNumber += 1;
+        }
+      }
+    }
+
+    if (!MAP_GRID_OVERLAY) continue;
+
     const vertices = [];
-    const cell = MAP_GRID_CELL_SIZE;
-    const epsilon = cell * 0.2;
+    const epsilon = MAP_GRID_CELL_SIZE * 0.2;
 
     // X-aligned spans across Z, clipped to the map mesh footprint.
-    for (let x = minX; x <= maxX + epsilon; x += cell) {
-      const lineX = Math.min(x, maxX);
-      vertices.push(lineX, y, minZ, lineX, y, maxZ);
+    for (let x = startX; x <= endX + epsilon; x += MAP_GRID_CELL_SIZE) {
+      const lineX = Math.min(x, endX);
+      vertices.push(lineX, y, startZ, lineX, y, endZ);
     }
     // Z-aligned spans across X, clipped to the map mesh footprint.
-    for (let z = minZ; z <= maxZ + epsilon; z += cell) {
-      const lineZ = Math.min(z, maxZ);
-      vertices.push(minX, y, lineZ, maxX, y, lineZ);
+    for (let z = startZ; z <= endZ + epsilon; z += MAP_GRID_CELL_SIZE) {
+      const lineZ = Math.min(z, endZ);
+      vertices.push(startX, y, lineZ, endX, y, lineZ);
     }
 
     if (!vertices.length) continue;
@@ -707,9 +821,10 @@ function buildMapGridOverlay(root) {
     overlay.add(gridLines);
   }
 
-  if (!overlay.children.length) return;
-  mapGridOverlayGroup = overlay;
-  scene.add(mapGridOverlayGroup);
+  if (MAP_GRID_OVERLAY && overlay.children.length) {
+    mapGridOverlayGroup = overlay;
+    scene.add(mapGridOverlayGroup);
+  }
 }
 
 if (!USE_SCENE_ASSET) {
