@@ -72,12 +72,17 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         modelGroup.position.y -= center.y;
     }
 
-    function buildBoxBody() {
+    function buildFallbackBody(team = 'neutral') {
+        const isPlayer = String(team || '').toLowerCase() === 'player';
+        const geometry = isPlayer
+            ? new THREE.SphereGeometry(0.52, 20, 16)
+            : new THREE.BoxGeometry(0.9, 1.4, 0.9);
         const mesh = new THREE.Mesh(
-            new THREE.BoxGeometry(0.9, 1.4, 0.9),
+            geometry,
             new THREE.MeshStandardMaterial({ color: 0xcfd8dc, roughness: 0.7, metalness: 0.1 })
         );
-        mesh.userData.isBox = true;
+        mesh.userData.isFallback = true;
+        mesh.userData.fallbackShape = isPlayer ? 'sphere' : 'box';
         mesh.renderOrder = 160;
         return mesh;
     }
@@ -108,18 +113,19 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
             group.remove(oldBody);
             const hitIdx = actorHitObjects.indexOf(oldBody);
             if (hitIdx >= 0) actorHitObjects.splice(hitIdx, 1);
-            if (oldBody.userData.isBox) {
+            if (oldBody.userData.isFallback) {
                 if (oldBody.geometry) oldBody.geometry.dispose();
                 if (oldBody.material) oldBody.material.dispose();
             }
         }
 
         let newBody;
+        const actorTeam = String(group?.userData?.team || 'neutral').toLowerCase();
         if (wantUrl && modelCache.has(wantUrl)) {
             newBody = buildGlbBody(wantUrl);
         }
         if (!newBody) {
-            newBody = buildBoxBody();
+            newBody = buildFallbackBody(actorTeam);
             if (wantUrl && !pendingLoads.has(wantUrl) && !modelCache.has(wantUrl)) {
                 loadGlbModel(wantUrl);
             }
@@ -157,7 +163,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         group.userData.team = String(actor?.team || 'neutral').toLowerCase();
         // Tint box placeholders with team color; GLB models keep their own materials
         const body = group.userData.bodyObject;
-        if (body && body.userData.isBox && body.material && body.material.color) {
+        if (body && body.userData.isFallback && body.material && body.material.color) {
             body.material.color.setHex(getActorColor(actor));
         }
         if (body) body.userData.actorId = actor.id;
@@ -256,9 +262,9 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
             let body;
             if (wantUrl && modelCache.has(wantUrl)) {
                 body = buildGlbBody(wantUrl);
-                if (!body) body = buildBoxBody();
+                if (!body) body = buildFallbackBody(team);
             } else {
-                body = buildBoxBody();
+                body = buildFallbackBody(team);
                 if (wantUrl) loadGlbModel(wantUrl);
             }
             body.userData.actorId = actorId;
@@ -293,7 +299,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
 
         // HP-based scale only on box placeholders (GLB models stay at natural scale)
         const body = group.userData.bodyObject;
-        if (body && body.userData.isBox) {
+        if (body && body.userData.fallbackShape === 'box') {
             const hp = clampNumber(actor?.hp, 0);
             const maxHp = Math.max(1, clampNumber(actor?.maxHp, hp || 1));
             body.scale.y = 0.7 + Math.max(0.25, Math.min(1, hp / maxHp)) * 0.7;
@@ -310,7 +316,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         if (body) {
             const hitIdx = actorHitObjects.indexOf(body);
             if (hitIdx >= 0) actorHitObjects.splice(hitIdx, 1);
-            if (body.userData.isBox) {
+            if (body.userData.isFallback) {
                 if (body.geometry) body.geometry.dispose();
                 if (body.material) body.material.dispose();
             }
