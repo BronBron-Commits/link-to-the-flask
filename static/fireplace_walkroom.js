@@ -14,10 +14,12 @@ const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCI
   ? window.__SOCIAL_ROOM_CONFIG__
   : {};
 const REQUESTED_SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
+const DISABLE_SCENE_ASSET_FALLBACK = Boolean(SOCIAL_ROOM_CONFIG.disableSceneFallback);
+const DISABLE_SKYBOX = Boolean(SOCIAL_ROOM_CONFIG.disableSkybox);
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
-const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
+const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (!DISABLE_SCENE_ASSET_FALLBACK && IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
 const SAFARI_LEGACY_EVERYTHING_PATTERN = /\/everything_\.gltf$/i;
 const SCENE_ASSET_PRIMARY_URL = (() => {
   if (!RESOLVED_SCENE_ASSET_URL) return '';
@@ -31,9 +33,15 @@ const SCENE_ASSET_PRIMARY_URL = (() => {
 const SCENE_ASSET_CANDIDATE_URLS = Array.from(new Set(
   [
     SCENE_ASSET_PRIMARY_URL,
-    '/static/everything_optimized_draco.glb',
-    // Avoid legacy 145MB binary fallback on Safari to reduce repeated crash loops.
-    ...(SAFARI_SAFE_MODE ? [] : ['/static/everything_.gltf']),
+    ...(
+      DISABLE_SCENE_ASSET_FALLBACK
+        ? []
+        : [
+            '/static/everything_optimized_draco.glb',
+            // Avoid legacy 145MB binary fallback on Safari to reduce repeated crash loops.
+            ...(SAFARI_SAFE_MODE ? [] : ['/static/everything_.gltf']),
+          ]
+    ),
   ].filter(Boolean)
 ));
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
@@ -348,18 +356,20 @@ scene.background = new THREE.Color(USE_SCENE_ASSET ? 0x2a3442 : 0x0a0d15);
 scene.fog = USE_SCENE_ASSET ? null : new THREE.Fog(0x0a0d15, 10, 34);
 
 const skyboxTextureLoader = new THREE.TextureLoader();
-skyboxTextureLoader.load(
-  '/static/skybox_night.jpg',
-  (texture) => {
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.mapping = THREE.EquirectangularReflectionMapping;
-    scene.background = texture;
-  },
-  undefined,
-  () => {
-    // Keep color fallback if skybox fails to load.
-  }
-);
+if (!DISABLE_SKYBOX) {
+  skyboxTextureLoader.load(
+    '/static/skybox_night.jpg',
+    (texture) => {
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.mapping = THREE.EquirectangularReflectionMapping;
+      scene.background = texture;
+    },
+    undefined,
+    () => {
+      // Keep color fallback if skybox fails to load.
+    }
+  );
+}
 
 const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.1, 5000);
 camera.position.set(0, 2.6, 6.4);
