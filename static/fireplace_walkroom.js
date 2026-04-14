@@ -363,6 +363,8 @@ if (!DISABLE_SKYBOX) {
     (texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.mapping = THREE.EquirectangularReflectionMapping;
+      if (!texture.scale) texture.scale = new THREE.Vector2(1, 1);
+      if (!texture.offset) texture.offset = new THREE.Vector2(0, 0);
       texture.scale.y = -1;
       texture.offset.y = 1;
       scene.background = texture;
