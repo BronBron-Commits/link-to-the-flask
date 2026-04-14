@@ -7,6 +7,8 @@ const DEFAULT_TEAM_COLORS = {
     neutral: 0xcfd8dc,
 };
 
+const PLAYER_SPHERE_BODY_KEY = '__player_sphere__';
+
 function clampNumber(value, fallback) {
     const n = Number(value);
     return Number.isFinite(n) ? n : fallback;
@@ -121,12 +123,14 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
 
         let newBody;
         const actorTeam = String(group?.userData?.team || 'neutral').toLowerCase();
-        if (wantUrl && modelCache.has(wantUrl)) {
+        if (actorTeam === 'player') {
+            newBody = buildFallbackBody('player');
+        } else if (wantUrl && modelCache.has(wantUrl)) {
             newBody = buildGlbBody(wantUrl);
         }
         if (!newBody) {
             newBody = buildFallbackBody(actorTeam);
-            if (wantUrl && !pendingLoads.has(wantUrl) && !modelCache.has(wantUrl)) {
+            if (actorTeam !== 'player' && wantUrl && !pendingLoads.has(wantUrl) && !modelCache.has(wantUrl)) {
                 loadGlbModel(wantUrl);
             }
         }
@@ -134,7 +138,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         newBody.userData.actorId = group.userData.actorId;
         group.add(newBody);
         group.userData.bodyObject = newBody;
-        group.userData.modelUrl = wantUrl || 'box';
+        group.userData.modelUrl = actorTeam === 'player' ? PLAYER_SPHERE_BODY_KEY : (wantUrl || 'box');
         actorHitObjects.push(newBody);
     }
 
@@ -242,12 +246,13 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         if (!actorId) return null;
 
         const team = String(actor?.team || 'neutral').toLowerCase();
-        const wantUrl = team === 'player' ? playerModelUrl : (team === 'enemy' ? enemyModelUrl : null);
+        const wantUrl = team === 'enemy' ? enemyModelUrl : null;
+        const desiredBodyKey = team === 'player' ? PLAYER_SPHERE_BODY_KEY : (wantUrl || 'box');
 
         let group = actorMeshes.get(actorId);
 
         // Rebuild body if model URL changed for this actor
-        if (group && group.userData.modelUrl !== (wantUrl || 'box')) {
+        if (group && group.userData.modelUrl !== desiredBodyKey) {
             replaceActorBody(group, wantUrl);
         }
 
@@ -255,7 +260,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
             group = new THREE.Group();
             group.userData.actorId = actorId;
             group.userData.team = team;
-            group.userData.modelUrl = wantUrl || 'box';
+            group.userData.modelUrl = desiredBodyKey;
             scene.add(group);
             actorMeshes.set(actorId, group);
 
