@@ -1348,7 +1348,9 @@
 
           <p id="a11y-status" class="a11y-status" aria-live="polite"></p>
 
-          <div class="tts-controls" aria-label="Story narration controls">
+          <button id="tts-toggle-btn" class="btn" type="button" aria-controls="tts-controls" aria-expanded="false">Show Voice Menu</button>
+
+          <div id="tts-controls" class="tts-controls" aria-label="Story narration controls" hidden>
             <div class="tts-field">
               <span class="tts-label">Voice</span>
               <span class="tts-select" style="padding:0.25em 0.5em;opacity:0.7;">Server TTS &mdash; English</span>
@@ -1643,6 +1645,8 @@ S: Who does? Tidus?
     const ambientToggleBtn = document.getElementById('ambient-toggle-btn');
     const pageSfxToggleBtn = document.getElementById('page-sfx-toggle-btn');
     const ttsRateEl = document.getElementById('tts-rate');
+    const ttsControlsEl = document.getElementById('tts-controls');
+    const ttsToggleBtn = document.getElementById('tts-toggle-btn');
     const ttsReadStoryBtn = document.getElementById('tts-read-story');
     const ttsReadLeftBtn = document.getElementById('tts-read-left');
     const ttsReadRightBtn = document.getElementById('tts-read-right');
@@ -1663,6 +1667,7 @@ S: Who does? Tidus?
     let focusModeEnabled = true;
     let autoFlipEnabled = false;
     let autoFlipTimer = null;
+    let ttsMenuVisible = false;
     const LIBRARY_AUDIO_ENABLED = true;
     const TTS_API_URL = '/api/tts';
     const ACCESSIBLE_READER_STORAGE_KEY = 'paraval_accessible_reader_mode';
@@ -1940,6 +1945,16 @@ S: Who does? Tidus?
       ttsStatusEl.textContent = message;
     }
 
+    function updateTtsMenuUi() {
+      if (ttsControlsEl) {
+        ttsControlsEl.hidden = !ttsMenuVisible;
+      }
+      if (ttsToggleBtn) {
+        ttsToggleBtn.setAttribute('aria-expanded', String(ttsMenuVisible));
+        ttsToggleBtn.textContent = ttsMenuVisible ? 'Hide Voice Menu' : 'Show Voice Menu';
+      }
+    }
+
     function cleanSpeechText(text) {
       return String(text || '').replace(/\s+/g, ' ').trim();
     }
@@ -2062,6 +2077,15 @@ S: Who does? Tidus?
     }
 
     function bindNarrationControls() {
+      if (ttsToggleBtn) {
+        ttsToggleBtn.addEventListener('click', () => {
+          ttsMenuVisible = !ttsMenuVisible;
+          updateTtsMenuUi();
+        });
+      }
+
+      updateTtsMenuUi();
+
       if (!ttsStatusEl) return;
 
       if (ttsRateEl) {
