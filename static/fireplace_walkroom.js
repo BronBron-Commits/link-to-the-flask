@@ -39,6 +39,7 @@ const SCENE_ASSET_CANDIDATE_URLS = Array.from(new Set(
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = SCENE_ASSET_CANDIDATE_URLS.length > 0;
 const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
+const FORCE_SPHERE_AVATARS = IS_MAP3D_ROUTE;
 
 const hudPlayerEl = document.getElementById('hud-player');
 const nameGateEl = document.getElementById('name-gate');
@@ -600,7 +601,7 @@ if (!USE_SCENE_ASSET) {
 
 const actor = new THREE.Group();
 actor.position.set(0, 0, USE_SCENE_ASSET ? 0 : 2.1);
-if (!USE_SCENE_ASSET) {
+if (!USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) {
   scene.add(actor);
 }
 
@@ -608,7 +609,7 @@ const remoteActorsLayer = new THREE.Group();
 scene.add(remoteActorsLayer);
 
 const fallbackAvatar = new THREE.Group();
-if (!USE_SCENE_ASSET) {
+if (!USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) {
   actor.add(fallbackAvatar);
 }
 
@@ -888,6 +889,25 @@ function buildProceduralAvatar(colorHex = '#7f6bff') {
   return root;
 }
 
+function buildSphereAvatar(colorHex = '#7f8fff') {
+  const root = new THREE.Group();
+  const sphere = new THREE.Mesh(
+    new THREE.SphereGeometry(0.34, 24, 18),
+    new THREE.MeshStandardMaterial({
+      color: colorHex,
+      emissive: 0x1c2f66,
+      emissiveIntensity: 0.7,
+      roughness: 0.22,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.92,
+    })
+  );
+  sphere.position.y = 1.0;
+  root.add(sphere);
+  return root;
+}
+
 const netState = {
   socket: null,
   localSid: '',
@@ -1110,11 +1130,13 @@ function createNameplate(text) {
 }
 
 async function ensureRemoteVisual(sid, entry) {
-  if (USE_SCENE_ASSET) return;
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) return;
   let rec = netState.remoteVisuals.get(sid);
   if (!rec) {
     const root = new THREE.Group();
-    const fallbackRoot = buildProceduralAvatar(String(entry?.side || '').toLowerCase() === 'villains' ? '#dd7f7f' : '#7f8fff');
+    const fallbackRoot = FORCE_SPHERE_AVATARS
+      ? buildSphereAvatar(String(entry?.side || '').toLowerCase() === 'villains' ? '#dd7f7f' : '#7f8fff')
+      : buildProceduralAvatar(String(entry?.side || '').toLowerCase() === 'villains' ? '#dd7f7f' : '#7f8fff');
     const nameplate = createNameplate(String(entry?.name || `Player-${sid.slice(0, 6)}`));
     root.add(fallbackRoot);
     root.add(nameplate);
@@ -1176,7 +1198,7 @@ async function ensureRemoteVisual(sid, entry) {
 }
 
 function syncRemoteActors() {
-  if (USE_SCENE_ASSET) {
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
     for (const sid of Array.from(netState.remoteVisuals.keys())) {
       removeRemoteVisual(sid);
     }
@@ -1202,7 +1224,7 @@ function syncRemoteActors() {
 
 function publishLocalPresence(force = false) {
   if (!netState.socket || !netState.localSid) return;
-  const localPosition = USE_SCENE_ASSET ? camera.position : actor.position;
+  const localPosition = (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) ? camera.position : actor.position;
   const payload = {
     name: chosenDisplayName || 'Traveler',
     side: 'heroes',
@@ -1667,7 +1689,7 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
 }
 
 async function loadSelectedAvatar() {
-  if (USE_SCENE_ASSET) return;
+  if (USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) return;
   if (!selectedModelUrl) return;
   const loader = new GLTFLoader();
 
@@ -1843,7 +1865,7 @@ function loadSceneAssetEnvironment() {
 
 loadSceneAssetEnvironment();
 
-if (USE_SCENE_ASSET) {
+if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
   actor.visible = false;
   fallbackAvatar.visible = false;
   if (actor.parent) {
@@ -2005,7 +2027,7 @@ function switchCustomAction(nextAction, fadeSeconds = 0.18) {
 }
 
 function updatePlayerMovement(dt) {
-  if (USE_SCENE_ASSET) {
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
     tmpLookForward.set(
       Math.sin(orbitYaw) * Math.cos(orbitPitch),
       Math.sin(orbitPitch),
@@ -2077,7 +2099,7 @@ function updatePlayerMovement(dt) {
 }
 
 function updateAvatarAnimation(dt, elapsed, isMoving) {
-  if (USE_SCENE_ASSET) return;
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) return;
   if (customMixerUsable && avatarMixer && (customIdleAction || customWalkAction)) {
     if (isMoving && customWalkAction) {
       switchCustomAction(customWalkAction);
@@ -2118,7 +2140,7 @@ function updateAvatarAnimation(dt, elapsed, isMoving) {
 }
 
 function updateCamera(dt) {
-  if (USE_SCENE_ASSET) {
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
     tmpTarget.copy(camera.position).add(tmpLookForward.set(
       Math.sin(orbitYaw) * Math.cos(orbitPitch),
       Math.sin(orbitPitch),
