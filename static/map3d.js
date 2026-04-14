@@ -874,11 +874,19 @@ function publishSnapshot() {
 
 function getLocalPlayerActor() {
     if (!networkState.localSid) return null;
+
+    // Primary: exact ownership match.
     for (const actor of networkState.playersById.values()) {
         if (String(actor?.ownerSid || '') === String(networkState.localSid || '')) {
             return actor;
         }
     }
+
+    // Fallback: if only one player exists, treat it as local for camera/input continuity.
+    if (networkState.playersById.size === 1) {
+        return networkState.playersById.values().next().value || null;
+    }
+
     return null;
 }
 
@@ -1311,6 +1319,12 @@ function upsertPlayer(entry) {
     if (!entry || typeof entry !== 'object') return;
     const actor = toPlayerActor(entry, entry.id);
     if (!actor) return;
+
+    const existing = networkState.playersById.get(actor.id);
+    const explicitOwnerSid = String(entry.ownerSid || entry.sid || '').trim();
+    const mergedOwnerSid = explicitOwnerSid || String(existing?.ownerSid || '').trim();
+    actor.ownerSid = mergedOwnerSid || actor.ownerSid || null;
+
     networkState.playersById.set(actor.id, actor);
     publishSnapshot();
 }
@@ -1402,7 +1416,7 @@ function createSocketBridge() {
     return socket;
 }
 
-const socket = (simulationMode || isStaticOpenWorld) ? null : createSocketBridge();
+const socket = simulationMode ? null : createSocketBridge();
 
 if (simulationMode) {
     simulationReplay.ui = createSimulationPanel();
