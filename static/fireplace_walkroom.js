@@ -17,6 +17,7 @@ const REQUESTED_SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '')
 const DISABLE_SCENE_ASSET_FALLBACK = Boolean(SOCIAL_ROOM_CONFIG.disableSceneFallback);
 const DISABLE_SKYBOX = Boolean(SOCIAL_ROOM_CONFIG.disableSkybox);
 const SKYBOX_URL = String(SOCIAL_ROOM_CONFIG.skyboxUrl || '/static/skybox_night.jpg').trim();
+const SHOW_AVATAR_SPHERE = Boolean(SOCIAL_ROOM_CONFIG.showAvatarSphere);
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
@@ -625,7 +626,7 @@ if (!USE_SCENE_ASSET) {
 
 const actor = new THREE.Group();
 actor.position.set(0, 2, USE_SCENE_ASSET ? 3 : 2.1);
-if (!USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) {
+if (!USE_SCENE_ASSET || FORCE_SPHERE_AVATARS || SHOW_AVATAR_SPHERE) {
   scene.add(actor);
 }
 
