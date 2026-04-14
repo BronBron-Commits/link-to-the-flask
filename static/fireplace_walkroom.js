@@ -2367,7 +2367,7 @@ function updateXrControls(dt) {
 
   let didMove = false;
   if (Math.abs(turnX) > 0) {
-    xrState.yawOffset -= turnX * xrState.turnSpeed * dt;
+    xrState.yawOffset += turnX * xrState.turnSpeed * dt;
     didMove = true;
   }
 
