@@ -2025,7 +2025,7 @@ document.addEventListener('mousemove', (event) => {
 });
 
 renderer.domElement.addEventListener('wheel', (event) => {
-  if (USE_SCENE_ASSET) return;
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) return;
   event.preventDefault();
   const zoomFactor = Math.exp(event.deltaY * 0.0015);
   orbitDistance *= zoomFactor;
