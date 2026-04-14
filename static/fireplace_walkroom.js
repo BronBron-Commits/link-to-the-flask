@@ -16,6 +16,7 @@ const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCI
 const REQUESTED_SCENE_ASSET_URL = String(SOCIAL_ROOM_CONFIG.sceneAssetUrl || '').trim();
 const DISABLE_SCENE_ASSET_FALLBACK = Boolean(SOCIAL_ROOM_CONFIG.disableSceneFallback);
 const DISABLE_SKYBOX = Boolean(SOCIAL_ROOM_CONFIG.disableSkybox);
+const SKYBOX_URL = String(SOCIAL_ROOM_CONFIG.skyboxUrl || '/static/skybox_night.jpg').trim();
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
@@ -358,7 +359,7 @@ scene.fog = USE_SCENE_ASSET ? null : new THREE.Fog(0x0a0d15, 10, 34);
 const skyboxTextureLoader = new THREE.TextureLoader();
 if (!DISABLE_SKYBOX) {
   skyboxTextureLoader.load(
-    '/static/skybox_night.jpg',
+    SKYBOX_URL,
     (texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.mapping = THREE.EquirectangularReflectionMapping;
