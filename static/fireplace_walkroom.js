@@ -22,6 +22,35 @@ const DUST_PARTICLES = Boolean(SOCIAL_ROOM_CONFIG.dustParticles);
 const DEFAULT_OPEN_WORLD_ASSET_URL = '/static/everything_optimized_draco.glb';
 const SCENE_ASSET_URL = REQUESTED_SCENE_ASSET_URL;
 const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '').trim());
+
+function resolveSpawnPosition() {
+  const fallback = USE_SCENE_ASSET
+    ? (IS_MAP3D_ROUTE ? [-690, 50, 786] : [0, 2, 3])
+    : [0, 2, 2.1];
+
+  const raw = SOCIAL_ROOM_CONFIG.spawnPosition;
+  if (Array.isArray(raw) && raw.length >= 3) {
+    const x = Number(raw[0]);
+    const y = Number(raw[1]);
+    const z = Number(raw[2]);
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+      return [x, y, z];
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const x = Number(raw.x);
+    const y = Number(raw.y);
+    const z = Number(raw.z);
+    if (Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(z)) {
+      return [x, y, z];
+    }
+  }
+
+  return fallback;
+}
+
+const SPAWN_POSITION = resolveSpawnPosition();
 const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (!DISABLE_SCENE_ASSET_FALLBACK && IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
 const SAFARI_LEGACY_EVERYTHING_PATTERN = /\/everything_\.gltf$/i;
 const SCENE_ASSET_PRIMARY_URL = (() => {
@@ -667,7 +696,7 @@ if (!USE_SCENE_ASSET) {
 }
 
 const actor = new THREE.Group();
-actor.position.set(0, 2, USE_SCENE_ASSET ? 3 : 2.1);
+actor.position.set(...SPAWN_POSITION);
 if (!USE_SCENE_ASSET || FORCE_SPHERE_AVATARS || SHOW_AVATAR_SPHERE) {
   scene.add(actor);
 }
@@ -1902,9 +1931,12 @@ function loadSceneAssetEnvironment() {
       moveBounds.maxX = halfX;
       moveBounds.minZ = -halfZ;
       moveBounds.maxZ = halfZ;
-      actor.position.set(-690, 50, 786);
-      camera.position.set(-690, 52.6, 792.4);
-      camera.lookAt(-690, 51, 786);
+      const spawnX = SPAWN_POSITION[0];
+      const spawnY = SPAWN_POSITION[1];
+      const spawnZ = SPAWN_POSITION[2];
+      actor.position.set(spawnX, spawnY, spawnZ);
+      camera.position.set(spawnX, spawnY + 2.6, spawnZ + 6.4);
+      camera.lookAt(spawnX, spawnY + 1.0, spawnZ);
       orbitDistance = THREE.MathUtils.clamp(Math.max(boxSize.x, boxSize.y, boxSize.z) * 0.14, 5.2, 10.5);
     }
   };
