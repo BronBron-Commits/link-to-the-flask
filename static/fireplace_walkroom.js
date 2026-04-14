@@ -2335,6 +2335,7 @@ function updateXrControls(dt) {
   if (!ENABLE_VR_CONTROLS || !renderer.xr.isPresenting || !xrState.active) return false;
   const session = renderer.xr.getSession();
   if (!session) return false;
+  const xrCam = renderer.xr.getCamera(camera);
 
   let moveX = 0;
   let moveY = 0;
@@ -2371,7 +2372,8 @@ function updateXrControls(dt) {
   }
 
   if (Math.abs(moveX) > 0 || Math.abs(moveY) > 0 || rise !== 0) {
-    camera.getWorldDirection(xrTmpForward);
+    // Head-relative movement: derive locomotion basis from current XR headset direction.
+    xrCam.getWorldDirection(xrTmpForward);
     xrTmpForward.y = 0;
     if (xrTmpForward.lengthSq() < 1e-6) {
       xrTmpForward.set(Math.sin(orbitYaw), 0, Math.cos(orbitYaw));
@@ -2394,7 +2396,6 @@ function updateXrControls(dt) {
     applyXrReferenceSpaceOffset();
   }
 
-  const xrCam = renderer.xr.getCamera(camera);
   xrCam.getWorldPosition(xrTmpWorldPos);
   actor.position.copy(xrTmpWorldPos);
   xrCam.getWorldDirection(tmpLookForward);
