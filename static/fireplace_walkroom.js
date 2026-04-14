@@ -363,6 +363,8 @@ if (!DISABLE_SKYBOX) {
     (texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.mapping = THREE.EquirectangularReflectionMapping;
+      texture.scale.y = -1;
+      texture.offset.y = 1;
       scene.background = texture;
     },
     undefined,
