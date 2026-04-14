@@ -50,7 +50,6 @@ function resolveSpawnPosition() {
   return fallback;
 }
 
-const SPAWN_POSITION = resolveSpawnPosition();
 const RESOLVED_SCENE_ASSET_URL = SCENE_ASSET_URL || (!DISABLE_SCENE_ASSET_FALLBACK && IS_MAP3D_ROUTE ? DEFAULT_OPEN_WORLD_ASSET_URL : '');
 const SAFARI_LEGACY_EVERYTHING_PATTERN = /\/everything_\.gltf$/i;
 const SCENE_ASSET_PRIMARY_URL = (() => {
@@ -78,6 +77,7 @@ const SCENE_ASSET_CANDIDATE_URLS = Array.from(new Set(
 ));
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = SCENE_ASSET_CANDIDATE_URLS.length > 0;
+const SPAWN_POSITION = resolveSpawnPosition();
 const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
 const FORCE_SPHERE_AVATARS = IS_MAP3D_ROUTE;
 
