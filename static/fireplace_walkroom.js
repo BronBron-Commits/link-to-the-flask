@@ -2332,15 +2332,30 @@ function applyDeadzone(value, deadZone) {
   return Math.abs(value) < deadZone ? 0 : value;
 }
 
-function compensateXrTurnPivot(headWorldPos, deltaYaw) {
-  // Keep the player's current head position fixed while snap/smooth turning,
-  // so turning pivots in place instead of orbiting around world origin.
-  const c = Math.cos(deltaYaw);
-  const s = Math.sin(deltaYaw);
-  const rx = c * headWorldPos.x - s * headWorldPos.z;
-  const rz = s * headWorldPos.x + c * headWorldPos.z;
-  xrState.offsetPosition.x += (headWorldPos.x - rx);
-  xrState.offsetPosition.z += (headWorldPos.z - rz);
+function applyHeadAnchoredXrYawTurn(headWorldPos, deltaYaw) {
+  // Solve exact transform update so the player's current head world position
+  // stays fixed while yaw changes. This prevents any orbiting around origin.
+  const oldYaw = xrState.yawOffset;
+  const newYaw = oldYaw + deltaYaw;
+
+  const dx = headWorldPos.x - xrState.offsetPosition.x;
+  const dz = headWorldPos.z - xrState.offsetPosition.z;
+
+  // Recover headset position in base-reference coordinates (before offsets).
+  const cInv = Math.cos(-oldYaw);
+  const sInv = Math.sin(-oldYaw);
+  const baseX = cInv * dx - sInv * dz;
+  const baseZ = sInv * dx + cInv * dz;
+
+  // Reapply with new yaw and solve new translation keeping head fixed.
+  const cNew = Math.cos(newYaw);
+  const sNew = Math.sin(newYaw);
+  const rotatedX = cNew * baseX - sNew * baseZ;
+  const rotatedZ = sNew * baseX + cNew * baseZ;
+
+  xrState.yawOffset = newYaw;
+  xrState.offsetPosition.x = headWorldPos.x - rotatedX;
+  xrState.offsetPosition.z = headWorldPos.z - rotatedZ;
 }
 
 function updateXrControls(dt) {
@@ -2381,8 +2396,7 @@ function updateXrControls(dt) {
   if (Math.abs(turnX) > 0) {
     xrCam.getWorldPosition(xrTmpHeadBeforeTurn);
     const deltaYaw = turnX * xrState.turnSpeed * dt;
-    xrState.yawOffset += deltaYaw;
-    compensateXrTurnPivot(xrTmpHeadBeforeTurn, deltaYaw);
+    applyHeadAnchoredXrYawTurn(xrTmpHeadBeforeTurn, deltaYaw);
     didMove = true;
   }
 
