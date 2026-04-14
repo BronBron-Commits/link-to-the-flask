@@ -1348,7 +1348,7 @@
 
           <p id="a11y-status" class="a11y-status" aria-live="polite"></p>
 
-          <button id="tts-toggle-btn" class="btn" type="button" aria-controls="tts-controls" aria-expanded="false">Show Voice Menu</button>
+          <button id="tts-toggle-btn" class="btn" type="button" aria-controls="tts-controls" aria-expanded="false" aria-label="Show narration menu">Show</button>
 
           <div id="tts-controls" class="tts-controls" aria-label="Story narration controls" hidden>
             <div class="tts-field">
@@ -1951,7 +1951,7 @@ S: Who does? Tidus?
       }
       if (ttsToggleBtn) {
         ttsToggleBtn.setAttribute('aria-expanded', String(ttsMenuVisible));
-        ttsToggleBtn.textContent = ttsMenuVisible ? 'Hide Voice Menu' : 'Show Voice Menu';
+        ttsToggleBtn.textContent = ttsMenuVisible ? 'Hide' : 'Show';
       }
     }
 
