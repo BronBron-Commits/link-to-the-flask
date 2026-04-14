@@ -363,10 +363,11 @@ if (!DISABLE_SKYBOX) {
     (texture) => {
       texture.colorSpace = THREE.SRGBColorSpace;
       texture.mapping = THREE.EquirectangularReflectionMapping;
-      if (!texture.scale) texture.scale = new THREE.Vector2(1, 1);
-      if (!texture.offset) texture.offset = new THREE.Vector2(0, 0);
-      texture.scale.y = -1;
-      texture.offset.y = 1;
+      // Flip skybox upside down by mirroring V coordinates
+      texture.matrixAutoUpdate = false;
+      const matrix = new THREE.Matrix3();
+      matrix.setUvTransform(0, 1, 1, -1, 0, 0.5, 0.5);
+      texture.matrix = matrix;
       scene.background = texture;
     },
     undefined,
@@ -473,7 +474,12 @@ const hemi = new THREE.HemisphereLight(
 );
 scene.add(hemi);
 
-const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 1.05 : 1.38) : 0.86);
+// Add sun directional light for mid-day effect
+const sunLight = new THREE.DirectionalLight(0xffd280, 1.2);
+sunLight.position.set(8, 12, 8);
+scene.add(sunLight);
+
+const key = new THREE.DirectionalLight(USE_SCENE_ASSET ? 0xfff4d6 : 0xa3b7dd, USE_SCENE_ASSET ? (SAFARI_SAFE_MODE ? 0.70 : 0.90) : 0.86);
 key.position.set(...(USE_SCENE_ASSET ? [10, 18, 12] : [-3.4, 4.4, 2.8]));
 if (USE_SCENE_ASSET && !SAFARI_SAFE_MODE) {
   key.castShadow = true;
