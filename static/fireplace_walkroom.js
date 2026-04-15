@@ -2296,6 +2296,7 @@ const xrTmpForward = new THREE.Vector3();
 const xrTmpRight = new THREE.Vector3();
 const xrTmpWorldPos = new THREE.Vector3();
 const xrTmpQuat = new THREE.Quaternion();
+const xrTmpHeadQuat = new THREE.Quaternion();
 
 function readThumbstickAxes(gamepad) {
   if (!gamepad || !Array.isArray(gamepad.axes) || gamepad.axes.length === 0) return [0, 0];
@@ -2337,28 +2338,29 @@ function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) 
   const pose = xrFrame.getViewerPose(currentRef);
   if (!pose || !pose.transform || !pose.transform.position) return false;
 
-  const px = Number(pose.transform.position.x || 0);
-  const pz = Number(pose.transform.position.z || 0);
-
-  let tx = Number(deltaX || 0);
-  let ty = Number(deltaY || 0);
-  let tz = Number(deltaZ || 0);
+  let nextRef = currentRef;
 
   if (Math.abs(deltaYaw) > 1e-6) {
-    const c = Math.cos(deltaYaw);
-    const s = Math.sin(deltaYaw);
-    // Translation needed so yaw rotates around current viewer position.
-    tx += px - (c * px - s * pz);
-    tz += pz - (s * px + c * pz);
+    const px = Number(pose.transform.position.x || 0);
+    const pz = Number(pose.transform.position.z || 0);
+    const toPivot = new XRRigidTransform({ x: -px, y: 0, z: -pz });
+    xrTmpQuat.setFromAxisAngle(worldUp, Number(deltaYaw || 0));
+    const yawTurn = new XRRigidTransform(
+      { x: 0, y: 0, z: 0 },
+      { x: xrTmpQuat.x, y: xrTmpQuat.y, z: xrTmpQuat.z, w: xrTmpQuat.w },
+    );
+    const fromPivot = new XRRigidTransform({ x: px, y: 0, z: pz });
+    nextRef = nextRef.getOffsetReferenceSpace(toPivot);
+    nextRef = nextRef.getOffsetReferenceSpace(yawTurn);
+    nextRef = nextRef.getOffsetReferenceSpace(fromPivot);
   }
 
-  xrTmpQuat.setFromAxisAngle(worldUp, Number(deltaYaw || 0));
-  const step = new XRRigidTransform(
-    { x: tx, y: ty, z: tz },
-    { x: xrTmpQuat.x, y: xrTmpQuat.y, z: xrTmpQuat.z, w: xrTmpQuat.w },
-  );
+  if (Math.abs(deltaX) > 1e-6 || Math.abs(deltaY) > 1e-6 || Math.abs(deltaZ) > 1e-6) {
+    const moveStep = new XRRigidTransform({ x: deltaX, y: deltaY, z: deltaZ });
+    nextRef = nextRef.getOffsetReferenceSpace(moveStep);
+  }
 
-  renderer.xr.setReferenceSpace(currentRef.getOffsetReferenceSpace(step));
+  renderer.xr.setReferenceSpace(nextRef);
   return true;
 }
 
@@ -2407,11 +2409,19 @@ function updateXrControls(dt, xrFrame) {
   let moveDz = 0;
 
   if (Math.abs(moveX) > 0 || Math.abs(moveY) > 0 || rise !== 0) {
-    // Head-relative movement: derive locomotion basis from current XR headset direction.
-    xrCam.getWorldDirection(xrTmpForward);
+    // Head-relative movement in current XR reference space.
+    const currentRef = renderer.xr.getReferenceSpace();
+    const pose = currentRef && xrFrame ? xrFrame.getViewerPose(currentRef) : null;
+    if (pose && pose.transform && pose.transform.orientation) {
+      const q = pose.transform.orientation;
+      xrTmpHeadQuat.set(Number(q.x || 0), Number(q.y || 0), Number(q.z || 0), Number(q.w || 1));
+      xrTmpForward.set(0, 0, -1).applyQuaternion(xrTmpHeadQuat);
+    } else {
+      xrCam.getWorldDirection(xrTmpForward);
+    }
     xrTmpForward.y = 0;
     if (xrTmpForward.lengthSq() < 1e-6) {
-      xrTmpForward.set(Math.sin(orbitYaw), 0, Math.cos(orbitYaw));
+      xrTmpForward.set(0, 0, -1);
     }
     xrTmpForward.normalize();
     xrTmpRight.crossVectors(worldUp, xrTmpForward).normalize();
