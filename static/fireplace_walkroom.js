@@ -2528,8 +2528,8 @@ if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
 function setMoveState(code, value) {
   if (code === 'KeyW' || code === 'ArrowUp') moveState.forward = value;
   if (code === 'KeyS' || code === 'ArrowDown') moveState.back = value;
-  if (code === 'KeyA' || code === 'ArrowLeft') moveState.left = value;
-  if (code === 'KeyD' || code === 'ArrowRight') moveState.right = value;
+  if (code === 'KeyA' || code === 'ArrowLeft') moveState.right = value;
+  if (code === 'KeyD' || code === 'ArrowRight') moveState.left = value;
   if (code === 'KeyQ' || code === 'Space' || code === 'PageUp') moveState.up = value;
   if (code === 'KeyE' || code === 'ControlLeft' || code === 'ControlRight' || code === 'PageDown') moveState.down = value;
   if (code === 'ShiftLeft' || code === 'ShiftRight') moveState.boost = value;
