@@ -435,8 +435,8 @@ document.body.appendChild(renderer.domElement);
 const xrState = {
   active: false,
   baseReferenceSpace: null,
+  currentReferenceSpace: null,
   offsetPosition: new THREE.Vector3(),
-  yawOffset: 0,
   moveSpeed: 2.7,
   boostMultiplier: 2.0,
   turnSpeed: 2.2,
@@ -489,8 +489,8 @@ function initWebXR() {
     session.addEventListener('end', () => {
       xrState.active = false;
       xrState.baseReferenceSpace = null;
+      xrState.currentReferenceSpace = null;
       xrState.offsetPosition.set(0, 0, 0);
-      xrState.yawOffset = 0;
       setBtnState('Enter VR', false);
     });
   };
@@ -512,8 +512,15 @@ function initWebXR() {
       xrState.active = true;
       xrState.baseReferenceSpace = renderer.xr.getReferenceSpace();
       xrState.offsetPosition.set(SPAWN_POSITION[0], SPAWN_POSITION[1], SPAWN_POSITION[2]);
-      xrState.yawOffset = 0;
-      applyXrReferenceSpaceOffset();
+      if (xrState.baseReferenceSpace && typeof XRRigidTransform !== 'undefined') {
+        const initialTransform = new XRRigidTransform({
+          x: xrState.offsetPosition.x,
+          y: xrState.offsetPosition.y,
+          z: xrState.offsetPosition.z,
+        });
+        xrState.currentReferenceSpace = xrState.baseReferenceSpace.getOffsetReferenceSpace(initialTransform);
+        renderer.xr.setReferenceSpace(xrState.currentReferenceSpace);
+      }
       setBtnState('Exit VR', false);
     } catch (_err) {
       setBtnState('Enter VR', false);
@@ -2298,7 +2305,6 @@ const xrTmpRight = new THREE.Vector3();
 const xrTmpWorldPos = new THREE.Vector3();
 const xrTmpQuat = new THREE.Quaternion();
 const xrTmpHeadQuat = new THREE.Quaternion();
-const xrTmpHeadPos = new THREE.Vector3();
 
 function readThumbstickAxes(gamepad) {
   if (!gamepad || !Array.isArray(gamepad.axes) || gamepad.axes.length === 0) return [0, 0];
@@ -2319,22 +2325,11 @@ function readThumbstickAxes(gamepad) {
   return [x, y];
 }
 
-function applyXrReferenceSpaceOffset() {
-  if (!xrState.baseReferenceSpace || typeof XRRigidTransform === 'undefined') return;
-  xrTmpQuat.setFromAxisAngle(worldUp, xrState.yawOffset);
-  const transform = new XRRigidTransform(
-    { x: xrState.offsetPosition.x, y: xrState.offsetPosition.y, z: xrState.offsetPosition.z },
-    { x: xrTmpQuat.x, y: xrTmpQuat.y, z: xrTmpQuat.z, w: xrTmpQuat.w },
-  );
-  const shifted = xrState.baseReferenceSpace.getOffsetReferenceSpace(transform);
-  renderer.xr.setReferenceSpace(shifted);
-}
-
 function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) {
   if (typeof XRRigidTransform === 'undefined') return false;
   if (!xrFrame) return false;
 
-  const currentRef = renderer.xr.getReferenceSpace();
+  const currentRef = xrState.currentReferenceSpace || renderer.xr.getReferenceSpace();
   if (!currentRef) return false;
 
   const pose = xrFrame.getViewerPose(currentRef);
@@ -2362,6 +2357,7 @@ function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) 
     nextRef = nextRef.getOffsetReferenceSpace(moveStep);
   }
 
+  xrState.currentReferenceSpace = nextRef;
   renderer.xr.setReferenceSpace(nextRef);
   return true;
 }
@@ -2412,7 +2408,7 @@ function updateXrControls(dt, xrFrame) {
 
   if (Math.abs(moveX) > 0 || Math.abs(moveY) > 0 || rise !== 0) {
     // Head-relative movement in current XR reference space.
-    const currentRef = renderer.xr.getReferenceSpace();
+    const currentRef = xrState.currentReferenceSpace || renderer.xr.getReferenceSpace();
     const pose = currentRef && xrFrame ? xrFrame.getViewerPose(currentRef) : null;
     if (pose && pose.transform && pose.transform.orientation) {
       const q = pose.transform.orientation;
@@ -2436,27 +2432,16 @@ function updateXrControls(dt, xrFrame) {
     moveDy += rise * speed * dt;
   }
 
-  if (Math.abs(deltaYaw) > 0) {
-    xrCam.getWorldPosition(xrTmpHeadPos);
-    // Pivot yaw around current head position, not world origin.
-    xrState.offsetPosition.sub(xrTmpHeadPos);
-    xrState.yawOffset += deltaYaw;
-    xrState.offsetPosition.add(xrTmpHeadPos);
-    didMove = true;
-  }
+  if (Math.abs(moveDx) > 0 || Math.abs(moveDy) > 0 || Math.abs(moveDz) > 0 || Math.abs(deltaYaw) > 0) {
+    const nextX = THREE.MathUtils.clamp(xrState.offsetPosition.x + moveDx, moveBounds.minX, moveBounds.maxX);
+    const nextY = THREE.MathUtils.clamp(xrState.offsetPosition.y + moveDy, -3, 250);
+    const nextZ = THREE.MathUtils.clamp(xrState.offsetPosition.z + moveDz, moveBounds.minZ, moveBounds.maxZ);
+    const clampedDx = nextX - xrState.offsetPosition.x;
+    const clampedDy = nextY - xrState.offsetPosition.y;
+    const clampedDz = nextZ - xrState.offsetPosition.z;
 
-  if (Math.abs(moveDx) > 0 || Math.abs(moveDy) > 0 || Math.abs(moveDz) > 0) {
-    xrState.offsetPosition.x += moveDx;
-    xrState.offsetPosition.y += moveDy;
-    xrState.offsetPosition.z += moveDz;
-    didMove = true;
-  }
-
-  if (didMove) {
-    xrState.offsetPosition.x = THREE.MathUtils.clamp(xrState.offsetPosition.x, moveBounds.minX, moveBounds.maxX);
-    xrState.offsetPosition.z = THREE.MathUtils.clamp(xrState.offsetPosition.z, moveBounds.minZ, moveBounds.maxZ);
-    xrState.offsetPosition.y = THREE.MathUtils.clamp(xrState.offsetPosition.y, -3, 250);
-    applyXrReferenceSpaceOffset();
+    xrState.offsetPosition.set(nextX, nextY, nextZ);
+    didMove = applyIncrementalXrTransform(clampedDx, clampedDy, clampedDz, deltaYaw, xrFrame);
   }
 
   xrCam.getWorldPosition(xrTmpWorldPos);
@@ -2499,8 +2484,10 @@ function loadSceneAssetEnvironment() {
       const spawnY = SPAWN_POSITION[1];
       const spawnZ = SPAWN_POSITION[2];
       actor.position.set(spawnX, spawnY, spawnZ);
-      camera.position.set(spawnX, spawnY + 2.6, spawnZ + 6.4);
-      camera.lookAt(spawnX, spawnY + 1.0, spawnZ);
+      if (!renderer.xr.isPresenting) {
+        camera.position.set(spawnX, spawnY + 2.6, spawnZ + 6.4);
+        camera.lookAt(spawnX, spawnY + 1.0, spawnZ);
+      }
       orbitDistance = THREE.MathUtils.clamp(Math.max(boxSize.x, boxSize.y, boxSize.z) * 0.14, 5.2, 10.5);
     }
   };
