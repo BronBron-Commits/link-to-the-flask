@@ -511,8 +511,9 @@ function initWebXR() {
       await renderer.xr.setSession(session);
       xrState.active = true;
       xrState.baseReferenceSpace = renderer.xr.getReferenceSpace();
-      xrState.offsetPosition.set(0, 0, 0);
+      xrState.offsetPosition.set(SPAWN_POSITION[0], SPAWN_POSITION[1], SPAWN_POSITION[2]);
       xrState.yawOffset = 0;
+      applyXrReferenceSpaceOffset();
       setBtnState('Exit VR', false);
     } catch (_err) {
       setBtnState('Enter VR', false);
@@ -2297,6 +2298,7 @@ const xrTmpRight = new THREE.Vector3();
 const xrTmpWorldPos = new THREE.Vector3();
 const xrTmpQuat = new THREE.Quaternion();
 const xrTmpHeadQuat = new THREE.Quaternion();
+const xrTmpHeadPos = new THREE.Vector3();
 
 function readThumbstickAxes(gamepad) {
   if (!gamepad || !Array.isArray(gamepad.axes) || gamepad.axes.length === 0) return [0, 0];
@@ -2434,8 +2436,27 @@ function updateXrControls(dt, xrFrame) {
     moveDy += rise * speed * dt;
   }
 
-  if (Math.abs(deltaYaw) > 0 || Math.abs(moveDx) > 0 || Math.abs(moveDy) > 0 || Math.abs(moveDz) > 0) {
-    didMove = applyIncrementalXrTransform(moveDx, moveDy, moveDz, deltaYaw, xrFrame);
+  if (Math.abs(deltaYaw) > 0) {
+    xrCam.getWorldPosition(xrTmpHeadPos);
+    // Pivot yaw around current head position, not world origin.
+    xrState.offsetPosition.sub(xrTmpHeadPos);
+    xrState.yawOffset += deltaYaw;
+    xrState.offsetPosition.add(xrTmpHeadPos);
+    didMove = true;
+  }
+
+  if (Math.abs(moveDx) > 0 || Math.abs(moveDy) > 0 || Math.abs(moveDz) > 0) {
+    xrState.offsetPosition.x += moveDx;
+    xrState.offsetPosition.y += moveDy;
+    xrState.offsetPosition.z += moveDz;
+    didMove = true;
+  }
+
+  if (didMove) {
+    xrState.offsetPosition.x = THREE.MathUtils.clamp(xrState.offsetPosition.x, moveBounds.minX, moveBounds.maxX);
+    xrState.offsetPosition.z = THREE.MathUtils.clamp(xrState.offsetPosition.z, moveBounds.minZ, moveBounds.maxZ);
+    xrState.offsetPosition.y = THREE.MathUtils.clamp(xrState.offsetPosition.y, -3, 250);
+    applyXrReferenceSpaceOffset();
   }
 
   xrCam.getWorldPosition(xrTmpWorldPos);
