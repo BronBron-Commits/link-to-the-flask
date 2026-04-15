@@ -2,6 +2,7 @@ import * as THREE from '/static/three.module.js';
 import { GLTFLoader } from '/static/GLTFLoader.js';
 import { DRACOLoader } from '/static/three-addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from '/static/three-addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from '/static/meshopt_decoder.module.js';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
@@ -687,6 +688,7 @@ worldSceneKtx2Loader.setTranscoderPath('/static/three-addons/libs/basis/');
 worldSceneKtx2Loader.detectSupport(renderer);
 worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
 worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
+worldSceneLoader.setMeshoptDecoder(MeshoptDecoder);
 let worldSceneRoot = null;
 let mapGridOverlayGroup = null;
 const mapSpaceDatabase = {
