@@ -99,6 +99,16 @@ The app will be available at `http://localhost:5000`.
 
 Navigate to `/map3d` to enter the 3D world.
 
+### Open World Asset Optimization
+
+To rebuild the optimized open-world scene asset used by `/map3d` and social room routes:
+
+```bash
+npm run assets:optimize:world
+```
+
+This regenerates `static/everything_optimized_draco.glb` from `static/everything_.gltf` using Draco mesh compression and WebP textures (max 2048px).
+
 ### Parser tests
 
 The PDF parser can be tested independently from the game runtime and rendering engine:

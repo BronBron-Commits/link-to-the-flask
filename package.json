@@ -8,7 +8,8 @@
     "test:coverage": "jest --coverage",
     "test:verbose": "jest --verbose",
     "test:ui": "electron electron-test-runner/main.js",
-    "sim:timeline": "node scripts/generate_timeline_artifact.js"
+    "sim:timeline": "node scripts/generate_timeline_artifact.js",
+    "assets:optimize:world": "npx --yes @gltf-transform/cli optimize static/everything_.gltf static/everything_optimized_draco.glb --compress draco --texture-compress webp --texture-size 2048 --flatten true --instance true --join true --palette true --prune true --resample true --sparse true --weld true --simplify false"
   },
   "devDependencies": {
     "electron": "^31.7.7",

@@ -275,7 +275,7 @@ import { GLTFLoader } from '{{ asset_url("GLTFLoader.js") }}';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
-const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_.gltf") }}';
+const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_optimized_draco.glb") }}';
 
 const selectedCharacterLabelEl = document.getElementById('selected-character');
 const statusEl = document.getElementById('status');
@@ -544,7 +544,7 @@ async function loadModels() {
     previewModel(selectedModelUrl);
   } else {
     enterWorldBtn.disabled = false;
-    setStatus(`Loaded ${models.length} model(s). Open World will use the default everything_.gltf scene for now.`, 'ok');
+    setStatus(`Loaded ${models.length} model(s). Open World will use the default everything_optimized_draco.glb scene for now.`, 'ok');
     previewModel('');
   }
 }

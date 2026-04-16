@@ -166,7 +166,7 @@ const params = new URLSearchParams(window.location.search || '');
 const urlCharacterId = String(params.get('characterId') || '').trim();
 const urlModelUrl = String(params.get('modelUrl') || '').trim();
 const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
-const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_.gltf") }}';
+const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_optimized_draco.glb") }}';
 
 let selectedCharacter = null;
 let selectedModelUrl = '';
@@ -176,7 +176,7 @@ const SCENES = [
   {
     id: 'maridon',
     title: 'Maridon',
-    description: 'Load the current full 3D world scene powered by everything_.gltf.',
+    description: 'Load the current full 3D world scene powered by everything_optimized_draco.glb.',
     target: '/map3d',
     tag: 'Full Scene',
   },

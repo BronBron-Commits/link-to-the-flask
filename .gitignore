@@ -85,6 +85,7 @@ schemas/
 # =========================
 *.bin
 static/*.glb
+!static/everything_optimized_draco.glb
 
 # Runtime-generated uploaded models (very high churn)
 static/user_models/
