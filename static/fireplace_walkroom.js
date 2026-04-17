@@ -37,7 +37,7 @@ const IS_MAP3D_ROUTE = /^\/map3d\/?$/i.test(String(window.location.pathname || '
 
 function resolveSpawnPosition() {
   const fallback = USE_SCENE_ASSET
-    ? (IS_MAP3D_ROUTE ? [-690, 50, 786] : [0, 2, 3])
+    ? (IS_MAP3D_ROUTE ? [0, 0, 0] : [0, 2, 3])
     : [0, 2, 2.1];
 
   const raw = SOCIAL_ROOM_CONFIG.spawnPosition;
