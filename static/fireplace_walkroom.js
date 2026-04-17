@@ -73,25 +73,30 @@ const SCENE_ASSET_PRIMARY_URL = (() => {
   }
   return RESOLVED_SCENE_ASSET_URL;
 })();
+const MAP3D_SCENE_ONLY_MODE = IS_MAP3D_ROUTE;
 const SCENE_ASSET_CANDIDATE_URLS = Array.from(new Set(
-  [
-    SCENE_ASSET_PRIMARY_URL,
-    ...(
-      DISABLE_SCENE_ASSET_FALLBACK
-        ? []
-        : [
-            '/static/everything_optimized_draco.glb',
-            // Avoid legacy 145MB binary fallback on Safari to reduce repeated crash loops.
-            ...(SAFARI_SAFE_MODE ? [] : ['/static/everything_.gltf']),
-          ]
-    ),
-  ].filter(Boolean)
+  (
+    MAP3D_SCENE_ONLY_MODE
+      ? [SCENE_ASSET_PRIMARY_URL]
+      : [
+          SCENE_ASSET_PRIMARY_URL,
+          ...(
+            DISABLE_SCENE_ASSET_FALLBACK
+              ? []
+              : [
+                  '/static/everything_optimized_draco.glb',
+                  // Avoid legacy 145MB binary fallback on Safari to reduce repeated crash loops.
+                  ...(SAFARI_SAFE_MODE ? [] : ['/static/everything_.gltf']),
+                ]
+          ),
+        ]
+  ).filter(Boolean)
 ));
 const ROOM_TITLE = String(SOCIAL_ROOM_CONFIG.roomTitle || 'Social Room').trim() || 'Social Room';
 const USE_SCENE_ASSET = SCENE_ASSET_CANDIDATE_URLS.length > 0;
 const SPAWN_POSITION = resolveSpawnPosition();
 const SINGLE_PLAYER_MODE = Boolean(SOCIAL_ROOM_CONFIG.singlePlayer);
-const FORCE_SPHERE_AVATARS = IS_MAP3D_ROUTE;
+const FORCE_SPHERE_AVATARS = Boolean(SOCIAL_ROOM_CONFIG.forceSphereAvatars);
 
 const hudPlayerEl = document.getElementById('hud-player');
 const nameGateEl = document.getElementById('name-gate');
@@ -1621,6 +1626,7 @@ function createNameplate(text) {
 }
 
 async function ensureRemoteVisual(sid, entry) {
+  if (MAP3D_SCENE_ONLY_MODE) return;
   if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) return;
   let rec = netState.remoteVisuals.get(sid);
   if (!rec) {
@@ -2180,6 +2186,7 @@ function applyImportedRigFallbackAnimation(elapsed, isMoving) {
 }
 
 async function loadSelectedAvatar() {
+  if (MAP3D_SCENE_ONLY_MODE) return;
   if (USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) return;
   if (!selectedModelUrl) return;
   const loader = new GLTFLoader();
