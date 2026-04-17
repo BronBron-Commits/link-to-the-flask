@@ -612,12 +612,21 @@
       async function syncServerSession(accessToken) {
         const token = String(accessToken || '').trim();
         if (!token) return;
+
+        const tokenMarker = `token:${token.slice(0, 24)}`;
+        const alreadySynced = String(sessionStorage.getItem('paraval-auth-sync-token') || '').trim();
+        if (alreadySynced === tokenMarker) {
+          return;
+        }
+
         await fetch('/api/auth/session', {
           method: 'POST',
           credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ accessToken: token }),
         });
+
+        sessionStorage.setItem('paraval-auth-sync-token', tokenMarker);
       }
 
       if (!supabaseUrl || !supabaseAnonKey) {

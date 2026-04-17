@@ -119,7 +119,6 @@ def _fetch_supabase_user(access_token: str) -> tuple[dict | None, str | None]:
     token = str(access_token or "").strip()
     config = _supabase_public_config()
     if not token or not config["url"] or not config["anon_key"]:
-        print(f"[SUPABASE FETCH] missing token or config", flush=True)
         return None, "missing-config-or-token"
     base_url = config["url"].rstrip("/")
     url = f"{base_url}/auth/v1/user"
@@ -128,55 +127,38 @@ def _fetch_supabase_user(access_token: str) -> tuple[dict | None, str | None]:
         "Authorization": f"Bearer {token}",
     }
     
-    print(f"[SUPABASE FETCH] attempting user fetch from {url}", flush=True)
-    
     # Try httpx if available (gevent-friendly)
     if HAS_HTTPX:
         try:
-            print(f"[SUPABASE FETCH] using httpx client with 10s timeout", flush=True)
-            with httpx.Client(verify=True, timeout=10.0) as client:
+            with httpx.Client(verify=True, timeout=6.0) as client:
                 response = client.get(url, headers=headers)
-                print(f"[SUPABASE FETCH] got httpx response: status={response.status_code}", flush=True)
                 if response.status_code != 200:
                     return None, f"supabase-http-{response.status_code}"
                 payload = response.json()
-                print(f"[SUPABASE FETCH] success, user_id={payload.get('id', 'unknown')}", flush=True)
                 return payload, None
         except httpx.TimeoutException:
-            print(f"[SUPABASE FETCH] httpx timeout", flush=True)
             return None, "supabase-timeout"
-        except Exception as exc:
-            print(f"[SUPABASE FETCH] httpx error: {type(exc).__name__}: {exc}", flush=True)
+        except Exception:
             return None, "supabase-network-error"
     
     # Fallback to urllib
-    print(f"[SUPABASE FETCH] httpx not available, using urllib (may hang under gevent)", flush=True)
     req = urllib_request.Request(url, headers=headers, method="GET")
     try:
-        print(f"[SUPABASE FETCH] urllib sending request...", flush=True)
-        with urllib_request.urlopen(req, timeout=10) as response:
-            print(f"[SUPABASE FETCH] urllib got response, reading...", flush=True)
+        with urllib_request.urlopen(req, timeout=6) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except urllib_error.HTTPError as exc:
-        print(f"[SUPABASE FETCH] urllib HTTP error {exc.code}: {exc}", flush=True)
         return None, f"supabase-http-{int(getattr(exc, 'code', 0) or 0)}"
-    except urllib_error.URLError as exc:
-        print(f"[SUPABASE FETCH] urllib URL error (network/DNS): {exc}", flush=True)
+    except urllib_error.URLError:
         return None, "supabase-network-error"
-    except TimeoutError as exc:
-        print(f"[SUPABASE FETCH] urllib timeout waiting for Supabase: {exc}", flush=True)
+    except TimeoutError:
         return None, "supabase-timeout"
-    except json.JSONDecodeError as exc:
-        print(f"[SUPABASE FETCH] urllib invalid JSON from Supabase: {exc}", flush=True)
+    except json.JSONDecodeError:
         return None, "supabase-invalid-json"
-    except OSError as exc:
-        print(f"[SUPABASE FETCH] urllib OS error: {exc}", flush=True)
+    except OSError:
         return None, "supabase-os-error"
 
     if not isinstance(payload, dict):
-        print(f"[SUPABASE FETCH] payload is not dict, got {type(payload)}", flush=True)
         return None, "supabase-invalid-payload"
-    print(f"[SUPABASE FETCH] urllib success, user_id={payload.get('id', 'unknown')}", flush=True)
     return payload, None
 
 
@@ -469,45 +451,40 @@ def auth_me():
 
 @app.route("/api/auth/session", methods=["POST"])
 def auth_session_create():
-    print(f"[AUTH SESSION] request received", flush=True)
     try:
         if not _supabase_is_configured():
-            print(f"[AUTH SESSION] Supabase not configured", flush=True)
             return jsonify(ok=False, error="supabase-not-configured"), 503
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
-            print(f"[AUTH SESSION] invalid payload type", flush=True)
             return jsonify(ok=False, error="invalid-payload"), 400
         access_token = str(payload.get("accessToken") or "").strip()
         if not access_token:
-            print(f"[AUTH SESSION] missing accessToken in payload", flush=True)
             return jsonify(ok=False, error="missing-access-token"), 400
-        print(f"[AUTH SESSION] fetching user from Supabase...", flush=True)
+
+        # Avoid repeated upstream validation for the same token in the same browser session.
+        token_hash = hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+        existing_user = _current_auth_user()
+        existing_hash = str(session.get("auth_token_hash") or "")
+        if existing_user and existing_hash == token_hash:
+            return jsonify(ok=True, authenticated=True, user=existing_user)
+
         user, validation_error = _fetch_supabase_user(access_token)
-        print(f"[AUTH SESSION] _fetch_supabase_user returned: user={bool(user)}, error={validation_error}", flush=True)
         if not user:
             if validation_error == "supabase-http-401":
-                print(f"[AUTH SESSION] invalid token (401)", flush=True)
                 return jsonify(ok=False, error="invalid-supabase-session", detail=validation_error), 401
             if validation_error == "supabase-http-403":
-                print(f"[AUTH SESSION] Supabase key rejected (403)", flush=True)
                 return jsonify(ok=False, error="supabase-key-rejected", detail=validation_error), 502
             if validation_error and validation_error.startswith("supabase-http-"):
-                print(f"[AUTH SESSION] Supabase HTTP error: {validation_error}", flush=True)
                 return jsonify(ok=False, error="supabase-user-fetch-failed", detail=validation_error), 502
             if validation_error in ("supabase-network-error", "supabase-timeout", "supabase-os-error"):
-                print(f"[AUTH SESSION] Supabase unreachable: {validation_error}", flush=True)
                 return jsonify(ok=False, error="supabase-unreachable", detail=validation_error), 502
-            print(f"[AUTH SESSION] Supabase validation error: {validation_error}", flush=True)
             return jsonify(ok=False, error="invalid-supabase-session", detail=validation_error or "unknown"), 401
-        print(f"[AUTH SESSION] user authenticated, storing in session...", flush=True)
+
         session["auth_user"] = _normalize_auth_user(user)
+        session["auth_token_hash"] = token_hash
         # Flask default sessions are cookie-backed; avoid storing large JWTs in cookies.
         session.pop("supabase_access_token", None)
-        print(f"[AUTH SESSION] session stored successfully", flush=True)
-        response_data = jsonify(ok=True, authenticated=True, user=session["auth_user"])
-        print(f"[AUTH SESSION] response created, returning now", flush=True)
-        return response_data
+        return jsonify(ok=True, authenticated=True, user=session["auth_user"])
     except Exception as exc:
         print(f"[AUTH SESSION ERROR] {type(exc).__name__}: {exc}", flush=True)
         return jsonify(ok=False, error="auth-session-internal-error", detail=type(exc).__name__), 500
