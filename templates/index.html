@@ -736,7 +736,9 @@ async function exchangeBackendSession(accessToken) {
 async function syncBackendSessionAndRedirect(sessionLike, statusLabel = 'Signing in...') {
   const token = extractAccessToken(sessionLike);
   if (!token) {
-    setStatus('Sign-in succeeded but access token is missing.', 'error');
+    setStatus('Sign-in succeeded but access token is missing. Sending you to Character Hub...', 'error');
+    renderAccount(normalizeSupabaseUser(sessionLike && sessionLike.user ? sessionLike.user : null));
+    window.location.replace('/hub');
     return false;
   }
 
@@ -751,7 +753,9 @@ async function syncBackendSessionAndRedirect(sessionLike, statusLabel = 'Signing
     if (window.__paravalAuth && typeof window.__paravalAuth === 'object') {
       window.__paravalAuth.lastSessionExchange = { ok: false, at: Date.now(), error: msg };
     }
-    setStatus(`Could not establish server session: ${msg}`, 'error');
+    setStatus(`Could not establish server session: ${msg}. Sending you to Character Hub...`, 'error');
+    renderAccount(normalizeSupabaseUser(sessionLike.user));
+    window.location.replace('/hub');
     return false;
   }
 
