@@ -1099,6 +1099,18 @@
       border-color: #000;
     }
 
+    .layout:not(.focused) {
+      grid-template-columns: 1fr;
+    }
+
+    .layout:not(.focused) .reader-panel {
+      display: none;
+    }
+
+    .layout:not(.focused) .shelf-panel {
+      border-right: 0;
+    }
+
     .layout.focused {
       grid-template-columns: 1fr;
     }
@@ -2659,6 +2671,9 @@ S: Who does? Tidus?
       }
       const index = Number(button.getAttribute('data-index'));
       if (!Number.isNaN(index)) {
+        if (!focusModeEnabled) {
+          setFocusMode(true);
+        }
         renderStory(index);
       }
     });
