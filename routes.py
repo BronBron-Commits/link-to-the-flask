@@ -325,19 +325,24 @@ def _resolve_selectable_pdf(sheet_id: str) -> Path | None:
 def _import_pdf_to_contracts(source_path: Path) -> dict:
     gs.CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
     tables = parse_character_tables(source_path)
-    print("[PDF PARSE OUTPUT]", tables, flush=True)
-
     master = build_master_character_record(tables)
-    print("[MASTER RECORD]", master, flush=True)
-
-    engine_entity = build_engine_entity(master)
     write_outputs(gs.CONTRACTS_DIR, tables)
+    source_meta = master.get("source") if isinstance(master.get("source"), dict) else {}
+    identity = master.get("identity") if isinstance(master.get("identity"), dict) else {}
+    core_stats = master.get("core_stats") if isinstance(master.get("core_stats"), dict) else {}
+    hit_points = master.get("hit_points") if isinstance(master.get("hit_points"), dict) else {}
+    abilities = master.get("abilities") if isinstance(master.get("abilities"), dict) else {}
     return {
         "ok": True,
         "source_file": source_path.name,
         "character": tables.get("character", {}),
-        "master": master,
-        "engine_entity": engine_entity,
+        "master": {
+            "source": source_meta,
+            "identity": identity,
+            "core_stats": core_stats,
+            "hit_points": hit_points,
+            "abilities": abilities,
+        },
     }
 
 
