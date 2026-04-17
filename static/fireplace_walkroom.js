@@ -525,11 +525,11 @@ function initWebXR() {
       const startZ = Number.isFinite(camera.position.z) ? camera.position.z : SPAWN_POSITION[2];
       xrState.offsetPosition.set(startX, startY, startZ);
       if (xrState.baseReferenceSpace && typeof XRRigidTransform !== 'undefined') {
-        const initialTransform = new XRRigidTransform({
-          x: xrState.offsetPosition.x,
-          y: xrState.offsetPosition.y,
-          z: xrState.offsetPosition.z,
-        });
+        const initialTransform = makeReferenceSpaceTranslation(
+          xrState.offsetPosition.x,
+          xrState.offsetPosition.y,
+          xrState.offsetPosition.z,
+        );
         xrState.currentReferenceSpace = xrState.baseReferenceSpace.getOffsetReferenceSpace(initialTransform);
         renderer.xr.setReferenceSpace(xrState.currentReferenceSpace);
       }
@@ -2340,6 +2340,11 @@ function readThumbstickAxes(gamepad) {
   return [x, y];
 }
 
+function makeReferenceSpaceTranslation(x, y, z) {
+  // XR origin offsets are inverse of desired world movement.
+  return new XRRigidTransform({ x: -x, y: -y, z: -z });
+}
+
 function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) {
   if (typeof XRRigidTransform === 'undefined') return false;
   if (!xrFrame) return false;
@@ -2368,7 +2373,7 @@ function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) 
   }
 
   if (Math.abs(deltaX) > 1e-6 || Math.abs(deltaY) > 1e-6 || Math.abs(deltaZ) > 1e-6) {
-    const moveStep = new XRRigidTransform({ x: deltaX, y: deltaY, z: deltaZ });
+    const moveStep = makeReferenceSpaceTranslation(deltaX, deltaY, deltaZ);
     nextRef = nextRef.getOffsetReferenceSpace(moveStep);
   }
 
