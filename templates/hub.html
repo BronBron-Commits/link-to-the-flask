@@ -138,45 +138,84 @@
       font-size: 0.78rem;
     }
 
-    .grid {
+    .hub-layout {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
       gap: 12px;
+      min-height: 480px;
     }
 
-    .card {
+    .list-panel,
+    .detail-panel {
       border: 1px solid rgba(210,175,70,0.15);
       background: rgba(255,255,255,0.03);
       border-radius: 14px;
       padding: 12px;
+      min-height: 0;
+    }
+
+    .list-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .panel-title {
+      color: #bda77a;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .character-list {
+      display: grid;
+      gap: 8px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .list-item {
+      border: 1px solid rgba(210,175,70,0.15);
+      background: rgba(255,255,255,0.02);
+      border-radius: 12px;
+      padding: 10px 12px;
       cursor: pointer;
       transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
     }
 
-    .card:hover {
+    .list-item:hover {
       border-color: rgba(210,175,70,0.38);
       transform: translateY(-2px);
       box-shadow: 0 10px 24px rgba(0,0,0,0.32);
     }
 
-    .card.selected {
+    .list-item.selected {
       border-color: rgba(210,175,70,0.72);
       box-shadow: 0 0 0 2px rgba(210,175,70,0.2);
     }
 
-    .card h3 {
+    .list-item h3 {
       color: #e8d898;
-      font-size: 0.95rem;
-      margin-bottom: 6px;
+      font-size: 0.88rem;
+      margin-bottom: 4px;
       letter-spacing: 0.06em;
     }
 
-    .card-head {
+    .list-head,
+    .detail-head {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 10px;
+    }
+
+    .list-summary {
+      color: #9e937c;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.72rem;
+      line-height: 1.45;
     }
 
     .card-badge {
@@ -192,9 +231,32 @@
       background: rgba(255,255,255,0.04);
     }
 
-    .card-specs {
+    .detail-panel {
       display: grid;
-      gap: 7px;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .detail-title {
+      color: #f1dfaa;
+      font-size: 1.18rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .detail-subtitle {
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.76rem;
+      line-height: 1.45;
+    }
+
+    .detail-specs {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      overflow: auto;
+      padding-right: 4px;
     }
 
     .spec-row {
@@ -218,6 +280,20 @@
       font-size: 0.75rem;
       line-height: 1.45;
       word-break: break-word;
+    }
+
+    @media (max-width: 820px) {
+      .hub-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .list-panel {
+        grid-template-rows: auto auto;
+      }
+
+      .character-list {
+        max-height: 240px;
+      }
     }
 
     .meta {
@@ -264,7 +340,13 @@
       <button id="pdf-upload-btn" class="btn" type="button">Upload PDF</button>
     </div>
     <div class="upload-note">Upload a character sheet PDF here. If Supabase table characters is missing, the hub falls back to uploaded sheets.</div>
-    <div id="character-grid" class="grid"></div>
+    <div class="hub-layout">
+      <aside class="list-panel">
+        <div class="panel-title">Characters</div>
+        <div id="character-list" class="character-list"></div>
+      </aside>
+      <section id="character-detail" class="detail-panel"></section>
+    </div>
   </section>
 </div>
 
@@ -301,7 +383,8 @@ const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
 const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
 const whoamiEl = document.getElementById('whoami');
 const statusEl = document.getElementById('status');
-const gridEl = document.getElementById('character-grid');
+const listEl = document.getElementById('character-list');
+const detailEl = document.getElementById('character-detail');
 const refreshBtn = document.getElementById('refresh-btn');
 const enterWorldBtn = document.getElementById('enter-world-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
@@ -311,6 +394,7 @@ const pdfUploadBtn = document.getElementById('pdf-upload-btn');
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
 let selectedCharacter = null;
+let currentEntries = [];
 
 function setStatus(msg, tone = '') {
   statusEl.textContent = msg;
@@ -355,27 +439,36 @@ function buildSpecRows(entries) {
         </div>`).join('');
 }
 
-function renderCharacters(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    gridEl.innerHTML = '<div class="empty">No characters found yet. You can still enter with a temporary character and upload a PDF later.</div>';
-    enterWorldBtn.disabled = false;
-    setStatus('No character sheet yet. Enter World to continue with a temporary character.', 'ok');
-    return;
-  }
-  gridEl.innerHTML = rows.map((row, idx) => {
-    const metadata = normalizeMetadata(row);
-    const id = String(row.id || row.character_id || `character-${idx + 1}`);
-    const name = row.name || row.character_name || row.title || `Character ${idx + 1}`;
-    const level = row.level ?? row.character_level ?? '-';
-    const cls = row.class || row.class_name || '-';
-    const species = row.species || row.race || '-';
-    const updated = row.updated_at || row.created_at || '-';
-    const source = row.source || metadata.source || 'character-record';
-    const sheetId = row.sheet_id || row.character_id || metadata.sheet_id || '-';
-    const originFile = metadata.source_file || metadata.file_name || metadata.filename || '-';
-    const parsedAt = metadata.parsed_at_utc || metadata.imported_at || '';
-    const selected = selectedCharacter && String(selectedCharacter.id || '') === id;
-    const specRows = buildSpecRows([
+function renderDetailPlaceholder(message) {
+  detailEl.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">Character Details</div>
+        <div class="detail-subtitle">Select a character from the left to inspect full specs.</div>
+      </div>
+    </div>
+    <div class="empty">${escapeHtml(message)}</div>
+  `;
+}
+
+function createCharacterEntry(row, idx) {
+  const metadata = normalizeMetadata(row);
+  const id = String(row.id || row.character_id || `character-${idx + 1}`);
+  const name = row.name || row.character_name || row.title || `Character ${idx + 1}`;
+  const level = row.level ?? row.character_level ?? '-';
+  const cls = row.class || row.class_name || '-';
+  const species = row.species || row.race || '-';
+  const updated = row.updated_at || row.created_at || '-';
+  const source = row.source || metadata.source || 'character-record';
+  const sheetId = row.sheet_id || row.character_id || metadata.sheet_id || '-';
+  const originFile = metadata.source_file || metadata.file_name || metadata.filename || '-';
+  const parsedAt = metadata.parsed_at_utc || metadata.imported_at || '';
+  return {
+    id,
+    name,
+    badge: formatValue(source, 'record'),
+    summary: `${formatValue(cls)} · ${formatValue(species)} · Level ${formatValue(level)}`,
+    specs: [
       { label: 'Class', value: formatValue(cls) },
       { label: 'Species', value: formatValue(species) },
       { label: 'Level', value: formatValue(level) },
@@ -384,87 +477,116 @@ function renderCharacters(rows) {
       { label: 'File', value: formatValue(originFile) },
       { label: 'Updated', value: formatTimestamp(updated) },
       { label: 'Parsed', value: formatTimestamp(parsedAt) },
-    ]);
-    return `
-      <article class="card ${selected ? 'selected' : ''}" data-character-id="${escapeHtml(id)}" data-character-name="${escapeHtml(name)}">
-        <div class="card-head">
-          <h3>${escapeHtml(name)}</h3>
-          <div class="card-badge">${escapeHtml(formatValue(source, 'record'))}</div>
-        </div>
-        <div class="card-specs">${specRows}</div>
-      </article>
-    `;
-  }).join('');
-
-  const cards = gridEl.querySelectorAll('.card[data-character-id]');
-  cards.forEach((card) => {
-    card.addEventListener('click', () => {
-      const id = String(card.getAttribute('data-character-id') || '').trim();
-      const name = String(card.getAttribute('data-character-name') || '').trim();
-      if (!id) return;
-      selectedCharacter = { id, name };
-      localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
-      cards.forEach((el) => el.classList.remove('selected'));
-      card.classList.add('selected');
-      enterWorldBtn.disabled = false;
-      setStatus(`Selected ${name || id}. Click Enter World to play as this character.`, 'ok');
-    });
-  });
-
-  if (selectedCharacter && selectedCharacter.id) {
-    enterWorldBtn.disabled = false;
-  }
+    ],
+  };
 }
 
-function renderSheetCharacters(rows) {
-  if (!Array.isArray(rows) || rows.length === 0) {
-    gridEl.innerHTML = '<div class="empty">No uploaded character sheets found yet. You can still enter with a temporary character and come back later.</div>';
-    enterWorldBtn.disabled = false;
-    setStatus('No uploaded sheets found. Enter World to continue with a temporary character.', 'ok');
-    return;
-  }
-  gridEl.innerHTML = rows.map((row, idx) => {
-    const name = row.label || row.filename || `Sheet ${idx + 1}`;
-    const id = String(row.sheetId || row.filename || `sheet-${idx + 1}`);
-    const source = row.source || '-';
-    const rel = row.relativePath || row.filename || '-';
-    const filename = row.filename || '-';
-    const selected = selectedCharacter && String(selectedCharacter.id || '') === id;
-    const specRows = buildSpecRows([
+function createSheetEntry(row, idx) {
+  const name = row.label || row.filename || `Sheet ${idx + 1}`;
+  const id = String(row.sheetId || row.filename || `sheet-${idx + 1}`);
+  const source = row.source || '-';
+  const rel = row.relativePath || row.filename || '-';
+  const filename = row.filename || '-';
+  return {
+    id,
+    name,
+    badge: 'sheet',
+    summary: `${formatValue(source)} · ${formatValue(filename)}`,
+    specs: [
       { label: 'Source', value: formatValue(source) },
       { label: 'File', value: formatValue(filename) },
       { label: 'Path', value: formatValue(rel) },
       { label: 'Sheet ID', value: formatValue(id) },
-    ]);
+    ],
+  };
+}
+
+function renderSelectedEntry(entry) {
+  if (!entry) {
+    renderDetailPlaceholder('No character details are available yet.');
+    return;
+  }
+  detailEl.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">${escapeHtml(entry.name)}</div>
+        <div class="detail-subtitle">${escapeHtml(entry.summary)}</div>
+      </div>
+      <div class="card-badge">${escapeHtml(entry.badge)}</div>
+    </div>
+    <div class="panel-title">Full Specs</div>
+    <div class="detail-specs">${buildSpecRows(entry.specs)}</div>
+  `;
+}
+
+function selectEntry(entryId, shouldFocusStatus = true) {
+  const entry = currentEntries.find((item) => String(item.id) === String(entryId));
+  if (!entry) {
+    return;
+  }
+  selectedCharacter = { id: entry.id, name: entry.name };
+  localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
+  listEl.querySelectorAll('.list-item[data-character-id]').forEach((item) => {
+    item.classList.toggle('selected', String(item.getAttribute('data-character-id')) === String(entry.id));
+  });
+  enterWorldBtn.disabled = false;
+  renderSelectedEntry(entry);
+  if (shouldFocusStatus) {
+    setStatus(`Selected ${entry.name || entry.id}. Click Enter World to play as this character.`, 'ok');
+  }
+}
+
+function renderEntryList(entries, emptyMessage, statusMessage) {
+  currentEntries = Array.isArray(entries) ? entries : [];
+  if (!currentEntries.length) {
+    listEl.innerHTML = `<div class="empty">${escapeHtml(emptyMessage)}</div>`;
+    renderDetailPlaceholder(emptyMessage);
+    enterWorldBtn.disabled = false;
+    setStatus(statusMessage, 'ok');
+    return;
+  }
+
+  listEl.innerHTML = currentEntries.map((entry) => {
+    const selected = selectedCharacter && String(selectedCharacter.id || '') === String(entry.id);
     return `
-      <article class="card ${selected ? 'selected' : ''}" data-character-id="${escapeHtml(id)}" data-character-name="${escapeHtml(name)}">
-        <div class="card-head">
-          <h3>${escapeHtml(name)}</h3>
-          <div class="card-badge">sheet</div>
+      <article class="list-item ${selected ? 'selected' : ''}" data-character-id="${escapeHtml(entry.id)}">
+        <div class="list-head">
+          <h3>${escapeHtml(entry.name)}</h3>
+          <div class="card-badge">${escapeHtml(entry.badge)}</div>
         </div>
-        <div class="card-specs">${specRows}</div>
+        <div class="list-summary">${escapeHtml(entry.summary)}</div>
       </article>
     `;
   }).join('');
 
-  const cards = gridEl.querySelectorAll('.card[data-character-id]');
-  cards.forEach((card) => {
-    card.addEventListener('click', () => {
-      const id = String(card.getAttribute('data-character-id') || '').trim();
-      const name = String(card.getAttribute('data-character-name') || '').trim();
+  listEl.querySelectorAll('.list-item[data-character-id]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const id = String(item.getAttribute('data-character-id') || '').trim();
       if (!id) return;
-      selectedCharacter = { id, name };
-      localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
-      cards.forEach((el) => el.classList.remove('selected'));
-      card.classList.add('selected');
-      enterWorldBtn.disabled = false;
-      setStatus(`Selected ${name || id}. Click Enter World to play as this character.`, 'ok');
+      selectEntry(id, true);
     });
   });
 
-  if (selectedCharacter && selectedCharacter.id) {
-    enterWorldBtn.disabled = false;
-  }
+  const preferredId = selectedCharacter && selectedCharacter.id ? String(selectedCharacter.id) : String(currentEntries[0].id);
+  selectEntry(preferredId, false);
+}
+
+function renderCharacters(rows) {
+  const entries = Array.isArray(rows) ? rows.map(createCharacterEntry) : [];
+  renderEntryList(
+    entries,
+    'No characters found yet. You can still enter with a temporary character and upload a PDF later.',
+    'No character sheet yet. Enter World to continue with a temporary character.'
+  );
+}
+
+function renderSheetCharacters(rows) {
+  const entries = Array.isArray(rows) ? rows.map(createSheetEntry) : [];
+  renderEntryList(
+    entries,
+    'No uploaded character sheets found yet. You can still enter with a temporary character and come back later.',
+    'No uploaded sheets found. Enter World to continue with a temporary character.'
+  );
 }
 
 async function boot() {
