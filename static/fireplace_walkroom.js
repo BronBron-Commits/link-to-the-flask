@@ -447,6 +447,8 @@ const xrState = {
   boostMultiplier: 2.0,
   turnSpeed: 2.2,
   deadZone: 0.18,
+  minY: -500,
+  maxY: 5000,
 };
 
 function initWebXR() {
@@ -517,7 +519,11 @@ function initWebXR() {
       await renderer.xr.setSession(session);
       xrState.active = true;
       xrState.baseReferenceSpace = renderer.xr.getReferenceSpace();
-      xrState.offsetPosition.set(SPAWN_POSITION[0], SPAWN_POSITION[1], SPAWN_POSITION[2]);
+      // Start VR where the user currently is, so entering VR does not drop below large scenes.
+      const startX = Number.isFinite(camera.position.x) ? camera.position.x : SPAWN_POSITION[0];
+      const startY = Number.isFinite(camera.position.y) ? camera.position.y : SPAWN_POSITION[1];
+      const startZ = Number.isFinite(camera.position.z) ? camera.position.z : SPAWN_POSITION[2];
+      xrState.offsetPosition.set(startX, startY, startZ);
       if (xrState.baseReferenceSpace && typeof XRRigidTransform !== 'undefined') {
         const initialTransform = new XRRigidTransform({
           x: xrState.offsetPosition.x,
@@ -2443,7 +2449,7 @@ function updateXrControls(dt, xrFrame) {
 
   if (Math.abs(moveDx) > 0 || Math.abs(moveDy) > 0 || Math.abs(moveDz) > 0 || Math.abs(deltaYaw) > 0) {
     const nextX = THREE.MathUtils.clamp(xrState.offsetPosition.x + moveDx, moveBounds.minX, moveBounds.maxX);
-    const nextY = THREE.MathUtils.clamp(xrState.offsetPosition.y + moveDy, -3, 250);
+    const nextY = THREE.MathUtils.clamp(xrState.offsetPosition.y + moveDy, xrState.minY, xrState.maxY);
     const nextZ = THREE.MathUtils.clamp(xrState.offsetPosition.z + moveDz, moveBounds.minZ, moveBounds.maxZ);
     const clampedDx = nextX - xrState.offsetPosition.x;
     const clampedDy = nextY - xrState.offsetPosition.y;
