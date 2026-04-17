@@ -365,6 +365,17 @@ def hub():
     )
 
 
+@app.route("/account-hub")
+def account_hub():
+    user = _current_auth_user()
+    if not user:
+        return redirect("/")
+    return render_template(
+        "account_hub.html",
+        auth_user=user,
+    )
+
+
 @app.route("/model-select")
 def model_select():
     cfg = _supabase_public_config()

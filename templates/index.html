@@ -866,10 +866,10 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
         return;
       }
 
-      console.log('[SIGN IN] sign-in succeeded, redirecting to /hub');
+      console.log('[SIGN IN] sign-in succeeded, redirecting to /account-hub');
       renderAccount(normalizeSupabaseUser(session.user));
       setStatus('Signed in successfully.', 'success');
-      window.location.replace('/hub');
+      window.location.replace('/account-hub');
     } catch (error) {
       console.log('[SIGN IN] exchange failed:', error.message);
       const msg = String(error && error.message ? error.message : error);
@@ -920,7 +920,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
         const result = await supabase.auth.signInWithOAuth({
           provider: 'discord',
           options: {
-            redirectTo: `${window.location.origin}/hub`,
+            redirectTo: `${window.location.origin}/account-hub`,
             skipBrowserRedirect: true,
           },
         });
@@ -997,7 +997,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
         const result = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: `${window.location.origin}/hub`,
+            redirectTo: `${window.location.origin}/account-hub`,
           },
         });
         if (result.error) {
@@ -1044,7 +1044,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     if (result.data.session) {
       try {
         renderAccount(normalizeSupabaseUser(result.data.session.user));
-        window.location.replace('/hub');
+        window.location.replace('/account-hub');
       } catch (error) {
         setStatus(`Sign-up flow failed: ${error.message}`, 'error');
       }
@@ -1121,13 +1121,13 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       return;
     }
     renderAccount(normalizeSupabaseUser(session.user));
-    window.location.replace('/hub');
+    window.location.replace('/account-hub');
   });
 
   const current = await supabase.auth.getSession();
   if (current.data.session) {
     renderAccount(normalizeSupabaseUser(current.data.session.user));
-    window.location.replace('/hub');
+    window.location.replace('/account-hub');
   }
   }
 }
