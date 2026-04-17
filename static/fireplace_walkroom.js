@@ -449,7 +449,27 @@ const xrState = {
   deadZone: 0.18,
   minY: -500,
   maxY: 5000,
+  restorePixelRatio: Math.min(window.devicePixelRatio || 1, SAFARI_SAFE_MODE ? 1.25 : 2),
+  restoreShadows: renderer.shadowMap.enabled,
 };
+
+function applyXrPerformanceMode(enabled) {
+  if (enabled) {
+    // Quest headsets drop frames quickly on large scenes; prioritize stable framerate in XR.
+    renderer.setPixelRatio(1);
+    renderer.shadowMap.enabled = false;
+    if (renderer.xr && typeof renderer.xr.setFoveation === 'function') {
+      renderer.xr.setFoveation(1.0);
+    }
+    return;
+  }
+
+  renderer.setPixelRatio(xrState.restorePixelRatio);
+  renderer.shadowMap.enabled = xrState.restoreShadows;
+  if (renderer.xr && typeof renderer.xr.setFoveation === 'function') {
+    renderer.xr.setFoveation(0.5);
+  }
+}
 
 function initWebXR() {
   if (!ENABLE_WEBXR) return;
@@ -499,6 +519,7 @@ function initWebXR() {
       xrState.baseReferenceSpace = null;
       xrState.currentReferenceSpace = null;
       xrState.offsetPosition.set(0, 0, 0);
+      applyXrPerformanceMode(false);
       setBtnState('Enter VR', false);
     });
   };
@@ -518,6 +539,7 @@ function initWebXR() {
       attachSessionListeners(session);
       await renderer.xr.setSession(session);
       xrState.active = true;
+      applyXrPerformanceMode(true);
       xrState.baseReferenceSpace = renderer.xr.getReferenceSpace();
       // Start VR where the user currently is, so entering VR does not drop below large scenes.
       const startX = Number.isFinite(camera.position.x) ? camera.position.x : SPAWN_POSITION[0];
