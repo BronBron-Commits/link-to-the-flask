@@ -263,6 +263,59 @@
       padding-right: 4px;
     }
 
+    .detail-section {
+      display: grid;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.12);
+      background: rgba(255,255,255,0.025);
+    }
+
+    .detail-section-title {
+      color: #bda77a;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .ability-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+      gap: 10px;
+    }
+
+    .ability-card {
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.14);
+      background: rgba(255,255,255,0.03);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+    }
+
+    .ability-name {
+      color: #f0dfa0;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .ability-score {
+      color: #fff3c6;
+      font-size: 1.15rem;
+      letter-spacing: 0.04em;
+    }
+
+    .ability-meta {
+      color: #ac9f85;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.71rem;
+      line-height: 1.4;
+    }
+
     .spec-row {
       display: grid;
       grid-template-columns: 88px minmax(0, 1fr);
@@ -431,8 +484,20 @@ function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
+function formatSignedNumber(value, fallback = '-') {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return numeric >= 0 ? `+${numeric}` : String(numeric);
+}
+
 function normalizeMetadata(row) {
   return row && row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+}
+
+function normalizeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
 function buildSpecRows(entries) {
@@ -441,6 +506,42 @@ function buildSpecRows(entries) {
           <div class="spec-label">${escapeHtml(label)}</div>
           <div class="spec-value">${escapeHtml(value)}</div>
         </div>`).join('');
+}
+
+function buildDetailSection(title, rows) {
+  return `
+    <section class="detail-section">
+      <div class="detail-section-title">${escapeHtml(title)}</div>
+      ${buildSpecRows(rows)}
+    </section>
+  `;
+}
+
+function buildAbilitySection(abilities) {
+  const order = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+  const cards = order.map((key) => {
+    const ability = normalizeObject(abilities[key]);
+    const score = formatValue(ability.score, '-');
+    const modifier = formatSignedNumber(ability.modifier);
+    const saveBonus = formatSignedNumber(ability.save_bonus);
+    const saveProficient = ability.save_proficient ? 'Yes' : 'No';
+    return `
+      <article class="ability-card">
+        <div class="ability-name">${escapeHtml(key)}</div>
+        <div class="ability-score">${escapeHtml(score)}</div>
+        <div class="ability-meta">Mod ${escapeHtml(modifier)}</div>
+        <div class="ability-meta">Save ${escapeHtml(saveBonus)}</div>
+        <div class="ability-meta">Save Proficient: ${escapeHtml(saveProficient)}</div>
+      </article>
+    `;
+  }).join('');
+
+  return `
+    <section class="detail-section">
+      <div class="detail-section-title">Ability Scores</div>
+      <div class="ability-grid">${cards}</div>
+    </section>
+  `;
 }
 
 function renderDetailPlaceholder(message) {
@@ -457,6 +558,9 @@ function renderDetailPlaceholder(message) {
 
 function createCharacterEntry(row, idx) {
   const metadata = normalizeMetadata(row);
+  const coreStats = normalizeObject(metadata.core_stats);
+  const hitPoints = normalizeObject(metadata.hit_points);
+  const abilities = normalizeObject(metadata.abilities);
   const id = String(row.id || row.character_id || `character-${idx + 1}`);
   const name = row.name || row.character_name || row.title || `Character ${idx + 1}`;
   const level = row.level ?? row.character_level ?? '-';
@@ -467,12 +571,8 @@ function createCharacterEntry(row, idx) {
   const sheetId = row.sheet_id || row.character_id || metadata.sheet_id || '-';
   const originFile = metadata.source_file || metadata.file_name || metadata.filename || '-';
   const parsedAt = metadata.parsed_at_utc || metadata.imported_at || '';
-  return {
-    id,
-    name,
-    badge: formatValue(source, 'record'),
-    summary: `${formatValue(cls)} · ${formatValue(species)} · Level ${formatValue(level)}`,
-    specs: [
+  const sections = [
+    buildDetailSection('Overview', [
       { label: 'Class', value: formatValue(cls) },
       { label: 'Species', value: formatValue(species) },
       { label: 'Level', value: formatValue(level) },
@@ -481,7 +581,36 @@ function createCharacterEntry(row, idx) {
       { label: 'File', value: formatValue(originFile) },
       { label: 'Updated', value: formatTimestamp(updated) },
       { label: 'Parsed', value: formatTimestamp(parsedAt) },
-    ],
+    ]),
+  ];
+
+  if (Object.keys(coreStats).length || Object.keys(hitPoints).length) {
+    sections.push(buildDetailSection('Core Stats', [
+      { label: 'Armor Class', value: formatValue(coreStats.armor_class) },
+      { label: 'Initiative', value: formatSignedNumber(coreStats.initiative_bonus) },
+      { label: 'Speed', value: coreStats.speed_ft ? `${coreStats.speed_ft} ft` : '-' },
+      { label: 'Proficiency', value: formatSignedNumber(coreStats.proficiency_bonus) },
+      { label: 'Passive Per.', value: formatValue(coreStats.passive_perception) },
+      { label: 'Passive Ins.', value: formatValue(coreStats.passive_insight) },
+      { label: 'Passive Inv.', value: formatValue(coreStats.passive_investigation) },
+      { label: 'Save DC', value: formatValue(coreStats.ability_save_dc) },
+      { label: 'Max HP', value: formatValue(hitPoints.max_hp) },
+      { label: 'Current HP', value: formatValue(hitPoints.current_hp) },
+      { label: 'Temp HP', value: formatValue(hitPoints.temp_hp) },
+      { label: 'Hit Dice', value: formatValue(hitPoints.hit_dice) },
+    ]));
+  }
+
+  if (Object.keys(abilities).length) {
+    sections.push(buildAbilitySection(abilities));
+  }
+
+  return {
+    id,
+    name,
+    badge: formatValue(source, 'record'),
+    summary: `${formatValue(cls)} · ${formatValue(species)} · Level ${formatValue(level)}`,
+    sections,
   };
 }
 
@@ -496,11 +625,13 @@ function createSheetEntry(row, idx) {
     name,
     badge: 'sheet',
     summary: `${formatValue(source)} · ${formatValue(filename)}`,
-    specs: [
-      { label: 'Source', value: formatValue(source) },
-      { label: 'File', value: formatValue(filename) },
-      { label: 'Path', value: formatValue(rel) },
-      { label: 'Sheet ID', value: formatValue(id) },
+    sections: [
+      buildDetailSection('Overview', [
+        { label: 'Source', value: formatValue(source) },
+        { label: 'File', value: formatValue(filename) },
+        { label: 'Path', value: formatValue(rel) },
+        { label: 'Sheet ID', value: formatValue(id) },
+      ]),
     ],
   };
 }
@@ -519,7 +650,7 @@ function renderSelectedEntry(entry) {
       <div class="card-badge">${escapeHtml(entry.badge)}</div>
     </div>
     <div class="panel-title">Full Specs</div>
-    <div class="detail-specs">${buildSpecRows(entry.specs)}</div>
+    <div class="detail-specs">${Array.isArray(entry.sections) ? entry.sections.join('') : ''}</div>
   `;
 }
 
@@ -710,6 +841,9 @@ async function boot() {
       metadata: {
         source_file: String(parsedPayload.source_file || uploadedFileName || '').trim() || null,
         parsed_at_utc: new Date().toISOString(),
+        core_stats: parsedPayload && parsedPayload.master ? parsedPayload.master.core_stats || null : null,
+        hit_points: parsedPayload && parsedPayload.master ? parsedPayload.master.hit_points || null : null,
+        abilities: parsedPayload && parsedPayload.master ? parsedPayload.master.abilities || null : null,
       },
     };
 
