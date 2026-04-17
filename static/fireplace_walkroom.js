@@ -468,6 +468,7 @@ function applyXrPerformanceMode(enabled) {
     return;
   }
 
+  resetVrLodVisibility();
   renderer.setPixelRatio(xrState.restorePixelRatio);
   renderer.shadowMap.enabled = xrState.restoreShadows;
   if (renderer.xr && typeof renderer.xr.setFoveation === 'function') {
@@ -729,6 +730,111 @@ worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
 worldSceneLoader.setMeshoptDecoder(MeshoptDecoder);
 let worldSceneRoot = null;
 let mapGridOverlayGroup = null;
+const vrLodState = {
+  entries: [],
+  enabled: true,
+  updateIntervalSec: 0.12,
+  lastUpdateSec: -Infinity,
+  cameraPos: new THREE.Vector3(),
+};
+
+function resetVrLodVisibility() {
+  if (!vrLodState.entries.length) return;
+  for (const entry of vrLodState.entries) {
+    if (!entry || !entry.mesh) continue;
+    entry.mesh.visible = entry.baseVisible;
+  }
+}
+
+function resolveVrLodProfile(triCount, radius) {
+  if (triCount <= 900 && radius <= 0.8) {
+    return {
+      fullDetailDistance: 18,
+      cullDistance: 34,
+    };
+  }
+  if (triCount <= 5500 && radius <= 2.4) {
+    return {
+      fullDetailDistance: 28,
+      cullDistance: 58,
+    };
+  }
+  if (triCount <= 22000 && radius <= 7.5) {
+    return {
+      fullDetailDistance: 46,
+      cullDistance: 88,
+    };
+  }
+  return {
+    fullDetailDistance: 76,
+    cullDistance: 140,
+  };
+}
+
+function buildVrLodIndex(root) {
+  vrLodState.entries = [];
+  if (!root) return;
+
+  root.updateMatrixWorld(true);
+  root.traverse((child) => {
+    if (!child || !child.isMesh || !child.geometry) return;
+
+    child.frustumCulled = true;
+    const geometry = child.geometry;
+    if (!geometry.boundingSphere) {
+      geometry.computeBoundingSphere();
+    }
+
+    const sphere = geometry.boundingSphere;
+    if (!sphere || !Number.isFinite(sphere.radius) || sphere.radius <= 0) return;
+
+    const triCount = geometry.index
+      ? Math.floor(geometry.index.count / 3)
+      : Math.floor((geometry.attributes.position ? geometry.attributes.position.count : 0) / 3);
+    if (!Number.isFinite(triCount) || triCount <= 0) return;
+
+    const worldCenter = sphere.center.clone().applyMatrix4(child.matrixWorld);
+    const worldRadius = sphere.radius * child.matrixWorld.getMaxScaleOnAxis();
+    const profile = resolveVrLodProfile(triCount, worldRadius);
+    vrLodState.entries.push({
+      mesh: child,
+      center: worldCenter,
+      radius: worldRadius,
+      baseVisible: child.visible,
+      fullDetailDistance: profile.fullDetailDistance,
+      cullDistance: profile.cullDistance,
+      hasReducedDetail: false,
+    });
+  });
+}
+
+function updateVrLodVisibility(elapsedSec) {
+  if (!vrLodState.enabled || !renderer.xr.isPresenting || !USE_SCENE_ASSET) return;
+  if (!vrLodState.entries.length) return;
+  if (elapsedSec - vrLodState.lastUpdateSec < vrLodState.updateIntervalSec) return;
+  vrLodState.lastUpdateSec = elapsedSec;
+
+  renderer.xr.getCamera(camera).getWorldPosition(vrLodState.cameraPos);
+
+  for (const entry of vrLodState.entries) {
+    const mesh = entry.mesh;
+    if (!mesh) continue;
+
+    const dx = entry.center.x - vrLodState.cameraPos.x;
+    const dy = entry.center.y - vrLodState.cameraPos.y;
+    const dz = entry.center.z - vrLodState.cameraPos.z;
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz) - entry.radius;
+    const shouldCull = distance > entry.cullDistance;
+    const shouldShow = entry.baseVisible && !shouldCull;
+    if (mesh.visible !== shouldShow) {
+      mesh.visible = shouldShow;
+    }
+
+    // LOD tiering: farther meshes keep rendering but with less expensive distance updates.
+    entry.hasReducedDetail = distance > entry.fullDetailDistance;
+  }
+}
+
 const mapSpaceDatabase = {
   cellSize: MAP_GRID_CELL_SIZE,
   spaces: [],
@@ -2522,6 +2628,7 @@ function loadSceneAssetEnvironment() {
     const layout = recenterSceneAsset(root);
     scene.add(root);
     worldSceneRoot = root;
+    buildVrLodIndex(root);
     buildMapGridOverlay(root);
 
     if (layout && layout.size && layout.box) {
@@ -2936,6 +3043,8 @@ function updateCamera(dt) {
 function animateFrame(_time, xrFrame) {
   const dt = Math.min(clock.getDelta(), 0.05);
   const elapsed = clock.elapsedTime;
+
+  updateVrLodVisibility(elapsed);
 
   if (fireGlow && flameCore && flameOuter) {
     fireGlow.intensity = 2.65 + Math.sin(elapsed * 6.8) * 0.34 + Math.sin(elapsed * 10.4) * 0.2;
