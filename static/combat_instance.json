@@ -1,10 +1,10 @@
 {
-  "character_id": "b2fc3bd0ec2046d29b2a660eb1a4f71d",
+  "character_id": "6f3f990b7a7148f0b46cb16262321c7f",
   "hit_points": {
-    "max_hp": 25,
-    "current_hp": 25,
+    "max_hp": 18,
+    "current_hp": 18,
     "temp_hp": null,
-    "hit_dice": "3d10",
+    "hit_dice": "3d8",
     "death_saves": {
       "successes": null,
       "failures": null
@@ -22,34 +22,24 @@
   },
   "feature_uses": [
     {
-      "id": "fuse_001_feature_use",
-      "feature_name": null,
-      "max_uses": 2,
+      "id": "fuse_001_magical_cunning_phb_2024_154",
+      "feature_name": "Magical Cunning \u2022 PHB-2024 154",
+      "max_uses": 1,
       "uses_spent": 0,
-      "uses_remaining": 2,
-      "recharge": "Long Rest"
-    },
-    {
-      "id": "fuse_002_feature_use",
-      "feature_name": null,
-      "max_uses": 15,
-      "uses_spent": 0,
-      "uses_remaining": 15,
-      "recharge": "Long Rest"
-    },
-    {
-      "id": "fuse_003_feature_use",
-      "feature_name": null,
-      "max_uses": 2,
-      "uses_spent": 0,
-      "uses_remaining": 2,
+      "uses_remaining": 1,
       "recharge": "Long Rest"
     }
   ],
   "equipment": {
-    "equipped_item_ids": [],
+    "equipped_item_ids": [
+      "itm_002_dagger",
+      "itm_003_sickle"
+    ],
     "equipped_armor": null,
-    "equipped_weapons": [],
+    "equipped_weapons": [
+      "Dagger",
+      "Sickle"
+    ],
     "ac_sources": []
   },
   "advantage_state": {
@@ -61,7 +51,7 @@
   "rest_state": {
     "short_rests_taken": 0,
     "long_rest_available": true,
-    "hit_dice_remaining": "3d10"
+    "hit_dice_remaining": "3d8"
   },
   "combat_state": {
     "in_combat": false,
@@ -73,9 +63,20 @@
     "global_disadvantage": false
   },
   "render_registry_binding": {
-    "entity_id": "b2fc3bd0ec2046d29b2a660eb1a4f71d",
+    "entity_id": "6f3f990b7a7148f0b46cb16262321c7f",
     "render_instance_id": null,
-    "attachments": [],
+    "attachments": [
+      {
+        "item_id": "itm_002_dagger",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      },
+      {
+        "item_id": "itm_003_sickle",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      }
+    ],
     "last_sync_tick": 0
   }
 }

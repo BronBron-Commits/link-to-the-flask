@@ -1,33 +1,33 @@
 {
-  "id": "b2fc3bd0ec2046d29b2a660eb1a4f71d",
-  "name": "Wysacaryn",
+  "id": "6f3f990b7a7148f0b46cb16262321c7f",
+  "name": "BronBron_the_Brutal's Character",
   "combat": {
-    "hp": 25,
-    "maxHp": 25,
-    "ac": 12,
-    "initiative": 2,
-    "speed": 35
+    "hp": 18,
+    "maxHp": 18,
+    "ac": 10,
+    "initiative": 1,
+    "speed": 30
   },
   "stats": {
     "str": 14,
-    "dex": 14,
-    "con": 12,
-    "int": 12,
-    "wis": 12,
+    "dex": 9,
+    "con": 10,
+    "int": 10,
+    "wis": 15,
     "cha": 9
   },
   "skills": {
     "acrobatics": {
-      "value": 2,
+      "value": -1,
       "proficient": false
     },
     "animal_handling": {
-      "value": 1,
+      "value": 2,
       "proficient": false
     },
     "arcana": {
-      "value": 3,
-      "proficient": true
+      "value": 0,
+      "proficient": false
     },
     "athletics": {
       "value": 2,
@@ -38,11 +38,11 @@
       "proficient": false
     },
     "history": {
-      "value": 3,
-      "proficient": true
+      "value": 0,
+      "proficient": false
     },
     "insight": {
-      "value": 1,
+      "value": 2,
       "proficient": false
     },
     "intimidation": {
@@ -50,43 +50,43 @@
       "proficient": false
     },
     "investigation": {
-      "value": 1,
+      "value": 0,
       "proficient": false
     },
     "medicine": {
-      "value": 3,
-      "proficient": true
+      "value": 2,
+      "proficient": false
     },
     "nature": {
-      "value": 1,
+      "value": 0,
       "proficient": false
     },
     "perception": {
-      "value": 3,
-      "proficient": true
+      "value": 2,
+      "proficient": false
     },
     "performance": {
       "value": -1,
       "proficient": false
     },
     "persuasion": {
-      "value": 1,
-      "proficient": true
+      "value": -1,
+      "proficient": false
     },
     "religion": {
-      "value": 1,
+      "value": 0,
       "proficient": false
     },
     "sleight_of_hand": {
-      "value": 2,
-      "proficient": false
+      "value": 1,
+      "proficient": true
     },
     "stealth": {
-      "value": 2,
-      "proficient": false
+      "value": 1,
+      "proficient": true
     },
     "survival": {
-      "value": 1,
+      "value": 2,
       "proficient": false
     }
   },
@@ -94,82 +94,109 @@
     "items": [
       {
         "instanceId": "inv_001",
-        "itemId": "shield",
+        "itemId": "leather",
         "qty": 1,
         "equipped": false
       },
       {
         "instanceId": "inv_002",
-        "itemId": "chain_mail",
-        "qty": 1,
-        "equipped": false
-      },
-      {
-        "instanceId": "inv_003",
-        "itemId": "longsword",
+        "itemId": "dagger",
         "qty": 1,
         "equipped": true,
         "slot": "main_hand"
       },
       {
-        "instanceId": "inv_004",
-        "itemId": "javelin",
-        "qty": 6,
-        "equipped": false
-      },
-      {
-        "instanceId": "inv_005",
-        "itemId": "holy_symbol",
+        "instanceId": "inv_003",
+        "itemId": "sickle",
         "qty": 1,
-        "equipped": false
+        "equipped": true
       },
       {
-        "instanceId": "inv_006",
+        "instanceId": "inv_004",
         "itemId": "backpack",
         "qty": 1,
         "equipped": false
       },
       {
+        "instanceId": "inv_005",
+        "itemId": "book",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_006",
+        "itemId": "orb",
+        "qty": 1,
+        "equipped": false
+      },
+      {
         "instanceId": "inv_007",
-        "itemId": "rations",
-        "qty": 7,
+        "itemId": "oil",
+        "qty": 10,
         "equipped": false
       },
       {
         "instanceId": "inv_008",
-        "itemId": "robe",
-        "qty": 1,
+        "itemId": "parchment",
+        "qty": 10,
         "equipped": false
       },
       {
         "instanceId": "inv_009",
-        "itemId": "blanket",
-        "qty": 1,
-        "equipped": false
-      },
-      {
-        "instanceId": "inv_010",
         "itemId": "tinderbox",
         "qty": 1,
         "equipped": false
       },
       {
-        "instanceId": "inv_011",
+        "instanceId": "inv_010",
         "itemId": "lamp",
         "qty": 1,
         "equipped": false
       },
       {
+        "instanceId": "inv_011",
+        "itemId": "ink_pen",
+        "qty": 1,
+        "equipped": false
+      },
+      {
         "instanceId": "inv_012",
-        "itemId": "holy_water",
+        "itemId": "ink",
         "qty": 1,
         "equipped": false
       }
     ],
     "capacity": 210,
-    "weight": 105
+    "weight": 44
   },
   "weapons": [
+    {
+      "name": "Dagger",
+      "attackBonus": 4,
+      "damage": {
+        "dice": "1d4+2",
+        "flat": null,
+        "type": "piercing"
+      }
+    },
+    {
+      "name": "Dagger",
+      "attackBonus": 4,
+      "damage": {
+        "dice": "1d4+2",
+        "flat": null,
+        "type": "piercing"
+      }
+    },
+    {
+      "name": "Sickle",
+      "attackBonus": 4,
+      "damage": {
+        "dice": "1d4+2",
+        "flat": null,
+        "type": "slashing"
+      }
+    },
     {
       "name": "Unarmed Strike",
       "attackBonus": 4,
@@ -180,80 +207,42 @@
       }
     }
   ],
-  "spells": [
-    {
-      "name": "Thaumaturgy",
-      "range": null,
-      "duration": null,
-      "castingTime": null,
-      "prepared": false
-    },
-    {
-      "name": "Resistance",
-      "range": null,
-      "duration": null,
-      "castingTime": null,
-      "prepared": false
-    },
-    {
-      "name": "Divine Smite",
-      "range": null,
-      "duration": null,
-      "castingTime": null,
-      "prepared": false
-    }
-  ],
+  "spells": [],
   "features": [
     {
-      "name": "PALADIN FEATURES",
+      "name": "WARLOCK FEATURES",
       "type": "section"
     },
     {
-      "name": "Core Paladin Traits",
+      "name": "Core Warlock Traits",
       "type": "feature"
     },
     {
-      "name": "Lay On Hands",
-      "type": "feature",
-      "ruleId": "lay_on_hands"
-    },
-    {
-      "name": "Spellcasting",
-      "type": "feature",
-      "ruleId": "spell_casting"
-    },
-    {
-      "name": "Weapon Mastery",
+      "name": "Eldritch Invocations",
       "type": "feature"
     },
     {
-      "name": "Fighting Style",
+      "name": "Pact Magic",
       "type": "feature"
     },
     {
-      "name": "Paladin\u2019s Smite",
+      "name": "Magical Cunning",
       "type": "feature"
     },
     {
-      "name": "Channel Divinity",
-      "type": "feature",
-      "ruleId": "channel_divinity"
-    },
-    {
-      "name": "Paladin Subclass",
+      "name": "Warlock Subclass",
       "type": "feature"
     },
     {
-      "name": "Oath Spells",
+      "name": "Creature Type",
       "type": "feature"
     },
     {
-      "name": "Channel Divinity (Legacy)",
-      "type": "feature",
-      "ruleId": "channel_divinity"
+      "name": "Size",
+      "type": "feature"
     },
     {
-      "name": "Ability Score Increase",
+      "name": "Speed",
       "type": "feature"
     },
     {
@@ -261,7 +250,11 @@
       "type": "feature"
     },
     {
-      "name": "Keen Senses",
+      "name": "Elven Lineage",
+      "type": "feature"
+    },
+    {
+      "name": "Elven Lineage Spells",
       "type": "feature"
     },
     {
@@ -269,23 +262,23 @@
       "type": "feature"
     },
     {
+      "name": "Keen Senses",
+      "type": "feature"
+    },
+    {
       "name": "Trance",
       "type": "feature"
     },
     {
-      "name": "Ability Score Increase",
+      "name": "FEATS",
+      "type": "section"
+    },
+    {
+      "name": "Alert",
       "type": "feature"
     },
     {
-      "name": "Elf Weapon Training",
-      "type": "feature"
-    },
-    {
-      "name": "Fleet of Foot",
-      "type": "feature"
-    },
-    {
-      "name": "Mask of the Wild",
+      "name": "Criminal Ability Score Improvements",
       "type": "feature"
     }
   ]
