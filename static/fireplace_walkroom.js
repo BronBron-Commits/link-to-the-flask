@@ -456,8 +456,8 @@ function initWebXR() {
   xrBtn.type = 'button';
   xrBtn.textContent = 'Enter VR';
   xrBtn.style.position = 'fixed';
-  xrBtn.style.top = '14px';
-  xrBtn.style.right = '14px';
+  xrBtn.style.left = '14px';
+  xrBtn.style.bottom = '14px';
   xrBtn.style.zIndex = '25';
   xrBtn.style.border = '1px solid rgba(130, 146, 208, 0.46)';
   xrBtn.style.background = 'rgba(10, 14, 25, 0.78)';
