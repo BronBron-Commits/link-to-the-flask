@@ -440,7 +440,7 @@
     }
   </style>
 </head>
-<body>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
   <div class="shell">
     <main class="panel">
       <header class="header">
@@ -451,16 +451,12 @@
         </div>
 
         <aside class="account-card" aria-label="Account summary">
-          <div class="mini-label">{{ 'Signed In As' if is_authenticated else 'Guest Access' }}</div>
-          <div class="account-name">{{ auth_user.displayName or auth_user.email or 'Paraval Player' }}</div>
-          <div class="meta">
-            {{ auth_user.email or 'No email on file' }}<br />
-            Role: {{ auth_user.role or 'authenticated' }}<br />
-            {% if is_authenticated %}
-            Email {{ 'confirmed' if auth_user.emailConfirmed else 'unconfirmed' }}
-            {% else %}
-            Browse available resources from the hub map.
-            {% endif %}
+          <div id="account-mini-label" class="mini-label">{{ 'Signed In As' if is_authenticated else 'Guest Access' }}</div>
+          <div id="account-name" class="account-name">{{ auth_user.displayName or auth_user.email or 'Paraval Player' }}</div>
+          <div id="account-meta" class="meta">
+            <span id="account-email">{{ auth_user.email or 'No email on file' }}</span><br />
+            <span id="account-role">Role: {{ auth_user.role or 'authenticated' }}</span><br />
+            <span id="account-confirm">{% if is_authenticated %}Email {{ 'confirmed' if auth_user.emailConfirmed else 'unconfirmed' }}{% else %}Browse available resources from the hub map.{% endif %}</span>
           </div>
         </aside>
       </header>
@@ -580,6 +576,90 @@
           signOutBtn.disabled = false;
         }
       });
+    })();
+  </script>
+
+  <script type="module">
+    (async function () {
+      const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
+      const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+      const miniLabelEl = document.getElementById('account-mini-label');
+      const nameEl = document.getElementById('account-name');
+      const emailEl = document.getElementById('account-email');
+      const roleEl = document.getElementById('account-role');
+      const confirmEl = document.getElementById('account-confirm');
+      const statusEl = document.getElementById('status');
+
+      function setStatus(message, tone) {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+      }
+
+      function renderUser(user) {
+        const metadata = (user && user.user_metadata && typeof user.user_metadata === 'object') ? user.user_metadata : {};
+        const appMetadata = (user && user.app_metadata && typeof user.app_metadata === 'object') ? user.app_metadata : {};
+        const displayName = String(metadata.display_name || metadata.full_name || metadata.name || '').trim();
+        const email = String((user && user.email) || '').trim();
+        const role = String(appMetadata.role || (user && user.role) || 'authenticated').trim() || 'authenticated';
+        const confirmed = Boolean(user && (user.email_confirmed_at || user.confirmed_at));
+
+        if (miniLabelEl) miniLabelEl.textContent = 'Signed In As';
+        if (nameEl) nameEl.textContent = displayName || email || 'Paraval Player';
+        if (emailEl) emailEl.textContent = email || 'No email on file';
+        if (roleEl) roleEl.textContent = `Role: ${role}`;
+        if (confirmEl) confirmEl.textContent = `Email ${confirmed ? 'confirmed' : 'unconfirmed'}`;
+      }
+
+      async function syncServerSession(accessToken) {
+        const token = String(accessToken || '').trim();
+        if (!token) return;
+        await fetch('/api/auth/session', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token }),
+        });
+      }
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return;
+      }
+
+      let createClient;
+      try {
+        ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+      } catch (_e1) {
+        try {
+          ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+        } catch (_e2) {
+          return;
+        }
+      }
+
+      if (typeof createClient !== 'function') {
+        return;
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      });
+
+      const current = await supabase.auth.getSession();
+      const session = current && current.data ? current.data.session : null;
+      if (!session || !session.user) {
+        return;
+      }
+
+      renderUser(session.user);
+      const token = String(session.access_token || '').trim();
+      if (token) {
+        try {
+          await syncServerSession(token);
+        } catch (_err) {
+          setStatus('Signed in on this browser. Server session sync is delayed.', '');
+        }
+      }
     })();
   </script>
 </body>

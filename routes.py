@@ -367,6 +367,7 @@ def hub():
 
 @app.route("/account-hub")
 def account_hub():
+    cfg = _supabase_public_config()
     user = _current_auth_user()
     is_authenticated = bool(user)
     if not user:
@@ -381,6 +382,8 @@ def account_hub():
         "account_hub.html",
         auth_user=user,
         is_authenticated=is_authenticated,
+        supabase_url=cfg["url"],
+        supabase_anon_key=cfg["anon_key"],
     )
 
 
