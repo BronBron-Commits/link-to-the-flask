@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import uuid
 from datetime import datetime, timezone
@@ -29,6 +30,9 @@ try:
     import fitz  # PyMuPDF
 except Exception:
     fitz = None
+
+
+PDF_PARSER_DEBUG = str(os.environ.get("PDF_PARSER_DEBUG", "")).strip().lower() in {"1", "true", "yes", "on"}
 
 
 def extract_text_by_page_pypdf(pdf_path: Path) -> list[str]:
@@ -323,11 +327,11 @@ def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: di
 
     # Core stat fallbacks with detailed diagnostics
     if character.get("armor_class") is None:
-        print("  [FALLBACK] Looking for ARMOR_CLASS...")
-        ac_value = (_get_form_value(form_values, "armor", "class", debug=True) 
-                    or _get_form_value(form_values, "ac", debug=True))
+        ac_value = (
+            _get_form_value(form_values, "armor", "class", debug=PDF_PARSER_DEBUG)
+            or _get_form_value(form_values, "ac", debug=PDF_PARSER_DEBUG)
+        )
         character["armor_class"] = to_int(ac_value)
-        print(f"  [FALLBACK] armor_class result: {character['armor_class']}")
     
     if character.get("hit_points") is None:
         character["hit_points"] = to_int(_get_form_value(form_values, "hit", "point", "max") or _get_form_value(form_values, "max", "hp"))
@@ -340,19 +344,18 @@ def apply_form_fallbacks(character: dict, abilities: list[dict], form_values: di
         character["speed"] = to_int(_get_form_value(form_values, "speed"))
     
     if character.get("proficiency_bonus") is None:
-        print("  [FALLBACK] Looking for PROFICIENCY_BONUS...")
-        prof_value = (_get_form_value(form_values, "prof", "bonus", debug=True) 
-                      or _get_form_value(form_values, "proficiency", debug=True))
+        prof_value = (
+            _get_form_value(form_values, "prof", "bonus", debug=PDF_PARSER_DEBUG)
+            or _get_form_value(form_values, "proficiency", debug=PDF_PARSER_DEBUG)
+        )
         character["proficiency_bonus"] = to_int(prof_value)
-        print(f"  [FALLBACK] proficiency_bonus result: {character['proficiency_bonus']}")
     
     if character.get("initiative_bonus") is None:
-        print("  [FALLBACK] Looking for INITIATIVE_BONUS...")
-        init_value = _get_form_value(form_values, "init", debug=True)
+        init_value = _get_form_value(form_values, "init", debug=PDF_PARSER_DEBUG)
         character["initiative_bonus"] = to_int(init_value)
-        print(f"  [FALLBACK] initiative_bonus result: {character['initiative_bonus']}")
 
-    _debug_ability_gaps(abilities, form_values)
+    if PDF_PARSER_DEBUG:
+        _debug_ability_gaps(abilities, form_values)
 
     if abilities:
         return
@@ -1287,12 +1290,13 @@ def parse_core_from_first_page_lines(first_page_lines: list[str]) -> dict[str, i
 def parse_character_tables(pdf_path: Path) -> dict:
     pages = extract_text_by_page(pdf_path)
     form_values = extract_pdf_form_values(pdf_path)
-    
-    print("\n" + "="*80)
-    print("PDF PARSING START")
-    print("="*80)
-    _debug_form_values(form_values)
-    print("="*80 + "\n")
+
+    if PDF_PARSER_DEBUG:
+        print("\n" + "=" * 80)
+        print("PDF PARSING START")
+        print("=" * 80)
+        _debug_form_values(form_values)
+        print("=" * 80 + "\n")
     
     full_text = "\n\n".join(pages)
     lines = normalize_lines(full_text)
@@ -1343,11 +1347,12 @@ def parse_character_tables(pdf_path: Path) -> dict:
     }
 
     abilities = parse_ability_scores_from_lines(first_page_lines, character_id)
-    if abilities:
+    if abilities and PDF_PARSER_DEBUG:
         print(f"[ABILITY PARSE] source=first_page_lines count={len(abilities)} abilities={[row.get('ability') for row in abilities]}")
     if not abilities:
         abilities = parse_ability_scores(full_text, character_id)
-        print(f"[ABILITY PARSE] source=full_text count={len(abilities)} abilities={[row.get('ability') for row in abilities]}")
+        if PDF_PARSER_DEBUG:
+            print(f"[ABILITY PARSE] source=full_text count={len(abilities)} abilities={[row.get('ability') for row in abilities]}")
 
     apply_form_fallbacks(character, abilities, form_values)
 

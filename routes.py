@@ -37,8 +37,6 @@ except ImportError:
 from scripts.pdf_to_tidy_data import (
     parse_character_tables,
     write_outputs,
-    build_master_character_record,
-    build_engine_entity,
 )
 
 
@@ -325,8 +323,12 @@ def _resolve_selectable_pdf(sheet_id: str) -> Path | None:
 def _import_pdf_to_contracts(source_path: Path) -> dict:
     gs.CONTRACTS_DIR.mkdir(parents=True, exist_ok=True)
     tables = parse_character_tables(source_path)
-    master = build_master_character_record(tables)
     write_outputs(gs.CONTRACTS_DIR, tables)
+    master_path = gs.CONTRACTS_DIR / "character_master.json"
+    if master_path.exists():
+        master = json.loads(master_path.read_text(encoding="utf-8"))
+    else:
+        master = {}
     source_meta = master.get("source") if isinstance(master.get("source"), dict) else {}
     identity = master.get("identity") if isinstance(master.get("identity"), dict) else {}
     core_stats = master.get("core_stats") if isinstance(master.get("core_stats"), dict) else {}
