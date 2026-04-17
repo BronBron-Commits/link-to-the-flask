@@ -10,6 +10,7 @@ const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
 const USER_AGENT = String(navigator.userAgent || '');
 const IOS_WEBKIT = /iPad|iPhone|iPod/i.test(USER_AGENT) || (/Macintosh/i.test(USER_AGENT) && navigator.maxTouchPoints > 1);
 const IS_SAFARI_ENGINE = /Safari/i.test(USER_AGENT) && !/Chrome|CriOS|Chromium|Edg|OPR|FxiOS|Firefox/i.test(USER_AGENT);
+const IS_QUEST_BROWSER = /OculusBrowser|Quest/i.test(USER_AGENT);
 const SAFARI_SAFE_MODE = IOS_WEBKIT || IS_SAFARI_ENGINE;
 const SOCIAL_ROOM_CONFIG = window.__SOCIAL_ROOM_CONFIG__ && typeof window.__SOCIAL_ROOM_CONFIG__ === 'object'
   ? window.__SOCIAL_ROOM_CONFIG__
@@ -453,17 +454,20 @@ const xrState = {
   snapTurnThreshold: 0.72,
   snapTurnCooldownSec: 0.2,
   nextSnapTurnAtSec: 0,
+  vrPixelRatio: IS_QUEST_BROWSER ? 1.15 : 1,
+  vrFoveation: IS_QUEST_BROWSER ? 0.35 : 1.0,
+  restoreFoveation: 0.5,
   restorePixelRatio: Math.min(window.devicePixelRatio || 1, SAFARI_SAFE_MODE ? 1.25 : 2),
   restoreShadows: renderer.shadowMap.enabled,
 };
 
 function applyXrPerformanceMode(enabled) {
   if (enabled) {
-    // Quest headsets drop frames quickly on large scenes; prioritize stable framerate in XR.
-    renderer.setPixelRatio(1);
+    // Keep VR stable but avoid over-aggressive texture degradation on Quest.
+    renderer.setPixelRatio(xrState.vrPixelRatio);
     renderer.shadowMap.enabled = false;
     if (renderer.xr && typeof renderer.xr.setFoveation === 'function') {
-      renderer.xr.setFoveation(1.0);
+      renderer.xr.setFoveation(xrState.vrFoveation);
     }
     return;
   }
@@ -472,7 +476,7 @@ function applyXrPerformanceMode(enabled) {
   renderer.setPixelRatio(xrState.restorePixelRatio);
   renderer.shadowMap.enabled = xrState.restoreShadows;
   if (renderer.xr && typeof renderer.xr.setFoveation === 'function') {
-    renderer.xr.setFoveation(0.5);
+    renderer.xr.setFoveation(xrState.restoreFoveation);
   }
 }
 
