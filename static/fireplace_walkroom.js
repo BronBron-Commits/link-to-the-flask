@@ -449,6 +449,10 @@ const xrState = {
   deadZone: 0.18,
   minY: -500,
   maxY: 5000,
+  snapTurnStep: THREE.MathUtils.degToRad(30),
+  snapTurnThreshold: 0.72,
+  snapTurnCooldownSec: 0.2,
+  nextSnapTurnAtSec: 0,
   restorePixelRatio: Math.min(window.devicePixelRatio || 1, SAFARI_SAFE_MODE ? 1.25 : 2),
   restoreShadows: renderer.shadowMap.enabled,
 };
@@ -519,6 +523,7 @@ function initWebXR() {
       xrState.baseReferenceSpace = null;
       xrState.currentReferenceSpace = null;
       xrState.offsetPosition.set(0, 0, 0);
+      xrState.nextSnapTurnAtSec = 0;
       applyXrPerformanceMode(false);
       setBtnState('Enter VR', false);
     });
@@ -2382,13 +2387,13 @@ function applyIncrementalXrTransform(deltaX, deltaY, deltaZ, deltaYaw, xrFrame) 
   if (Math.abs(deltaYaw) > 1e-6) {
     const px = Number(pose.transform.position.x || 0);
     const pz = Number(pose.transform.position.z || 0);
-    const toPivot = new XRRigidTransform({ x: -px, y: 0, z: -pz });
+    const toPivot = makeReferenceSpaceTranslation(-px, 0, -pz);
     xrTmpQuat.setFromAxisAngle(worldUp, Number(deltaYaw || 0));
     const yawTurn = new XRRigidTransform(
       { x: 0, y: 0, z: 0 },
       { x: xrTmpQuat.x, y: xrTmpQuat.y, z: xrTmpQuat.z, w: xrTmpQuat.w },
     );
-    const fromPivot = new XRRigidTransform({ x: px, y: 0, z: pz });
+    const fromPivot = makeReferenceSpaceTranslation(px, 0, pz);
     nextRef = nextRef.getOffsetReferenceSpace(toPivot);
     nextRef = nextRef.getOffsetReferenceSpace(yawTurn);
     nextRef = nextRef.getOffsetReferenceSpace(fromPivot);
@@ -2442,7 +2447,12 @@ function updateXrControls(dt, xrFrame) {
   moveY = applyDeadzone(moveY, xrState.deadZone);
   turnX = applyDeadzone(turnX, xrState.deadZone);
 
-  const deltaYaw = Math.abs(turnX) > 0 ? (turnX * xrState.turnSpeed * dt) : 0;
+  const nowSec = performance.now() * 0.001;
+  let deltaYaw = 0;
+  if (Math.abs(turnX) >= xrState.snapTurnThreshold && nowSec >= xrState.nextSnapTurnAtSec) {
+    deltaYaw = Math.sign(turnX) * xrState.snapTurnStep;
+    xrState.nextSnapTurnAtSec = nowSec + xrState.snapTurnCooldownSec;
+  }
   let didMove = false;
   let moveDx = 0;
   let moveDy = 0;
