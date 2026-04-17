@@ -670,30 +670,38 @@ def character_sheets_api():
 
 @app.route("/api/import-pdf", methods=["POST"])
 def import_pdf_api():
-    pdf_file = request.files.get("pdf")
-    if not pdf_file or not pdf_file.filename:
-        return jsonify(ok=False, error="missing pdf file"), 400
-    if not pdf_file.filename.lower().endswith(".pdf"):
-        return jsonify(ok=False, error="file must be a .pdf"), 400
-    gs.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = secure_filename(pdf_file.filename)
-    source_path = gs.UPLOADS_DIR / filename
-    pdf_file.save(source_path)
-    return jsonify(_import_pdf_to_contracts(source_path))
+    try:
+        pdf_file = request.files.get("pdf")
+        if not pdf_file or not pdf_file.filename:
+            return jsonify(ok=False, error="missing pdf file"), 400
+        if not pdf_file.filename.lower().endswith(".pdf"):
+            return jsonify(ok=False, error="file must be a .pdf"), 400
+        gs.UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+        filename = secure_filename(pdf_file.filename)
+        source_path = gs.UPLOADS_DIR / filename
+        pdf_file.save(source_path)
+        return jsonify(_import_pdf_to_contracts(source_path))
+    except Exception as exc:
+        print(f"[PDF IMPORT ERROR] {type(exc).__name__}: {exc}", flush=True)
+        return jsonify(ok=False, error="pdf-import-failed", detail=type(exc).__name__), 500
 
 
 @app.route("/api/import-character-sheet", methods=["POST"])
 def import_character_sheet_api():
-    payload = request.get_json(silent=True)
-    if not isinstance(payload, dict):
-        payload = request.form.to_dict(flat=True)
-    sheet_id = str(payload.get("sheetId") or payload.get("sheet") or "").strip()
-    if not sheet_id:
-        return jsonify(ok=False, error="missing sheetId"), 400
-    source_path = _resolve_selectable_pdf(sheet_id)
-    if source_path is None:
-        return jsonify(ok=False, error="character sheet not found"), 404
-    return jsonify(_import_pdf_to_contracts(source_path))
+    try:
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            payload = request.form.to_dict(flat=True)
+        sheet_id = str(payload.get("sheetId") or payload.get("sheet") or "").strip()
+        if not sheet_id:
+            return jsonify(ok=False, error="missing sheetId"), 400
+        source_path = _resolve_selectable_pdf(sheet_id)
+        if source_path is None:
+            return jsonify(ok=False, error="character sheet not found"), 404
+        return jsonify(_import_pdf_to_contracts(source_path))
+    except Exception as exc:
+        print(f"[CHARACTER SHEET IMPORT ERROR] {type(exc).__name__}: {exc}", flush=True)
+        return jsonify(ok=False, error="character-sheet-import-failed", detail=type(exc).__name__), 500
 
 
 @app.route("/api/player-info")
