@@ -623,6 +623,7 @@ const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim
 let currentMode = 'sign-in';
 let currentUser = null;
 let signInInFlight = false;
+let backendSessionSyncInFlight = false;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -702,6 +703,62 @@ async function signInViaSupabaseRest(email, password, timeoutMs = 10000) {
   } finally {
     clearTimeout(timer);
   }
+}
+
+function extractAccessToken(sessionLike) {
+  if (!sessionLike || typeof sessionLike !== 'object') {
+    return '';
+  }
+  return String(sessionLike.access_token || sessionLike.accessToken || '').trim();
+}
+
+async function exchangeBackendSession(accessToken) {
+  const token = String(accessToken || '').trim();
+  if (!token) {
+    throw new Error('missing-access-token');
+  }
+  const response = await fetch('/api/auth/session', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ accessToken: token }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.ok === false) {
+    const reason = String(payload.error || payload.detail || response.statusText || 'backend-auth-session-failed');
+    throw new Error(reason);
+  }
+  return payload;
+}
+
+async function syncBackendSessionAndRedirect(sessionLike, statusLabel = 'Signing in...') {
+  const token = extractAccessToken(sessionLike);
+  if (!token) {
+    setStatus('Sign-in succeeded but access token is missing.', 'error');
+    return false;
+  }
+
+  setStatus(statusLabel, '');
+  try {
+    await exchangeBackendSession(token);
+    if (window.__paravalAuth && typeof window.__paravalAuth === 'object') {
+      window.__paravalAuth.lastSessionExchange = { ok: true, at: Date.now() };
+    }
+  } catch (error) {
+    const msg = String(error && error.message ? error.message : error);
+    if (window.__paravalAuth && typeof window.__paravalAuth === 'object') {
+      window.__paravalAuth.lastSessionExchange = { ok: false, at: Date.now(), error: msg };
+    }
+    setStatus(`Could not establish server session: ${msg}`, 'error');
+    return false;
+  }
+
+  renderAccount(normalizeSupabaseUser(sessionLike.user));
+  setStatus('Signed in successfully.', 'success');
+  window.location.replace('/account-hub');
+  return true;
 }
 
 function renderAccount(user) {
@@ -867,9 +924,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       }
 
       console.log('[SIGN IN] sign-in succeeded, redirecting to /account-hub');
-      renderAccount(normalizeSupabaseUser(session.user));
-      setStatus('Signed in successfully.', 'success');
-      window.location.replace('/account-hub');
+      await syncBackendSessionAndRedirect(session, 'Finalizing secure session...');
     } catch (error) {
       console.log('[SIGN IN] exchange failed:', error.message);
       const msg = String(error && error.message ? error.message : error);
@@ -1120,14 +1175,28 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       applyMode('sign-in');
       return;
     }
-    renderAccount(normalizeSupabaseUser(session.user));
-    window.location.replace('/account-hub');
+
+    if (backendSessionSyncInFlight) {
+      return;
+    }
+    backendSessionSyncInFlight = true;
+    try {
+      await syncBackendSessionAndRedirect(session, 'Restoring session...');
+    } finally {
+      backendSessionSyncInFlight = false;
+    }
   });
 
   const current = await supabase.auth.getSession();
   if (current.data.session) {
-    renderAccount(normalizeSupabaseUser(current.data.session.user));
-    window.location.replace('/account-hub');
+    if (!backendSessionSyncInFlight) {
+      backendSessionSyncInFlight = true;
+      try {
+        await syncBackendSessionAndRedirect(current.data.session, 'Restoring session...');
+      } finally {
+        backendSessionSyncInFlight = false;
+      }
+    }
   }
   }
 }
