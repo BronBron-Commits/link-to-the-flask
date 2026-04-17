@@ -368,11 +368,19 @@ def hub():
 @app.route("/account-hub")
 def account_hub():
     user = _current_auth_user()
+    is_authenticated = bool(user)
     if not user:
-        return redirect("/")
+        user = {
+            "id": "",
+            "email": "",
+            "displayName": "Guest Explorer",
+            "role": "guest",
+            "emailConfirmed": False,
+        }
     return render_template(
         "account_hub.html",
         auth_user=user,
+        is_authenticated=is_authenticated,
     )
 
 
