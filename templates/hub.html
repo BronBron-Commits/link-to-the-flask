@@ -949,14 +949,26 @@ async function boot() {
     setStatus('Uploading PDF...', '');
     const fd = new FormData();
     fd.append('pdf', file);
-    const response = await fetch('/api/import-pdf', {
-      method: 'POST',
-      body: fd,
-      credentials: 'same-origin',
-    });
-    const payload = await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }));
+    let response;
+    try {
+      response = await fetch('/api/import-pdf', {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin',
+      });
+    } catch (_networkErr) {
+      setStatus('PDF upload failed: network error contacting server.', 'error');
+      return;
+    }
+
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    const payload = contentType.includes('application/json')
+      ? await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }))
+      : { ok: false, error: response.status === 504 ? 'gateway-timeout' : 'invalid-server-response' };
+
     if (!response.ok || payload.ok === false) {
-      setStatus(`PDF upload failed: ${payload.error || response.statusText}`, 'error');
+      const reason = payload.error || response.statusText || `http-${response.status}`;
+      setStatus(`PDF upload failed: ${reason}`, 'error');
       return;
     }
 
