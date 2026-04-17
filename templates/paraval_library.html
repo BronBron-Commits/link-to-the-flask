@@ -64,6 +64,30 @@
       animation: vignetteBreath 10s ease-in-out infinite;
     }
 
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 10px;
+      pointer-events: none;
+      z-index: 4;
+      border-radius: 26px;
+      border: 1px solid rgba(244, 216, 154, 0.9);
+      box-shadow:
+        inset 0 0 0 2px rgba(199, 167, 102, 0.45),
+        inset 0 0 0 8px rgba(79, 49, 22, 0.38),
+        0 0 0 1px rgba(255, 236, 178, 0.24);
+      background:
+        linear-gradient(90deg, rgba(246, 225, 171, 0.18), rgba(246, 225, 171, 0)) top / 100% 14px no-repeat,
+        linear-gradient(90deg, rgba(246, 225, 171, 0), rgba(246, 225, 171, 0.16), rgba(246, 225, 171, 0)) bottom / 100% 14px no-repeat,
+        linear-gradient(180deg, rgba(255, 244, 208, 0.2), rgba(255, 244, 208, 0)) left / 14px 100% no-repeat,
+        linear-gradient(180deg, rgba(255, 244, 208, 0), rgba(255, 244, 208, 0.2)) right / 14px 100% no-repeat,
+        radial-gradient(circle at top left, rgba(255, 233, 171, 0.42), transparent 34%),
+        radial-gradient(circle at top right, rgba(255, 228, 158, 0.34), transparent 32%),
+        radial-gradient(circle at bottom left, rgba(230, 173, 94, 0.2), transparent 30%),
+        radial-gradient(circle at bottom right, rgba(255, 223, 150, 0.28), transparent 34%);
+      filter: drop-shadow(0 0 18px rgba(199, 167, 102, 0.12));
+    }
+
     .frame {
       position: relative;
       isolation: isolate;
