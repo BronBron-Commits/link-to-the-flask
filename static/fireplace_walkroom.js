@@ -2843,7 +2843,7 @@ renderer.domElement.addEventListener('wheel', (event) => {
   event.preventDefault();
 
   if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
-    const nextFov = THREE.MathUtils.clamp(camera.fov + event.deltaY * 0.02, 12, 110);
+    const nextFov = THREE.MathUtils.clamp(camera.fov + event.deltaY * 0.02, 4, 145);
     if (Math.abs(nextFov - camera.fov) > 1e-6) {
       camera.fov = nextFov;
       camera.updateProjectionMatrix();
