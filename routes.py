@@ -8,6 +8,8 @@ import json
 import os
 import re
 import hashlib
+import threading
+import time
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib import error as urllib_error
@@ -41,6 +43,68 @@ from scripts.pdf_to_tidy_data import (
 
 
 ARTIFACTS_DIR = Path("artifacts")
+PDF_IMPORT_JOBS: dict[str, dict] = {}
+PDF_IMPORT_JOBS_LOCK = threading.Lock()
+PDF_IMPORT_JOB_TTL_SECONDS = 1800
+
+
+def _prune_pdf_import_jobs_locked(now_ts: float) -> None:
+    stale_ids: list[str] = []
+    for job_id, job in PDF_IMPORT_JOBS.items():
+        finished_at = float(job.get("finished_at") or 0)
+        if finished_at and (now_ts - finished_at) > PDF_IMPORT_JOB_TTL_SECONDS:
+            stale_ids.append(job_id)
+    for job_id in stale_ids:
+        PDF_IMPORT_JOBS.pop(job_id, None)
+
+
+def _run_pdf_import_job(job_id: str, source_path: Path) -> None:
+    with PDF_IMPORT_JOBS_LOCK:
+        job = PDF_IMPORT_JOBS.get(job_id)
+        if not isinstance(job, dict):
+            return
+        job["status"] = "running"
+        job["started_at"] = time.time()
+
+    try:
+        result = _import_pdf_to_contracts(source_path)
+        with PDF_IMPORT_JOBS_LOCK:
+            job = PDF_IMPORT_JOBS.get(job_id)
+            if not isinstance(job, dict):
+                return
+            job["status"] = "completed"
+            job["result"] = result
+            job["finished_at"] = time.time()
+    except Exception as exc:
+        with PDF_IMPORT_JOBS_LOCK:
+            job = PDF_IMPORT_JOBS.get(job_id)
+            if not isinstance(job, dict):
+                return
+            job["status"] = "failed"
+            job["error"] = "pdf-import-failed"
+            job["detail"] = type(exc).__name__
+            job["finished_at"] = time.time()
+
+
+def _start_pdf_import_job(source_path: Path) -> str:
+    job_id = uuid4().hex
+    now_ts = time.time()
+    with PDF_IMPORT_JOBS_LOCK:
+        _prune_pdf_import_jobs_locked(now_ts)
+        PDF_IMPORT_JOBS[job_id] = {
+            "status": "queued",
+            "source_file": source_path.name,
+            "created_at": now_ts,
+            "started_at": None,
+            "finished_at": None,
+            "result": None,
+            "error": None,
+            "detail": None,
+        }
+
+    thread = threading.Thread(target=_run_pdf_import_job, args=(job_id, source_path), daemon=True)
+    thread.start()
+    return job_id
 
 
 def _asset_version_token(relative_path: str) -> str:
@@ -664,10 +728,45 @@ def import_pdf_api():
         filename = secure_filename(pdf_file.filename)
         source_path = gs.UPLOADS_DIR / filename
         pdf_file.save(source_path)
-        return jsonify(_import_pdf_to_contracts(source_path))
+        job_id = _start_pdf_import_job(source_path)
+        return jsonify(ok=True, async_job=True, job_id=job_id, source_file=source_path.name, status="queued"), 202
     except Exception as exc:
         print(f"[PDF IMPORT ERROR] {type(exc).__name__}: {exc}", flush=True)
         return jsonify(ok=False, error="pdf-import-failed", detail=type(exc).__name__), 500
+
+
+@app.route("/api/import-pdf-status/<job_id>", methods=["GET"])
+def import_pdf_status_api(job_id: str):
+    token = str(job_id or "").strip().lower()
+    if not token:
+        return jsonify(ok=False, error="missing-job-id"), 400
+
+    with PDF_IMPORT_JOBS_LOCK:
+        job = PDF_IMPORT_JOBS.get(token)
+        if not isinstance(job, dict):
+            return jsonify(ok=False, error="job-not-found"), 404
+        status = str(job.get("status") or "unknown")
+        source_file = str(job.get("source_file") or "")
+        if status in ("queued", "running"):
+            return jsonify(ok=True, done=False, status=status, job_id=token, source_file=source_file)
+        if status == "completed":
+            return jsonify(
+                ok=True,
+                done=True,
+                status="completed",
+                job_id=token,
+                source_file=source_file,
+                result=job.get("result") or {},
+            )
+        return jsonify(
+            ok=False,
+            done=True,
+            status="failed",
+            job_id=token,
+            source_file=source_file,
+            error=str(job.get("error") or "pdf-import-failed"),
+            detail=str(job.get("detail") or "unknown"),
+        ), 500
 
 
 @app.route("/api/import-character-sheet", methods=["POST"])

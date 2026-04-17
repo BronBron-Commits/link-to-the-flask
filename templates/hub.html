@@ -927,6 +927,51 @@ async function boot() {
     return { ok: true };
   }
 
+  async function waitForPdfImportJob(jobId) {
+    const id = String(jobId || '').trim();
+    if (!id) {
+      return { ok: false, reason: 'missing-job-id' };
+    }
+
+    const maxAttempts = 360;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      let response;
+      try {
+        response = await fetch(`/api/import-pdf-status/${encodeURIComponent(id)}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+        });
+      } catch (_networkErr) {
+        return { ok: false, reason: 'network-error' };
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const payload = contentType.includes('application/json')
+        ? await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }))
+        : { ok: false, error: response.status === 504 ? 'gateway-timeout' : 'invalid-server-response' };
+
+      if (payload.done === true && payload.ok === true && payload.status === 'completed') {
+        return { ok: true, result: payload.result || {} };
+      }
+
+      if (payload.done === true && payload.ok === false) {
+        return { ok: false, reason: payload.error || payload.detail || 'pdf-import-failed' };
+      }
+
+      if (!response.ok && payload.done !== false) {
+        return { ok: false, reason: payload.error || response.statusText || `http-${response.status}` };
+      }
+
+      if (attempt % 10 === 0) {
+        setStatus('Parsing PDF on server... still working.', '');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    return { ok: false, reason: 'import-timeout' };
+  }
+
   refreshBtn.addEventListener('click', loadCharacters);
 
   enterWorldBtn.addEventListener('click', () => {
@@ -962,7 +1007,7 @@ async function boot() {
     }
 
     const contentType = String(response.headers.get('content-type') || '').toLowerCase();
-    const payload = contentType.includes('application/json')
+    let payload = contentType.includes('application/json')
       ? await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }))
       : { ok: false, error: response.status === 504 ? 'gateway-timeout' : 'invalid-server-response' };
 
@@ -970,6 +1015,16 @@ async function boot() {
       const reason = payload.error || response.statusText || `http-${response.status}`;
       setStatus(`PDF upload failed: ${reason}`, 'error');
       return;
+    }
+
+    if (payload.async_job && payload.job_id) {
+      setStatus('PDF uploaded. Parsing in background...', '');
+      const jobResult = await waitForPdfImportJob(payload.job_id);
+      if (!jobResult.ok) {
+        setStatus(`PDF upload failed: ${jobResult.reason}`, 'error');
+        return;
+      }
+      payload = jobResult.result || {};
     }
 
     const persistResult = await persistParsedCharacter(payload, file.name);
