@@ -2840,8 +2840,17 @@ document.addEventListener('mousemove', (event) => {
 });
 
 renderer.domElement.addEventListener('wheel', (event) => {
-  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) return;
   event.preventDefault();
+
+  if (USE_SCENE_ASSET && !FORCE_SPHERE_AVATARS) {
+    const nextFov = THREE.MathUtils.clamp(camera.fov + event.deltaY * 0.02, 24, 90);
+    if (Math.abs(nextFov - camera.fov) > 1e-6) {
+      camera.fov = nextFov;
+      camera.updateProjectionMatrix();
+    }
+    return;
+  }
+
   const zoomFactor = Math.exp(event.deltaY * 0.0015);
   orbitDistance *= zoomFactor;
   orbitDistance = Math.max(0.65, orbitDistance);
