@@ -25,20 +25,19 @@
       position: relative;
       z-index: 1;
       min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      padding: 12px;
     }
     .panel {
-      width: min(920px, calc(100vw - 40px));
-      max-height: calc(100vh - 120px);
-      overflow: auto;
+      width: 100%;
+      height: calc(100vh - 24px);
+      overflow: hidden;
       border-radius: 20px;
       border: 1px solid rgba(210,175,70,0.16);
       background: linear-gradient(155deg, rgba(18,22,36,0.94), rgba(12,15,26,0.98));
       box-shadow: 0 22px 56px rgba(0,0,0,0.6);
       padding: 24px;
+      display: flex;
+      flex-direction: column;
     }
     .header {
       display: flex;
@@ -100,9 +99,11 @@
     }
     .layout {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 320px;
-      gap: 14px;
-      align-items: start;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 16px;
+      align-items: stretch;
+      min-height: 0;
+      flex: 1 1 auto;
     }
     .file-input {
       flex: 1 1 260px;
@@ -117,14 +118,43 @@
     }
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      grid-template-columns: 1fr;
+      gap: 10px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .model-rail {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
       gap: 12px;
+      min-height: 0;
+      border: 1px solid rgba(210,175,70,0.15);
+      background: rgba(255,255,255,0.03);
+      border-radius: 16px;
+      padding: 12px;
+    }
+    .rail-head,
+    .viewer-headline {
+      color: #bda77a;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    .rail-copy,
+    .viewer-copy {
+      margin-top: 6px;
+      color: #8f8778;
+      font-size: 0.78rem;
+      line-height: 1.5;
+      font-family: Consolas, 'Courier New', monospace;
     }
     .card {
       border: 1px solid rgba(210,175,70,0.15);
       background: rgba(255,255,255,0.03);
       border-radius: 14px;
-      padding: 12px;
+      padding: 12px 14px;
       cursor: pointer;
       transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
     }
@@ -166,27 +196,23 @@
       border-radius: 14px;
       background: radial-gradient(circle at 50% 20%, rgba(59, 68, 97, 0.34), rgba(13, 17, 29, 0.98) 60%);
       overflow: hidden;
-      min-height: 300px;
-      position: sticky;
-      top: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
     }
     .preview-head {
       border-bottom: 1px solid rgba(210,175,70,0.14);
-      padding: 10px 12px;
-      color: #e4d39b;
-      font-size: 0.74rem;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      font-family: Consolas, 'Courier New', monospace;
+      padding: 14px 16px;
     }
     .preview-viewport {
       width: 100%;
-      height: 340px;
+      height: 100%;
+      min-height: 520px;
       background: linear-gradient(180deg, rgba(26, 32, 50, 0.5), rgba(9, 12, 20, 0.95));
     }
     .preview-meta {
       border-top: 1px solid rgba(210,175,70,0.14);
-      padding: 10px 12px;
+      padding: 12px 16px;
       color: #9e937c;
       font-family: Consolas, 'Courier New', monospace;
       font-size: 0.74rem;
@@ -195,14 +221,21 @@
       min-height: 54px;
     }
     @media (max-width: 960px) {
+      .panel {
+        height: auto;
+        min-height: calc(100vh - 24px);
+        overflow: auto;
+      }
       .layout {
         grid-template-columns: 1fr;
+        min-height: auto;
       }
-      .preview {
-        position: relative;
+      .model-rail {
+        max-height: 42vh;
       }
       .preview-viewport {
         height: 280px;
+        min-height: 280px;
       }
     }
   </style>
@@ -231,9 +264,18 @@
     </div>
 
     <div class="layout">
-      <div id="model-grid" class="grid"></div>
+      <aside class="model-rail" aria-label="Available models">
+        <div>
+          <div class="rail-head">Available Models</div>
+          <div class="rail-copy">Choose from your uploaded and static models. The list stays scrollable while the viewer remains in place.</div>
+        </div>
+        <div id="model-grid" class="grid"></div>
+      </aside>
       <aside class="preview" aria-label="Selected model preview">
-        <div class="preview-head">Live Preview</div>
+        <div class="preview-head">
+          <div class="viewer-headline">Viewer</div>
+          <div class="viewer-copy">Inspect the current selection here before entering the world.</div>
+        </div>
         <div id="preview-viewport" class="preview-viewport"></div>
         <div id="preview-meta" class="preview-meta">Select a model to preview it.</div>
       </aside>
