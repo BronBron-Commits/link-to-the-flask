@@ -900,7 +900,7 @@ async function boot() {
     const safeLevel = Number.isFinite(rawLevel) && rawLevel > 0 ? Math.floor(rawLevel) : 1;
 
     const row = {
-      user_id: String((me.user && me.user.id) || '').trim(),
+      user_id: String(currentUserId || '').trim(),
       name: String(character.name || identity.character_name || uploadedFileName || 'Unnamed Character').trim(),
       class_name: className,
       species: String(character.species || identity.species || '').trim() || null,
