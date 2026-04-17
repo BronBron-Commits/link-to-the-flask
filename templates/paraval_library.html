@@ -64,43 +64,24 @@
       animation: vignetteBreath 10s ease-in-out infinite;
     }
 
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 10px;
-      pointer-events: none;
-      z-index: 4;
-      border-radius: 26px;
-      border: 1px solid rgba(244, 216, 154, 0.9);
-      box-shadow:
-        inset 0 0 0 2px rgba(199, 167, 102, 0.45),
-        inset 0 0 0 8px rgba(79, 49, 22, 0.38),
-        0 0 0 1px rgba(255, 236, 178, 0.24);
-      background:
-        linear-gradient(90deg, rgba(246, 225, 171, 0.18), rgba(246, 225, 171, 0)) top / 100% 14px no-repeat,
-        linear-gradient(90deg, rgba(246, 225, 171, 0), rgba(246, 225, 171, 0.16), rgba(246, 225, 171, 0)) bottom / 100% 14px no-repeat,
-        linear-gradient(180deg, rgba(255, 244, 208, 0.2), rgba(255, 244, 208, 0)) left / 14px 100% no-repeat,
-        linear-gradient(180deg, rgba(255, 244, 208, 0), rgba(255, 244, 208, 0.2)) right / 14px 100% no-repeat,
-        radial-gradient(circle at top left, rgba(255, 233, 171, 0.42), transparent 34%),
-        radial-gradient(circle at top right, rgba(255, 228, 158, 0.34), transparent 32%),
-        radial-gradient(circle at bottom left, rgba(230, 173, 94, 0.2), transparent 30%),
-        radial-gradient(circle at bottom right, rgba(255, 223, 150, 0.28), transparent 34%);
-      filter: drop-shadow(0 0 18px rgba(199, 167, 102, 0.12));
-    }
-
     .frame {
       position: relative;
       isolation: isolate;
       max-width: 1380px;
       margin: 0 auto;
-      border: 1px solid rgba(var(--accent-rgb), 0.34);
+      border: 1px solid rgba(244, 216, 154, 0.72);
       border-radius: 28px;
       overflow: hidden;
       background:
         radial-gradient(circle at 16% 0%, rgba(133, 182, 255, 0.08), transparent 36%),
         linear-gradient(135deg, rgba(11, 16, 24, 0.92), rgba(8, 11, 17, 0.98)),
         linear-gradient(0deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0.02));
-      box-shadow: 0 34px 80px rgba(0, 0, 0, 0.48);
+      box-shadow:
+        0 34px 80px rgba(0, 0, 0, 0.48),
+        0 0 0 1px rgba(255, 236, 178, 0.18),
+        inset 0 0 0 2px rgba(199, 167, 102, 0.42),
+        inset 0 0 0 10px rgba(79, 49, 22, 0.34),
+        inset 0 0 34px rgba(212, 170, 88, 0.08);
       transition: border-color 0.65s ease, box-shadow 0.65s ease;
     }
 
