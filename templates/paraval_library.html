@@ -417,6 +417,13 @@
       font-size: 0.92rem;
     }
 
+    .shelf-actions {
+      display: flex;
+      gap: 10px;
+      margin: 0 0 18px;
+      flex-wrap: wrap;
+    }
+
     .bookshelf {
       display: grid;
       gap: 14px;
@@ -1334,6 +1341,9 @@
       <aside class="shelf-panel">
         <h2 class="shelf-title">Curated Shelf</h2>
         <p class="shelf-copy">Each volume is a standalone tale, rumor, diary fragment, or frontier history from Paraval. Select any spine to open it on the reading desk.</p>
+        <div class="shelf-actions">
+          <button id="focus-mode-shelf-btn" class="btn" type="button" aria-pressed="false">Focus Mode</button>
+        </div>
         <div id="bookshelf" class="bookshelf" aria-label="Story selection"></div>
       </aside>
 
@@ -1647,6 +1657,7 @@ S: Who does? Tidus?
     const accessibleReaderFxBtn = document.getElementById('accessible-reader-fx-btn');
     const accessibilityStatusEl = document.getElementById('a11y-status');
     const focusModeBtn = document.getElementById('focus-mode-btn');
+    const focusModeShelfBtn = document.getElementById('focus-mode-shelf-btn');
     const autoFlipBtn = document.getElementById('auto-flip-btn');
     const prevBookBtn = document.getElementById('prev-book-btn');
     const nextBookBtn = document.getElementById('next-book-btn');
@@ -2540,6 +2551,12 @@ S: Who does? Tidus?
       focusModeBtn.classList.toggle('is-active', focusModeEnabled);
       focusModeBtn.setAttribute('aria-pressed', String(focusModeEnabled));
       focusModeBtn.textContent = focusModeEnabled ? 'Exit Focus' : 'Focus Mode';
+
+      if (focusModeShelfBtn) {
+        focusModeShelfBtn.classList.toggle('is-active', focusModeEnabled);
+        focusModeShelfBtn.setAttribute('aria-pressed', String(focusModeEnabled));
+        focusModeShelfBtn.textContent = focusModeEnabled ? 'Exit Focus' : 'Focus Mode';
+      }
     }
 
     function updateAccessibleReaderUi() {
@@ -2557,6 +2574,10 @@ S: Who does? Tidus?
 
       if (focusModeBtn) {
         focusModeBtn.disabled = accessibleModeEnabled;
+      }
+
+      if (focusModeShelfBtn) {
+        focusModeShelfBtn.disabled = accessibleModeEnabled;
       }
 
       if (autoFlipBtn) {
@@ -2692,6 +2713,11 @@ S: Who does? Tidus?
     }
     if (focusModeBtn) {
       focusModeBtn.addEventListener('click', () => {
+        setFocusMode(!focusModeEnabled);
+      });
+    }
+    if (focusModeShelfBtn) {
+      focusModeShelfBtn.addEventListener('click', () => {
         setFocusMode(!focusModeEnabled);
       });
     }
