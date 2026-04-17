@@ -80,6 +80,13 @@
       flex-wrap: wrap;
     }
 
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
     .btn {
       border: 1px solid rgba(210,175,70,0.24);
       background: rgba(15, 19, 31, 0.96);
@@ -103,6 +110,16 @@
     .btn:disabled {
       opacity: 0.45;
       cursor: not-allowed;
+    }
+
+    .btn.danger {
+      border-color: rgba(213, 143, 131, 0.34);
+      color: #f0c1b9;
+      background: rgba(56, 20, 18, 0.92);
+    }
+
+    .btn.danger:hover {
+      border-color: rgba(213, 143, 131, 0.62);
     }
 
     .status {
@@ -452,6 +469,9 @@ const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
 let selectedCharacter = null;
 let currentEntries = [];
+let supabaseClient = null;
+let currentUserId = '';
+let reloadCharacterEntries = async () => {};
 
 function setStatus(msg, tone = '') {
   statusEl.textContent = msg;
@@ -610,6 +630,8 @@ function createCharacterEntry(row, idx) {
     name,
     badge: formatValue(source, 'record'),
     summary: `${formatValue(cls)} · ${formatValue(species)} · Level ${formatValue(level)}`,
+    canDelete: Boolean(row && row.id),
+    deleteKind: 'saved-character',
     sections,
   };
 }
@@ -625,6 +647,8 @@ function createSheetEntry(row, idx) {
     name,
     badge: 'sheet',
     summary: `${formatValue(source)} · ${formatValue(filename)}`,
+    canDelete: false,
+    deleteKind: 'sheet',
     sections: [
       buildDetailSection('Overview', [
         { label: 'Source', value: formatValue(source) },
@@ -647,11 +671,52 @@ function renderSelectedEntry(entry) {
         <div class="detail-title">${escapeHtml(entry.name)}</div>
         <div class="detail-subtitle">${escapeHtml(entry.summary)}</div>
       </div>
-      <div class="card-badge">${escapeHtml(entry.badge)}</div>
+      <div class="detail-actions">
+        ${entry.canDelete ? '<button id="delete-character-btn" class="btn danger" type="button">Delete Character</button>' : ''}
+        <div class="card-badge">${escapeHtml(entry.badge)}</div>
+      </div>
     </div>
     <div class="panel-title">Full Specs</div>
     <div class="detail-specs">${Array.isArray(entry.sections) ? entry.sections.join('') : ''}</div>
   `;
+
+  const deleteBtn = document.getElementById('delete-character-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      await deleteSelectedCharacter(entry);
+    });
+  }
+}
+
+async function deleteSelectedCharacter(entry) {
+  if (!entry || !entry.canDelete) {
+    return;
+  }
+  if (!supabaseClient) {
+    setStatus('Character deletion is unavailable because the auth client is not ready.', 'error');
+    return;
+  }
+  const confirmed = window.confirm(`Delete ${entry.name}? This cannot be undone.`);
+  if (!confirmed) {
+    return;
+  }
+
+  setStatus(`Deleting ${entry.name}...`, '');
+  const query = supabaseClient.from('characters').delete().eq('id', entry.id);
+  const guardedQuery = currentUserId ? query.eq('user_id', currentUserId) : query;
+  const { error } = await guardedQuery;
+  if (error) {
+    setStatus(`Could not delete character: ${error.message}`, 'error');
+    return;
+  }
+
+  if (selectedCharacter && String(selectedCharacter.id) === String(entry.id)) {
+    selectedCharacter = null;
+    localStorage.removeItem(SELECTED_CHARACTER_STORAGE_KEY);
+  }
+  enterWorldBtn.disabled = true;
+  await reloadCharacterEntries();
+  setStatus(`${entry.name} deleted.`, 'ok');
 }
 
 function selectEntry(entryId, shouldFocusStatus = true) {
@@ -774,6 +839,7 @@ async function boot() {
   const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
   });
+  supabaseClient = supabase;
   window.supabase = supabase;
   window.__paravalAuth.clientReady = true;
 
@@ -785,6 +851,7 @@ async function boot() {
   }
 
   const user = session.user;
+  currentUserId = String(user.id || '').trim();
   const meta = (user.user_metadata && typeof user.user_metadata === 'object') ? user.user_metadata : {};
   const displayName = String(meta.display_name || meta.full_name || meta.name || '').trim();
   whoamiEl.textContent = `Signed in as ${displayName || user.email || user.id}`;
@@ -796,6 +863,8 @@ async function boot() {
     renderSheetCharacters(sheets);
     setStatus(`Loaded ${sheets.length} uploaded sheet(s) from backend fallback.`, 'ok');
   }
+
+  reloadCharacterEntries = loadCharacters;
 
   async function loadCharacters() {
     setStatus('Loading characters from Supabase...');
