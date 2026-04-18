@@ -1,5 +1,5 @@
 import * as THREE from './three.module.js';
-import { GLTFLoader } from './GLTFLoader.js';
+import { createAssetImporter } from './utils/assetImporter.js';
 
 const DEFAULT_TEAM_COLORS = {
     player: 0x4cc9f0,
@@ -31,11 +31,10 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
 
     let playerModelUrl = null;
     let enemyModelUrl = null;
-    const modelCache = new Map();   // url → THREE.Group (loaded GLB scene)
+    const modelCache = new Map();   // url -> THREE.Object3D (loaded scene root)
     const pendingLoads = new Set();
     let lastSnapshot = null;
-
-    const gltfLoader = new GLTFLoader();
+    const assetImporter = createAssetImporter({ renderer });
 
     let snapshotMeta = {
         canMove: true,
@@ -43,20 +42,21 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         canEndTurn: true,
     };
 
-    // ── GLB model loading ────────────────────────────────────────────────────
+    // ── Model loading (GLTF/GLB/FBX) ────────────────────────────────────────
 
-    function loadGlbModel(url) {
+    async function loadModelAsset(url) {
         if (pendingLoads.has(url) || modelCache.has(url)) return;
         pendingLoads.add(url);
-        gltfLoader.load(url, (gltf) => {
+        try {
+            const importedAsset = await assetImporter.load(url);
             pendingLoads.delete(url);
-            modelCache.set(url, gltf.scene);
+            modelCache.set(url, importedAsset.scene);
             rebuildActorsForModelUrl(url);
             if (lastSnapshot) applySnapshot(lastSnapshot);
-        }, undefined, (err) => {
+        } catch (err) {
             console.warn('[MAP3D] Failed to load model:', url, err);
             pendingLoads.delete(url);
-        });
+        }
     }
 
     function normalizeModelScale(modelGroup) {
@@ -89,12 +89,12 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         return mesh;
     }
 
-    function buildGlbBody(url) {
+    function buildModelBody(url) {
         const loaded = modelCache.get(url);
         if (!loaded) return null;
         const group = loaded.clone();
         normalizeModelScale(group);
-        group.userData.isGlb = true;
+        group.userData.isModelAsset = true;
         group.traverse((child) => {
             if (child.isMesh) child.renderOrder = 160;
         });
@@ -126,12 +126,12 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         if (actorTeam === 'player') {
             newBody = buildFallbackBody('player');
         } else if (wantUrl && modelCache.has(wantUrl)) {
-            newBody = buildGlbBody(wantUrl);
+            newBody = buildModelBody(wantUrl);
         }
         if (!newBody) {
             newBody = buildFallbackBody(actorTeam);
             if (actorTeam !== 'player' && wantUrl && !pendingLoads.has(wantUrl) && !modelCache.has(wantUrl)) {
-                loadGlbModel(wantUrl);
+                loadModelAsset(wantUrl);
             }
         }
 
@@ -266,11 +266,11 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
 
             let body;
             if (wantUrl && modelCache.has(wantUrl)) {
-                body = buildGlbBody(wantUrl);
+                body = buildModelBody(wantUrl);
                 if (!body) body = buildFallbackBody(team);
             } else {
                 body = buildFallbackBody(team);
-                if (wantUrl) loadGlbModel(wantUrl);
+                if (wantUrl) loadModelAsset(wantUrl);
             }
             body.userData.actorId = actorId;
             group.add(body);
@@ -447,7 +447,7 @@ export function createMap3dRuntime({ scene, camera, renderer }) {
         }
 
         if (normalUrl && !modelCache.has(normalUrl)) {
-            loadGlbModel(normalUrl);
+            loadModelAsset(normalUrl);
         } else if (lastSnapshot) {
             // Model already in cache (or cleared) — re-apply to rebuild actors immediately
             applySnapshot(lastSnapshot);

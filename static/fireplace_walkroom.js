@@ -3,6 +3,7 @@ import { GLTFLoader } from '/static/GLTFLoader.js';
 import { DRACOLoader } from '/static/three-addons/loaders/DRACOLoader.js';
 import { KTX2Loader } from '/static/three-addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from '/static/meshopt_decoder.module.js';
+import { createAssetImporter } from '/static/utils/assetImporter.js';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
@@ -732,6 +733,7 @@ worldSceneKtx2Loader.detectSupport(renderer);
 worldSceneLoader.setDRACOLoader(worldSceneDracoLoader);
 worldSceneLoader.setKTX2Loader(worldSceneKtx2Loader);
 worldSceneLoader.setMeshoptDecoder(MeshoptDecoder);
+const avatarAssetImporter = createAssetImporter({ renderer });
 let worldSceneRoot = null;
 let mapGridOverlayGroup = null;
 const vrLodState = {
@@ -1272,8 +1274,10 @@ let customAvatarRoot = null;
 let avatarMixer = null;
 let customIdleAction = null;
 let customWalkAction = null;
+let customDanceAction = null;
 let activeCustomAction = null;
 let customMixerUsable = false;
+let danceOverrideActive = false;
 const importedRigAnimator = {
   active: false,
   bones: new Map(),
@@ -1817,12 +1821,11 @@ async function ensureRemoteVisual(sid, entry) {
   }
 
   try {
-    const loader = new GLTFLoader();
-    const gltf = await new Promise((resolve, reject) => loader.load(modelUrl, resolve, undefined, reject));
+    const importedAsset = await avatarAssetImporter.load(modelUrl);
     if (!netState.remoteVisuals.has(sid)) return;
     const latest = netState.remoteVisuals.get(sid);
     if (!latest || latest.loadToken !== token) return;
-    const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
+    const root = importedAsset.scene;
     if (!root) {
       latest.fallbackRoot.visible = true;
       return;
@@ -2332,14 +2335,10 @@ async function loadSelectedAvatar() {
   if (MAP3D_SCENE_ONLY_MODE) return;
   if (USE_SCENE_ASSET || FORCE_SPHERE_AVATARS) return;
   if (!selectedModelUrl) return;
-  const loader = new GLTFLoader();
 
   try {
-    const gltf = await new Promise((resolve, reject) => {
-      loader.load(selectedModelUrl, resolve, undefined, reject);
-    });
-
-    const root = gltf.scene || (Array.isArray(gltf.scenes) ? gltf.scenes[0] : null);
+    const importedAsset = await avatarAssetImporter.load(selectedModelUrl);
+    const root = importedAsset.scene;
     if (!root) return;
 
     if (customAvatarRoot) {
@@ -2351,8 +2350,10 @@ async function loadSelectedAvatar() {
     avatarMixer = null;
     customIdleAction = null;
     customWalkAction = null;
+    customDanceAction = null;
     activeCustomAction = null;
     customMixerUsable = false;
+    danceOverrideActive = false;
     importedRigAnimator.active = false;
     importedRigAnimator.bones.clear();
 
@@ -2363,15 +2364,17 @@ async function loadSelectedAvatar() {
 
     setupImportedRigAnimator(customAvatarRoot);
 
-    if (Array.isArray(gltf.animations) && gltf.animations.length) {
-      const clips = gltf.animations;
+    if (Array.isArray(importedAsset.animations) && importedAsset.animations.length) {
+      const clips = importedAsset.animations;
       const findClip = (matcher) => clips.find((clip) => matcher.test(String(clip.name || '').toLowerCase())) || null;
       const idleClip = findClip(/idle|stand|breath|rest/) || clips[0] || null;
       const walkClip = findClip(/walk|locomotion|move|run/) || clips.find((clip) => clip !== idleClip) || idleClip;
+      const danceClip = findClip(/dance|swing|groove|hip.?hop|break|samba|jive|shuffle/);
       const idleUsable = clipHasUsableMotion(idleClip);
       const walkUsable = clipHasUsableMotion(walkClip);
+      const danceUsable = clipHasUsableMotion(danceClip);
 
-      if (idleUsable || walkUsable) {
+      if (idleUsable || walkUsable || danceUsable) {
         avatarMixer = new THREE.AnimationMixer(customAvatarRoot);
         customMixerUsable = true;
       }
@@ -2390,6 +2393,12 @@ async function loadSelectedAvatar() {
         customWalkAction.setEffectiveWeight(0);
       }
 
+      if (avatarMixer && danceClip && danceUsable) {
+        customDanceAction = avatarMixer.clipAction(danceClip);
+        customDanceAction.enabled = true;
+        customDanceAction.setEffectiveWeight(0);
+      }
+
       if (avatarMixer && !customIdleAction && customWalkAction) {
         customIdleAction = customWalkAction;
         customIdleAction.setEffectiveWeight(1);
@@ -2405,8 +2414,10 @@ async function loadSelectedAvatar() {
     avatarMixer = null;
     customIdleAction = null;
     customWalkAction = null;
+    customDanceAction = null;
     activeCustomAction = null;
     customMixerUsable = false;
+    danceOverrideActive = false;
     importedRigAnimator.active = false;
     importedRigAnimator.bones.clear();
     fallbackAvatar.visible = true;
@@ -2865,10 +2876,15 @@ document.addEventListener('keydown', (event) => {
     || event.code === 'ArrowUp' || event.code === 'ArrowLeft' || event.code === 'ArrowDown' || event.code === 'ArrowRight'
     || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'Space'
     || event.code === 'ControlLeft' || event.code === 'ControlRight' || event.code === 'PageUp' || event.code === 'PageDown'
-    || event.code === 'ShiftLeft' || event.code === 'ShiftRight'
+    || event.code === 'ShiftLeft' || event.code === 'ShiftRight' || event.code === 'KeyG'
   ) {
     event.preventDefault();
   }
+
+  if (event.code === 'KeyG' && customDanceAction) {
+    danceOverrideActive = !danceOverrideActive;
+  }
+
   setMoveState(event.code, true);
 });
 
@@ -2878,7 +2894,7 @@ document.addEventListener('keyup', (event) => {
     || event.code === 'ArrowUp' || event.code === 'ArrowLeft' || event.code === 'ArrowDown' || event.code === 'ArrowRight'
     || event.code === 'KeyQ' || event.code === 'KeyE' || event.code === 'Space'
     || event.code === 'ControlLeft' || event.code === 'ControlRight' || event.code === 'PageUp' || event.code === 'PageDown'
-    || event.code === 'ShiftLeft' || event.code === 'ShiftRight'
+    || event.code === 'ShiftLeft' || event.code === 'ShiftRight' || event.code === 'KeyG'
   ) {
     event.preventDefault();
   }
@@ -2984,8 +3000,10 @@ function updateAvatarAnimation(dt, elapsed, isMoving) {
     return;
   }
 
-  if (customMixerUsable && avatarMixer && (customIdleAction || customWalkAction)) {
-    if (isMoving && customWalkAction) {
+  if (customMixerUsable && avatarMixer && (customIdleAction || customWalkAction || customDanceAction)) {
+    if (danceOverrideActive && customDanceAction) {
+      switchCustomAction(customDanceAction);
+    } else if (isMoving && customWalkAction) {
       switchCustomAction(customWalkAction);
     } else if (!isMoving && customIdleAction) {
       switchCustomAction(customIdleAction);

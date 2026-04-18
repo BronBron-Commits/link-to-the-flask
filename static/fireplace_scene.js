@@ -4323,14 +4323,15 @@ async function uploadTrainingDummyModelFile() {
 
   const files = dummyModelFileEl.files ? Array.from(dummyModelFileEl.files) : [];
   if (!files.length) {
-    dummyModelStatusEl.textContent = 'Choose a .glb or .gltf file first.';
+    dummyModelStatusEl.textContent = 'Choose a .glb, .gltf, or .fbx file first.';
     return;
   }
 
   const primary = files.find((f) => f.name.toLowerCase().endsWith('.glb'))
-    || files.find((f) => f.name.toLowerCase().endsWith('.gltf'));
+    || files.find((f) => f.name.toLowerCase().endsWith('.gltf'))
+    || files.find((f) => f.name.toLowerCase().endsWith('.fbx'));
   if (!primary) {
-    dummyModelStatusEl.textContent = 'Only .glb and .gltf files are supported.';
+    dummyModelStatusEl.textContent = 'Only .glb, .gltf, and .fbx files are supported.';
     return;
   }
 
@@ -4414,14 +4415,15 @@ async function uploadModelFile() {
   }
   const files = modelFileEl.files ? Array.from(modelFileEl.files) : [];
   if (!files.length) {
-    modelStatusEl.textContent = 'Choose a .glb or .gltf file first.';
+    modelStatusEl.textContent = 'Choose a .glb, .gltf, or .fbx file first.';
     return;
   }
   const primary = files.find((f) => f.name.toLowerCase().endsWith('.glb'))
-    || files.find((f) => f.name.toLowerCase().endsWith('.gltf'));
+    || files.find((f) => f.name.toLowerCase().endsWith('.gltf'))
+    || files.find((f) => f.name.toLowerCase().endsWith('.fbx'));
 
   if (!primary) {
-    modelStatusEl.textContent = 'Only .glb and .gltf files are supported.';
+    modelStatusEl.textContent = 'Only .glb, .gltf, and .fbx files are supported.';
     return;
   }
 

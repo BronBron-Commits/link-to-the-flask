@@ -309,32 +309,35 @@ def _discover_selectable_character_sheets() -> list[dict]:
 
 def _discover_available_glb_models() -> list[dict]:
     rows: list[dict] = []
+    supported_exts = (".glb", ".gltf", ".fbx")
 
     if gs.STATIC_DIR.exists():
-        for path in sorted(gs.STATIC_DIR.glob("*.glb")):
-            if not path.is_file():
-                continue
-            rows.append(
-                {
-                    "label": path.name,
-                    "url": f"/static/{path.name}",
-                    "source": "static",
-                }
-            )
+        for ext in supported_exts:
+            for path in sorted(gs.STATIC_DIR.glob(f"*{ext}")):
+                if not path.is_file():
+                    continue
+                rows.append(
+                    {
+                        "label": path.name,
+                        "url": f"/static/{path.name}",
+                        "source": "static",
+                    }
+                )
 
     user_models_root = gs.CHARACTER_MODELS_DIR
     if user_models_root.exists():
-        for path in sorted(user_models_root.rglob("*.glb")):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(gs.STATIC_DIR).as_posix()
-            rows.append(
-                {
-                    "label": path.name,
-                    "url": f"/static/{rel}",
-                    "source": "user_models",
-                }
-            )
+        for ext in supported_exts:
+            for path in sorted(user_models_root.rglob(f"*{ext}")):
+                if not path.is_file():
+                    continue
+                rel = path.relative_to(gs.STATIC_DIR).as_posix()
+                rows.append(
+                    {
+                        "label": path.name,
+                        "url": f"/static/{rel}",
+                        "source": "user_models",
+                    }
+                )
 
     rows.sort(key=lambda row: (str(row.get("label") or "").lower(), str(row.get("url") or "").lower()))
     return rows
@@ -869,9 +872,10 @@ def upload_character_model_api():
     if not entry_name or entry_name not in saved:
         glbs = [n for n in saved if n.lower().endswith(".glb")]
         gltfs = [n for n in saved if n.lower().endswith(".gltf")]
-        entry_name = (glbs or gltfs or [""])[0]
-    if not entry_name or not entry_name.lower().endswith((".glb", ".gltf")):
-        return jsonify(ok=False, error="primary model must be .glb or .gltf"), 400
+        fbxs = [n for n in saved if n.lower().endswith(".fbx")]
+        entry_name = (glbs or gltfs or fbxs or [""])[0]
+    if not entry_name or not entry_name.lower().endswith((".glb", ".gltf", ".fbx")):
+        return jsonify(ok=False, error="primary model must be .glb, .gltf, or .fbx"), 400
     return jsonify(
         ok=True,
         model_url=f"/static/user_models/{bundle_id}/{entry_name}",

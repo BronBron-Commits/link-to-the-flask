@@ -219,7 +219,7 @@ function retarget( target, source, options = {} ) {
  * @param {module:SkeletonUtils~RetargetOptions} options - The options.
  * @return {AnimationClip} The retargeted animation clip.
  */
-function retargetClip( target, source, clip, options = {} ) {
+export function retargetClip( target, source, clip, options = {} ) {
 
 	options.useFirstFramePosition = options.useFirstFramePosition !== undefined ? options.useFirstFramePosition : false;
 

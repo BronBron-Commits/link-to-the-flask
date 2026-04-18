@@ -1,5 +1,7 @@
 import * as THREE from '/static/three.module.js';
-import { GLTFLoader } from '/static/GLTFLoader.js';
+import { createAssetImporter } from '/static/utils/assetImporter.js';
+
+const shellAssetImporter = createAssetImporter();
 
 function makeRenderInstanceId(prefix = 'render') {
     const suffix = Math.random().toString(36).slice(2, 10);
@@ -57,26 +59,17 @@ function createFallbackShell(entityId) {
     return mesh;
 }
 
-function loadGltfAsShell(path, entityId) {
-    return new Promise((resolve, reject) => {
-        const loader = new GLTFLoader();
-        loader.load(
-            path,
-            (gltf) => {
-                const root = gltf.scene;
-                root.name = `entity_shell_${entityId || 'unknown'}`;
-                root.userData.entityId = entityId || null;
-                root.traverse((child) => {
-                    if (!child.isMesh) return;
-                    child.castShadow = true;
-                    child.receiveShadow = true;
-                });
-                resolve(root);
-            },
-            undefined,
-            reject
-        );
+async function loadModelAsShell(path, entityId) {
+    const importedAsset = await shellAssetImporter.load(path);
+    const root = importedAsset.scene;
+    root.name = `entity_shell_${entityId || 'unknown'}`;
+    root.userData.entityId = entityId || null;
+    root.traverse((child) => {
+        if (!child.isMesh) return;
+        child.castShadow = true;
+        child.receiveShadow = true;
     });
+    return root;
 }
 
 export async function spawnEntityFromContracts(config) {
@@ -100,7 +93,7 @@ export async function spawnEntityFromContracts(config) {
     let shell;
     if (assetPath) {
         try {
-            shell = await loadGltfAsShell(assetPath, entityId);
+            shell = await loadModelAsShell(assetPath, entityId);
         } catch (_err) {
             shell = createFallbackShell(entityId);
         }

@@ -20,7 +20,7 @@ Players explore a 3D world, import their D&D Beyond characters from PDF, and eng
 - **Real-time multiplayer** via WebSocket (Flask-SocketIO + gevent)
 - **Turn-based D&D 5e combat** with initiative, movement ranges, melee attacks, and enemy AI
 - **Character import** from D&D Beyond PDF character sheets *(experimental — see caveats below)*
-- **Custom 3D character models** — upload your own `.glb` avatar
+- **Custom 3D character models** — upload your own `.glb`, `.gltf`, or `.fbx` avatar
 - **DM controls** — spawn training dummies, start/end combat, control the scene
 - **Procedural combat presentation** — dice cinematics, floating text, screen shake, hit stop
 - **Ambient audio** — loading screen track, exploration ambient, combat music layers
@@ -36,7 +36,7 @@ Players explore a 3D world, import their D&D Beyond characters from PDF, and eng
 | Transport | WebSocket (gevent-websocket) |
 | Frontend | Three.js r183, vanilla JavaScript |
 | PDF parsing | PyMuPDF, pypdf |
-| 3D assets | GLTF/GLB via GLTFLoader |
+| 3D assets | GLTF/GLB/FBX via GLTFLoader + FBXLoader |
 | Collision | three-mesh-bvh |
 
 ---

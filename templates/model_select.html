@@ -150,6 +150,12 @@
       line-height: 1.5;
       font-family: Consolas, 'Courier New', monospace;
     }
+    .viewer-controls {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
     .card {
       border: 1px solid rgba(210,175,70,0.15);
       background: rgba(255,255,255,0.03);
@@ -259,7 +265,7 @@
     <div id="status" class="status">Loading available models...</div>
 
     <div class="upload-row">
-      <input id="model-file" class="file-input" type="file" accept=".glb,.gltf,.bin,image/*,model/gltf-binary,model/gltf+json" multiple />
+      <input id="model-file" class="file-input" type="file" accept=".glb,.gltf,.fbx,.bin,image/*,model/gltf-binary,model/gltf+json" multiple />
       <button id="upload-btn" class="btn" type="button">Upload Model</button>
     </div>
 
@@ -275,6 +281,9 @@
         <div class="preview-head">
           <div class="viewer-headline">Viewer</div>
           <div class="viewer-copy">Inspect the current selection here before entering the world.</div>
+          <div class="viewer-controls">
+            <button id="preview-dance-btn" class="btn" type="button" disabled>Preview Swing Dance</button>
+          </div>
         </div>
         <div id="preview-viewport" class="preview-viewport"></div>
         <div id="preview-meta" class="preview-meta">Select a model to preview it.</div>
@@ -313,11 +322,15 @@
 
 <script type="module">
 import * as THREE from '{{ asset_url("three.module.js") }}';
-import { GLTFLoader } from '{{ asset_url("GLTFLoader.js") }}';
+import { createAssetImporter } from '{{ asset_url("utils/assetImporter.js") }}';
+import { retargetClip } from '{{ asset_url("utils/SkeletonUtils.js") }}';
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
 const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_optimized_draco.glb") }}';
+const SWING_DANCE_FBX_URL = '{{ asset_url("Swing Dancing.fbx") }}';
+const LOCAL_FBX_LOADER_URL = '{{ asset_url("three-addons/loaders/FBXLoader.js") }}';
+const FBX_LOADER_CDN_URL = 'https://cdn.jsdelivr.net/npm/three@0.183.0/examples/jsm/loaders/FBXLoader.js';
 
 const selectedCharacterLabelEl = document.getElementById('selected-character');
 const statusEl = document.getElementById('status');
@@ -328,6 +341,7 @@ const modelFileEl = document.getElementById('model-file');
 const uploadBtn = document.getElementById('upload-btn');
 const previewViewportEl = document.getElementById('preview-viewport');
 const previewMetaEl = document.getElementById('preview-meta');
+const previewDanceBtn = document.getElementById('preview-dance-btn');
 
 const urlSearch = new URLSearchParams(window.location.search || '');
 const selectedCharacterId = String(urlSearch.get('characterId') || '').trim();
@@ -337,11 +351,42 @@ let selectedModelUrl = '';
 let previewRenderer = null;
 let previewScene = null;
 let previewCamera = null;
-let previewLoader = null;
+let previewAssetImporter = null;
 let previewModelRoot = null;
 let previewSpinGroup = null;
 let previewFrameHandle = 0;
 let previewRequestId = 0;
+let previewLastFrameMs = 0;
+let previewMixer = null;
+let previewDanceAction = null;
+let previewDanceClip = null;
+let previewDanceSourceMesh = null;
+let previewDanceLoaded = false;
+let previewDanceLoadingPromise = null;
+let previewDanceEnabled = false;
+let cachedFbxLoaderCtor = null;
+let fbxLoaderImportPromise = null;
+
+const RIG_SLOT_PATTERNS = {
+  hips: [/(^|[_.])hips?([_.]|$)/i, /pelvis/i, /mixamorig:?hips/i, /^root$/i],
+  spine: [/spine$/i, /spine[_.-]?0*1/i, /mixamorig:?spine$/i, /torso/i],
+  chest: [/chest/i, /upperchest/i, /spine[_.-]?0*2/i, /mixamorig:?spine1/i],
+  head: [/head/i, /mixamorig:?head/i],
+  leftUpperArm: [/left.*upperarm/i, /upperarm.*left/i, /mixamorig:?leftarm/i, /^armature.*arm.*l/i, /arm[_ .-]*l/i],
+  leftLowerArm: [/left.*(lowerarm|forearm)/i, /(lowerarm|forearm).*(left|_l|\.l| l)/i, /mixamorig:?leftforearm/i],
+  rightUpperArm: [/right.*upperarm/i, /upperarm.*right/i, /mixamorig:?rightarm/i, /^armature.*arm.*r/i, /arm[_ .-]*r/i],
+  rightLowerArm: [/right.*(lowerarm|forearm)/i, /(lowerarm|forearm).*(right|_r|\.r| r)/i, /mixamorig:?rightforearm/i],
+  leftUpperLeg: [/left.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(left|_l|\.l| l)/i, /mixamorig:?leftupleg/i],
+  leftLowerLeg: [/left.*(leg|calf|lowerleg)/i, /(leg|calf|lowerleg).*(left|_l|\.l| l)/i, /mixamorig:?leftleg/i],
+  rightUpperLeg: [/right.*(upleg|thigh|upperleg)/i, /(upleg|thigh|upperleg).*(right|_r|\.r| r)/i, /mixamorig:?rightupleg/i],
+  rightLowerLeg: [/right.*(leg|calf|lowerleg)/i, /(leg|calf|lowerleg).*(right|_r|\.r| r)/i, /mixamorig:?rightleg/i],
+};
+
+const REQUIRED_RIG_SLOTS = [
+  'hips', 'spine', 'chest',
+  'leftUpperArm', 'rightUpperArm',
+  'leftUpperLeg', 'rightUpperLeg',
+];
 
 function setStatus(msg, tone = '') {
   statusEl.textContent = msg;
@@ -359,6 +404,49 @@ function escapeHtml(s) {
 
 function setPreviewMeta(msg) {
   if (previewMetaEl) previewMetaEl.textContent = msg || '';
+}
+
+function updateDanceButtonState() {
+  if (!previewDanceBtn) return;
+  previewDanceBtn.disabled = !previewDanceEnabled;
+  if (!previewDanceEnabled) {
+    previewDanceBtn.textContent = 'Preview Swing Dance';
+  }
+}
+
+function setDanceButtonPlaying(isPlaying) {
+  if (!previewDanceBtn) return;
+  previewDanceBtn.textContent = isPlaying ? 'Stop Swing Dance' : 'Preview Swing Dance';
+}
+
+async function resolveFbxLoaderCtor() {
+  if (cachedFbxLoaderCtor) return cachedFbxLoaderCtor;
+  if (fbxLoaderImportPromise) return fbxLoaderImportPromise;
+
+  fbxLoaderImportPromise = (async () => {
+    try {
+      const localModule = await import(LOCAL_FBX_LOADER_URL);
+      if (localModule && localModule.FBXLoader) {
+        cachedFbxLoaderCtor = localModule.FBXLoader;
+        return cachedFbxLoaderCtor;
+      }
+    } catch (_localImportError) {
+      // Fallback to CDN loader when local file cannot be loaded.
+    }
+
+    const remoteModule = await import(FBX_LOADER_CDN_URL);
+    if (!remoteModule || !remoteModule.FBXLoader) {
+      throw new Error('FBXLoader module did not export FBXLoader.');
+    }
+    cachedFbxLoaderCtor = remoteModule.FBXLoader;
+    return cachedFbxLoaderCtor;
+  })();
+
+  try {
+    return await fbxLoaderImportPromise;
+  } finally {
+    fbxLoaderImportPromise = null;
+  }
 }
 
 function initPreviewScene() {
@@ -384,7 +472,7 @@ function initPreviewScene() {
   previewScene.add(previewSpinGroup);
   previewScene.add(ambient, key, rim);
 
-  previewLoader = new GLTFLoader();
+  previewAssetImporter = createAssetImporter({ renderer: previewRenderer });
 
   const resize = () => {
     if (!previewRenderer || !previewCamera || !previewViewportEl) return;
@@ -405,10 +493,225 @@ function initPreviewScene() {
 
   const animate = () => {
     previewFrameHandle = requestAnimationFrame(animate);
-    if (previewSpinGroup) previewSpinGroup.rotation.y += 0.005;
+    const now = performance.now();
+    if (!previewLastFrameMs) previewLastFrameMs = now;
+    const dt = Math.min((now - previewLastFrameMs) / 1000, 0.05);
+    previewLastFrameMs = now;
+
+    if (previewDanceAction && previewMixer) {
+      previewMixer.update(dt);
+    }
+
+    if (previewSpinGroup && !previewDanceAction) previewSpinGroup.rotation.y += 0.005;
     previewRenderer.render(previewScene, previewCamera);
   };
+  previewLastFrameMs = performance.now();
   animate();
+}
+
+function getPrimarySkinnedMesh(root) {
+  if (!root) return null;
+  let best = null;
+  root.traverse((obj) => {
+    if (!obj || !obj.isSkinnedMesh || !obj.skeleton || !Array.isArray(obj.skeleton.bones)) return;
+    if (!best || obj.skeleton.bones.length > best.skeleton.bones.length) {
+      best = obj;
+    }
+  });
+  return best;
+}
+
+function findRigSlotBones(skeleton) {
+  const result = {};
+  if (!skeleton || !Array.isArray(skeleton.bones)) return result;
+  const bones = skeleton.bones;
+  Object.entries(RIG_SLOT_PATTERNS).forEach(([slot, patterns]) => {
+    const bone = bones.find((b) => {
+      const name = String((b && b.name) || '').trim();
+      return patterns.some((re) => re.test(name));
+    });
+    if (bone) result[slot] = bone;
+  });
+  return result;
+}
+
+function resetPreviewPose() {
+  if (!previewModelRoot) return;
+  previewModelRoot.traverse((obj) => {
+    if (obj && obj.isSkinnedMesh && obj.skeleton && typeof obj.skeleton.pose === 'function') {
+      obj.skeleton.pose();
+    }
+  });
+}
+
+function stopSwingDancePreview({ keepMeta = false } = {}) {
+  if (previewDanceAction) {
+    previewDanceAction.stop();
+    previewDanceAction = null;
+  }
+  if (previewMixer) {
+    previewMixer.stopAllAction();
+    previewMixer = null;
+  }
+  resetPreviewPose();
+  setDanceButtonPlaying(false);
+  if (!keepMeta && selectedModelUrl) {
+    setPreviewMeta(`Previewing: ${selectedModelUrl}`);
+  }
+}
+
+async function ensureSwingDanceLoaded() {
+  if (previewDanceLoaded && previewDanceClip && previewDanceSourceMesh) {
+    return { clip: previewDanceClip, sourceMesh: previewDanceSourceMesh };
+  }
+  if (previewDanceLoadingPromise) return previewDanceLoadingPromise;
+
+  previewDanceLoadingPromise = (async () => {
+    const LoaderCtor = await resolveFbxLoaderCtor();
+
+    const loader = new LoaderCtor();
+    const fbxRoot = await new Promise((resolve, reject) => {
+      loader.load(SWING_DANCE_FBX_URL, resolve, undefined, reject);
+    });
+
+    const clip = Array.isArray(fbxRoot.animations) && fbxRoot.animations.length
+      ? fbxRoot.animations[0]
+      : null;
+    if (!clip) {
+      throw new Error('Swing dance FBX did not contain an animation clip.');
+    }
+
+    const sourceMesh = getPrimarySkinnedMesh(fbxRoot);
+    if (!sourceMesh) {
+      throw new Error('Swing dance FBX is missing a rigged source skeleton.');
+    }
+
+    previewDanceClip = clip;
+    previewDanceSourceMesh = sourceMesh;
+    previewDanceLoaded = true;
+    return { clip, sourceMesh };
+  })();
+
+  try {
+    return await previewDanceLoadingPromise;
+  } finally {
+    previewDanceLoadingPromise = null;
+  }
+}
+
+function buildRetargetNames(targetSkeleton, sourceSkeleton) {
+  const targetSlots = findRigSlotBones(targetSkeleton);
+  const sourceSlots = findRigSlotBones(sourceSkeleton);
+  const names = {};
+
+  Object.keys(RIG_SLOT_PATTERNS).forEach((slot) => {
+    const targetBone = targetSlots[slot];
+    const sourceBone = sourceSlots[slot];
+    if (targetBone && sourceBone) {
+      names[targetBone.name] = sourceBone.name;
+    }
+  });
+
+  const requiredMapped = REQUIRED_RIG_SLOTS.filter((slot) => targetSlots[slot] && sourceSlots[slot]).length;
+  return {
+    names,
+    targetSlots,
+    sourceSlots,
+    requiredMapped,
+  };
+}
+
+function refreshDancePreviewEligibility() {
+  previewDanceEnabled = false;
+  if (!previewModelRoot) {
+    updateDanceButtonState();
+    return;
+  }
+
+  const targetMesh = getPrimarySkinnedMesh(previewModelRoot);
+  if (!targetMesh || !targetMesh.skeleton) {
+    updateDanceButtonState();
+    return;
+  }
+
+  const targetSlots = findRigSlotBones(targetMesh.skeleton);
+  const requiredAvailable = REQUIRED_RIG_SLOTS.filter((slot) => targetSlots[slot]).length;
+  previewDanceEnabled = requiredAvailable >= Math.ceil(REQUIRED_RIG_SLOTS.length * 0.72);
+  updateDanceButtonState();
+}
+
+async function playSwingDancePreview() {
+  if (!previewModelRoot) {
+    setStatus('Select a model before running the swing dance preview.', 'error');
+    return;
+  }
+
+  const targetMesh = getPrimarySkinnedMesh(previewModelRoot);
+  if (!targetMesh || !targetMesh.skeleton) {
+    setStatus('This model is not rigged. Swing dance preview requires a skinned rig.', 'error');
+    setPreviewMeta('Swing dance unavailable: selected model is not rigged.');
+    previewDanceEnabled = false;
+    updateDanceButtonState();
+    return;
+  }
+
+  setStatus('Preparing swing dance preview...', '');
+  setPreviewMeta('Loading swing dance animation and checking rig compatibility...');
+
+  try {
+    const { clip, sourceMesh } = await ensureSwingDanceLoaded();
+    const mapping = buildRetargetNames(targetMesh.skeleton, sourceMesh.skeleton);
+
+    if (mapping.requiredMapped < Math.ceil(REQUIRED_RIG_SLOTS.length * 0.72)) {
+      stopSwingDancePreview({ keepMeta: true });
+      setStatus('Selected avatar rig is incompatible with the swing dance clip.', 'error');
+      setPreviewMeta('Swing dance unavailable: rig compatibility too low for safe retargeting.');
+      return;
+    }
+
+    const sourceHips = mapping.sourceSlots.hips;
+    if (!sourceHips) {
+      stopSwingDancePreview({ keepMeta: true });
+      setStatus('Swing dance source clip is missing hips data.', 'error');
+      setPreviewMeta('Swing dance unavailable: source animation rig is incomplete.');
+      return;
+    }
+
+    stopSwingDancePreview({ keepMeta: true });
+
+    const clipForTarget = retargetClip(targetMesh, sourceMesh, clip, {
+      names: mapping.names,
+      hip: sourceHips.name,
+      preserveBoneMatrix: true,
+      preserveBonePositions: true,
+      useFirstFramePosition: true,
+    });
+
+    previewMixer = new THREE.AnimationMixer(previewModelRoot);
+    previewDanceAction = previewMixer.clipAction(clipForTarget);
+    previewDanceAction.reset();
+    previewDanceAction.setLoop(THREE.LoopRepeat, Infinity);
+    previewDanceAction.setEffectiveWeight(1);
+    previewDanceAction.play();
+
+    setDanceButtonPlaying(true);
+    setStatus('Swing dance preview running.', 'ok');
+    setPreviewMeta('Swing dance active (retargeted from Mixamo FBX).');
+  } catch (error) {
+    stopSwingDancePreview({ keepMeta: true });
+    const message = error && error.message ? error.message : String(error || 'unknown error');
+    setStatus(`Swing dance preview failed: ${message}`, 'error');
+    setPreviewMeta(`Swing dance preview failed: ${message}`);
+  }
+}
+
+function toggleSwingDancePreview() {
+  if (previewDanceAction) {
+    stopSwingDancePreview();
+    setStatus('Swing dance preview stopped.', 'ok');
+    return;
+  }
+  void playSwingDancePreview();
 }
 
 function disposeObject3D(root) {
@@ -454,39 +757,44 @@ function fitPreviewCamera(root) {
 
 function previewModel(url) {
   initPreviewScene();
-  if (!previewLoader || !previewSpinGroup) return;
+  if (!previewAssetImporter || !previewSpinGroup) return;
+  stopSwingDancePreview({ keepMeta: true });
   if (!url) {
     setPreviewMeta('Select a model to preview it.');
+    previewModelRoot = null;
+    refreshDancePreviewEligibility();
     return;
   }
 
   const requestId = ++previewRequestId;
   setPreviewMeta(`Loading preview: ${url}`);
-  previewLoader.load(
-    url,
-    (gltf) => {
+  void (async () => {
+    try {
+      const importedAsset = await previewAssetImporter.load(url);
       if (requestId !== previewRequestId) return;
       if (previewModelRoot) {
         previewSpinGroup.remove(previewModelRoot);
         disposeObject3D(previewModelRoot);
         previewModelRoot = null;
       }
-      previewModelRoot = gltf.scene || null;
+      previewModelRoot = importedAsset && importedAsset.scene ? importedAsset.scene : null;
       if (!previewModelRoot) {
         setPreviewMeta('Could not render this model (empty scene).');
+        refreshDancePreviewEligibility();
         return;
       }
       previewSpinGroup.add(previewModelRoot);
       fitPreviewCamera(previewModelRoot);
       setPreviewMeta(`Previewing: ${url}`);
-    },
-    undefined,
-    (err) => {
+      refreshDancePreviewEligibility();
+    } catch (err) {
       if (requestId !== previewRequestId) return;
       const message = err && err.message ? err.message : String(err || 'unknown error');
       setPreviewMeta(`Preview failed: ${message}`);
+      previewModelRoot = null;
+      refreshDancePreviewEligibility();
     }
-  );
+  })();
 }
 
 function selectModel(url, cardNodes) {
@@ -539,7 +847,7 @@ function loadSelectedCharacter() {
 
 function renderModels(models) {
   if (!Array.isArray(models) || models.length === 0) {
-    modelGridEl.innerHTML = '<div class="empty">No uploaded models found yet. Upload a .glb/.gltf bundle first.</div>';
+    modelGridEl.innerHTML = '<div class="empty">No uploaded models found yet. Upload a .glb/.gltf/.fbx bundle first.</div>';
     return;
   }
 
@@ -633,6 +941,9 @@ if (loadSelectedCharacter()) {
 
   refreshBtn.addEventListener('click', loadModels);
   uploadBtn.addEventListener('click', uploadModelFiles);
+  if (previewDanceBtn) {
+    previewDanceBtn.addEventListener('click', toggleSwingDancePreview);
+  }
 
   enterWorldBtn.addEventListener('click', () => {
     const modelUrl = selectedModelUrl || OPEN_WORLD_MODEL_URL;
