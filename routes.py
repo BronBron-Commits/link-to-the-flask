@@ -311,36 +311,86 @@ def _discover_available_glb_models() -> list[dict]:
     rows: list[dict] = []
     supported_exts = (".glb", ".gltf", ".fbx")
 
+    def append_static_path(path: Path, source: str = "static") -> None:
+        if not path.is_file():
+            return
+        rel = path.relative_to(gs.STATIC_DIR).as_posix()
+        top_level = rel.split("/", 1)[0] if rel else ""
+        rows.append(
+            {
+                "label": path.name,
+                "url": f"/static/{rel}",
+                "source": source,
+                "relativePath": rel,
+                "category": top_level or "static",
+            }
+        )
+
     if gs.STATIC_DIR.exists():
         for ext in supported_exts:
             for path in sorted(gs.STATIC_DIR.glob(f"*{ext}")):
-                if not path.is_file():
-                    continue
-                rows.append(
-                    {
-                        "label": path.name,
-                        "url": f"/static/{path.name}",
-                        "source": "static",
-                    }
-                )
+                append_static_path(path)
+
+        organized_roots = [
+            gs.STATIC_DIR / "models",
+            gs.STATIC_DIR / "scenes",
+        ]
+        for root in organized_roots:
+            if not root.exists():
+                continue
+            for ext in supported_exts:
+                for path in sorted(root.rglob(f"*{ext}")):
+                    append_static_path(path)
 
     user_models_root = gs.CHARACTER_MODELS_DIR
     if user_models_root.exists():
         for ext in supported_exts:
             for path in sorted(user_models_root.rglob(f"*{ext}")):
-                if not path.is_file():
-                    continue
-                rel = path.relative_to(gs.STATIC_DIR).as_posix()
-                rows.append(
-                    {
-                        "label": path.name,
-                        "url": f"/static/{rel}",
-                        "source": "user_models",
-                    }
-                )
+                append_static_path(path, source="user_models")
 
-    rows.sort(key=lambda row: (str(row.get("label") or "").lower(), str(row.get("url") or "").lower()))
+    rows.sort(key=lambda row: (str(row.get("category") or "").lower(), str(row.get("label") or "").lower(), str(row.get("url") or "").lower()))
     return rows
+
+
+def _sanitize_model_upload_relative_path(raw_name: str) -> Path | None:
+    raw = str(raw_name or "").strip().replace("\\", "/")
+    if not raw:
+        return None
+
+    raw = re.sub(r"^[A-Za-z]:/+", "", raw)
+    raw = raw.lstrip("/")
+    if not raw:
+        return None
+
+    parts: list[str] = []
+    for piece in raw.split("/"):
+        token = str(piece or "").strip()
+        if not token or token in {".", ".."}:
+            continue
+        safe = secure_filename(token)
+        if safe:
+            parts.append(safe)
+
+    if not parts:
+        return None
+
+    return Path(*parts)
+
+
+def _dedupe_upload_target(bundle_dir: Path, relative_path: Path) -> Path:
+    candidate = bundle_dir / relative_path
+    if not candidate.exists():
+        return candidate
+
+    stem = secure_filename(relative_path.stem) or "asset"
+    suffix = relative_path.suffix.lower()
+    parent = relative_path.parent
+    counter = 1
+    while True:
+        next_candidate = bundle_dir / parent / f"{stem}-{counter}{suffix}"
+        if not next_candidate.exists():
+            return next_candidate
+        counter += 1
 
 
 def _resolve_selectable_pdf(sheet_id: str) -> Path | None:
@@ -849,30 +899,30 @@ def upload_character_model_api():
     saved: list[str] = []
     entry_name_map: dict[str, str] = {}
     for uploaded in files:
-        safe = secure_filename(uploaded.filename)
-        if not safe:
+        raw_name = str(uploaded.filename or "").strip()
+        relative_path = _sanitize_model_upload_relative_path(raw_name)
+        if relative_path is None:
             continue
         data = uploaded.read()
         if not data:
             continue
-        digest = hashlib.sha256(data).hexdigest()[:12]
-        source_path = Path(safe)
-        stem = secure_filename(source_path.stem) or "asset"
-        suffix = source_path.suffix.lower()
-        hashed_name = f"{stem}-{digest}{suffix}"
-        target_path = bundle_dir / hashed_name
+        target_path = _dedupe_upload_target(bundle_dir, relative_path)
         target_path.parent.mkdir(parents=True, exist_ok=True)
         target_path.write_bytes(data)
-        saved.append(hashed_name)
-        entry_name_map[safe] = hashed_name
+        saved_rel = target_path.relative_to(bundle_dir).as_posix()
+        saved.append(saved_rel)
+        original_rel = relative_path.as_posix()
+        entry_name_map[original_rel] = saved_rel
+        entry_name_map[Path(original_rel).name] = saved_rel
     if not saved:
         return jsonify(ok=False, error="no valid files uploaded"), 400
     entry_name = secure_filename(request.form.get("model_entry", ""))
-    entry_name = entry_name_map.get(entry_name, entry_name)
+    requested_entry = str(request.form.get("model_entry", "")).strip().replace("\\", "/")
+    entry_name = entry_name_map.get(requested_entry, entry_name_map.get(Path(requested_entry).name, requested_entry))
     if not entry_name or entry_name not in saved:
-        glbs = [n for n in saved if n.lower().endswith(".glb")]
-        gltfs = [n for n in saved if n.lower().endswith(".gltf")]
-        fbxs = [n for n in saved if n.lower().endswith(".fbx")]
+        glbs = sorted((n for n in saved if n.lower().endswith(".glb")), key=lambda value: (value.count("/"), value.lower()))
+        gltfs = sorted((n for n in saved if n.lower().endswith(".gltf")), key=lambda value: (value.count("/"), value.lower()))
+        fbxs = sorted((n for n in saved if n.lower().endswith(".fbx")), key=lambda value: (value.count("/"), value.lower()))
         entry_name = (glbs or gltfs or fbxs or [""])[0]
     if not entry_name or not entry_name.lower().endswith((".glb", ".gltf", ".fbx")):
         return jsonify(ok=False, error="primary model must be .glb, .gltf, or .fbx"), 400
