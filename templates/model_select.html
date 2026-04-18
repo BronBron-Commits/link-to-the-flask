@@ -360,7 +360,7 @@ let previewLastFrameMs = 0;
 let previewMixer = null;
 let previewDanceAction = null;
 let previewDanceClip = null;
-let previewDanceSourceMesh = null;
+let previewDanceSourceRig = null;
 let previewDanceLoaded = false;
 let previewDanceLoadingPromise = null;
 let previewDanceEnabled = false;
@@ -606,8 +606,8 @@ function stopSwingDancePreview({ keepMeta = false } = {}) {
 }
 
 async function ensureSwingDanceLoaded() {
-  if (previewDanceLoaded && previewDanceClip && previewDanceSourceMesh) {
-    return { clip: previewDanceClip, sourceMesh: previewDanceSourceMesh };
+  if (previewDanceLoaded && previewDanceClip && previewDanceSourceRig) {
+    return { clip: previewDanceClip, sourceRig: previewDanceSourceRig };
   }
   if (previewDanceLoadingPromise) return previewDanceLoadingPromise;
 
@@ -626,15 +626,51 @@ async function ensureSwingDanceLoaded() {
       throw new Error('Swing dance FBX did not contain an animation clip.');
     }
 
-    const sourceMesh = getPrimarySkinnedMesh(fbxRoot);
-    if (!sourceMesh) {
-      throw new Error('Swing dance FBX is missing a rigged source skeleton.');
+    let sourceRig = getPrimarySkinnedMesh(fbxRoot);
+
+    if (!sourceRig) {
+      const trackBoneNames = new Set();
+      (clip.tracks || []).forEach((track) => {
+        const rawName = String((track && track.name) || '').trim();
+        if (!rawName) return;
+
+        const bracketMatch = rawName.match(/\.bones\[([^\]]+)\]/i);
+        if (bracketMatch && bracketMatch[1]) {
+          trackBoneNames.add(String(bracketMatch[1]).trim());
+          return;
+        }
+
+        const dotIdx = rawName.indexOf('.');
+        if (dotIdx > 0) {
+          trackBoneNames.add(rawName.slice(0, dotIdx).trim());
+        }
+      });
+
+      const allBones = [];
+      fbxRoot.traverse((obj) => {
+        if (obj && obj.isBone) allBones.push(obj);
+      });
+
+      const filteredBones = allBones.filter((bone) => {
+        if (!trackBoneNames.size) return true;
+        const name = String((bone && bone.name) || '').trim();
+        return name && trackBoneNames.has(name);
+      });
+
+      const sourceBones = filteredBones.length ? filteredBones : allBones;
+      if (sourceBones.length) {
+        sourceRig = new THREE.Skeleton(sourceBones);
+      }
+    }
+
+    if (!sourceRig) {
+      throw new Error('Swing dance FBX is missing a usable source skeleton.');
     }
 
     previewDanceClip = clip;
-    previewDanceSourceMesh = sourceMesh;
+    previewDanceSourceRig = sourceRig;
     previewDanceLoaded = true;
-    return { clip, sourceMesh };
+    return { clip, sourceRig };
   })();
 
   try {
@@ -711,8 +747,11 @@ async function playSwingDancePreview() {
   setPreviewMeta('Loading swing dance animation and checking rig compatibility...');
 
   try {
-    const { clip, sourceMesh } = await ensureSwingDanceLoaded();
-    const mapping = buildRetargetNames(targetMesh.skeleton, sourceMesh.skeleton);
+    const { clip, sourceRig } = await ensureSwingDanceLoaded();
+    const sourceSkeleton = sourceRig && sourceRig.isObject3D
+      ? sourceRig.skeleton
+      : sourceRig;
+    const mapping = buildRetargetNames(targetMesh.skeleton, sourceSkeleton);
 
     const requiredSlotThreshold = Math.ceil(REQUIRED_RIG_SLOTS.length * 0.72);
     const hasSlotCompatibility = mapping.requiredMapped >= requiredSlotThreshold;
@@ -737,7 +776,7 @@ async function playSwingDancePreview() {
       retargetOptions.hip = sourceHips.name;
     }
 
-    const clipForTarget = retargetClip(targetMesh, sourceMesh, clip, {
+    const clipForTarget = retargetClip(targetMesh, sourceRig, clip, {
       ...retargetOptions,
     });
 
