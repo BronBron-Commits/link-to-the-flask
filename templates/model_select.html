@@ -388,7 +388,8 @@ const REQUIRED_RIG_SLOTS = [
   'leftUpperLeg', 'rightUpperLeg',
 ];
 
-const MIN_FALLBACK_BONE_MATCHES = 12;
+const MIN_FALLBACK_BONE_MATCHES = 4;
+const MIN_TOTAL_MAPPED_BONES = 6;
 
 function setStatus(msg, tone = '') {
   statusEl.textContent = msg;
@@ -580,6 +581,46 @@ function buildFallbackBoneNameMap(targetSkeleton, sourceSkeleton) {
   return { names, matchCount };
 }
 
+function buildSourceBoneLookup(sourceSkeleton) {
+  const byNormalized = new Map();
+  const byRaw = new Map();
+  const sourceBones = Array.isArray(sourceSkeleton?.bones) ? sourceSkeleton.bones : [];
+
+  sourceBones.forEach((bone) => {
+    const sourceName = String((bone && bone.name) || '').trim();
+    if (!sourceName) return;
+    byRaw.set(sourceName, sourceName);
+
+    const normalized = normalizeBoneName(sourceName);
+    if (normalized && !byNormalized.has(normalized)) {
+      byNormalized.set(normalized, sourceName);
+    }
+  });
+
+  return { byNormalized, byRaw };
+}
+
+function createBoneNameResolver(sourceSkeleton, explicitNames = {}) {
+  const lookup = buildSourceBoneLookup(sourceSkeleton);
+  return (targetBone) => {
+    const targetName = String((targetBone && targetBone.name) || '').trim();
+    if (!targetName) return '';
+
+    const explicit = explicitNames[targetName];
+    if (explicit && lookup.byRaw.has(explicit)) {
+      return explicit;
+    }
+
+    const normalized = normalizeBoneName(targetName);
+    if (!normalized) return explicit || targetName;
+
+    const normalizedMatch = lookup.byNormalized.get(normalized);
+    if (normalizedMatch) return normalizedMatch;
+
+    return explicit || targetName;
+  };
+}
+
 function resetPreviewPose() {
   if (!previewModelRoot) return;
   previewModelRoot.traverse((obj) => {
@@ -707,6 +748,7 @@ function buildRetargetNames(targetSkeleton, sourceSkeleton) {
     sourceSlots,
     requiredMapped,
     fallbackMatched: fallback.matchCount,
+    totalMappedBones: Object.keys(names).length,
   };
 }
 
@@ -752,21 +794,23 @@ async function playSwingDancePreview() {
       ? sourceRig.skeleton
       : sourceRig;
     const mapping = buildRetargetNames(targetMesh.skeleton, sourceSkeleton);
+    const boneNameResolver = createBoneNameResolver(sourceSkeleton, mapping.names);
 
     const requiredSlotThreshold = Math.ceil(REQUIRED_RIG_SLOTS.length * 0.72);
     const hasSlotCompatibility = mapping.requiredMapped >= requiredSlotThreshold;
     const hasFallbackCompatibility = mapping.fallbackMatched >= MIN_FALLBACK_BONE_MATCHES;
-    if (!hasSlotCompatibility && !hasFallbackCompatibility) {
-      stopSwingDancePreview({ keepMeta: true });
-      setStatus('Selected avatar rig is incompatible with the swing dance clip.', 'error');
-      setPreviewMeta('Swing dance unavailable: not enough shared rig bones for safe retargeting.');
-      return;
+    const hasMinimumBoneCoverage = mapping.totalMappedBones >= MIN_TOTAL_MAPPED_BONES;
+
+    if (!hasSlotCompatibility && !hasFallbackCompatibility && !hasMinimumBoneCoverage) {
+      setStatus('Rig match is weak. Running best-effort swing dance retarget.', '');
+      setPreviewMeta('Rig compatibility is limited; running best-effort retargeting.');
     }
 
     stopSwingDancePreview({ keepMeta: true });
 
     const retargetOptions = {
       names: mapping.names,
+      getBoneName: boneNameResolver,
       preserveBoneMatrix: true,
       preserveBonePositions: true,
       useFirstFramePosition: true,
@@ -774,6 +818,9 @@ async function playSwingDancePreview() {
     const sourceHips = mapping.sourceSlots.hips;
     if (sourceHips && sourceHips.name) {
       retargetOptions.hip = sourceHips.name;
+    } else if (mapping.targetSlots.hips) {
+      const resolvedHip = boneNameResolver(mapping.targetSlots.hips);
+      if (resolvedHip) retargetOptions.hip = resolvedHip;
     }
 
     const clipForTarget = retargetClip(targetMesh, sourceRig, clip, {
