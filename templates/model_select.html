@@ -321,7 +321,7 @@
 </script>
 
 <script type="module">
-import * as THREE from '{{ asset_url("three.module.js") }}';
+import * as THREE from '/static/three.module.js';
 import { createAssetImporter } from '{{ asset_url("utils/assetImporter.js") }}';
 import { retargetClip } from '{{ asset_url("utils/SkeletonUtils.js") }}';
 
@@ -827,7 +827,8 @@ async function playSwingDancePreview() {
       ...retargetOptions,
     });
 
-    previewMixer = new THREE.AnimationMixer(previewModelRoot);
+    // Retargeted clips address target skeleton bones, so bind the mixer to the skinned mesh.
+    previewMixer = new THREE.AnimationMixer(targetMesh);
     previewDanceAction = previewMixer.clipAction(clipForTarget);
     previewDanceAction.reset();
     previewDanceAction.setLoop(THREE.LoopRepeat, Infinity);
