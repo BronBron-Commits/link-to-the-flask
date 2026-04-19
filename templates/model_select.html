@@ -370,6 +370,7 @@ let previewDanceLoadingPromise = null;
 let previewDanceEnabled = false;
 let cachedFbxLoaderCtor = null;
 let fbxLoaderImportPromise = null;
+const modelValidationCache = new Map();
 
 const RIG_SLOT_PATTERNS = {
   hips: [/(^|[_.])hips?([_.]|$)/i, /pelvis/i, /mixamorig:?hips/i, /^root$/i],
@@ -881,6 +882,171 @@ function disposeObject3D(root) {
   });
 }
 
+function resolveAssetUrl(url) {
+  try {
+    return new URL(String(url || '').trim(), window.location.href);
+  } catch {
+    return null;
+  }
+}
+
+function getMaterialTextureSlots(material) {
+  if (!material || typeof material !== 'object') return [];
+  const slots = [];
+  for (const key of Object.keys(material)) {
+    const value = material[key];
+    if (value && value.isTexture) {
+      slots.push({ key, texture: value });
+    }
+  }
+  return slots;
+}
+
+function hasUsableTextureImage(texture) {
+  if (!texture || !texture.isTexture) return false;
+  const image = texture.image;
+  if (!image) return false;
+  const src = String((image.currentSrc || image.src || '')).trim();
+  if (src) return true;
+  if (image.data && typeof image.width === 'number' && typeof image.height === 'number') {
+    return image.width > 0 && image.height > 0;
+  }
+  if (typeof image.width === 'number' && typeof image.height === 'number') {
+    return image.width > 0 && image.height > 0;
+  }
+  return false;
+}
+
+async function assertExternalImageUrisAccessible(importedAsset, modelUrl) {
+  if (!importedAsset || importedAsset.format !== 'gltf') return;
+  const parser = importedAsset.source && importedAsset.source.parser ? importedAsset.source.parser : null;
+  const gltfJson = parser && parser.json && typeof parser.json === 'object' ? parser.json : null;
+  const images = Array.isArray(gltfJson && gltfJson.images) ? gltfJson.images : [];
+  if (!images.length) return;
+
+  const baseUrl = resolveAssetUrl(modelUrl);
+  if (!baseUrl) return;
+
+  for (const imageDef of images) {
+    const uri = String(imageDef && imageDef.uri ? imageDef.uri : '').trim();
+    if (!uri) continue;
+    if (/^(data:|blob:)/i.test(uri)) continue;
+
+    let imageUrl;
+    try {
+      imageUrl = new URL(uri, baseUrl).href;
+    } catch {
+      throw new Error(`invalid-texture-uri:${uri}`);
+    }
+
+    let response;
+    try {
+      response = await fetch(imageUrl, { method: 'HEAD', credentials: 'same-origin' });
+    } catch {
+      response = null;
+    }
+
+    if (!response || !response.ok) {
+      const fallback = await fetch(imageUrl, { method: 'GET', credentials: 'same-origin' }).catch(() => null);
+      if (!fallback || !fallback.ok) {
+        throw new Error(`missing-texture:${uri}`);
+      }
+    }
+  }
+}
+
+async function validateModelEntry(row) {
+  const url = String(row && row.url ? row.url : '').trim();
+  if (!url) {
+    return { ok: false, reason: 'missing-model-url' };
+  }
+
+  const cached = modelValidationCache.get(url);
+  if (cached) {
+    return cached;
+  }
+
+  initPreviewScene();
+  if (!previewAssetImporter) {
+    const result = { ok: false, reason: 'asset-importer-unavailable' };
+    modelValidationCache.set(url, result);
+    return result;
+  }
+
+  let importedAsset = null;
+  try {
+    importedAsset = await previewAssetImporter.load(url);
+    const scene = importedAsset && importedAsset.scene;
+    if (!scene) {
+      throw new Error('asset-scene-missing');
+    }
+
+    await assertExternalImageUrisAccessible(importedAsset, url);
+
+    const brokenTextureRefs = [];
+    scene.traverse((obj) => {
+      if (!obj || !obj.isMesh) return;
+      const materials = Array.isArray(obj.material) ? obj.material : [obj.material];
+      materials.forEach((material) => {
+        getMaterialTextureSlots(material).forEach(({ key, texture }) => {
+          if (!hasUsableTextureImage(texture)) {
+            brokenTextureRefs.push(`${obj.name || obj.uuid}:${key}`);
+          }
+        });
+      });
+    });
+
+    if (brokenTextureRefs.length) {
+      throw new Error('missing-texture-bindings');
+    }
+
+    const result = { ok: true, reason: '' };
+    modelValidationCache.set(url, result);
+    return result;
+  } catch (error) {
+    const reason = String(error && error.message ? error.message : error || 'model-validation-failed');
+    const result = { ok: false, reason };
+    modelValidationCache.set(url, result);
+    return result;
+  } finally {
+    if (importedAsset && importedAsset.scene) {
+      disposeObject3D(importedAsset.scene);
+    }
+  }
+}
+
+async function filterValidModels(models) {
+  if (!Array.isArray(models) || !models.length) {
+    return { validModels: [], invalidModels: [] };
+  }
+
+  const queue = models.slice();
+  const validModels = [];
+  const invalidModels = [];
+  const workerCount = Math.max(1, Math.min(3, queue.length));
+  let checked = 0;
+
+  setStatus(`Validating ${queue.length} model(s) for load and texture integrity...`, '');
+
+  async function worker() {
+    while (queue.length) {
+      const row = queue.shift();
+      if (!row) continue;
+      const verdict = await validateModelEntry(row);
+      checked += 1;
+      if (verdict.ok) {
+        validModels.push(row);
+      } else {
+        invalidModels.push({ row, reason: verdict.reason });
+      }
+      setStatus(`Validated ${checked}/${models.length} models...`, '');
+    }
+  }
+
+  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  return { validModels, invalidModels };
+}
+
 function fitPreviewCamera(root) {
   if (!root || !previewCamera) return;
   const box = new THREE.Box3().setFromObject(root);
@@ -1032,14 +1198,25 @@ async function loadModels() {
     return;
   }
   const models = Array.isArray(payload.models) ? payload.models : [];
-  renderModels(models);
+  const { validModels, invalidModels } = await filterValidModels(models);
+
+  if (selectedModelUrl) {
+    const exists = validModels.some((row) => String((row && row.url) || '').trim() === selectedModelUrl);
+    if (!exists) {
+      selectedModelUrl = '';
+      localStorage.removeItem(SELECTED_MODEL_STORAGE_KEY);
+      previewModel('');
+    }
+  }
+
+  renderModels(validModels);
   if (selectedModelUrl) {
     enterWorldBtn.disabled = false;
-    setStatus(`Loaded ${models.length} model(s).`, 'ok');
+    setStatus(`Loaded ${validModels.length} model(s). Hidden ${invalidModels.length} broken/incomplete model(s).`, 'ok');
     previewModel(selectedModelUrl);
   } else {
     enterWorldBtn.disabled = false;
-    setStatus(`Loaded ${models.length} model(s). Open World will use the default everything_optimized_draco.glb scene for now.`, 'ok');
+    setStatus(`Loaded ${validModels.length} model(s). Hidden ${invalidModels.length} broken/incomplete model(s). Open World will use the default everything_optimized_draco.glb scene for now.`, 'ok');
     previewModel('');
   }
 }
