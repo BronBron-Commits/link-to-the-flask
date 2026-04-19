@@ -326,22 +326,6 @@ def _discover_available_glb_models() -> list[dict]:
             }
         )
 
-    if gs.STATIC_DIR.exists():
-        for ext in supported_exts:
-            for path in sorted(gs.STATIC_DIR.glob(f"*{ext}")):
-                append_static_path(path)
-
-        organized_roots = [
-            gs.STATIC_DIR / "models",
-            gs.STATIC_DIR / "scenes",
-        ]
-        for root in organized_roots:
-            if not root.exists():
-                continue
-            for ext in supported_exts:
-                for path in sorted(root.rglob(f"*{ext}")):
-                    append_static_path(path)
-
     user_models_root = gs.CHARACTER_MODELS_DIR
     if user_models_root.exists():
         for ext in supported_exts:

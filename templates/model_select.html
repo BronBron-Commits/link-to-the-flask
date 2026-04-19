@@ -257,7 +257,7 @@
       </div>
       <div class="actions">
         <button id="refresh-btn" class="btn" type="button">Refresh</button>
-        <button id="enter-world-btn" class="btn" type="button" disabled>Enter World</button>
+        <button id="enter-world-btn" class="btn is-hidden" type="button" disabled aria-hidden="true">Enter World</button>
         <a class="btn" href="/hub">Back to Hub</a>
       </div>
     </div>
@@ -275,7 +275,7 @@
       <aside class="model-rail" aria-label="Available models">
         <div>
           <div class="rail-head">Available Models</div>
-          <div class="rail-copy">Choose from your uploaded and static models. The list stays scrollable while the viewer remains in place.</div>
+          <div class="rail-copy">This page is your model storage library. Upload files here and preview stored models.</div>
         </div>
         <div id="model-grid" class="grid"></div>
       </aside>
@@ -1108,20 +1108,12 @@ function previewModel(url) {
   })();
 }
 
-function selectModel(url, cardNodes) {
+function previewStoredModel(url) {
   const modelUrl = String(url || '').trim();
   if (!modelUrl) return;
   selectedModelUrl = modelUrl;
   localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
-
-  if (cardNodes && typeof cardNodes.forEach === 'function') {
-    cardNodes.forEach((el) => el.classList.remove('selected'));
-    const targetCard = Array.from(cardNodes).find((el) => String(el.getAttribute('data-model-url') || '').trim() === modelUrl);
-    if (targetCard) targetCard.classList.add('selected');
-  }
-
-  enterWorldBtn.disabled = false;
-  setStatus(`Selected model ${modelUrl}. Enter world when ready.`, 'ok');
+  setStatus(`Previewing stored model ${modelUrl}.`, 'ok');
   previewModel(modelUrl);
 }
 
@@ -1158,7 +1150,7 @@ function loadSelectedCharacter() {
 
 function renderModels(models) {
   if (!Array.isArray(models) || models.length === 0) {
-    modelGridEl.innerHTML = '<div class="empty">No uploaded models found yet. Upload a .glb/.gltf/.fbx bundle first.</div>';
+    modelGridEl.innerHTML = '<div class="empty">No stored models yet. Upload a .glb/.gltf/.fbx bundle to add one.</div>';
     return;
   }
 
@@ -1166,9 +1158,8 @@ function renderModels(models) {
     const label = row && row.label ? row.label : 'Unnamed Model';
     const url = row && row.url ? row.url : '';
     const source = row && row.source ? row.source : '-';
-    const isSelected = url && selectedModelUrl && url === selectedModelUrl;
     return `
-      <article class="card ${isSelected ? 'selected' : ''}" data-model-url="${escapeHtml(url)}">
+      <article class="card" data-model-url="${escapeHtml(url)}">
         <h3>${escapeHtml(label)}</h3>
         <div class="meta">Source: ${escapeHtml(source)}\nURL: ${escapeHtml(url || '-')}</div>
       </article>
@@ -1179,12 +1170,19 @@ function renderModels(models) {
   cards.forEach((card) => {
     card.addEventListener('click', () => {
       const url = String(card.getAttribute('data-model-url') || '').trim();
-      selectModel(url, cards);
+      cards.forEach((el) => el.classList.remove('selected'));
+      card.classList.add('selected');
+      previewStoredModel(url);
     });
   });
 
   if (selectedModelUrl) {
-    selectModel(selectedModelUrl, cards);
+    const existing = Array.from(cards).find((el) => String(el.getAttribute('data-model-url') || '').trim() === selectedModelUrl);
+    if (existing) {
+      cards.forEach((el) => el.classList.remove('selected'));
+      existing.classList.add('selected');
+      previewStoredModel(selectedModelUrl);
+    }
   }
 }
 
@@ -1211,12 +1209,10 @@ async function loadModels() {
 
   renderModels(validModels);
   if (selectedModelUrl) {
-    enterWorldBtn.disabled = false;
-    setStatus(`Loaded ${validModels.length} model(s). Hidden ${invalidModels.length} broken/incomplete model(s).`, 'ok');
+    setStatus(`Stored ${validModels.length} model(s). Hidden ${invalidModels.length} broken/incomplete model(s).`, 'ok');
     previewModel(selectedModelUrl);
   } else {
-    enterWorldBtn.disabled = false;
-    setStatus(`Loaded ${validModels.length} model(s). Hidden ${invalidModels.length} broken/incomplete model(s). Open World will use the default everything_optimized_draco.glb scene for now.`, 'ok');
+    setStatus(`Stored ${validModels.length} model(s). Hidden ${invalidModels.length} broken/incomplete model(s).`, 'ok');
     previewModel('');
   }
 }
@@ -1285,11 +1281,9 @@ if (loadSelectedCharacter()) {
     previewDanceBtn.addEventListener('click', toggleSwingDancePreview);
   }
 
-  enterWorldBtn.addEventListener('click', () => {
-    const modelUrl = selectedModelUrl || OPEN_WORLD_MODEL_URL;
-    const target = `/world-select?characterId=${encodeURIComponent(selectedCharacter.id)}&modelUrl=${encodeURIComponent(modelUrl)}`;
-    window.location.href = target;
-  });
+  if (enterWorldBtn) {
+    enterWorldBtn.disabled = true;
+  }
 
   loadModels().catch((err) => {
     setStatus(`Failed loading models: ${err && err.message ? err.message : String(err)}`, 'error');
