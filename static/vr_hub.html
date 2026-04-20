@@ -238,13 +238,21 @@ scene.add(floor);
 const _gloveLoader = new GLTFLoader();
 const _gripSpaces = [renderer.xr.getControllerGrip(0), renderer.xr.getControllerGrip(1)];
 
-// Offsets: adjust position/rotation so the glove sits naturally on the hand
-// These can be tuned once you see the result in-headset.
-const GLOVE_OFFSET_POS = new THREE.Vector3(0, 0, -0.02);   // slight forward
-const GLOVE_OFFSET_ROT = new THREE.Euler(Math.PI / 6, Math.PI, 0); // palm-forward
-
 _gloveLoader.load('/static/gloves.glb', (gltf) => {
+  // Debug: log bounding box to understand scale/position of the raw GLB
+  const _bb = new THREE.Box3().setFromObject(gltf.scene);
+  const _sz = new THREE.Vector3(); _bb.getSize(_sz);
+  const _cn = new THREE.Vector3(); _bb.getCenter(_cn);
+  console.log('[VR Hub] Glove BB size:', _sz, 'center:', _cn);
+
   _gripSpaces.forEach((grip, idx) => {
+    // Debug marker: bright cyan box so we can confirm grip tracking regardless of glove
+    const _marker = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.04, 0.04),
+      new THREE.MeshBasicMaterial({ color: 0x00ffff, wireframe: true })
+    );
+    grip.add(_marker);
+
     const glove = gltf.scene.clone();
 
     // Force double-sided so mesh is visible regardless of winding/normals
@@ -255,13 +263,19 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
       }
     });
 
-    // No mirror — both hands use the same orientation to avoid inverted normals.
-    // Rotate left hand (idx 1) 180° around Y to face the right way.
-    if (idx === 1) glove.rotation.y = Math.PI;
+    // Center the glove on the grip origin (counteract any baked offset in the GLB)
+    glove.position.set(-_cn.x, -_cn.y, -_cn.z);
 
-    glove.position.copy(GLOVE_OFFSET_POS);
-    glove.rotation.x = GLOVE_OFFSET_ROT.x;
-    // (rotation.y set above per hand)
+    // Scale to roughly hand-sized (~20cm) if the mesh is wildly off
+    const maxDim = Math.max(_sz.x, _sz.y, _sz.z);
+    if (maxDim > 0) {
+      const target = 0.2; // 20cm target hand size
+      if (maxDim > target * 5 || maxDim < target * 0.2) {
+        const s = target / maxDim;
+        glove.scale.setScalar(s);
+        console.log('[VR Hub] Auto-scaled glove by', s.toFixed(4));
+      }
+    }
 
     grip.add(glove);
     scene.add(grip);
