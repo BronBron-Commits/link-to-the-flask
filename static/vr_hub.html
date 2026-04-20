@@ -329,7 +329,7 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
     const s = maxDim > 0 ? (0.2 / maxDim) : 1;
     glove.scale.setScalar(s);
     const xInward = idx === 0 ? 2.0 : -2.0; // right(+X) / left(-X) opposite direction
-    glove.position.set(-cn2.x * s + xInward, -cn2.y * s - 1.0, -cn2.z * s + 1.0);
+    glove.position.set(-cn2.x * s + xInward, -cn2.y * s, -cn2.z * s + 1.0);
     glove.rotation.y = Math.PI; // flip 180° on Y
     console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'sz:', sz2, 's:', s.toFixed(4));
 
