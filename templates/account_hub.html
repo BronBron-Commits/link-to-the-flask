@@ -298,6 +298,9 @@
     .network-wrap:not(.is-collapsed) .bubble.library {
       transition-delay: 0.22s;
     }
+    .network-wrap:not(.is-collapsed) .bubble.vr {
+      transition-delay: 0.28s;
+    }
 
     .bubble:hover,
     .bubble:focus-visible {
@@ -390,6 +393,17 @@
       width: 185px;
       height: 185px;
       animation-delay: -5.2s;
+    }
+
+    .bubble.vr {
+      --bubble-accent: rgba(160, 110, 255, 1);
+      --tx: -20px;
+      --ty: -220px;
+      right: 4%;
+      bottom: 38%;
+      width: 160px;
+      height: 160px;
+      animation-delay: -1.8s;
     }
 
     .rail {
@@ -500,6 +514,7 @@
       .bubble.models { right: 6%; top: 11%; }
       .bubble.worlds { left: 10%; bottom: 11%; }
       .bubble.library { right: 9%; bottom: 7%; }
+      .bubble.vr { right: 3%; bottom: 34%; }
 
       .bubble:hover,
       .bubble:focus-visible {
@@ -633,6 +648,11 @@
           <a class="bubble nav-bubble library" href="/paraval-library">
             <strong>Library</strong>
             <span>Open reference content, documents, and adjacent tools.</span>
+          </a>
+
+          <a class="bubble nav-bubble vr" href="/vr-hub">
+            <strong>Enter VR</strong>
+            <span>Step into the 3D hub in WebXR.</span>
           </a>
         </div>
 
