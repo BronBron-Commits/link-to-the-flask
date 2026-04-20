@@ -238,18 +238,6 @@ scene.add(floor);
 const _gloveLoader = new GLTFLoader();
 const _gripSpaces = [renderer.xr.getControllerGrip(0), renderer.xr.getControllerGrip(1)];
 
-// ── GLOVE TRANSFORM TUNING ──────────────────────────────────────────────────
-// Adjust these until the gloves sit correctly on your hands.
-// Rotations are in radians. Math.PI = 180°, Math.PI/2 = 90°.
-// RIGHT hand (grip index 0)
-const GLOVE_R_ROT = new THREE.Euler( Math.PI / 2,  Math.PI, 0, 'XYZ'); // rotate: +90° X, 180° Y
-const GLOVE_R_POS = new THREE.Vector3(0, 0, 0);   // fine-tune position after rotation
-
-// LEFT hand (grip index 1)
-const GLOVE_L_ROT = new THREE.Euler( Math.PI / 2,  0,       0, 'XYZ'); // rotate: +90° X only
-const GLOVE_L_POS = new THREE.Vector3(0, 0, 0);
-// ────────────────────────────────────────────────────────────────────────────
-
 _gloveLoader.load('/static/gloves.glb', (gltf) => {
   // Collect every Mesh in the scene, split into left/right by X bounding-box center
   const allMeshes = [];
@@ -285,14 +273,7 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
     const maxDim = Math.max(sz2.x, sz2.y, sz2.z);
     const s = maxDim > 0 ? (0.2 / maxDim) : 1;
     glove.scale.setScalar(s);
-
-    // Apply tunable rotation offset (adjust GLOVE_R_ROT / GLOVE_L_ROT above)
-    const rot = idx === 0 ? GLOVE_R_ROT : GLOVE_L_ROT;
-    const pos = idx === 0 ? GLOVE_R_POS : GLOVE_L_POS;
-    glove.rotation.copy(rot);
-
-    // Center on grip origin, then apply fine-tune position
-    glove.position.set(-cn2.x * s + pos.x, -cn2.y * s + pos.y, -cn2.z * s + pos.z);
+    glove.position.set(-cn2.x * s, -cn2.y * s, -cn2.z * s);
     console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'sz:', sz2, 's:', s.toFixed(4));
 
     grip.add(glove);
