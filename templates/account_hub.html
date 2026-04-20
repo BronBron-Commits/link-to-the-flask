@@ -739,6 +739,36 @@
         return;
       }
 
+      function clearClientAuthArtifacts() {
+        try {
+          sessionStorage.removeItem('paraval-auth-sync-token');
+        } catch (_e) {}
+
+        try {
+          const localKeys = [];
+          for (let i = 0; i < localStorage.length; i += 1) {
+            const key = String(localStorage.key(i) || '');
+            if (!key) continue;
+            if (/supabase/i.test(key) || /^sb-.*-auth-token$/i.test(key)) {
+              localKeys.push(key);
+            }
+          }
+          localKeys.forEach((key) => localStorage.removeItem(key));
+        } catch (_e) {}
+
+        try {
+          const sessionKeys = [];
+          for (let i = 0; i < sessionStorage.length; i += 1) {
+            const key = String(sessionStorage.key(i) || '');
+            if (!key) continue;
+            if (/supabase/i.test(key) || /^sb-.*-auth-token$/i.test(key)) {
+              sessionKeys.push(key);
+            }
+          }
+          sessionKeys.forEach((key) => sessionStorage.removeItem(key));
+        } catch (_e) {}
+      }
+
       signOutBtn.addEventListener('click', async () => {
         signOutBtn.disabled = true;
         setStatus('Signing out...', '');
@@ -750,8 +780,9 @@
           if (!response.ok) {
             throw new Error(`logout-http-${response.status}`);
           }
+          clearClientAuthArtifacts();
           setStatus('Signed out. Redirecting...', 'ok');
-          window.location.replace('/');
+          window.location.replace('/?signedOut=1');
         } catch (error) {
           const message = String(error && error.message ? error.message : error);
           setStatus(`Sign-out failed: ${message}`, 'error');

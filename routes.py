@@ -595,6 +595,7 @@ def auth_session_create():
 def auth_logout():
     session.pop("auth_user", None)
     session.pop("supabase_access_token", None)
+    session.pop("auth_token_hash", None)
     return jsonify(ok=True, authenticated=False)
 
 

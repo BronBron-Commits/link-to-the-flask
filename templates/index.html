@@ -620,9 +620,11 @@ const tabManageEl = document.getElementById('tab-manage');
 
 const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
 const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+const justSignedOut = new URLSearchParams(window.location.search).get('signedOut') === '1';
 let currentMode = 'sign-in';
 let currentUser = null;
 let signInInFlight = false;
+let suppressHubRedirect = justSignedOut;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -810,6 +812,21 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   });
   window.supabase = supabase;
   window.__paravalAuth.clientReady = true;
+
+  if (justSignedOut) {
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (_err) {
+      // Keep sign-out UX stable even if local SDK cleanup throws.
+    }
+    try {
+      const cleanedUrl = `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState({}, '', cleanedUrl);
+    } catch (_err) {}
+    renderAccount(null);
+    applyMode('sign-in');
+    setStatus('Signed out.', 'success');
+  }
 
   tabSignInEl.addEventListener('click', () => applyMode('sign-in'));
   tabCreateEl.addEventListener('click', () => applyMode('create'));
@@ -1112,6 +1129,13 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   });
 
   supabase.auth.onAuthStateChange(async (event, session) => {
+    if (suppressHubRedirect) {
+      if (!session) {
+        renderAccount(null);
+        applyMode('sign-in');
+      }
+      return;
+    }
     if (event === 'INITIAL_SESSION') {
       console.log('[AUTH SYNC] onAuthStateChange INITIAL_SESSION');
     }
@@ -1125,7 +1149,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   });
 
   const current = await supabase.auth.getSession();
-  if (current.data.session) {
+  if (!suppressHubRedirect && current.data.session) {
     renderAccount(normalizeSupabaseUser(current.data.session.user));
     window.location.replace('/account-hub');
   }
