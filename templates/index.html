@@ -324,17 +324,6 @@
       background: linear-gradient(155deg, rgba(80,61,20,0.98), rgba(39,31,14,0.98));
     }
 
-    .auth-btn.discord {
-      border-color: rgba(124, 142, 255, 0.62);
-      background: linear-gradient(155deg, rgba(39, 47, 94, 0.98), rgba(28, 35, 72, 0.98));
-      color: #e2e9ff;
-    }
-
-    .auth-btn.discord:hover {
-      border-color: rgba(155, 170, 255, 0.88);
-      box-shadow: 0 10px 24px rgba(0,0,0,0.32), 0 0 0 1px rgba(124, 142, 255, 0.35) inset;
-    }
-
     .auth-btn.google {
       border-color: rgba(133, 197, 255, 0.6);
       background: linear-gradient(155deg, rgba(24, 57, 100, 0.98), rgba(17, 41, 75, 0.98));
@@ -502,7 +491,6 @@
     </div>
     <div class="auth-actions">
       <button id="auth-sign-in" class="auth-btn primary" type="button">Sign In</button>
-      <button id="auth-sign-in-discord" class="auth-btn discord" type="button">Sign In With Discord</button>
       <button id="auth-sign-in-google" class="auth-btn google" type="button">Sign In With Google</button>
       <button id="auth-sign-up" class="auth-btn" type="button">Create Account</button>
       <button id="auth-save-profile" class="auth-btn is-hidden" type="button">Save Profile</button>
@@ -591,7 +579,6 @@ const passwordEl = document.getElementById('auth-password');
 const passwordConfirmEl = document.getElementById('auth-password-confirm');
 const displayNameEl = document.getElementById('auth-display-name');
 const signInBtn = document.getElementById('auth-sign-in');
-const signInDiscordBtn = document.getElementById('auth-sign-in-discord');
 const signInGoogleBtn = document.getElementById('auth-sign-in-google');
 const signUpBtn = document.getElementById('auth-sign-up');
 const saveProfileBtn = document.getElementById('auth-save-profile');
@@ -628,24 +615,6 @@ let currentUser = null;
 let signInInFlight = false;
 let suppressHubRedirect = justSignedOut;
 
-function authErrorMessage(code) {
-  const normalized = String(code || '').trim();
-  if (!normalized) return '';
-  if (normalized === 'discord-not-configured') {
-    return 'Discord sign-in is not configured on this server yet.';
-  }
-  if (normalized === 'discord-access_denied') {
-    return 'Discord sign-in was canceled.';
-  }
-  if (normalized === 'discord-invalid-state') {
-    return 'Discord sign-in failed security validation. Please try again.';
-  }
-  if (normalized === 'discord-missing-code') {
-    return 'Discord sign-in returned without an authorization code.';
-  }
-  return `Discord sign-in failed (${normalized}).`;
-}
-
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
   statusEl.className = `auth-status${tone ? ` is-${tone}` : ''}`;
@@ -657,7 +626,7 @@ function setInputsDisabled(disabled) {
   passwordEl.disabled = disabled;
   passwordConfirmEl.disabled = disabled;
   signInBtn.disabled = disabled;
-  if (signInDiscordBtn) signInDiscordBtn.disabled = disabled;
+
   if (signInGoogleBtn) signInGoogleBtn.disabled = disabled;
   signUpBtn.disabled = disabled;
   saveProfileBtn.disabled = disabled;
@@ -760,7 +729,7 @@ function applyMode(mode) {
   tabManageEl.classList.toggle('is-active', isManage);
   confirmWrapEl.classList.toggle('is-hidden', !isCreate);
   signInBtn.classList.toggle('is-hidden', mode !== 'sign-in');
-  if (signInDiscordBtn) signInDiscordBtn.classList.toggle('is-hidden', mode !== 'sign-in');
+
   if (signInGoogleBtn) signInGoogleBtn.classList.toggle('is-hidden', mode !== 'sign-in');
   signUpBtn.classList.toggle('is-hidden', !isCreate);
   saveProfileBtn.classList.toggle('is-hidden', !isManage);
@@ -801,7 +770,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
 } else {
   if (authErrorCode) {
-    setStatus(authErrorMessage(authErrorCode), 'error');
+    setStatus(authErrorCode, 'error');
   }
   window.__paravalAuth.page = 'index';
   window.__paravalAuth.moduleLoaded = false;
@@ -927,13 +896,6 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   });
   } else {
     console.error('[BOOT] ERROR: signInBtn not found! Sign-in button will not work.');
-  }
-
-  if (signInDiscordBtn) {
-    signInDiscordBtn.addEventListener('click', () => {
-      setStatus('Opening Discord app...', '');
-      window.location.assign('/auth/discord/app-start');
-    });
   }
 
   if (signInGoogleBtn) {
