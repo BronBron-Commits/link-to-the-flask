@@ -247,17 +247,28 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
   _gripSpaces.forEach((grip, idx) => {
     const glove = gltf.scene.clone();
 
-    // Mirror for right vs left hand: flip X scale on right (idx 0 = right in XR)
-    glove.scale.set(idx === 0 ? -1 : 1, 1, 1);
+    // Force double-sided so mesh is visible regardless of winding/normals
+    glove.traverse(node => {
+      if (node.isMesh && node.material) {
+        const mats = Array.isArray(node.material) ? node.material : [node.material];
+        mats.forEach(m => { m.side = THREE.DoubleSide; });
+      }
+    });
+
+    // No mirror — both hands use the same orientation to avoid inverted normals.
+    // Rotate left hand (idx 1) 180° around Y to face the right way.
+    if (idx === 1) glove.rotation.y = Math.PI;
+
     glove.position.copy(GLOVE_OFFSET_POS);
-    glove.rotation.copy(GLOVE_OFFSET_ROT);
+    glove.rotation.x = GLOVE_OFFSET_ROT.x;
+    // (rotation.y set above per hand)
 
     grip.add(glove);
     scene.add(grip);
   });
+  console.log('[VR Hub] Gloves loaded onto grip spaces');
 }, undefined, (err) => {
   console.warn('[VR Hub] Failed to load gloves.glb:', err);
-  // Fallback: add grip spaces without gloves so controller tracking still works
   _gripSpaces.forEach(grip => scene.add(grip));
 });
 
