@@ -35,3 +35,31 @@ Avoid `eventlet` workers (deprecated in Gunicorn). Run Socket.IO with gevent web
 ```bash
 gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 app:app -b 0.0.0.0:5000
 ```
+
+## Discord OAuth environment setup
+
+This app reads Discord OAuth values from process environment variables.
+
+1. Copy the template:
+
+```bash
+cp deployment/discord-oauth.env.example deployment/discord-oauth.env
+```
+
+2. Edit `deployment/discord-oauth.env` and set the real secret:
+
+```bash
+DISCORD_CLIENT_ID=1492219079237304493
+DISCORD_CLIENT_SECRET=YOUR_REAL_DISCORD_CLIENT_SECRET
+DISCORD_REDIRECT_URI=https://game.bronbron.org/auth/discord/callback
+DISCORD_OAUTH_SCOPE="identify email"
+```
+
+3. Load env vars before starting Gunicorn:
+
+```bash
+source scripts/load_discord_env.sh
+gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 app:app -b 0.0.0.0:5000
+```
+
+For systemd, mirror these values in your service unit using `Environment=` or `EnvironmentFile=`.
