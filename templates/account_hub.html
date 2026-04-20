@@ -241,6 +241,23 @@
       animation: float 9s ease-in-out infinite;
     }
 
+    .nav-bubble {
+      transition: opacity 0.3s ease, filter 0.3s ease;
+    }
+
+    .network-wrap.is-collapsed .nav-bubble {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      filter: blur(8px);
+    }
+
+    .network-wrap:not(.is-collapsed) .nav-bubble {
+      opacity: 1;
+      visibility: visible;
+      filter: blur(0);
+    }
+
     .bubble:hover,
     .bubble:focus-visible {
       transform: translateY(-6px) scale(1.02);
@@ -273,15 +290,15 @@
       animation-duration: 11s;
     }
 
-    .bubble.core-static {
-      cursor: default;
+    .bubble.core-toggle {
+      cursor: pointer;
     }
 
-    .bubble.core-static:hover,
-    .bubble.core-static:focus-visible {
-      transform: none;
-      border-color: rgba(243, 203, 122, 0.26);
-      box-shadow: 0 18px 34px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.08);
+    .bubble.core-toggle:hover,
+    .bubble.core-toggle:focus-visible {
+      transform: translateY(-4px) scale(1.01);
+      border-color: rgba(243, 203, 122, 0.45);
+      box-shadow: 0 24px 40px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.08);
       outline: none;
     }
 
@@ -440,9 +457,9 @@
         transform: translate(-50%, -50%) translateY(-6px) scale(1.02);
       }
 
-      .bubble.core-static:hover,
-      .bubble.core-static:focus-visible {
-        transform: translate(-50%, -50%);
+      .bubble.core-toggle:hover,
+      .bubble.core-toggle:focus-visible {
+        transform: translate(-50%, -50%) translateY(-4px) scale(1.01);
       }
     }
 
@@ -493,10 +510,8 @@
         transform: translateY(-4px);
       }
 
-      .bubble.core-static:hover,
-      .bubble.core-static:focus-visible {
-        transform: none;
-      }
+      .bubble.core-toggle:hover,
+      .bubble.core-toggle:focus-visible { transform: translateY(-4px); }
     }
   </style>
 </head>
@@ -539,27 +554,27 @@
             <path d="M710 565 C640 488, 598 438, 520 366" fill="none" stroke="url(#lineA)" stroke-width="3" stroke-linecap="round" />
           </svg>
 
-          <a class="bubble character" href="/hub">
+          <a class="bubble nav-bubble character" href="/hub">
             <strong>Character Hub</strong>
             <span>Upload sheets, review roster data, and pick the character you want to carry forward.</span>
           </a>
 
-          <a class="bubble models" href="/model-select">
+          <a class="bubble nav-bubble models" href="/model-select">
             <strong>Model Select</strong>
             <span>Manage avatar files and preview what the selected character will use.</span>
           </a>
 
-          <div class="bubble core core-static" aria-label="Worlds welcome home node">
+          <div class="bubble core core-toggle" role="button" tabindex="0" aria-expanded="false" aria-label="Toggle hub destinations">
             <strong>Welcome Home</strong>
             <span>Choose where to step next across your worlds, models, and library.</span>
           </div>
 
-          <a class="bubble worlds" href="/world-select">
+          <a class="bubble nav-bubble worlds" href="/world-select">
             <strong>World Select</strong>
             <span>Jump into available environments and scene entry points.</span>
           </a>
 
-          <a class="bubble library" href="/paraval-library">
+          <a class="bubble nav-bubble library" href="/paraval-library">
             <strong>Library</strong>
             <span>Open reference content, documents, and adjacent tools.</span>
           </a>
@@ -572,10 +587,35 @@
     (function () {
       const statusEl = document.getElementById('status');
       const signOutBtn = document.getElementById('sign-out-btn');
+      const networkWrap = document.querySelector('.network-wrap');
+      const coreBubble = document.querySelector('.bubble.core-toggle');
 
       function setStatus(message, tone) {
         statusEl.textContent = message || '';
         statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+      }
+
+      if (networkWrap && coreBubble) {
+        let expanded = false;
+
+        const applyBubbleState = () => {
+          networkWrap.classList.toggle('is-collapsed', !expanded);
+          coreBubble.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        };
+
+        const toggleBubbleState = () => {
+          expanded = !expanded;
+          applyBubbleState();
+        };
+
+        applyBubbleState();
+        coreBubble.addEventListener('click', toggleBubbleState);
+        coreBubble.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggleBubbleState();
+          }
+        });
       }
 
       if (!signOutBtn) {
