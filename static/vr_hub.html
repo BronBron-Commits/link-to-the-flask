@@ -449,30 +449,22 @@ function _getVrFadeMesh() {
   return _vrFadeMesh;
 }
 
+// Fade state — hoisted to module scope so the animation loop can read it
+const FADE_MS = 420;
+const fadeState = { active: false, start: 0, href: '' };
+
 function triggerNavigate(panel) {
   if (navigating) return;
   navigating = true;
   const href = panel.userData.def.href;
-
-  // Mark VR handoff so the destination page can auto-enter VR
   try { sessionStorage.setItem('vr-handoff', '1'); } catch (_) {}
 
-  const session = renderer.xr.getSession();
-  if (session && renderer.xr.isPresenting) {
-    // Fade to black inside the headset, then navigate (session ends naturally on unload)
-    const fadeMesh = _getVrFadeMesh();
-    const FADE_MS = 420;
-    const start = performance.now();
-    function doFade() {
-      const p = Math.min((performance.now() - start) / FADE_MS, 1);
-      fadeMesh.material.opacity = p;
-      if (p < 1) {
-        requestAnimationFrame(doFade);
-      } else {
-        window.location.href = href;
-      }
-    }
-    requestAnimationFrame(doFade);
+  if (renderer.xr.isPresenting) {
+    // Fade driven by setAnimationLoop (rAF is suspended inside XR sessions)
+    fadeState.active = true;
+    fadeState.start = performance.now();
+    fadeState.href = href;
+    _getVrFadeMesh(); // ensure mesh exists before first frame ticks
   } else {
     window.location.href = href;
   }
