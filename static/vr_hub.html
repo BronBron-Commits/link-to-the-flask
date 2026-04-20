@@ -288,186 +288,292 @@ scene.add(floor);
   scene.add(root);
 })();
 
-// ── Hand Tracking + Controller Fallback ──────────────────────────────────────
-// Bone connections: adjacent joint pairs used to build deforming cylinder segments.
-const HAND_BONES = [
-  // Wrist fan to metacarpals
-  ['wrist','thumb-metacarpal'],
-  ['wrist','index-finger-metacarpal'],
-  ['wrist','middle-finger-metacarpal'],
-  ['wrist','ring-finger-metacarpal'],
-  ['wrist','pinky-finger-metacarpal'],
-  // Knuckle cross-bar
-  ['index-finger-metacarpal', 'middle-finger-metacarpal'],
-  ['middle-finger-metacarpal','ring-finger-metacarpal'],
-  ['ring-finger-metacarpal',  'pinky-finger-metacarpal'],
-  // Thumb
-  ['thumb-metacarpal','thumb-phalanx-proximal'],
-  ['thumb-phalanx-proximal','thumb-phalanx-distal'],
-  ['thumb-phalanx-distal','thumb-tip'],
-  // Index
-  ['index-finger-metacarpal','index-finger-phalanx-proximal'],
-  ['index-finger-phalanx-proximal','index-finger-phalanx-intermediate'],
-  ['index-finger-phalanx-intermediate','index-finger-phalanx-distal'],
-  ['index-finger-phalanx-distal','index-finger-tip'],
-  // Middle
-  ['middle-finger-metacarpal','middle-finger-phalanx-proximal'],
-  ['middle-finger-phalanx-proximal','middle-finger-phalanx-intermediate'],
-  ['middle-finger-phalanx-intermediate','middle-finger-phalanx-distal'],
-  ['middle-finger-phalanx-distal','middle-finger-tip'],
-  // Ring
-  ['ring-finger-metacarpal','ring-finger-phalanx-proximal'],
-  ['ring-finger-phalanx-proximal','ring-finger-phalanx-intermediate'],
-  ['ring-finger-phalanx-intermediate','ring-finger-phalanx-distal'],
-  ['ring-finger-phalanx-distal','ring-finger-tip'],
-  // Pinky
-  ['pinky-finger-metacarpal','pinky-finger-phalanx-proximal'],
-  ['pinky-finger-phalanx-proximal','pinky-finger-phalanx-intermediate'],
-  ['pinky-finger-phalanx-intermediate','pinky-finger-phalanx-distal'],
-  ['pinky-finger-phalanx-distal','pinky-finger-tip'],
+// ── Skinned Hand Mesh with WebXR Joint Skeleton ───────────────────────────────
+//
+// Strategy:
+//   1. 25 THREE.Bone objects mirror the WebXR XRJointSpace hierarchy.
+//   2. A SkinnedMesh is built from capsule-tube segments per bone; each vertex
+//      carries skinIndex/skinWeight attributes pointing to exactly one bone.
+//   3. Every frame the bone's matrixWorld is overwritten directly from the
+//      corresponding XRJointSpace.matrixWorld, then skeleton.update() applies
+//      the bind-pose inverse to produce the skinning matrices.
+//   4. When hand tracking is unavailable a static controller-space box hand is
+//      shown as fallback.
+//
+// Joint order matches the WebXR Hand Input spec (index 0-24).
+const JOINT_NAMES = [
+  'wrist',                                              // 0
+  'thumb-metacarpal','thumb-phalanx-proximal',          // 1-2
+  'thumb-phalanx-distal','thumb-tip',                   // 3-4
+  'index-finger-metacarpal','index-finger-phalanx-proximal',     // 5-6
+  'index-finger-phalanx-intermediate','index-finger-phalanx-distal','index-finger-tip', // 7-9
+  'middle-finger-metacarpal','middle-finger-phalanx-proximal',    // 10-11
+  'middle-finger-phalanx-intermediate','middle-finger-phalanx-distal','middle-finger-tip', // 12-14
+  'ring-finger-metacarpal','ring-finger-phalanx-proximal',        // 15-16
+  'ring-finger-phalanx-intermediate','ring-finger-phalanx-distal','ring-finger-tip', // 17-19
+  'pinky-finger-metacarpal','pinky-finger-phalanx-proximal',      // 20-21
+  'pinky-finger-phalanx-intermediate','pinky-finger-phalanx-distal','pinky-finger-tip', // 22-24
 ];
 
-// Joint sphere caps at knuckles + fingertips for visual roundness.
-const CAP_JOINTS = [
-  'wrist',
-  'thumb-tip','index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip',
-  'thumb-phalanx-proximal',
-  'index-finger-phalanx-proximal','middle-finger-phalanx-proximal',
-  'ring-finger-phalanx-proximal', 'pinky-finger-phalanx-proximal',
+// Parent index for each joint (WebXR spec hierarchy).
+const JOINT_PARENT = [
+  -1,  // wrist = root
+   0,1,2,3,           // thumb chain
+   0,5,6,7,8,         // index chain
+   0,10,11,12,13,     // middle chain
+   0,15,16,17,18,     // ring chain
+   0,20,21,22,23,     // pinky chain
 ];
 
-const _handMat    = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.85, metalness: 0.0 });
-// Unit-height cylinder (height=1m) — scale.y is set per-frame to match joint-to-joint distance.
-const _boneCylGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 8, 1);
-const _jointCapGeo = new THREE.SphereGeometry(0.009, 8, 6);
+// Each finger segment: [proximalJointIdx, distalJointIdx, tubeRadius]
+const BONE_SEGMENTS = [
+  [0,1,0.012],[1,2,0.010],[2,3,0.009],[3,4,0.008],           // thumb
+  [0,5,0.012],[5,6,0.011],[6,7,0.009],[7,8,0.008],[8,9,0.007], // index
+  [0,10,0.012],[10,11,0.011],[11,12,0.009],[12,13,0.008],[13,14,0.007], // middle
+  [0,15,0.011],[15,16,0.010],[16,17,0.008],[17,18,0.007],[18,19,0.006], // ring
+  [0,20,0.010],[20,21,0.009],[21,22,0.007],[22,23,0.006],[23,24,0.006], // pinky
+  // Palm cross-bars
+  [5,10,0.008],[10,15,0.008],[15,20,0.007],
+];
 
-// Reusable temporaries — avoid allocating on every frame.
-const _bpA = new THREE.Vector3(), _bpB = new THREE.Vector3();
-const _bdir = new THREE.Vector3(), _bUp = new THREE.Vector3(0, 1, 0);
+const _handMat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.8, metalness: 0.0, skinning: true });
+const _handMatFlat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.8, metalness: 0.0 });
 
-// Reorients a unit-height cylinder so it spans from joint A to joint B.
-function _updateBone(mesh, jA, jB) {
-  jA.getWorldPosition(_bpA);
-  jB.getWorldPosition(_bpB);
-  _bdir.subVectors(_bpB, _bpA);
-  const len = _bdir.length();
-  if (len < 0.001) { mesh.visible = false; return; }
-  mesh.visible = true;
-  mesh.position.addVectors(_bpA, _bpB).multiplyScalar(0.5);
-  mesh.scale.y = len;
-  mesh.quaternion.setFromUnitVectors(_bUp, _bdir.divideScalar(len));
+// Build a tube (capsule-like) geometry from origin (0,0,0) to (0,len,0),
+// all vertices weighted 100% to boneIdx, and the distal end blended toward
+// distalBoneIdx so the joint bends smoothly.
+function buildBoneTube(len, radius, boneIdx, distalIdx, radialSegs = 6, heightSegs = 3) {
+  const positions = [], normals = [], skinIndices = [], skinWeights = [];
+  const indices = [];
+
+  const rows = heightSegs + 1;
+  for (let r = 0; r < rows; r++) {
+    const t = r / heightSegs;          // 0 at proximal, 1 at distal
+    const y = t * len;
+    // Blend weight: proximal end = full bone, distal end = 50/50 split
+    const wProx = 1 - t * 0.5;
+    const wDist = t * 0.5;
+    for (let s = 0; s <= radialSegs; s++) {
+      const angle = (s / radialSegs) * Math.PI * 2;
+      const cx = Math.cos(angle) * radius;
+      const cz = Math.sin(angle) * radius;
+      positions.push(cx, y, cz);
+      normals.push(cx / radius, 0, cz / radius);
+      skinIndices.push(boneIdx, distalIdx, 0, 0);
+      skinWeights.push(wProx, wDist, 0, 0);
+    }
+  }
+  // Quads between rows
+  const cols = radialSegs + 1;
+  for (let r = 0; r < heightSegs; r++) {
+    for (let s = 0; s < radialSegs; s++) {
+      const a = r * cols + s, b = a + cols, c = b + 1, d = a + 1;
+      indices.push(a, b, d, b, c, d);
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position',   new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal',     new THREE.Float32BufferAttribute(normals,   3));
+  geo.setAttribute('skinIndex',  new THREE.Uint16BufferAttribute(skinIndices,  4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(skinWeights, 4));
+  geo.setIndex(indices);
+  return geo;
 }
 
-const _boneUpdaters = []; // per-frame callbacks registered per hand
+// Build one complete skinned hand mesh from a rest-pose joint position map.
+// restPositions: Map<jointName, THREE.Vector3> in world space (captured at first frame).
+function buildSkinnedHand(restPositions) {
+  // Create bones matching the joint hierarchy.
+  const bones = JOINT_NAMES.map((name, i) => {
+    const b = new THREE.Bone();
+    b.name = name;
+    b.position.copy(restPositions.get(name) || new THREE.Vector3());
+    return b;
+  });
+  // Parent bones (subtract parent world pos → local).
+  bones.forEach((b, i) => {
+    const pi = JOINT_PARENT[i];
+    if (pi === -1) return; // wrist = scene root
+    const parentPos = bones[pi].position;
+    b.position.sub(parentPos); // convert to local space relative to parent
+    bones[pi].add(b);
+  });
 
-// Static procedural hand — shown when hand tracking is unavailable (controller mode).
-function buildProceduralHand(isRight) {
+  // Root pivot — placed at wrist world position.
+  const rootPivot = new THREE.Group();
+  rootPivot.position.copy(restPositions.get('wrist') || new THREE.Vector3());
+  rootPivot.add(bones[0]);
+
+  const skeleton = new THREE.Skeleton(bones);
+
+  // Merge all segment geometries into one SkinnedMesh.
+  const mergedPositions = [], mergedNormals = [], mergedSkinIdx = [], mergedSkinWt = [];
+  const mergedIndices = [];
+  let vertexOffset = 0;
+
+  BONE_SEGMENTS.forEach(([proxIdx, distIdx, radius]) => {
+    const pPos = restPositions.get(JOINT_NAMES[proxIdx]) || new THREE.Vector3();
+    const dPos = restPositions.get(JOINT_NAMES[distIdx]) || new THREE.Vector3();
+    const len  = pPos.distanceTo(dPos);
+    if (len < 0.001) return;
+
+    const geo = buildBoneTube(len, radius, proxIdx, distIdx);
+    const pos = geo.attributes.position;
+    const nor = geo.attributes.normal;
+    const si  = geo.attributes.skinIndex;
+    const sw  = geo.attributes.skinWeight;
+    const idx = geo.index.array;
+
+    // Orient the local tube from proximal joint toward distal joint.
+    const dir = new THREE.Vector3().subVectors(dPos, pPos).normalize();
+    const up  = new THREE.Vector3(0, 1, 0);
+    const q   = new THREE.Quaternion().setFromUnitVectors(up, dir);
+    const mat = new THREE.Matrix4().makeRotationFromQuaternion(q);
+    mat.setPosition(pPos);
+
+    for (let v = 0; v < pos.count; v++) {
+      const lp = new THREE.Vector3(pos.getX(v), pos.getY(v), pos.getZ(v)).applyMatrix4(mat);
+      mergedPositions.push(lp.x, lp.y, lp.z);
+      const ln = new THREE.Vector3(nor.getX(v), nor.getY(v), nor.getZ(v)).applyMatrix3(new THREE.Matrix3().getNormalMatrix(mat));
+      mergedNormals.push(ln.x, ln.y, ln.z);
+      mergedSkinIdx.push(si.getX(v), si.getY(v), si.getZ(v), si.getW(v));
+      mergedSkinWt.push(sw.getX(v), sw.getY(v), sw.getZ(v), sw.getW(v));
+    }
+    for (let i = 0; i < idx.length; i++) mergedIndices.push(idx[i] + vertexOffset);
+    vertexOffset += pos.count;
+  });
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position',   new THREE.Float32BufferAttribute(mergedPositions, 3));
+  geo.setAttribute('normal',     new THREE.Float32BufferAttribute(mergedNormals,   3));
+  geo.setAttribute('skinIndex',  new THREE.Uint16BufferAttribute(mergedSkinIdx,  4));
+  geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(mergedSkinWt,  4));
+  geo.setIndex(mergedIndices);
+
+  const skinnedMesh = new THREE.SkinnedMesh(geo, _handMat);
+  skinnedMesh.add(bones[0]);
+  skinnedMesh.bind(skeleton);
+
+  return { skinnedMesh, skeleton, bones, rootPivot };
+}
+
+// Static fallback hand (no hand-tracking).
+function buildStaticHand(isRight) {
   const root = new THREE.Group();
   const flip = isRight ? 1 : -1;
   function addBox(w, h, d, x, y, z) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _handMat);
-    m.position.set(x, y, z);
-    root.add(m);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _handMatFlat);
+    m.position.set(x, y, z); root.add(m);
   }
-  // Palm
   addBox(0.078, 0.022, 0.095, 0, 0, 0.048);
-  // Four fingers: index → pinky
   const fingers = [
-    { x: flip *  0.026, lens: [0.032, 0.022, 0.018], w: 0.016 },
-    { x: flip *  0.009, lens: [0.036, 0.025, 0.019], w: 0.017 },
-    { x: -flip * 0.008, lens: [0.030, 0.021, 0.016], w: 0.015 },
-    { x: -flip * 0.025, lens: [0.022, 0.016, 0.013], w: 0.012 },
+    { x: flip * 0.026,  lens: [0.032,0.022,0.018], w: 0.016 },
+    { x: flip * 0.009,  lens: [0.036,0.025,0.019], w: 0.017 },
+    { x: -flip * 0.008, lens: [0.030,0.021,0.016], w: 0.015 },
+    { x: -flip * 0.025, lens: [0.022,0.016,0.013], w: 0.012 },
   ];
   fingers.forEach(({ x, lens, w }) => {
     let z = 0;
-    lens.forEach(len => { addBox(w, w * 0.85, len, x, 0, z - len / 2); z -= len + 0.002; });
+    lens.forEach(len => { addBox(w, w*0.85, len, x, 0, z - len/2); z -= len + 0.002; });
   });
-  // Thumb
   const tp = new THREE.Group();
   tp.position.set(flip * 0.040, 0, 0.038);
-  tp.rotation.z = flip * -0.55;
-  tp.rotation.y = flip *  0.30;
+  tp.rotation.z = flip * -0.55; tp.rotation.y = flip * 0.30;
   let tz = 0;
-  [{ w: 0.018, d: 0.034 }, { w: 0.015, d: 0.026 }].forEach(({ w, d }) => {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(w, w * 0.85, d), _handMat);
-    s.position.set(0, 0, tz - d / 2); tp.add(s); tz -= d + 0.003;
+  [{ w: 0.018, d: 0.034 },{ w: 0.015, d: 0.026 }].forEach(({ w, d }) => {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(w, w*0.85, d), _handMatFlat);
+    s.position.set(0, 0, tz - d/2); tp.add(s); tz -= d + 0.003;
   });
   root.add(tp);
   return root;
 }
 
+const _handUpdaters = [];
+const _tmpMat4 = new THREE.Matrix4();
+
 [0, 1].forEach(idx => {
-  const ctrl    = renderer.xr.getController(idx);
-  const xrHand  = renderer.xr.getHand(idx);
+  const ctrl   = renderer.xr.getController(idx);
+  const xrHand = renderer.xr.getHand(idx);
   const isRight = idx === 0;
 
-  // Static fallback hand lives in controller space
-  const staticHand = buildProceduralHand(isRight);
+  // Fallback: static box hand on the controller.
+  const staticHand = buildStaticHand(isRight);
   ctrl.add(staticHand);
-
-  // Ray pointer — only useful in controller mode
   const rayLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-3)]),
     new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.4 })
   );
   ctrl.add(rayLine);
   scene.add(ctrl);
-
-  // Bone cylinder meshes — world-space objects repositioned every frame.
-  const boneMeshes = HAND_BONES.map(([nameA, nameB]) => {
-    const mesh = new THREE.Mesh(_boneCylGeo, _handMat);
-    mesh.visible = false;
-    scene.add(mesh);
-    return { mesh, nameA, nameB };
-  });
-
-  // Sphere caps at knuckles / fingertips — children of their XRJointSpace.
-  CAP_JOINTS.forEach(name => {
-    const joint = xrHand.joints[name];
-    if (joint) {
-      const cap = new THREE.Mesh(_jointCapGeo, _handMat);
-      cap.visible = false;
-      joint.add(cap);
-    }
-  });
   scene.add(xrHand);
 
   let _tracking = false;
+  let _skinnedData = null; // { skinnedMesh, skeleton, bones }
+  let _restCaptured = false;
 
-  // Per-frame: update every bone cylinder from live joint world-space positions.
-  _boneUpdaters.push(() => {
-    if (!_tracking) return;
-    boneMeshes.forEach(({ mesh, nameA, nameB }) => {
-      const jA = xrHand.joints[nameA], jB = xrHand.joints[nameB];
-      if (jA && jB) _updateBone(mesh, jA, jB);
+  // Called once on first tracked frame to build the skinned mesh from the real rest pose.
+  function _captureAndBuild() {
+    const restPos = new Map();
+    JOINT_NAMES.forEach(name => {
+      const j = xrHand.joints[name];
+      if (j) {
+        const wp = new THREE.Vector3();
+        j.getWorldPosition(wp);
+        restPos.set(name, wp);
+      } else {
+        restPos.set(name, new THREE.Vector3());
+      }
     });
+    _skinnedData = buildSkinnedHand(restPos);
+    scene.add(_skinnedData.skinnedMesh);
+    _restCaptured = true;
+  }
+
+  _handUpdaters.push(() => {
+    if (!_tracking) return;
+    if (!_restCaptured) { _captureAndBuild(); return; }
+
+    const { skeleton, bones } = _skinnedData;
+    // Drive each bone's world matrix directly from its XRJointSpace.
+    JOINT_NAMES.forEach((name, i) => {
+      const joint = xrHand.joints[name];
+      if (!joint) return;
+      // XRJointSpace world matrix is maintained by Three.js XR manager each frame.
+      joint.updateWorldMatrix(true, false);
+      bones[i].matrixWorld.copy(joint.matrixWorld);
+      // Decompose into local TRS so Three.js hierarchy remains consistent.
+      const pi = JOINT_PARENT[i];
+      if (pi === -1) {
+        bones[i].matrix.copy(joint.matrixWorld);
+      } else {
+        _tmpMat4.copy(bones[pi].matrixWorld).invert();
+        bones[i].matrix.multiplyMatrices(_tmpMat4, joint.matrixWorld);
+      }
+      bones[i].matrix.decompose(bones[i].position, bones[i].quaternion, bones[i].scale);
+      bones[i].matrixWorldNeedsUpdate = false;
+    });
+    skeleton.update();
   });
 
   xrHand.addEventListener('connected', e => {
     _tracking = !!e.data.hand;
     staticHand.visible = !_tracking;
     rayLine.visible    = !_tracking;
-    boneMeshes.forEach(({ mesh }) => { mesh.visible = _tracking; });
-    CAP_JOINTS.forEach(name => {
-      const j = xrHand.joints[name];
-      if (j && j.children[0]) j.children[0].visible = _tracking;
-    });
+    if (_skinnedData) _skinnedData.skinnedMesh.visible = _tracking;
   });
   xrHand.addEventListener('disconnected', () => {
     _tracking = false;
+    _restCaptured = false;
     staticHand.visible = true;
     rayLine.visible    = true;
-    boneMeshes.forEach(({ mesh }) => { mesh.visible = false; });
-    CAP_JOINTS.forEach(name => {
-      const j = xrHand.joints[name];
-      if (j && j.children[0]) j.children[0].visible = false;
-    });
+    if (_skinnedData) { scene.remove(_skinnedData.skinnedMesh); _skinnedData = null; }
   });
 });
 
-// Animation loop — drive hand bone deformation then render.
+// Animation loop — drive skinned hand deformation then render.
 renderer.setAnimationLoop(() => {
-  _boneUpdaters.forEach(fn => fn());
+  _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
 });
 </script>
