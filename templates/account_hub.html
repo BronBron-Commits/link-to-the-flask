@@ -161,6 +161,36 @@
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
     }
 
+    .account-actions {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .account-signout-btn {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(6, 11, 19, 0.82);
+      color: #fff1c9;
+      border-radius: 12px;
+      padding: 10px 12px;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .account-signout-btn:hover,
+    .account-signout-btn:focus-visible {
+      transform: translateX(3px);
+      border-color: rgba(243, 203, 122, 0.52);
+      background: rgba(10, 18, 30, 0.94);
+      outline: none;
+    }
+
     .account-name {
       font-size: 1.1rem;
       color: #fff6df;
@@ -176,7 +206,7 @@
 
     .hub-stage {
       display: grid;
-      grid-template-columns: minmax(0, 1.55fr) minmax(280px, 0.9fr);
+      grid-template-columns: 1fr;
       gap: 24px;
       align-items: stretch;
     }
@@ -493,6 +523,10 @@
             <span id="account-role">Role: {{ auth_user.role or 'authenticated' }}</span><br />
             <span id="account-confirm">{% if is_authenticated %}Email {{ 'confirmed' if auth_user.emailConfirmed else 'unconfirmed' }}{% else %}Browse available resources from the hub map.{% endif %}</span>
           </div>
+          <div class="account-actions">
+            <button id="sign-out-btn" class="account-signout-btn" type="button">Sign Out</button>
+            <div id="status" class="status" aria-live="polite"></div>
+          </div>
         </aside>
       </header>
 
@@ -536,20 +570,6 @@
             <span>Open reference content, documents, and adjacent tools.</span>
           </a>
         </div>
-
-        <aside class="rail">
-          <section class="info-card">
-            <h2>Quick Actions</h2>
-            <div class="action-stack">
-              <button id="sign-out-btn" class="action-btn" type="button">
-                <strong>Sign Out</strong>
-                <span>Clear the current account session and return to the login page.</span>
-              </button>
-            </div>
-          </section>
-
-          <div id="status" class="status" aria-live="polite"></div>
-        </aside>
       </section>
     </main>
   </div>
