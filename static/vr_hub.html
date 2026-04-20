@@ -272,8 +272,13 @@ function _gamepadFromHandedness(handedness) {
 
 function _isYPressed(leftGp) {
   if (!leftGp || !leftGp.buttons) return false;
-  const candidates = [leftGp.buttons[3], leftGp.buttons[4]];
-  return candidates.some((b) => !!b && (b.pressed || (b.value || 0) > 0.65));
+  // Oculus/Quest left controller: X is usually index 4, Y is usually index 5.
+  // Prefer Y explicitly; only fall back when index 5 is unavailable.
+  const yBtn = leftGp.buttons[5];
+  if (yBtn) return !!(yBtn.pressed || (yBtn.value || 0) > 0.65);
+
+  const fallback = leftGp.buttons[4];
+  return !!(fallback && (fallback.pressed || (fallback.value || 0) > 0.65));
 }
 
 function _updateLeftHandPanel(leftGp) {
