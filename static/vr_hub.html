@@ -329,7 +329,7 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
 
     // Scale/rotate first, then recenter in controller-local space so mesh center sits on ray origin.
     glove.scale.setScalar(s);
-    glove.rotation.y = Math.PI + 0.3; // continue same slight tweak direction
+    glove.rotation.y = Math.PI - 1.0; // continue same slight tweak direction
     glove.position.set(0, 0, 0);
 
     rayOrigin.add(glove);
