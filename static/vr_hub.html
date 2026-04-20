@@ -263,19 +263,14 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
       }
     });
 
-    // Center the glove on the grip origin (counteract any baked offset in the GLB)
-    glove.position.set(-_cn.x, -_cn.y, -_cn.z);
-
-    // Scale to roughly hand-sized (~20cm) if the mesh is wildly off
+    // Scale to roughly hand-sized (~20cm) based on longest axis
     const maxDim = Math.max(_sz.x, _sz.y, _sz.z);
-    if (maxDim > 0) {
-      const target = 0.2; // 20cm target hand size
-      if (maxDim > target * 5 || maxDim < target * 0.2) {
-        const s = target / maxDim;
-        glove.scale.setScalar(s);
-        console.log('[VR Hub] Auto-scaled glove by', s.toFixed(4));
-      }
-    }
+    const s = maxDim > 0 ? (0.2 / maxDim) : 1;
+    glove.scale.setScalar(s);
+
+    // Center on grip origin — offset must be in scaled units
+    glove.position.set(-_cn.x * s, -_cn.y * s, -_cn.z * s);
+    console.log('[VR Hub] Glove scale:', s.toFixed(4), 'offset:', glove.position);
 
     grip.add(glove);
     scene.add(grip);
