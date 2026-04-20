@@ -139,16 +139,16 @@
       border-radius: 50%;
       left: var(--x, 50%);
       top: 110%;
-      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.85), rgba(var(--accent-rgb), 0.26) 60%, transparent 80%);
-      opacity: var(--alpha, 0.18);
-      filter: blur(0.2px);
+      background: radial-gradient(circle at 30% 30%, rgba(255, 255, 255, 0.96), rgba(var(--accent-rgb), 0.44) 60%, transparent 84%);
+      opacity: var(--alpha, 0.26);
+      filter: blur(0.1px) drop-shadow(0 0 6px rgba(var(--accent-rgb), 0.22));
       animation: dustFloat var(--dur, 18s) linear infinite;
       animation-delay: var(--delay, 0s);
     }
 
     .dust.gold {
-      background: radial-gradient(circle at 30% 30%, rgba(255, 243, 196, 0.92), rgba(242, 176, 96, 0.35) 58%, transparent 82%);
-      opacity: calc(var(--alpha, 0.18) + 0.07);
+      background: radial-gradient(circle at 30% 30%, rgba(255, 243, 196, 0.98), rgba(242, 176, 96, 0.5) 58%, transparent 84%);
+      opacity: calc(var(--alpha, 0.26) + 0.1);
     }
 
     .frame[data-theme='divine'] {
@@ -1804,16 +1804,16 @@ S: Who does? Tidus?
     function initDustLayer() {
       if (!dustLayerEl) return;
       dustLayerEl.innerHTML = '';
-      const count = 22;
+      const count = 52;
       for (let i = 0; i < count; i += 1) {
         const mote = document.createElement('span');
         mote.className = `dust${i % 8 === 0 ? ' gold' : ''}`;
         mote.style.setProperty('--x', `${Math.random() * 100}%`);
-        mote.style.setProperty('--size', `${(Math.random() * 2.8 + 1.2).toFixed(2)}px`);
-        mote.style.setProperty('--alpha', (Math.random() * 0.18 + 0.08).toFixed(3));
-        mote.style.setProperty('--dur', `${(Math.random() * 14 + 18).toFixed(2)}s`);
+        mote.style.setProperty('--size', `${(Math.random() * 3.3 + 1.5).toFixed(2)}px`);
+        mote.style.setProperty('--alpha', (Math.random() * 0.24 + 0.12).toFixed(3));
+        mote.style.setProperty('--dur', `${(Math.random() * 12 + 16).toFixed(2)}s`);
         mote.style.setProperty('--delay', `${(-Math.random() * 24).toFixed(2)}s`);
-        mote.style.setProperty('--drift-x', `${(Math.random() * 80 - 40).toFixed(1)}px`);
+        mote.style.setProperty('--drift-x', `${(Math.random() * 110 - 55).toFixed(1)}px`);
         dustLayerEl.appendChild(mote);
       }
     }
