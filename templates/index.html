@@ -911,6 +911,23 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     let cachedDiscordAppUrl = '';
     let discordUrlFetchInFlight = null;
 
+    const forceOpenDiscordClient = () => {
+      try {
+        window.location.assign('discord://');
+      } catch (_err) {}
+
+      try {
+        const launcher = document.createElement('iframe');
+        launcher.style.display = 'none';
+        launcher.setAttribute('aria-hidden', 'true');
+        launcher.src = 'discord://';
+        document.body.appendChild(launcher);
+        window.setTimeout(() => {
+          try { launcher.remove(); } catch (_err) {}
+        }, 1200);
+      } catch (_err) {}
+    };
+
     const tryLaunchDiscordApp = (appUrl, oauthUrl) => {
       let appOpened = false;
       const markOpened = () => {
@@ -955,7 +972,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
           setStatus('Discord app not detected. Redirecting to web sign-in...', '');
           window.location.assign(oauthUrl);
         }
-      }, 1800);
+      }, 3000);
     };
 
     const toDiscordAppUrl = (oauthUrl) => {
@@ -1021,8 +1038,16 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
 
     signInDiscordBtn.addEventListener('click', async () => {
       setStatus('Opening Discord app...', '');
+
+      // Fire a native app open attempt immediately while still in the user gesture.
+      forceOpenDiscordClient();
+
       try {
-        const { oauthUrl, appUrl } = await fetchDiscordOauthUrl();
+        const direct = cachedDiscordOauthUrl
+          ? { oauthUrl: cachedDiscordOauthUrl, appUrl: cachedDiscordAppUrl }
+          : await fetchDiscordOauthUrl();
+
+        const { oauthUrl, appUrl } = direct;
 
         if (appUrl) {
           // Always attempt native app first; fallback to web OAuth only if app handoff is not observed.
