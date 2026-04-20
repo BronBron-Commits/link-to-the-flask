@@ -142,7 +142,6 @@
       </div>
       <div class="actions">
         <a class="btn" href="/account-hub">Return to Account Hub</a>
-        <a id="back-model-btn" class="btn" href="/model-select">Shortcut: Model Select</a>
         <button id="back-worlds-btn" class="btn" type="button" style="display:none;">Back to World Menu</button>
       </div>
     </div>
@@ -160,7 +159,6 @@ const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
 const contextEl = document.getElementById('context');
 const statusEl = document.getElementById('status');
 const worldGridEl = document.getElementById('world-grid');
-const backModelBtn = document.getElementById('back-model-btn');
 const backWorldsBtn = document.getElementById('back-worlds-btn');
 
 const params = new URLSearchParams(window.location.search || '');
@@ -232,7 +230,6 @@ function loadContext() {
     localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
   }
   contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Open World Model: ${OPEN_WORLD_MODEL_URL}`;
-  backModelBtn.href = `/model-select?characterId=${encodeURIComponent(selectedCharacter.id)}${selectedModelUrl ? `&modelUrl=${encodeURIComponent(selectedModelUrl)}` : ''}`;
   return true;
 }
 

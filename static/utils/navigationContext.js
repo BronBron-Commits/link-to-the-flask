@@ -74,17 +74,12 @@ export function buildHubResumeLinks() {
   const encodedCharacter = encodeURIComponent(characterId || '');
   const encodedModel = encodeURIComponent(modelUrl || '');
 
-  const modelHref = characterId
-    ? `/model-select?characterId=${encodedCharacter}${modelUrl ? `&modelUrl=${encodedModel}` : ''}`
-    : '/model-select';
-
   const worldHref = characterId
     ? `/world-select?characterId=${encodedCharacter}${modelUrl ? `&modelUrl=${encodedModel}` : ''}`
     : '/world-select';
 
   const links = [
     { key: 'character', label: 'Resume Character Hub', href: '/hub' },
-    { key: 'models', label: 'Resume Model Select', href: modelHref },
     { key: 'worlds', label: 'Resume World Select', href: worldHref },
     { key: 'library', label: 'Open Library', href: '/paraval-library' },
   ];
