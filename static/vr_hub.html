@@ -376,13 +376,30 @@ function raycastFromController(ctrl) {
   return hits.length > 0 ? hits[0] : null;
 }
 
-// Central select handler — called from both Three.js events and raw XR session
-function handleSelect() {
+// Central select handler — uses native XR frame pose when available for accurate at-press raycast
+function handleSelect(event) {
   if (navigating) return;
-  // Use per-frame hover state (most reliable)
+
+  // Path 1: native XRInputSourceEvent — most accurate, uses actual controller pose at press time
+  if (event && event.frame && event.inputSource && event.inputSource.targetRaySpace) {
+    const refSpace = renderer.xr.getReferenceSpace();
+    if (refSpace) {
+      const pose = event.frame.getPose(event.inputSource.targetRaySpace, refSpace);
+      if (pose) {
+        const m = pose.transform.matrix; // column-major Float32Array
+        raycaster.ray.origin.set(m[12], m[13], m[14]);
+        raycaster.ray.direction.set(-m[8], -m[9], -m[10]).normalize();
+        const hits = raycaster.intersectObjects(panelMeshes);
+        if (hits.length > 0) { triggerNavigate(hits[0].object); return; }
+      }
+    }
+  }
+
+  // Path 2: per-frame hover state
   const hovered = ctrlHovered[0] || ctrlHovered[1];
   if (hovered) { triggerNavigate(hovered); return; }
-  // Fallback: fresh raycast from both controllers
+
+  // Path 3: fresh raycast from both Three.js controllers
   for (const ctrl of controllers) {
     const hit = raycastFromController(ctrl);
     if (hit) { triggerNavigate(hit.object); return; }
@@ -463,12 +480,27 @@ function triggerNavigate(panel) {
 
 // ─── Animation loop ───────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
+let _xrSelectAttached = false;
 
-renderer.setAnimationLoop(() => {
+renderer.setAnimationLoop((time, frame) => {
   const t = clock.getElapsedTime();
 
-  // ── Controller raycasts (primary in VR) ──────────────────────────────────
-  const inVR = renderer.xr.isPresenting;
+  // Attach session select listeners on the very first XR frame (bulletproof)
+  if (frame && !_xrSelectAttached) {
+    _xrSelectAttached = true;
+    frame.session.addEventListener('selectstart', handleSelect);
+    frame.session.addEventListener('select', handleSelect);
+  }
+
+  // ── Fade-to-black driven here (rAF doesn’t tick inside XR frames) ───────────────
+  if (fadeState.active && _vrFadeMesh) {
+    const p = Math.min((performance.now() - fadeState.start) / FADE_MS, 1);
+    _vrFadeMesh.material.opacity = p;
+    if (p >= 1) {
+      window.location.href = fadeState.href;
+      return;
+    }
+  }
 
   // Reset per-controller hover
   ctrlHovered[0] = null;
@@ -491,7 +523,7 @@ renderer.setAnimationLoop(() => {
 
   // ── Gaze raycast (desktop / phone fallback) ───────────────────────────────
   let gazed = null;
-  if (!inVR) {
+  if (!renderer.xr.isPresenting) {
     raycaster.setFromCamera({ x: 0, y: 0 }, camera);
     const hits = raycaster.intersectObjects(panelMeshes);
     gazed = hits.length > 0 ? hits[0].object : null;
