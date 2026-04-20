@@ -441,11 +441,8 @@ const _dir = new THREE.Vector3(), _yUp = new THREE.Vector3(0, 1, 0);
 const _q   = new THREE.Quaternion();
 
 function _alignSegment(mesh, jA, jB) {
-  // joint.position is already world-space: the XR manager sets joint.matrix
-  // directly from the world-space XR pose, and the parent _hand Group sits at
-  // the scene origin (identity). No updateWorldMatrix traversal needed.
-  _pA.copy(jA.position);
-  _pB.copy(jB.position);
+  jA.getWorldPosition(_pA);
+  jB.getWorldPosition(_pB);
   _dir.subVectors(_pB, _pA);
   const len = _dir.length();
   if (len < 0.0005) { mesh.visible = false; return; }
@@ -532,8 +529,8 @@ const _handUpdaters = [];
     new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.4 })
   );
   ctrl.add(rayLine);
-  scene.add(ctrl);
-  scene.add(xrHand);
+  playerRig.add(ctrl);
+  playerRig.add(xrHand);
 
   // Build all segment + cap meshes up-front (world-space, hidden by default).
   const segMeshes = HAND_SEGMENTS.map(([, , cylR]) => {
@@ -581,7 +578,10 @@ const _handUpdaters = [];
       if (jA && jB && jA.visible && jB.visible) {
         _alignSegment(segMeshes[i], jA, jB);
         const cap = capMeshes[i];
-        if (cap) { cap.position.copy(jB.position); cap.visible = true; }
+        if (cap) {
+          jB.getWorldPosition(cap.position);
+          cap.visible = true;
+        }
       } else {
         segMeshes[i].visible = false;
         if (capMeshes[i]) capMeshes[i].visible = false;
@@ -589,7 +589,10 @@ const _handUpdaters = [];
     });
     // Wrist cap
     const wj = xrHand.joints['wrist'];
-    if (wj && wj.visible) { wristCap.position.copy(wj.position); wristCap.visible = true; }
+    if (wj && wj.visible) {
+      wj.getWorldPosition(wristCap.position);
+      wristCap.visible = true;
+    }
     else { wristCap.visible = false; }
   });
 });
