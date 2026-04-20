@@ -104,8 +104,11 @@
     }
 
     .btn:hover {
-      border-color: rgba(210,175,70,0.55);
+      border-color: rgba(210,175,70,0.65);
+      box-shadow: 0 0 14px rgba(210,175,70,0.18), inset 0 0 10px rgba(210,175,70,0.06);
+      transform: translateY(-1px);
     }
+    .btn { transition: border-color 0.18s, box-shadow 0.18s, transform 0.14s; }
 
     .btn:disabled {
       opacity: 0.45;
@@ -206,14 +209,16 @@
     }
 
     .list-item:hover {
-      border-color: rgba(210,175,70,0.38);
-      transform: translateY(-2px);
-      box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+      border-color: rgba(210,175,70,0.6);
+      transform: translateY(-3px) scale(1.012);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.42), 0 0 0 1px rgba(210,175,70,0.18), inset 0 0 18px rgba(210,175,70,0.05);
+      background: rgba(255,255,255,0.045);
     }
 
     .list-item.selected {
-      border-color: rgba(210,175,70,0.72);
-      box-shadow: 0 0 0 2px rgba(210,175,70,0.2);
+      border-color: rgba(210,175,70,0.82);
+      box-shadow: 0 0 0 2px rgba(210,175,70,0.28), 0 0 18px rgba(210,175,70,0.12);
+      background: rgba(210,175,70,0.06);
     }
 
     .list-item h3 {
@@ -287,6 +292,12 @@
       border-radius: 12px;
       border: 1px solid rgba(210,175,70,0.12);
       background: rgba(255,255,255,0.025);
+      transition: border-color 0.22s, box-shadow 0.22s, background 0.22s;
+    }
+    .detail-section:hover {
+      border-color: rgba(210,175,70,0.28);
+      box-shadow: 0 0 20px rgba(210,175,70,0.07);
+      background: rgba(255,255,255,0.04);
     }
 
     .detail-section-title {
@@ -310,6 +321,13 @@
       padding: 10px;
       display: grid;
       gap: 6px;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s, background 0.2s;
+    }
+    .ability-card:hover {
+      border-color: rgba(210,175,70,0.42);
+      box-shadow: 0 0 16px rgba(210,175,70,0.1);
+      transform: translateY(-2px) scale(1.03);
+      background: rgba(210,175,70,0.05);
     }
 
     .ability-name {
@@ -338,6 +356,12 @@
       grid-template-columns: 88px minmax(0, 1fr);
       gap: 8px;
       align-items: start;
+      border-radius: 6px;
+      padding: 2px 4px;
+      transition: background 0.15s;
+    }
+    .spec-row:hover {
+      background: rgba(210,175,70,0.055);
     }
 
     .spec-label {
@@ -388,10 +412,22 @@
       font-family: Consolas, 'Courier New', monospace;
       font-size: 1rem;
     }
+
+    /* Cursor glow overlay */
+    #cursor-glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    #cursor-glow.active { opacity: 1; }
   </style>
 </head>
 <body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
 <canvas id="bg-canvas"></canvas>
+<canvas id="cursor-glow"></canvas>
 
 <div class="shell">
   <section class="panel">
@@ -425,29 +461,87 @@
 
 <script>
 (function () {
+  // ── Background particles ─────────────────────────────────────────────────
   const canvas = document.getElementById('bg-canvas');
   const ctx = canvas.getContext('2d');
-  let W, H, particles = [];
+  let W, H;
+  const particles = [];
+  let mx = -9999, my = -9999;
+
   function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
   window.addEventListener('resize', resize);
   resize();
+
   function rand(a, b) { return a + Math.random() * (b - a); }
-  for (let i = 0; i < 90; i++) {
-    particles.push({ x: rand(0, W), y: rand(0, H), r: rand(0.4, 1.6), vx: rand(-0.06, 0.06), vy: rand(-0.14, -0.04), alpha: rand(0.08, 0.45), hue: rand(32, 52) });
+
+  for (let i = 0; i < 160; i++) {
+    particles.push({
+      x: rand(0, W), y: rand(0, H),
+      r: rand(0.5, 2.2),
+      vx: rand(-0.10, 0.10), vy: rand(-0.22, -0.06),
+      alpha: rand(0.07, 0.5), hue: rand(30, 55),
+      pulse: rand(0, Math.PI * 2), pulseSpeed: rand(0.008, 0.022),
+    });
   }
+
+  window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+  window.addEventListener('mouseleave', () => { mx = -9999; my = -9999; });
+
   function frame() {
     ctx.clearRect(0, 0, W, H);
     for (const p of particles) {
+      // Mouse repulsion
+      const dx = p.x - mx, dy = p.y - my;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120 && dist > 0) {
+        const force = (120 - dist) / 120 * 0.38;
+        p.vx += (dx / dist) * force;
+        p.vy += (dy / dist) * force;
+      }
+      // Drag
+      p.vx *= 0.985; p.vy *= 0.985;
+      // Gentle drift back toward natural speed
+      p.vy -= 0.0008;
       p.x += p.vx; p.y += p.vy;
-      if (p.y < -4) { p.y = H + 4; p.x = rand(0, W); }
+      p.pulse += p.pulseSpeed;
+      if (p.y < -4) { p.y = H + 4; p.x = rand(0, W); p.vx = rand(-0.10, 0.10); p.vy = rand(-0.22, -0.06); }
+      if (p.x < -4) p.x = W + 4;
+      if (p.x > W + 4) p.x = -4;
+      const a = p.alpha * (0.72 + 0.28 * Math.sin(p.pulse));
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-      ctx.fillStyle = `hsla(${p.hue}, 80%, 68%, ${p.alpha})`;
+      ctx.fillStyle = `hsla(${p.hue}, 82%, 68%, ${a})`;
       ctx.fill();
     }
     requestAnimationFrame(frame);
   }
   frame();
+
+  // ── Cursor glow ──────────────────────────────────────────────────────────
+  const glowCanvas = document.getElementById('cursor-glow');
+  const gctx = glowCanvas.getContext('2d');
+  let gW, gH;
+  function resizeGlow() { gW = glowCanvas.width = window.innerWidth; gH = glowCanvas.height = window.innerHeight; }
+  window.addEventListener('resize', resizeGlow);
+  resizeGlow();
+
+  let glowX = -9999, glowY = -9999;
+  window.addEventListener('mousemove', e => {
+    glowX = e.clientX; glowY = e.clientY;
+    glowCanvas.classList.add('active');
+  });
+  window.addEventListener('mouseleave', () => glowCanvas.classList.remove('active'));
+
+  (function glowLoop() {
+    gctx.clearRect(0, 0, gW, gH);
+    const grad = gctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, 260);
+    grad.addColorStop(0,   'rgba(210,175,70,0.055)');
+    grad.addColorStop(0.4, 'rgba(210,175,70,0.022)');
+    grad.addColorStop(1,   'rgba(210,175,70,0)');
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, gW, gH);
+    requestAnimationFrame(glowLoop);
+  })();
 })();
 </script>
 
