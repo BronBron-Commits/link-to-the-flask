@@ -670,31 +670,31 @@ function _buildControlTablet() {
       new THREE.CylinderGeometry(0.013, 0.013, 0.26, 12),
       handleMat
     );
-    bar.position.set(side * 0.228, 0.02, 0.012);
+    bar.position.set(side * 0.275, 0.02, 0.012);
     root.add(bar);
     // Top cap
     const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
-    capTop.position.set(side * 0.228, 0.02 + 0.13, 0.012);
+    capTop.position.set(side * 0.275, 0.02 + 0.13, 0.012);
     root.add(capTop);
     // Bottom cap
     const capBot = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
-    capBot.position.set(side * 0.228, 0.02 - 0.13, 0.012);
+    capBot.position.set(side * 0.275, 0.02 - 0.13, 0.012);
     root.add(capBot);
     // Horizontal brace connecting bar to body (top)
     const braceTop = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.009, 0.009, 0.032, 8),
+      new THREE.CylinderGeometry(0.009, 0.009, 0.080, 8),
       handleMat
     );
     braceTop.rotation.z = Math.PI / 2;
-    braceTop.position.set(side * 0.212, 0.02 + 0.09, 0.012);
+    braceTop.position.set(side * 0.238, 0.02 + 0.09, 0.012);
     root.add(braceTop);
     // Horizontal brace connecting bar to body (bottom)
     const braceBot = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.009, 0.009, 0.032, 8),
+      new THREE.CylinderGeometry(0.009, 0.009, 0.080, 8),
       handleMat
     );
     braceBot.rotation.z = Math.PI / 2;
-    braceBot.position.set(side * 0.212, 0.02 - 0.09, 0.012);
+    braceBot.position.set(side * 0.238, 0.02 - 0.09, 0.012);
     root.add(braceBot);
   });
 
