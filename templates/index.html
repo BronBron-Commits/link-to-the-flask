@@ -620,11 +620,31 @@ const tabManageEl = document.getElementById('tab-manage');
 
 const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
 const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
-const justSignedOut = new URLSearchParams(window.location.search).get('signedOut') === '1';
+const queryParams = new URLSearchParams(window.location.search);
+const justSignedOut = queryParams.get('signedOut') === '1';
+const authErrorCode = String(queryParams.get('authError') || '').trim();
 let currentMode = 'sign-in';
 let currentUser = null;
 let signInInFlight = false;
 let suppressHubRedirect = justSignedOut;
+
+function authErrorMessage(code) {
+  const normalized = String(code || '').trim();
+  if (!normalized) return '';
+  if (normalized === 'discord-not-configured') {
+    return 'Discord sign-in is not configured on this server yet.';
+  }
+  if (normalized === 'discord-access_denied') {
+    return 'Discord sign-in was canceled.';
+  }
+  if (normalized === 'discord-invalid-state') {
+    return 'Discord sign-in failed security validation. Please try again.';
+  }
+  if (normalized === 'discord-missing-code') {
+    return 'Discord sign-in returned without an authorization code.';
+  }
+  return `Discord sign-in failed (${normalized}).`;
+}
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -780,6 +800,9 @@ const backendState = await readBackendSession();
 if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
 } else {
+  if (authErrorCode) {
+    setStatus(authErrorMessage(authErrorCode), 'error');
+  }
   window.__paravalAuth.page = 'index';
   window.__paravalAuth.moduleLoaded = false;
   window.__paravalAuth.clientReady = false;
@@ -907,169 +930,9 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
   }
 
   if (signInDiscordBtn) {
-    let cachedDiscordOauthUrl = '';
-    let cachedDiscordAppUrl = '';
-    let discordUrlFetchInFlight = null;
-    let awaitingManualWebFallback = false;
-
-    const forceOpenDiscordClient = () => {
-      try {
-        window.location.assign('discord://');
-      } catch (_err) {}
-
-      try {
-        const launcher = document.createElement('iframe');
-        launcher.style.display = 'none';
-        launcher.setAttribute('aria-hidden', 'true');
-        launcher.src = 'discord://';
-        document.body.appendChild(launcher);
-        window.setTimeout(() => {
-          try { launcher.remove(); } catch (_err) {}
-        }, 1200);
-      } catch (_err) {}
-    };
-
-    const tryLaunchDiscordApp = (appUrl) => {
-      let appOpened = false;
-      const markOpened = () => {
-        appOpened = true;
-        awaitingManualWebFallback = false;
-      };
-
-      const onVisibility = () => {
-        if (document.hidden) {
-          markOpened();
-        }
-      };
-
-      const cleanup = () => {
-        window.removeEventListener('blur', markOpened);
-        window.removeEventListener('pagehide', markOpened);
-        document.removeEventListener('visibilitychange', onVisibility);
-      };
-
-      window.addEventListener('blur', markOpened, { once: true });
-      window.addEventListener('pagehide', markOpened, { once: true });
-      document.addEventListener('visibilitychange', onVisibility);
-
-      // Use both location and hidden iframe to maximize protocol-handler success across browsers.
-      try {
-        window.location.assign(appUrl);
-      } catch (_err) {}
-
-      try {
-        const iframe = document.createElement('iframe');
-        iframe.style.display = 'none';
-        iframe.setAttribute('aria-hidden', 'true');
-        iframe.src = appUrl;
-        document.body.appendChild(iframe);
-        window.setTimeout(() => {
-          try { iframe.remove(); } catch (_err) {}
-        }, 1500);
-      } catch (_err) {}
-
-      window.setTimeout(() => {
-        cleanup();
-        if (!appOpened) {
-          awaitingManualWebFallback = true;
-          setStatus('Discord app launch attempted. If it did not open, tap Sign In With Discord again for web sign-in.', '');
-        }
-      }, 3000);
-    };
-
-    const toDiscordAppUrl = (oauthUrl) => {
-      try {
-        const parsed = new URL(String(oauthUrl || '').trim());
-        const isDiscordAuthorize = /(^|\.)discord\.com$/i.test(parsed.hostname) && /\/oauth2\/authorize$/i.test(parsed.pathname);
-        if (!isDiscordAuthorize) {
-          return '';
-        }
-        const qp = parsed.searchParams.toString();
-        return `discord://-/oauth2/authorize${qp ? `?${qp}` : ''}`;
-      } catch {
-        return '';
-      }
-    };
-
-    const fetchDiscordOauthUrl = async () => {
-      if (cachedDiscordOauthUrl) {
-        return { oauthUrl: cachedDiscordOauthUrl, appUrl: cachedDiscordAppUrl };
-      }
-      if (discordUrlFetchInFlight) {
-        return discordUrlFetchInFlight;
-      }
-
-      discordUrlFetchInFlight = (async () => {
-        const result = await supabase.auth.signInWithOAuth({
-          provider: 'discord',
-          options: {
-            redirectTo: `${window.location.origin}/account-hub`,
-            skipBrowserRedirect: true,
-          },
-        });
-        if (result.error) {
-          throw new Error(result.error.message || 'Could not start Discord sign-in.');
-        }
-
-        const oauthUrl = String(result?.data?.url || '').trim();
-        if (!oauthUrl) {
-          throw new Error('Discord sign-in URL was not returned.');
-        }
-
-        const appUrl = toDiscordAppUrl(oauthUrl);
-        cachedDiscordOauthUrl = oauthUrl;
-        cachedDiscordAppUrl = appUrl;
-        return { oauthUrl, appUrl };
-      })();
-
-      try {
-        return await discordUrlFetchInFlight;
-      } finally {
-        discordUrlFetchInFlight = null;
-      }
-    };
-
-    const warmDiscordOauthUrl = () => {
-      void fetchDiscordOauthUrl().catch(() => {});
-    };
-
-    // Warm cache as early as possible and when user starts interacting.
-    warmDiscordOauthUrl();
-    signInDiscordBtn.addEventListener('pointerdown', warmDiscordOauthUrl, { passive: true });
-    signInDiscordBtn.addEventListener('touchstart', warmDiscordOauthUrl, { passive: true });
-
-    signInDiscordBtn.addEventListener('click', async () => {
-      setStatus('Opening Discord app...', '');
-
-      // Fire a native app open attempt immediately while still in the user gesture.
-      forceOpenDiscordClient();
-
-      try {
-        const direct = cachedDiscordOauthUrl
-          ? { oauthUrl: cachedDiscordOauthUrl, appUrl: cachedDiscordAppUrl }
-          : await fetchDiscordOauthUrl();
-
-        const { oauthUrl, appUrl } = direct;
-
-        if (awaitingManualWebFallback && oauthUrl) {
-          awaitingManualWebFallback = false;
-          setStatus('Opening Discord web sign-in...', '');
-          window.location.assign(oauthUrl);
-          return;
-        }
-
-        if (appUrl) {
-          // Always attempt native app first. If it fails to open, require a second tap for web fallback.
-          tryLaunchDiscordApp(appUrl);
-          return;
-        }
-
-        setStatus('Redirecting to Discord sign-in...', '');
-        window.location.assign(oauthUrl);
-      } catch (error) {
-        const msg = String(error && error.message ? error.message : error);
-        setStatus(`Discord sign-in failed: ${msg}`, 'error');
-      }
+    signInDiscordBtn.addEventListener('click', () => {
+      setStatus('Redirecting to Discord sign-in...', '');
+      window.location.assign('/auth/discord/start');
     });
   }
 

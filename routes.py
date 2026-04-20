@@ -174,6 +174,127 @@ def _supabase_public_config() -> dict:
     }
 
 
+def _discord_oauth_config() -> dict:
+    return {
+        "client_id": str(os.environ.get("DISCORD_CLIENT_ID") or "").strip(),
+        "client_secret": str(os.environ.get("DISCORD_CLIENT_SECRET") or "").strip(),
+        "redirect_uri": str(os.environ.get("DISCORD_REDIRECT_URI") or "").strip(),
+        "scope": str(os.environ.get("DISCORD_OAUTH_SCOPE") or "identify email").strip() or "identify email",
+    }
+
+
+def _discord_is_configured(config: dict | None = None) -> bool:
+    cfg = config if isinstance(config, dict) else _discord_oauth_config()
+    return bool(cfg.get("client_id") and cfg.get("client_secret") and cfg.get("redirect_uri"))
+
+
+def _discord_exchange_code(code: str, config: dict) -> tuple[dict | None, str | None]:
+    clean_code = str(code or "").strip()
+    if not clean_code:
+        return None, "discord-missing-code"
+
+    token_url = "https://discord.com/api/oauth2/token"
+    payload = {
+        "client_id": str(config.get("client_id") or "").strip(),
+        "client_secret": str(config.get("client_secret") or "").strip(),
+        "grant_type": "authorization_code",
+        "code": clean_code,
+        "redirect_uri": str(config.get("redirect_uri") or "").strip(),
+    }
+    encoded = urlencode(payload).encode("utf-8")
+    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+
+    if HAS_HTTPX:
+        try:
+            with httpx.Client(verify=True, timeout=8.0) as client:
+                response = client.post(token_url, headers=headers, content=encoded)
+                if response.status_code != 200:
+                    return None, f"discord-token-http-{response.status_code}"
+                token_payload = response.json()
+        except httpx.TimeoutException:
+            return None, "discord-token-timeout"
+        except Exception:
+            return None, "discord-token-network-error"
+    else:
+        req = urllib_request.Request(token_url, data=encoded, headers=headers, method="POST")
+        try:
+            with urllib_request.urlopen(req, timeout=8) as response:
+                token_payload = json.loads(response.read().decode("utf-8"))
+        except urllib_error.HTTPError as exc:
+            return None, f"discord-token-http-{int(getattr(exc, 'code', 0) or 0)}"
+        except urllib_error.URLError:
+            return None, "discord-token-network-error"
+        except TimeoutError:
+            return None, "discord-token-timeout"
+        except json.JSONDecodeError:
+            return None, "discord-token-invalid-json"
+        except OSError:
+            return None, "discord-token-os-error"
+
+    if not isinstance(token_payload, dict):
+        return None, "discord-token-invalid-payload"
+    if not str(token_payload.get("access_token") or "").strip():
+        return None, "discord-token-missing-access-token"
+    return token_payload, None
+
+
+def _discord_fetch_user(access_token: str) -> tuple[dict | None, str | None]:
+    token = str(access_token or "").strip()
+    if not token:
+        return None, "discord-missing-access-token"
+
+    user_url = "https://discord.com/api/users/@me"
+    headers = {"Authorization": f"Bearer {token}"}
+
+    if HAS_HTTPX:
+        try:
+            with httpx.Client(verify=True, timeout=8.0) as client:
+                response = client.get(user_url, headers=headers)
+                if response.status_code != 200:
+                    return None, f"discord-user-http-{response.status_code}"
+                payload = response.json()
+        except httpx.TimeoutException:
+            return None, "discord-user-timeout"
+        except Exception:
+            return None, "discord-user-network-error"
+    else:
+        req = urllib_request.Request(user_url, headers=headers, method="GET")
+        try:
+            with urllib_request.urlopen(req, timeout=8) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except urllib_error.HTTPError as exc:
+            return None, f"discord-user-http-{int(getattr(exc, 'code', 0) or 0)}"
+        except urllib_error.URLError:
+            return None, "discord-user-network-error"
+        except TimeoutError:
+            return None, "discord-user-timeout"
+        except json.JSONDecodeError:
+            return None, "discord-user-invalid-json"
+        except OSError:
+            return None, "discord-user-os-error"
+
+    return payload if isinstance(payload, dict) else None, None if isinstance(payload, dict) else "discord-user-invalid-payload"
+
+
+def _normalize_discord_user(user: dict) -> dict:
+    username = str(user.get("global_name") or user.get("username") or "").strip()
+    discriminator = str(user.get("discriminator") or "").strip()
+    if username and discriminator and discriminator != "0":
+        username = f"{username}#{discriminator}"
+    return {
+        "id": str(user.get("id") or "").strip(),
+        "email": str(user.get("email") or "").strip(),
+        "displayName": username or "Discord User",
+        "role": "discord-authenticated",
+        "emailConfirmed": bool(user.get("verified")),
+    }
+
+
+def _redirect_index_with_auth_error(error_code: str):
+    safe_error = str(error_code or "auth-error").strip() or "auth-error"
+    return redirect(f"/?{urlencode({'authError': safe_error})}", code=302)
+
+
 def _supabase_is_configured() -> bool:
     cfg = _supabase_public_config()
     return bool(cfg["url"] and cfg["anon_key"])
@@ -597,6 +718,65 @@ def auth_logout():
     session.pop("supabase_access_token", None)
     session.pop("auth_token_hash", None)
     return jsonify(ok=True, authenticated=False)
+
+
+@app.route("/auth/discord/start", methods=["GET"])
+def auth_discord_start():
+    cfg = _discord_oauth_config()
+    if not _discord_is_configured(cfg):
+        return _redirect_index_with_auth_error("discord-not-configured")
+
+    state = uuid4().hex
+    session["discord_oauth_state"] = state
+
+    params = {
+        "response_type": "code",
+        "client_id": cfg["client_id"],
+        "scope": cfg["scope"],
+        "state": state,
+        "redirect_uri": cfg["redirect_uri"],
+        "prompt": "consent",
+    }
+    authorize_url = f"https://discord.com/oauth2/authorize?{urlencode(params)}"
+    return redirect(authorize_url, code=302)
+
+
+@app.route("/auth/discord/callback", methods=["GET"])
+def auth_discord_callback():
+    cfg = _discord_oauth_config()
+    if not _discord_is_configured(cfg):
+        return _redirect_index_with_auth_error("discord-not-configured")
+
+    callback_error = str(request.args.get("error") or "").strip()
+    if callback_error:
+        return _redirect_index_with_auth_error(f"discord-{callback_error}")
+
+    state = str(request.args.get("state") or "").strip()
+    expected_state = str(session.get("discord_oauth_state") or "").strip()
+    session.pop("discord_oauth_state", None)
+    if not state or not expected_state or state != expected_state:
+        return _redirect_index_with_auth_error("discord-invalid-state")
+
+    code = str(request.args.get("code") or "").strip()
+    if not code:
+        return _redirect_index_with_auth_error("discord-missing-code")
+
+    token_payload, token_error = _discord_exchange_code(code, cfg)
+    if not token_payload:
+        return _redirect_index_with_auth_error(token_error or "discord-token-exchange-failed")
+
+    access_token = str(token_payload.get("access_token") or "").strip()
+    user_payload, user_error = _discord_fetch_user(access_token)
+    if not user_payload:
+        return _redirect_index_with_auth_error(user_error or "discord-user-fetch-failed")
+
+    normalized_user = _normalize_discord_user(user_payload)
+    session["auth_user"] = normalized_user
+    session["auth_token_hash"] = hashlib.sha256(
+        f"discord:{normalized_user.get('id', '')}:{time.time()}".encode("utf-8")
+    ).hexdigest()
+    session.pop("supabase_access_token", None)
+    return redirect("/account-hub", code=302)
 
 
 @app.route("/map3d")
