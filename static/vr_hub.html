@@ -199,10 +199,13 @@ const _tmpForward = new THREE.Vector3();
 const _tmpRight = new THREE.Vector3();
 const _tmpUp = new THREE.Vector3(0, 1, 0);
 const _controllersByHand = { left: null, right: null };
-let _leftPanelOpen = false;
-let _yWasPressed = false;
+const PANEL_GRAB_DISTANCE = 0.22;
+const _grabPressedPrev = { left: false, right: false };
+const _panelGrabState = { holder: null };
+const _tmpCtrlPos = new THREE.Vector3();
+const _tmpPanelPos = new THREE.Vector3();
 
-function _buildLeftHandPanel() {
+function _buildWorldPanel() {
   const root = new THREE.Group();
 
   const c = document.createElement('canvas');
@@ -216,12 +219,12 @@ function _buildLeftHandPanel() {
   ctx.strokeRect(6, 6, c.width - 12, c.height - 12);
   ctx.fillStyle = '#e8d89a';
   ctx.font = 'bold 38px Georgia';
-  ctx.fillText('Paraval Wrist Panel', 26, 64);
+  ctx.fillText('Paraval World Panel', 26, 64);
   ctx.font = '26px Georgia';
   ctx.fillStyle = '#c8d5e8';
   ctx.fillText('Left Stick: Move', 26, 122);
   ctx.fillText('Right Stick: Turn', 26, 158);
-  ctx.fillText('Y: Toggle Panel', 26, 194);
+  ctx.fillText('Grip/Trigger: Grab + Move', 26, 194);
 
   const tex = new THREE.CanvasTexture(c);
   const panel = new THREE.Mesh(
@@ -230,13 +233,14 @@ function _buildLeftHandPanel() {
   );
   root.add(panel);
 
-  root.position.set(-0.08, 0.065, -0.05);
-  root.rotation.set(-1.15 + Math.PI * 0.5, Math.PI * 0.5, Math.PI * 0.5);
-  root.visible = false;
+  root.position.set(0, 1.35, -0.9);
+  root.rotation.set(-0.12, 0, 0);
+  root.visible = true;
   return root;
 }
 
-const _leftHandPanel = _buildLeftHandPanel();
+const _worldPanel = _buildWorldPanel();
+scene.add(_worldPanel);
 
 function _deadzone(v) {
   return Math.abs(v) < STICK_DEADZONE ? 0 : v;
@@ -270,44 +274,64 @@ function _gamepadFromHandedness(handedness) {
   return null;
 }
 
-function _isYPressed(leftGp) {
-  if (!leftGp || !leftGp.buttons) return false;
-  // Oculus/Quest left controller: X is usually index 4, Y is usually index 5.
-  // Prefer Y explicitly; only fall back when index 5 is unavailable.
-  const yBtn = leftGp.buttons[5];
-  if (yBtn) return !!(yBtn.pressed || (yBtn.value || 0) > 0.65);
-
-  const fallback = leftGp.buttons[4];
-  return !!(fallback && (fallback.pressed || (fallback.value || 0) > 0.65));
+function _isGrabPressed(gp) {
+  if (!gp || !gp.buttons) return false;
+  // Quest usually maps trigger to [0] and squeeze/grip to [1].
+  const trigger = gp.buttons[0];
+  const grip = gp.buttons[1];
+  const pressed = (b) => !!(b && (b.pressed || (b.value || 0) > 0.7));
+  return pressed(trigger) || pressed(grip);
 }
 
-function _updateLeftHandPanel(leftGp) {
+function _updatePanelInteraction(leftGp, rightGp) {
   const leftCtrl = _controllersByHand.left;
-  if (!leftCtrl) {
-    if (_leftHandPanel.parent) _leftHandPanel.parent.remove(_leftHandPanel);
-    _leftHandPanel.visible = false;
-    _yWasPressed = false;
-    return;
+  const rightCtrl = _controllersByHand.right;
+
+  const leftPressed = _isGrabPressed(leftGp);
+  const rightPressed = _isGrabPressed(rightGp);
+
+  if (_panelGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_worldPanel);
+    _panelGrabState.holder = null;
+  }
+  if (_panelGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_worldPanel);
+    _panelGrabState.holder = null;
   }
 
-  if (_leftHandPanel.parent !== leftCtrl) leftCtrl.add(_leftHandPanel);
+  if (!_panelGrabState.holder) {
+    const tryGrab = (hand, ctrl, pressed, wasPressed) => {
+      if (!ctrl || !pressed || wasPressed) return false;
+      ctrl.getWorldPosition(_tmpCtrlPos);
+      _worldPanel.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) > PANEL_GRAB_DISTANCE) return false;
+      ctrl.attach(_worldPanel);
+      _panelGrabState.holder = hand;
+      return true;
+    };
 
-  const yPressed = _isYPressed(leftGp);
-  if (yPressed && !_yWasPressed) _leftPanelOpen = !_leftPanelOpen;
-  _yWasPressed = yPressed;
-  _leftHandPanel.visible = _leftPanelOpen;
+    tryGrab('left', leftCtrl, leftPressed, _grabPressedPrev.left) ||
+    tryGrab('right', rightCtrl, rightPressed, _grabPressedPrev.right);
+  }
+
+  _grabPressedPrev.left = leftPressed;
+  _grabPressedPrev.right = rightPressed;
 }
 
 function _updateQuestLocomotion(dt) {
   if (!renderer.xr.isPresenting) {
-    _leftHandPanel.visible = false;
-    _yWasPressed = false;
+    _grabPressedPrev.left = false;
+    _grabPressedPrev.right = false;
+    if (_panelGrabState.holder) {
+      scene.attach(_worldPanel);
+      _panelGrabState.holder = null;
+    }
     return;
   }
 
   const leftGp = _gamepadFromHandedness('left') || _controllersByHand.left?.userData?.inputSource?.gamepad;
   const rightGp = _gamepadFromHandedness('right') || _controllersByHand.right?.userData?.inputSource?.gamepad;
-  _updateLeftHandPanel(leftGp);
+  _updatePanelInteraction(leftGp, rightGp);
   const left = _readStick(leftGp);
   const right = _readStick(rightGp);
 
