@@ -288,73 +288,97 @@ scene.add(floor);
   scene.add(root);
 })();
 
-// ── Procedural Hand Builder ─────────────────────────────────────────────────
-// Builds a simple box-segment hand in controller-local space.
-// Controller space: -Z = ray forward, +Y = up, +X = right (for right controller).
-// Knuckle line sits at z=0 (ray origin); fingers extend toward -Z; palm extends toward +Z.
+// ── Hand Tracking + Controller Fallback ──────────────────────────────────────
+// WebXR Hand Input joint names (25 joints per hand, WebXR spec order).
+const HAND_JOINT_NAMES = [
+  'wrist',
+  'thumb-metacarpal',              'thumb-phalanx-proximal',
+  'thumb-phalanx-distal',          'thumb-tip',
+  'index-finger-metacarpal',       'index-finger-phalanx-proximal',
+  'index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip',
+  'middle-finger-metacarpal',      'middle-finger-phalanx-proximal',
+  'middle-finger-phalanx-intermediate','middle-finger-phalanx-distal','middle-finger-tip',
+  'ring-finger-metacarpal',        'ring-finger-phalanx-proximal',
+  'ring-finger-phalanx-intermediate',  'ring-finger-phalanx-distal', 'ring-finger-tip',
+  'pinky-finger-metacarpal',       'pinky-finger-phalanx-proximal',
+  'pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal','pinky-finger-tip',
+];
+
+const _handMat  = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.85, metalness: 0.0 });
+const _jointGeo = new THREE.SphereGeometry(0.010, 8, 6);
+
+// Static procedural hand used when no hand-tracking data is available (controller mode).
+// Controller space: -Z = ray forward, +Y = up. Knuckle line at z=0, palm extends +Z.
 function buildProceduralHand(isRight) {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.85, metalness: 0.0 });
   const root = new THREE.Group();
   const flip = isRight ? 1 : -1;
-
   function addBox(w, h, d, x, y, z) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _handMat);
     m.position.set(x, y, z);
     root.add(m);
   }
-
-  // Palm: knuckles at z=0, wrist at z=+0.095
-  addBox(0.078, 0.022, 0.095,  0, 0, 0.048);
-
-  // Four fingers (index → pinky), each with 3 phalanges extending in -Z
-  // xPos uses flip so the index is on the thumb-side for both hands
+  // Palm
+  addBox(0.078, 0.022, 0.095, 0, 0, 0.048);
+  // Four fingers: index → pinky
   const fingers = [
-    { x: flip *  0.026, lens: [0.032, 0.022, 0.018], w: 0.016 }, // index
-    { x: flip *  0.009, lens: [0.036, 0.025, 0.019], w: 0.017 }, // middle
-    { x: -flip * 0.008, lens: [0.030, 0.021, 0.016], w: 0.015 }, // ring
-    { x: -flip * 0.025, lens: [0.022, 0.016, 0.013], w: 0.012 }, // pinky
+    { x: flip *  0.026, lens: [0.032, 0.022, 0.018], w: 0.016 },
+    { x: flip *  0.009, lens: [0.036, 0.025, 0.019], w: 0.017 },
+    { x: -flip * 0.008, lens: [0.030, 0.021, 0.016], w: 0.015 },
+    { x: -flip * 0.025, lens: [0.022, 0.016, 0.013], w: 0.012 },
   ];
   fingers.forEach(({ x, lens, w }) => {
     let z = 0;
-    lens.forEach(len => {
-      addBox(w, w * 0.85, len, x, 0, z - len / 2);
-      z -= len + 0.002;
-    });
+    lens.forEach(len => { addBox(w, w * 0.85, len, x, 0, z - len / 2); z -= len + 0.002; });
   });
-
-  // Thumb: two phalanges from the palm side, splayed outward
-  const thumbPivot = new THREE.Group();
-  thumbPivot.position.set(flip * 0.040, 0, 0.038);
-  thumbPivot.rotation.z = flip * -0.55;  // splay out from palm
-  thumbPivot.rotation.y = flip *  0.30;  // angle toward -Z
-  const thumbSegs = [{ w: 0.018, d: 0.034 }, { w: 0.015, d: 0.026 }];
+  // Thumb
+  const tp = new THREE.Group();
+  tp.position.set(flip * 0.040, 0, 0.038);
+  tp.rotation.z = flip * -0.55;
+  tp.rotation.y = flip *  0.30;
   let tz = 0;
-  thumbSegs.forEach(({ w, d }) => {
-    const seg = new THREE.Mesh(new THREE.BoxGeometry(w, w * 0.85, d), mat);
-    seg.position.set(0, 0, tz - d / 2);
-    thumbPivot.add(seg);
-    tz -= d + 0.003;
+  [{ w: 0.018, d: 0.034 }, { w: 0.015, d: 0.026 }].forEach(({ w, d }) => {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(w, w * 0.85, d), _handMat);
+    s.position.set(0, 0, tz - d / 2); tp.add(s); tz -= d + 0.003;
   });
-  root.add(thumbPivot);
-
+  root.add(tp);
   return root;
 }
 
-// Controllers (ray lines visible in VR) + procedural hands
-const _rayOrigins = [renderer.xr.getController(0), renderer.xr.getController(1)];
-// index 0 = right hand, index 1 = left hand
-_rayOrigins.forEach((rayOrigin, idx) => {
-  const hand = buildProceduralHand(idx === 0);
-  rayOrigin.add(hand);
-  scene.add(rayOrigin);
-});
+[0, 1].forEach(idx => {
+  const ctrl    = renderer.xr.getController(idx);
+  const xrHand  = renderer.xr.getHand(idx);
+  const isRight = idx === 0;
 
-[renderer.xr.getController(0), renderer.xr.getController(1)].forEach(ctrl => {
-  ctrl.add(new THREE.Line(
+  // Static fallback hand lives in controller space
+  const staticHand = buildProceduralHand(isRight);
+  ctrl.add(staticHand);
+
+  // Ray pointer — only useful in controller mode
+  const rayLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-3)]),
     new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.4 })
-  ));
+  );
+  ctrl.add(rayLine);
   scene.add(ctrl);
+
+  // Joint sphere meshes — children of each XRJointSpace, auto-updated by Three.js each frame
+  HAND_JOINT_NAMES.forEach(name => {
+    const joint = xrHand.joints[name];
+    if (joint) joint.add(new THREE.Mesh(_jointGeo, _handMat));
+  });
+  scene.add(xrHand);
+
+  // When hand tracking connects: hide controller visuals, show joint spheres.
+  // When it disconnects (or controller reconnects): restore controller visuals.
+  xrHand.addEventListener('connected', e => {
+    const tracking = !!e.data.hand;
+    staticHand.visible = !tracking;
+    rayLine.visible    = !tracking;
+  });
+  xrHand.addEventListener('disconnected', () => {
+    staticHand.visible = true;
+    rayLine.visible    = true;
+  });
 });
 
 // Animation loop
