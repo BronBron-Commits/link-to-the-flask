@@ -242,7 +242,7 @@
     }
 
     .nav-bubble {
-      transition: opacity 0.3s ease, filter 0.3s ease;
+      transition: opacity 0.3s ease, filter 0.3s ease, visibility 0s linear 0.3s;
     }
 
     .network-wrap.is-collapsed .nav-bubble {
@@ -255,7 +255,9 @@
     .network-wrap:not(.is-collapsed) .nav-bubble {
       opacity: 1;
       visibility: visible;
+      pointer-events: auto;
       filter: blur(0);
+      transition-delay: 0s, 0s, 0s;
     }
 
     .bubble:hover,
