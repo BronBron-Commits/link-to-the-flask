@@ -206,17 +206,37 @@ function _deadzone(v) {
 
 function _readStick(gamepad) {
   if (!gamepad || !gamepad.axes || gamepad.axes.length < 2) return { x: 0, y: 0 };
-  return {
-    x: _deadzone(gamepad.axes[0] || 0),
-    y: _deadzone(gamepad.axes[1] || 0),
-  };
+
+  // XR gamepad layouts vary by browser/runtime: some expose the stick on
+  // axes[0,1], others on axes[2,3]. Pick whichever pair is most active.
+  const candidates = [
+    { x: _deadzone(gamepad.axes[0] || 0), y: _deadzone(gamepad.axes[1] || 0) },
+    { x: _deadzone(gamepad.axes[2] || 0), y: _deadzone(gamepad.axes[3] || 0) },
+  ];
+  let best = candidates[0];
+  let bestMag = Math.abs(best.x) + Math.abs(best.y);
+  for (let i = 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    const mag = Math.abs(c.x) + Math.abs(c.y);
+    if (mag > bestMag) { best = c; bestMag = mag; }
+  }
+  return best;
+}
+
+function _gamepadFromHandedness(handedness) {
+  const session = renderer.xr.getSession();
+  if (!session) return null;
+  for (const source of session.inputSources) {
+    if (source && source.handedness === handedness && source.gamepad) return source.gamepad;
+  }
+  return null;
 }
 
 function _updateQuestLocomotion(dt) {
   if (!renderer.xr.isPresenting) return;
 
-  const leftGp = _controllersByHand.left?.userData?.inputSource?.gamepad;
-  const rightGp = _controllersByHand.right?.userData?.inputSource?.gamepad;
+  const leftGp = _gamepadFromHandedness('left') || _controllersByHand.left?.userData?.inputSource?.gamepad;
+  const rightGp = _gamepadFromHandedness('right') || _controllersByHand.right?.userData?.inputSource?.gamepad;
   const left = _readStick(leftGp);
   const right = _readStick(rightGp);
 
