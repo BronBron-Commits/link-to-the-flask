@@ -435,7 +435,7 @@ const _skyPickerDefs = [
 ];
 _skyPickerDefs.forEach(({ name, x, z }) => {
   const panel = _buildSkyPickerPanel(name);
-  panel.position.set(x, 0.45, z);
+  panel.position.set(x, 0.95, z);
   panel.rotation.set(-0.10, 0, 0);
   scene.add(panel);
   _skyPickers.push(panel);
