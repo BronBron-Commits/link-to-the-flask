@@ -211,12 +211,12 @@ scene.fog = new THREE.FogExp2(0x06090f, 0.045);
           ? mix(horizon, zenith,  (t - 0.5) * 2.0)
           : mix(nadir,   horizon, t * 2.0);
 
-        // subtle star-field sparkle based on world position hash
-        vec3 p = floor(vWorldPos * 120.0);
+        // sparse, dim star-field based on world position hash
+        vec3 p = floor(vWorldPos * 90.0);
         float h = fract(sin(dot(p, vec3(127.1, 311.7, 74.3))) * 43758.5453);
-        float star = step(0.994, h) * smoothstep(0.0, 0.3, normalize(vWorldPos).y);
+        float star = step(0.9985, h) * smoothstep(0.0, 0.3, normalize(vWorldPos).y);
 
-        gl_FragColor = vec4(sky + star * 0.9, 1.0);
+        gl_FragColor = vec4(sky + star * 0.28, 1.0);
       }
     `
   });
