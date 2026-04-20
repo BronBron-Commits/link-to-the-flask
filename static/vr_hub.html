@@ -180,13 +180,46 @@ window.addEventListener('resize', () => {
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x06090f, 0.045);
 
-// ─── Procedural midnight skybox ───────────────────────────────────────────────
+// ─── Procedural skybox — colour-switchable via uniforms ──────────────────────
+const SKY_PRESETS = {
+  blue: {
+    label: 'Blue',
+    accentHex: '#4488ff',
+    zenith:  new THREE.Color(0.012, 0.016, 0.040),
+    horizon: new THREE.Color(0.040, 0.055, 0.120),
+    nadir:   new THREE.Color(0.006, 0.008, 0.018),
+    fogColor: 0x06090f,
+  },
+  green: {
+    label: 'Green',
+    accentHex: '#44ff88',
+    zenith:  new THREE.Color(0.008, 0.034, 0.014),
+    horizon: new THREE.Color(0.018, 0.080, 0.032),
+    nadir:   new THREE.Color(0.004, 0.014, 0.006),
+    fogColor: 0x050f07,
+  },
+  red: {
+    label: 'Red',
+    accentHex: '#ff5533',
+    zenith:  new THREE.Color(0.040, 0.008, 0.008),
+    horizon: new THREE.Color(0.100, 0.022, 0.016),
+    nadir:   new THREE.Color(0.018, 0.004, 0.004),
+    fogColor: 0x0f0504,
+  },
+};
+
+let _skyMat;
 (function _buildSkybox() {
+  const p = SKY_PRESETS.blue;
   const skyGeo = new THREE.SphereGeometry(60, 32, 16);
-  const skyMat = new THREE.ShaderMaterial({
+  _skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
-    uniforms: {},
+    uniforms: {
+      uZenith:  { value: p.zenith.clone() },
+      uHorizon: { value: p.horizon.clone() },
+      uNadir:   { value: p.nadir.clone() },
+    },
     vertexShader: `
       varying vec3 vWorldPos;
       void main() {
@@ -195,23 +228,16 @@ scene.fog = new THREE.FogExp2(0x06090f, 0.045);
       }
     `,
     fragmentShader: `
+      uniform vec3 uZenith;
+      uniform vec3 uHorizon;
+      uniform vec3 uNadir;
       varying vec3 vWorldPos;
       void main() {
-        // normalised height in [-1, 1], clamp to [0, 1] for gradient
         float t = clamp(normalize(vWorldPos).y * 0.5 + 0.5, 0.0, 1.0);
-
-        // zenith: near-black deep-space blue
-        vec3 zenith  = vec3(0.012, 0.016, 0.040);
-        // horizon: dark indigo / midnight blue
-        vec3 horizon = vec3(0.040, 0.055, 0.120);
-        // below-horizon: darker still
-        vec3 nadir   = vec3(0.006, 0.008, 0.018);
-
         vec3 sky = (t >= 0.5)
-          ? mix(horizon, zenith,  (t - 0.5) * 2.0)
-          : mix(nadir,   horizon, t * 2.0);
+          ? mix(uHorizon, uZenith,  (t - 0.5) * 2.0)
+          : mix(uNadir,   uHorizon, t * 2.0);
 
-        // sparse, dim star-field based on world position hash
         vec3 p = floor(vWorldPos * 90.0);
         float h = fract(sin(dot(p, vec3(127.1, 311.7, 74.3))) * 43758.5453);
         float star = step(0.9985, h) * smoothstep(0.0, 0.3, normalize(vWorldPos).y);
@@ -220,10 +246,20 @@ scene.fog = new THREE.FogExp2(0x06090f, 0.045);
       }
     `
   });
-  const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+  const skyMesh = new THREE.Mesh(skyGeo, _skyMat);
   skyMesh.renderOrder = -1;
   scene.add(skyMesh);
 })();
+
+function _applySkyPreset(name) {
+  const p = SKY_PRESETS[name];
+  if (!p || !_skyMat) return;
+  _skyMat.uniforms.uZenith.value.copy(p.zenith);
+  _skyMat.uniforms.uHorizon.value.copy(p.horizon);
+  _skyMat.uniforms.uNadir.value.copy(p.nadir);
+  scene.fog.color.setHex(p.fogColor);
+  renderer.setClearColor(p.fogColor, 1);
+}
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
 const playerRig = new THREE.Group();
@@ -287,6 +323,67 @@ function _buildWorldPanel() {
 const _worldPanel = _buildWorldPanel();
 scene.add(_worldPanel);
 
+// ─── Sky-picker panels ────────────────────────────────────────────────────────
+// Fixed panels arranged in a gentle arc. Trigger/grip while nearby switches sky.
+function _buildSkyPickerPanel(presetName) {
+  const p = SKY_PRESETS[presetName];
+  const root = new THREE.Group();
+
+  const cw = 320, ch = 160;
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const ctx = c.getContext('2d');
+
+  // Background gradient matching the preset horizon colour
+  const bg = ctx.createLinearGradient(0, 0, 0, ch);
+  const h = p.horizon;
+  const z = p.zenith;
+  bg.addColorStop(0, `rgb(${Math.round(z.r*255)},${Math.round(z.g*255)},${Math.round(z.b*255)})`);
+  bg.addColorStop(1, `rgb(${Math.round(h.r*255)},${Math.round(h.g*255)},${Math.round(h.b*255)})`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, cw, ch);
+
+  // Border
+  ctx.strokeStyle = p.accentHex;
+  ctx.lineWidth = 5;
+  ctx.strokeRect(4, 4, cw - 8, ch - 8);
+
+  // Label
+  ctx.fillStyle = p.accentHex;
+  ctx.font = 'bold 44px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(p.label, cw / 2, 72);
+
+  // Sub-label
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '22px Georgia';
+  ctx.fillText('Grip / Trigger to select', cw / 2, 120);
+
+  const tex = new THREE.CanvasTexture(c);
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.20, 0.10),
+    new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
+  );
+  root.add(mesh);
+  root.userData.skyPreset = presetName;
+  return root;
+}
+
+// Arc: three panels centred at z=-1.1, spread ±0.55 on X
+const _skyPickers = [];
+const _skyPickerDefs = [
+  { name: 'blue',  x: -0.60, z: -1.05 },
+  { name: 'green', x:  0.00, z: -1.15 },
+  { name: 'red',   x:  0.60, z: -1.05 },
+];
+_skyPickerDefs.forEach(({ name, x, z }) => {
+  const panel = _buildSkyPickerPanel(name);
+  panel.position.set(x, 1.45, z);
+  panel.rotation.set(-0.10, 0, 0);
+  scene.add(panel);
+  _skyPickers.push(panel);
+});
+
 function _deadzone(v) {
   return Math.abs(v) < STICK_DEADZONE ? 0 : v;
 }
@@ -334,6 +431,30 @@ function _updatePanelInteraction(leftGp, rightGp) {
 
   const leftPressed = _isGrabPressed(leftGp);
   const rightPressed = _isGrabPressed(rightGp);
+
+  // ── Sky-picker selection (fresh press near any picker panel) ───────────────
+  const anyFreshPress =
+    (leftPressed  && !_grabPressedPrev.left) ||
+    (rightPressed && !_grabPressedPrev.right);
+
+  if (anyFreshPress) {
+    const ctrls = [
+      leftPressed  && !_grabPressedPrev.left  ? leftCtrl  : null,
+      rightPressed && !_grabPressedPrev.right ? rightCtrl : null,
+    ].filter(Boolean);
+
+    for (const ctrl of ctrls) {
+      if (!ctrl) continue;
+      ctrl.getWorldPosition(_tmpCtrlPos);
+      for (const picker of _skyPickers) {
+        picker.getWorldPosition(_tmpPanelPos);
+        if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= PANEL_GRAB_DISTANCE) {
+          _applySkyPreset(picker.userData.skyPreset);
+          break;
+        }
+      }
+    }
+  }
 
   if (_panelGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
     scene.attach(_worldPanel);
