@@ -239,52 +239,47 @@ const _gloveLoader = new GLTFLoader();
 const _gripSpaces = [renderer.xr.getControllerGrip(0), renderer.xr.getControllerGrip(1)];
 
 _gloveLoader.load('/static/gloves.glb', (gltf) => {
-  // The GLB contains both gloves in one scene.
-  // Split top-level children by their X bounding-box center:
-  // more-negative X = left hand (grip idx 1), more-positive X = right hand (grip idx 0).
-  const children = [...gltf.scene.children];
-  if (children.length < 2) {
-    // Fallback: can't split — clone whole scene for each grip
-    console.warn('[VR Hub] Expected 2 glove children, got', children.length, '— falling back to full clone');
-    children.push(children[0] ? children[0].clone() : new THREE.Object3D());
-  }
+  // Collect every Mesh in the scene, split into left/right by X bounding-box center
+  const allMeshes = [];
+  gltf.scene.traverse(node => { if (node.isMesh) allMeshes.push(node); });
 
-  // Sort by bounding-box center X so [0]=most-negative (left), [1]=most-positive (right)
-  const _tmp = new THREE.Box3(), _ctr = new THREE.Vector3();
-  children.sort((a, b) => {
-    _tmp.setFromObject(a); _tmp.getCenter(_ctr); const ax = _ctr.x;
-    _tmp.setFromObject(b); _tmp.getCenter(_ctr); const bx = _ctr.x;
-    return ax - bx; // ascending: [0]=left, [1]=right
+  const _bb = new THREE.Box3(), _ctr = new THREE.Vector3();
+  const centers = allMeshes.map(m => { _bb.setFromObject(m); _bb.getCenter(_ctr); return _ctr.x; });
+  const midX = (Math.min(...centers) + Math.max(...centers)) / 2;
+
+  // Build two Groups: one for each half
+  const groupL = new THREE.Group(), groupR = new THREE.Group();
+  allMeshes.forEach((m, i) => {
+    m.material = Array.isArray(m.material)
+      ? m.material.map(mt => { const c = mt.clone(); c.side = THREE.DoubleSide; return c; })
+      : (() => { const c = m.material.clone(); c.side = THREE.DoubleSide; return c; })();
+    const clone = m.clone();
+    // Preserve world transform relative to scene root
+    m.getWorldPosition(clone.position);
+    m.getWorldQuaternion(clone.quaternion);
+    m.getWorldScale(clone.scale);
+    (centers[i] < midX ? groupL : groupR).add(clone);
   });
 
-  // XR controller index 0 = right hand, index 1 = left hand
-  // So: _gripSpaces[0] (right) gets children[1], _gripSpaces[1] (left) gets children[0]
-  const gloveForGrip = [children[1], children[0]]; // [rightGlove, leftGlove]
+  // XR: grip index 0 = right hand, index 1 = left hand
+  const gloveForGrip = [groupR, groupL];
 
-  // Compute per-hand scale using that hand's own bounding box
   _gripSpaces.forEach((grip, idx) => {
-    const glove = gloveForGrip[idx].clone();
+    const glove = gloveForGrip[idx];
 
-    glove.traverse(node => {
-      if (node.isMesh && node.material) {
-        const mats = Array.isArray(node.material) ? node.material : [node.material];
-        mats.forEach(m => { m.side = THREE.DoubleSide; });
-      }
-    });
-
-    const bb = new THREE.Box3().setFromObject(glove);
-    const sz = new THREE.Vector3(); bb.getSize(sz);
-    const cn = new THREE.Vector3(); bb.getCenter(cn);
-    const maxDim = Math.max(sz.x, sz.y, sz.z);
+    const bb2 = new THREE.Box3().setFromObject(glove);
+    const sz2 = new THREE.Vector3(); bb2.getSize(sz2);
+    const cn2 = new THREE.Vector3(); bb2.getCenter(cn2);
+    const maxDim = Math.max(sz2.x, sz2.y, sz2.z);
     const s = maxDim > 0 ? (0.2 / maxDim) : 1;
     glove.scale.setScalar(s);
-    glove.position.set(-cn.x * s, -cn.y * s, -cn.z * s);
-    console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'glove BB size:', sz, 'scale:', s.toFixed(4));
+    glove.position.set(-cn2.x * s, -cn2.y * s, -cn2.z * s);
+    console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'sz:', sz2, 's:', s.toFixed(4));
 
     grip.add(glove);
     scene.add(grip);
   });
-  console.log('[VR Hub] Gloves loaded');
+  console.log('[VR Hub] Gloves loaded, meshes split at midX:', midX.toFixed(2));
 }, undefined, (err) => {
   console.warn('[VR Hub] Failed to load gloves.glb:', err);
   _gripSpaces.forEach(grip => scene.add(grip));
