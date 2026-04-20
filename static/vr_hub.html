@@ -288,7 +288,14 @@ function makePanelTexture(panel, highlighted) {
   // Sub label
   ctx.fillStyle = highlighted ? 'rgba(255,255,255,0.7)' : col;
   ctx.font = '26px Georgia, serif';
-  ctx.fillText(panel.sub, W / 2, H / 2 + 38);
+  ctx.fillText(panel.sub, W / 2, H / 2 + 32);
+
+  // Pull trigger prompt on hover
+  if (highlighted) {
+    ctx.fillStyle = 'rgba(255,208,110,0.9)';
+    ctx.font = 'bold 20px Georgia, serif';
+    ctx.fillText('▶  PULL TRIGGER TO ENTER', W / 2, H - 30);
+  }
 
   return new THREE.CanvasTexture(cv);
 }
@@ -357,7 +364,7 @@ const ctrlHovered = [null, null]; // panel mesh hovered by each controller
 
 // ─── Controllers ─────────────────────────────────────────────────────────────
 const controllers = [renderer.xr.getController(0), renderer.xr.getController(1)];
-const ctrlRayLines = []; // Line mesh per controller so we can update endpoint
+const ctrlRayLines = [];
 
 const _ctrlMat = new THREE.Matrix4();
 
@@ -369,25 +376,43 @@ function raycastFromController(ctrl) {
   return hits.length > 0 ? hits[0] : null;
 }
 
-controllers.forEach((ctrl, idx) => {
-  // Trigger fires navigation using the per-frame hover state (matrixWorld is
-  // only valid inside the animation loop, not during XR input events)
-  ctrl.addEventListener('selectstart', () => {
-    const hovered = ctrlHovered[idx];
-    if (hovered && !navigating) triggerNavigate(hovered);
-  });
+// Central select handler — called from both Three.js events and raw XR session
+function handleSelect() {
+  if (navigating) return;
+  // Use per-frame hover state (most reliable)
+  const hovered = ctrlHovered[0] || ctrlHovered[1];
+  if (hovered) { triggerNavigate(hovered); return; }
+  // Fallback: fresh raycast from both controllers
+  for (const ctrl of controllers) {
+    const hit = raycastFromController(ctrl);
+    if (hit) { triggerNavigate(hit.object); return; }
+  }
+}
 
-  // Ray line — we update the far endpoint each frame based on hit distance
-  const positions = new Float32Array(6); // origin(0,0,0) + tip(0,0,-dist)
+controllers.forEach((ctrl, idx) => {
+  ctrl.addEventListener('selectstart', handleSelect);
+  ctrl.addEventListener('select', handleSelect); // fires on trigger release too
+
+  // Ray line
+  const positions = new Float32Array(6);
   const lineGeo = new THREE.BufferGeometry();
   lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   lineGeo.setDrawRange(0, 2);
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.55, linewidth: 1 });
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.6 });
   const line = new THREE.Line(lineGeo, lineMat);
   ctrl.add(line);
   ctrlRayLines.push(line);
 
   scene.add(ctrl);
+});
+
+// Raw XR session select — belt-and-suspenders fallback in case Three.js
+// controller events don't fire on this runtime
+renderer.xr.addEventListener('sessionstart', () => {
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  session.addEventListener('selectstart', handleSelect);
+  session.addEventListener('select', handleSelect);
 });
 
 // ─── Navigate helper ─────────────────────────────────────────────────────────
