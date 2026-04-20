@@ -382,6 +382,7 @@ function _alignSegment(mesh, jA, jB) {
 // Static fallback hand (controller mode).
 function buildStaticHand(isRight) {
   const root = new THREE.Group();
+  root.rotation.x = Math.PI * 0.25;
   const flip = isRight ? 1 : -1;
   function addSphere(r, x, y, z, mat = _ctrlMat) {
     const m = new THREE.Mesh(_sphGeo(r), mat);
