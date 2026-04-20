@@ -259,6 +259,12 @@ function _updateQuestLocomotion(dt) {
       LOOK_LIMIT
     );
   }
+
+  // Keep artificial locomotion look upright: yaw on rig + pitch on pivot only.
+  playerRig.rotation.x = 0;
+  playerRig.rotation.z = 0;
+  playerPitch.rotation.y = 0;
+  playerPitch.rotation.z = 0;
 }
 
 // VR button
