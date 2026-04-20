@@ -343,6 +343,8 @@ const WRIST_CAP_RADIUS = 0.014;
 
 const _handMat     = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.75, metalness: 0.0 });
 const _handMatFlat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.75, metalness: 0.0 });
+const _ctrlMat     = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, roughness: 0.6, metalness: 0.05 });
+const _ctrlAccent  = new THREE.MeshStandardMaterial({ color: 0x21242a, roughness: 0.8, metalness: 0.1 });
 
 // Shared geometries — unit cylinder (h=1) scaled per-frame; spheres per radius.
 const _cylGeoCache = new Map();
@@ -381,39 +383,44 @@ function _alignSegment(mesh, jA, jB) {
 function buildStaticHand(isRight) {
   const root = new THREE.Group();
   const flip = isRight ? 1 : -1;
-  function addSphere(r, x, y, z) {
-    const m = new THREE.Mesh(_sphGeo(r), _handMatFlat);
+  function addSphere(r, x, y, z, mat = _ctrlMat) {
+    const m = new THREE.Mesh(_sphGeo(r), mat);
     m.position.set(x, y, z);
     root.add(m);
   }
 
-  // Rounded palm cluster (cartoon style).
+  // Grip/handle: rounded downward chain.
   [
-    { r: 0.022, x: 0, y: 0, z: 0.048 },
-    { r: 0.019, x: 0, y: -0.001, z: 0.024 },
-    { r: 0.017, x: 0, y: -0.002, z: 0.002 },
+    { r: 0.022, x: 0, y: -0.010, z: 0.014 },
+    { r: 0.020, x: 0, y: -0.031, z: 0.004 },
+    { r: 0.017, x: 0, y: -0.048, z: -0.006 },
+    { r: 0.014, x: 0, y: -0.061, z: -0.016 },
   ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
 
-  // Finger chains made of spheres from knuckle to tip.
+  // Main face/body near top of grip.
   [
-    { x: flip * 0.026, radii: [0.010, 0.009, 0.008, 0.007], gap: 0.014 },
-    { x: flip * 0.009, radii: [0.011, 0.010, 0.009, 0.008], gap: 0.015 },
-    { x: -flip * 0.008, radii: [0.010, 0.009, 0.008, 0.007], gap: 0.014 },
-    { x: -flip * 0.025, radii: [0.009, 0.008, 0.007, 0.006], gap: 0.013 },
-  ].forEach(({ x, radii, gap }) => {
-    let z = 0.010;
-    radii.forEach((r, i) => {
-      addSphere(r, x, -0.001 + (i * -0.0007), z);
-      z -= gap;
-    });
-  });
-
-  // Thumb placed on the outside with a soft outward arc.
-  [
-    { r: 0.011, x: flip * 0.040, y: -0.004, z: 0.032 },
-    { r: 0.010, x: flip * 0.047, y: -0.006, z: 0.012 },
-    { r: 0.009, x: flip * 0.053, y: -0.008, z: -0.006 },
+    { r: 0.020, x: 0, y: 0.004, z: 0.018 },
+    { r: 0.016, x: 0, y: 0.013, z: 0.006 },
+    { r: 0.015, x: 0, y: -0.001, z: 0.030 },
   ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
+  // Tracking ring arc (Quest-like halo), mirrored by handedness.
+  [
+    { r: 0.010, x: flip * 0.010, y: 0.026, z: 0.020 },
+    { r: 0.010, x: flip * 0.026, y: 0.032, z: 0.010 },
+    { r: 0.010, x: flip * 0.037, y: 0.024, z: -0.004 },
+    { r: 0.010, x: flip * 0.035, y: 0.010, z: -0.016 },
+    { r: 0.010, x: flip * 0.021, y: 0.001, z: -0.022 },
+  ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
+  // Thumbstick and face buttons on top plate.
+  addSphere(0.007, flip * 0.008, 0.022, 0.010, _ctrlAccent);
+  addSphere(0.005, flip * 0.018, 0.017, 0.018, _ctrlAccent);
+  addSphere(0.005, flip * 0.024, 0.013, 0.012, _ctrlAccent);
+
+  // Trigger and grip accents.
+  addSphere(0.007, flip * 0.012, -0.004, 0.033, _ctrlAccent);
+  addSphere(0.006, flip * 0.018, -0.028, 0.004, _ctrlAccent);
 
   return root;
 }
