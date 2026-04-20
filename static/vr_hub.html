@@ -289,9 +289,9 @@ scene.add(floor);
   scene.add(root);
 })();
 
-// Controllers (ray lines visible in VR) + gloves attached to grip spaces
+// Controllers (ray lines visible in VR) + gloves centered on ray origin spaces
 const _gloveLoader = new GLTFLoader();
-const _gripSpaces = [renderer.xr.getControllerGrip(0), renderer.xr.getControllerGrip(1)];
+const _rayOrigins = [renderer.xr.getController(0), renderer.xr.getController(1)];
 
 _gloveLoader.load('/static/gloves.glb', (gltf) => {
   // Collect every Mesh in the scene, split into left/right by X bounding-box center
@@ -316,29 +316,38 @@ _gloveLoader.load('/static/gloves.glb', (gltf) => {
     (centers[i] < midX ? groupL : groupR).add(clone);
   });
 
-  // XR: grip index 0 = right hand, index 1 = left hand
+  // XR: controller index 0 = right hand, index 1 = left hand
   const gloveForGrip = [groupR, groupL];
 
-  _gripSpaces.forEach((grip, idx) => {
+  _rayOrigins.forEach((rayOrigin, idx) => {
     const glove = gloveForGrip[idx];
 
     const bb2 = new THREE.Box3().setFromObject(glove);
     const sz2 = new THREE.Vector3(); bb2.getSize(sz2);
-    const cn2 = new THREE.Vector3(); bb2.getCenter(cn2);
     const maxDim = Math.max(sz2.x, sz2.y, sz2.z);
     const s = maxDim > 0 ? (0.2 / maxDim) : 1;
-    glove.scale.setScalar(s);
-    glove.position.set(-cn2.x * s, -cn2.y * s, -cn2.z * s);
-    glove.rotation.y = Math.PI; // flip 180° on Y
-    console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'sz:', sz2, 's:', s.toFixed(4));
 
-    grip.add(glove);
-    scene.add(grip);
+    // Scale/rotate first, then recenter in controller-local space so mesh center sits on ray origin.
+    glove.scale.setScalar(s);
+    glove.rotation.y = Math.PI; // flip 180° on Y
+    glove.position.set(0, 0, 0);
+
+    rayOrigin.add(glove);
+    scene.add(rayOrigin);
+
+    rayOrigin.updateMatrixWorld(true);
+    glove.updateMatrixWorld(true);
+    const centeredBox = new THREE.Box3().setFromObject(glove);
+    const worldCenter = new THREE.Vector3(); centeredBox.getCenter(worldCenter);
+    const localCenter = rayOrigin.worldToLocal(worldCenter.clone());
+    glove.position.sub(localCenter);
+
+    console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'sz:', sz2, 's:', s.toFixed(4));
   });
   console.log('[VR Hub] Gloves loaded, meshes split at midX:', midX.toFixed(2));
 }, undefined, (err) => {
   console.warn('[VR Hub] Failed to load gloves.glb:', err);
-  _gripSpaces.forEach(grip => scene.add(grip));
+  _rayOrigins.forEach(rayOrigin => scene.add(rayOrigin));
 });
 
 [renderer.xr.getController(0), renderer.xr.getController(1)].forEach(ctrl => {
