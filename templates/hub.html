@@ -517,6 +517,10 @@ function normalizeObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 }
 
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
 function buildSpecRows(entries) {
   return entries.map(({ label, value }) => `
         <div class="spec-row">
@@ -561,6 +565,45 @@ function buildAbilitySection(abilities) {
   `;
 }
 
+function buildInventorySlotsSection(equipment = {}, attacks = []) {
+  const slotRows = [
+    { label: 'Main Hand', value: formatValue(equipment.main_hand || equipment.primary_weapon || equipment.weapon_main || '-') },
+    { label: 'Off Hand', value: formatValue(equipment.off_hand || equipment.secondary_weapon || equipment.weapon_off || '-') },
+    { label: 'Armor', value: formatValue(equipment.equipped_armor || equipment.armor || '-') },
+    { label: 'Shield', value: formatValue(equipment.shield || '-') },
+    { label: 'Attuned', value: formatValue(Array.isArray(equipment.equipped_item_ids) ? String(equipment.equipped_item_ids.length) : '-') },
+  ];
+
+  const equippedWeapons = normalizeArray(equipment.equipped_weapons);
+  if (equippedWeapons.length) {
+    slotRows.push({ label: 'Equipped Weapons', value: equippedWeapons.join(', ') });
+  } else {
+    const attackNames = normalizeArray(attacks).map((attack) => String((attack && attack.name) || '').trim()).filter(Boolean);
+    slotRows.push({ label: 'Equipped Weapons', value: attackNames.length ? attackNames.join(', ') : '-' });
+  }
+
+  return buildDetailSection('Inventory Slots', slotRows);
+}
+
+function buildInventoryItemsSection(items = []) {
+  const rows = normalizeArray(items)
+    .map((item) => normalizeObject(item))
+    .filter((item) => String(item.name || item.itemId || '').trim())
+    .slice(0, 40)
+    .map((item, index) => {
+      const name = formatValue(item.name || item.itemId || `Item ${index + 1}`);
+      const qty = formatValue(item.quantity ?? 1);
+      const weight = formatValue(item.weight || '-');
+      const equipped = item.equipped ? 'Equipped' : '-';
+      return { label: `${index + 1}. ${name}`, value: `Qty ${qty} | Wt ${weight} | ${equipped}` };
+    });
+
+  if (!rows.length) {
+    rows.push({ label: 'Items', value: 'No inventory items recorded.' });
+  }
+  return buildDetailSection('Inventory Items', rows);
+}
+
 function renderDetailPlaceholder(message) {
   detailEl.innerHTML = `
     <div class="detail-head">
@@ -578,6 +621,13 @@ function createCharacterEntry(row, idx) {
   const coreStats = normalizeObject(metadata.core_stats);
   const hitPoints = normalizeObject(metadata.hit_points);
   const abilities = normalizeObject(metadata.abilities);
+  const inventory = normalizeObject(metadata.inventory);
+  const equipment = normalizeObject(metadata.equipment);
+  const actions = normalizeObject(metadata.actions);
+  const actionAttacks = normalizeArray(actions.attacks);
+  const inventoryItems = normalizeArray(inventory.items);
+  const fallbackInventoryItems = normalizeArray(metadata.inventory_items);
+  const combinedItems = inventoryItems.length ? inventoryItems : fallbackInventoryItems;
   const id = String(row.id || row.character_id || `character-${idx + 1}`);
   const name = row.name || row.character_name || row.title || `Character ${idx + 1}`;
   const level = row.level ?? row.character_level ?? '-';
@@ -621,6 +671,9 @@ function createCharacterEntry(row, idx) {
   if (Object.keys(abilities).length) {
     sections.push(buildAbilitySection(abilities));
   }
+
+  sections.push(buildInventorySlotsSection(equipment, actionAttacks));
+  sections.push(buildInventoryItemsSection(combinedItems));
 
   return {
     id,
@@ -906,6 +959,9 @@ async function boot() {
         core_stats: parsedPayload && parsedPayload.master ? parsedPayload.master.core_stats || null : null,
         hit_points: parsedPayload && parsedPayload.master ? parsedPayload.master.hit_points || null : null,
         abilities: parsedPayload && parsedPayload.master ? parsedPayload.master.abilities || null : null,
+        inventory: parsedPayload && parsedPayload.master ? parsedPayload.master.inventory || null : null,
+        equipment: parsedPayload && parsedPayload.master ? parsedPayload.master.equipment || null : null,
+        actions: parsedPayload && parsedPayload.master ? parsedPayload.master.actions || null : null,
       },
     };
 

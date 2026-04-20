@@ -417,6 +417,9 @@ def _import_pdf_to_contracts(source_path: Path) -> dict:
     core_stats = master.get("core_stats") if isinstance(master.get("core_stats"), dict) else {}
     hit_points = master.get("hit_points") if isinstance(master.get("hit_points"), dict) else {}
     abilities = master.get("abilities") if isinstance(master.get("abilities"), dict) else {}
+    inventory = master.get("inventory") if isinstance(master.get("inventory"), dict) else {}
+    equipment = master.get("equipment") if isinstance(master.get("equipment"), dict) else {}
+    actions = master.get("actions") if isinstance(master.get("actions"), dict) else {}
     return {
         "ok": True,
         "source_file": source_path.name,
@@ -427,6 +430,9 @@ def _import_pdf_to_contracts(source_path: Path) -> dict:
             "core_stats": core_stats,
             "hit_points": hit_points,
             "abilities": abilities,
+            "inventory": inventory,
+            "equipment": equipment,
+            "actions": actions,
         },
     }
 
