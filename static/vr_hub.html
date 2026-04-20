@@ -185,40 +185,61 @@ const SKY_PRESETS = {
   blue: {
     label: 'Blue',
     accentHex: '#4488ff',
-    zenith:  new THREE.Color(0.012, 0.016, 0.040),
-    horizon: new THREE.Color(0.040, 0.055, 0.120),
-    nadir:   new THREE.Color(0.006, 0.008, 0.018),
-    fogColor: 0x06090f,
+    zenith:  new THREE.Color(0.010, 0.018, 0.060),   // deep space indigo
+    upper:   new THREE.Color(0.025, 0.048, 0.130),   // rich midnight blue
+    mid:     new THREE.Color(0.055, 0.090, 0.220),   // horizon glow band
+    horizon: new THREE.Color(0.090, 0.130, 0.310),   // bright horizon edge
+    nadir:   new THREE.Color(0.005, 0.008, 0.022),   // ground undersky
+    glow:    new THREE.Color(0.10,  0.18,  0.55),    // horizon bloom tint
+    fogColor: 0x060a18,
+    ambientColor: 0x1a2050, ambientIntensity: 4.0,
+    sunColor: 0x6699ff,     sunIntensity: 1.6,
+    rimColor: 0x2244cc,     rimIntensity: 0.9,
   },
   green: {
     label: 'Green',
-    accentHex: '#44ff88',
-    zenith:  new THREE.Color(0.008, 0.034, 0.014),
-    horizon: new THREE.Color(0.018, 0.080, 0.032),
-    nadir:   new THREE.Color(0.004, 0.014, 0.006),
-    fogColor: 0x050f07,
+    accentHex: '#44ffaa',
+    zenith:  new THREE.Color(0.005, 0.028, 0.012),
+    upper:   new THREE.Color(0.012, 0.065, 0.028),
+    mid:     new THREE.Color(0.025, 0.120, 0.052),
+    horizon: new THREE.Color(0.040, 0.180, 0.075),
+    nadir:   new THREE.Color(0.003, 0.012, 0.005),
+    glow:    new THREE.Color(0.08,  0.40,  0.18),
+    fogColor: 0x030d06,
+    ambientColor: 0x0d2e14, ambientIntensity: 4.2,
+    sunColor: 0x44ffaa,     sunIntensity: 1.4,
+    rimColor: 0x22cc66,     rimIntensity: 0.8,
   },
   red: {
     label: 'Red',
-    accentHex: '#ff5533',
-    zenith:  new THREE.Color(0.040, 0.008, 0.008),
-    horizon: new THREE.Color(0.100, 0.022, 0.016),
-    nadir:   new THREE.Color(0.018, 0.004, 0.004),
-    fogColor: 0x0f0504,
+    accentHex: '#ff6644',
+    zenith:  new THREE.Color(0.030, 0.006, 0.005),
+    upper:   new THREE.Color(0.075, 0.014, 0.010),
+    mid:     new THREE.Color(0.160, 0.035, 0.020),
+    horizon: new THREE.Color(0.280, 0.075, 0.030),
+    nadir:   new THREE.Color(0.012, 0.003, 0.002),
+    glow:    new THREE.Color(0.55,  0.14,  0.06),
+    fogColor: 0x0e0403,
+    ambientColor: 0x2e0c06, ambientIntensity: 4.0,
+    sunColor: 0xff7744,     sunIntensity: 2.0,
+    rimColor: 0xcc2200,     rimIntensity: 1.0,
   },
 };
 
 let _skyMat;
 (function _buildSkybox() {
   const p = SKY_PRESETS.blue;
-  const skyGeo = new THREE.SphereGeometry(60, 32, 16);
+  const skyGeo = new THREE.SphereGeometry(60, 48, 24);
   _skyMat = new THREE.ShaderMaterial({
     side: THREE.BackSide,
     depthWrite: false,
     uniforms: {
       uZenith:  { value: p.zenith.clone() },
+      uUpper:   { value: p.upper.clone() },
+      uMid:     { value: p.mid.clone() },
       uHorizon: { value: p.horizon.clone() },
       uNadir:   { value: p.nadir.clone() },
+      uGlow:    { value: p.glow.clone() },
     },
     vertexShader: `
       varying vec3 vWorldPos;
@@ -229,20 +250,46 @@ let _skyMat;
     `,
     fragmentShader: `
       uniform vec3 uZenith;
+      uniform vec3 uUpper;
+      uniform vec3 uMid;
       uniform vec3 uHorizon;
       uniform vec3 uNadir;
+      uniform vec3 uGlow;
       varying vec3 vWorldPos;
+
+      // 5-stop smooth gradient
+      vec3 skyGradient(float t) {
+        if (t > 0.75) return mix(uUpper,   uZenith,  (t - 0.75) * 4.0);
+        if (t > 0.50) return mix(uMid,     uUpper,   (t - 0.50) * 4.0);
+        if (t > 0.30) return mix(uHorizon, uMid,     (t - 0.30) * 5.0);
+        if (t > 0.10) return mix(uNadir,   uHorizon, (t - 0.10) * 5.0);
+        return uNadir;
+      }
+
       void main() {
-        float t = clamp(normalize(vWorldPos).y * 0.5 + 0.5, 0.0, 1.0);
-        vec3 sky = (t >= 0.5)
-          ? mix(uHorizon, uZenith,  (t - 0.5) * 2.0)
-          : mix(uNadir,   uHorizon, t * 2.0);
+        vec3 dir = normalize(vWorldPos);
+        float t = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 sky = skyGradient(t);
 
-        vec3 p = floor(vWorldPos * 90.0);
-        float h = fract(sin(dot(p, vec3(127.1, 311.7, 74.3))) * 43758.5453);
-        float star = step(0.9985, h) * smoothstep(0.0, 0.3, normalize(vWorldPos).y);
+        // Soft horizon glow band — peaks at t≈0.5, fades above and below
+        float glowBand = exp(-pow((t - 0.48) / 0.09, 2.0));
+        sky += uGlow * glowBand * 0.28;
 
-        gl_FragColor = vec4(sky + star * 0.28, 1.0);
+        // Subtle lateral nebula sweep using world-space XZ angle
+        float angle = atan(dir.z, dir.x);
+        float nebula = sin(angle * 2.0 + 1.3) * 0.5 + 0.5;
+        float nebulaHeight = smoothstep(0.55, 0.80, t) * (1.0 - smoothstep(0.80, 1.0, t));
+        sky += uGlow * nebula * nebulaHeight * 0.10;
+
+        // Sparse dim stars
+        vec3 sp = floor(vWorldPos * 90.0);
+        float h = fract(sin(dot(sp, vec3(127.1, 311.7, 74.3))) * 43758.5453);
+        // vary star brightness slightly by a second hash
+        float h2 = fract(sin(dot(sp, vec3(269.5, 183.3, 52.1))) * 43758.5453);
+        float brightness = mix(0.15, 0.45, h2);
+        float star = step(0.9985, h) * smoothstep(0.0, 0.35, dir.y) * brightness;
+
+        gl_FragColor = vec4(sky + star, 1.0);
       }
     `
   });
@@ -255,10 +302,20 @@ function _applySkyPreset(name) {
   const p = SKY_PRESETS[name];
   if (!p || !_skyMat) return;
   _skyMat.uniforms.uZenith.value.copy(p.zenith);
+  _skyMat.uniforms.uUpper.value.copy(p.upper);
+  _skyMat.uniforms.uMid.value.copy(p.mid);
   _skyMat.uniforms.uHorizon.value.copy(p.horizon);
   _skyMat.uniforms.uNadir.value.copy(p.nadir);
+  _skyMat.uniforms.uGlow.value.copy(p.glow);
   scene.fog.color.setHex(p.fogColor);
   renderer.setClearColor(p.fogColor, 1);
+  // Update scene lighting to match preset
+  _sceneAmbient.color.setHex(p.ambientColor);
+  _sceneAmbient.intensity = p.ambientIntensity;
+  _sceneSun.color.setHex(p.sunColor);
+  _sceneSun.intensity = p.sunIntensity;
+  _sceneRim.color.setHex(p.rimColor);
+  _sceneRim.intensity = p.rimIntensity;
 }
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
@@ -527,15 +584,21 @@ const vrBtn = createVRButton(renderer);
 if (vrBtn) document.getElementById('vr-btn-wrap').appendChild(vrBtn);
 
 // ─── Lighting ─────────────────────────────────────────────────────────────────
-scene.add(new THREE.AmbientLight(0x1a1830, 3.5));
+const _sceneAmbient = new THREE.AmbientLight(0x1a2050, 4.0);
+scene.add(_sceneAmbient);
 
-const sun = new THREE.DirectionalLight(0xfff5d0, 1.8);
-sun.position.set(4, 8, 3);
-scene.add(sun);
+const _sceneSun = new THREE.DirectionalLight(0x6699ff, 1.6);
+_sceneSun.position.set(4, 8, 3);
+scene.add(_sceneSun);
 
-const rimLight = new THREE.DirectionalLight(0x4466ff, 0.6);
-rimLight.position.set(-5, 2, -4);
-scene.add(rimLight);
+const _sceneRim = new THREE.DirectionalLight(0x2244cc, 0.9);
+_sceneRim.position.set(-5, 2, -4);
+scene.add(_sceneRim);
+
+// Soft fill from below to reduce harsh shadows
+const _sceneFill = new THREE.DirectionalLight(0x112244, 0.4);
+_sceneFill.position.set(0, -4, 2);
+scene.add(_sceneFill);
 
 // ─── Starfield ────────────────────────────────────────────────────────────────
 (function buildStars() {
