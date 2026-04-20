@@ -343,6 +343,109 @@ const _panelGrabState = { holder: null };
 const _tmpCtrlPos = new THREE.Vector3();
 const _tmpPanelPos = new THREE.Vector3();
 
+// ─── Brightness slider ────────────────────────────────────────────────────────
+const BRIGHTNESS_MIN = 0.2;
+const BRIGHTNESS_MAX = 3.0;
+const BRIGHTNESS_HEIGHT = 0.40;  // physical travel distance in metres
+let _brightness = 1.0;           // current normalised exposure value
+
+const _sliderState = { holder: null, grabLocalY: 0, grabBrightness: 0 };
+const _tmpSliderPos = new THREE.Vector3();
+const _tmpSliderCtrl = new THREE.Vector3();
+
+function _buildBrightnessSlider() {
+  const root = new THREE.Group();
+
+  // Track — tall thin bar
+  const track = new THREE.Mesh(
+    new THREE.BoxGeometry(0.012, BRIGHTNESS_HEIGHT, 0.012),
+    new THREE.MeshBasicMaterial({ color: 0x334466 })
+  );
+  root.add(track);
+
+  // Handle — grabbable sphere, starts at centre
+  const handle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.025, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0x88bbff })
+  );
+  handle.position.y = 0; // will be updated each frame
+  root.add(handle);
+  root.userData.handle = handle;
+
+  // Label canvas
+  const cw = 192, ch = 80;
+  const c = document.createElement('canvas');
+  c.width = cw; c.height = ch;
+  const labelTex = new THREE.CanvasTexture(c);
+  const label = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.09, 0.038),
+    new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, side: THREE.DoubleSide })
+  );
+  label.position.set(0.075, 0, 0);
+  root.add(label);
+  root.userData.labelCanvas = c;
+  root.userData.labelTex = labelTex;
+
+  // Top/bottom tick labels
+  ['☀', '🌑'].forEach((sym, i) => {
+    const sc = document.createElement('canvas');
+    sc.width = 64; sc.height = 64;
+    const sctx = sc.getContext('2d');
+    sctx.font = '38px sans-serif';
+    sctx.textAlign = 'center';
+    sctx.textBaseline = 'middle';
+    sctx.fillText(sym, 32, 32);
+    const st = new THREE.CanvasTexture(sc);
+    const sm = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.04, 0.04),
+      new THREE.MeshBasicMaterial({ map: st, transparent: true, side: THREE.DoubleSide })
+    );
+    sm.position.set(0, i === 0 ? BRIGHTNESS_HEIGHT / 2 + 0.03 : -(BRIGHTNESS_HEIGHT / 2 + 0.03), 0);
+    root.add(sm);
+  });
+
+  root.position.set(0.55, 1.05, -0.9);
+  root.rotation.set(-0.10, 0, 0);
+  return root;
+}
+
+const _brightnessSlider = _buildBrightnessSlider();
+scene.add(_brightnessSlider);
+
+function _brightnessToY(b) {
+  const t = (b - BRIGHTNESS_MIN) / (BRIGHTNESS_MAX - BRIGHTNESS_MIN);
+  return (t - 0.5) * BRIGHTNESS_HEIGHT;
+}
+function _yToBrightness(y) {
+  const t = y / BRIGHTNESS_HEIGHT + 0.5;
+  return THREE.MathUtils.clamp(
+    BRIGHTNESS_MIN + t * (BRIGHTNESS_MAX - BRIGHTNESS_MIN),
+    BRIGHTNESS_MIN, BRIGHTNESS_MAX
+  );
+}
+
+function _applyBrightness(b) {
+  _brightness = b;
+  renderer.toneMappingExposure = b;
+  // Update handle position
+  _brightnessSlider.userData.handle.position.y = _brightnessToY(b);
+  // Redraw label
+  const c = _brightnessSlider.userData.labelCanvas;
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.fillStyle = 'rgba(10,16,34,0.85)';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#4488ff';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
+  ctx.fillStyle = '#aaccff';
+  ctx.font = 'bold 28px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText('☀ ' + b.toFixed(2), c.width / 2, c.height / 2 + 8);
+  _brightnessSlider.userData.labelTex.needsUpdate = true;
+}
+_applyBrightness(1.0); // initialise
+
 function _buildWorldPanel() {
   const root = new THREE.Group();
 
@@ -488,6 +591,39 @@ function _updatePanelInteraction(leftGp, rightGp) {
 
   const leftPressed = _isGrabPressed(leftGp);
   const rightPressed = _isGrabPressed(rightGp);
+
+  // ── Brightness slider drag ─────────────────────────────────────────────────
+  if (_sliderState.holder) {
+    const holdCtrl = _controllersByHand[_sliderState.holder];
+    const holdPressed = _sliderState.holder === 'left' ? leftPressed : rightPressed;
+    if (!holdCtrl || !holdPressed) {
+      // release
+      _sliderState.holder = null;
+    } else {
+      // drag: map controller world Y to brightness
+      holdCtrl.getWorldPosition(_tmpSliderCtrl);
+      // convert world Y to slider local Y
+      const localY = _brightnessSlider.worldToLocal(_tmpSliderCtrl.clone()).y;
+      const newB = _yToBrightness(localY - _sliderState.grabLocalY + _brightnessToY(_sliderState.grabBrightness));
+      _applyBrightness(newB);
+    }
+  } else {
+    // Try to grab slider handle
+    const trySliderGrab = (hand, ctrl, pressed, wasPressed) => {
+      if (!ctrl || !pressed || wasPressed) return false;
+      ctrl.getWorldPosition(_tmpSliderCtrl);
+      _brightnessSlider.userData.handle.getWorldPosition(_tmpSliderPos);
+      if (_tmpSliderCtrl.distanceTo(_tmpSliderPos) > PANEL_GRAB_DISTANCE) return false;
+      // record grab offset
+      const localY = _brightnessSlider.worldToLocal(_tmpSliderCtrl.clone()).y;
+      _sliderState.holder = hand;
+      _sliderState.grabLocalY = localY;
+      _sliderState.grabBrightness = _brightness;
+      return true;
+    };
+    trySliderGrab('left',  leftCtrl,  leftPressed,  _grabPressedPrev.left) ||
+    trySliderGrab('right', rightCtrl, rightPressed, _grabPressedPrev.right);
+  }
 
   // ── Sky-picker selection (fresh press near any picker panel) ───────────────
   const anyFreshPress =
