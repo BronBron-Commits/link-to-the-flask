@@ -316,6 +316,8 @@ function _applySkyPreset(name) {
   _sceneSun.intensity = p.sunIntensity;
   _sceneRim.color.setHex(p.rimColor);
   _sceneRim.intensity = p.rimIntensity;
+  _currentSky = name;
+  if (_controlTablet) _refreshSkyBtns();
 }
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
@@ -416,6 +418,7 @@ const _sliderState = { holder: null, grabLocalY: 0, grabBrightness: 0 };
 const _tmpSliderPos = new THREE.Vector3();
 const _tmpSliderCtrl = new THREE.Vector3();
 const _tmpTabletPos = new THREE.Vector3();
+let _currentSky = 'blue';
 
 function _brightnessToY(b) {
   const t = (b - BRIGHTNESS_MIN) / (BRIGHTNESS_MAX - BRIGHTNESS_MIN);
@@ -472,13 +475,41 @@ function _drawBrightnessValue(c, tex, b) {
   tex.needsUpdate = true;
 }
 
+function _drawSkyBtn(c, tex, presetName, active) {
+  const p = SKY_PRESETS[presetName];
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const hz = p.horizon, zn = p.zenith;
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, `rgb(${Math.round(zn.r*255)},${Math.round(zn.g*255)},${Math.round(zn.b*255)})`);
+  bg.addColorStop(1, `rgb(${Math.round(hz.r*255)},${Math.round(hz.g*255)},${Math.round(hz.b*255)})`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, c.width, c.height);
+  if (active) { ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.fillRect(0, 0, c.width, c.height); }
+  ctx.strokeStyle = active ? '#ffffff' : p.accentHex;
+  ctx.lineWidth = active ? 5 : 2;
+  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
+  ctx.fillStyle = active ? '#ffffff' : p.accentHex;
+  ctx.font = `bold ${active ? 26 : 22}px Georgia`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(p.label, c.width / 2, c.height / 2);
+  tex.needsUpdate = true;
+}
+
+function _refreshSkyBtns() {
+  if (!_controlTablet) return;
+  for (const btn of (_controlTablet.userData.skyBtnMeshes || [])) {
+    _drawSkyBtn(btn.userData.canvas, btn.userData.tex, btn.userData.skyPreset, btn.userData.skyPreset === _currentSky);
+  }
+}
+
 function _buildControlTablet() {
   const root = new THREE.Group();
   const Z = 0.016; // local Z offset for face elements
 
   // Tablet body
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(0.40, 0.52, 0.018),
+    new THREE.BoxGeometry(0.40, 0.70, 0.018),
     new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.55, metalness: 0.45 })
   );
   root.add(body);
@@ -599,8 +630,37 @@ function _buildControlTablet() {
     new THREE.PlaneGeometry(0.285, 0.036),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
   );
-  ft.position.set(0, -0.237, Z);
+  ft.position.set(0, -0.316, Z);
   root.add(ft);
+
+  // ── Bottom: SKY colour buttons ──────────────────────────────────────────────
+  const skyLblC = document.createElement('canvas'); skyLblC.width = 320; skyLblC.height = 44;
+  const skyLblCtx = skyLblC.getContext('2d');
+  skyLblCtx.fillStyle = '#445566'; skyLblCtx.font = '20px Georgia'; skyLblCtx.textAlign = 'center';
+  skyLblCtx.fillText('SKY', 160, 30);
+  const skyLbl = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.030),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(skyLblC), transparent: true, side: THREE.DoubleSide })
+  );
+  skyLbl.position.set(0, -0.228, Z);
+  root.add(skyLbl);
+
+  const skyBtnMeshes = [];
+  ['blue', 'green', 'red'].forEach((preset, i) => {
+    const bc = document.createElement('canvas'); bc.width = 192; bc.height = 80;
+    const bTex = new THREE.CanvasTexture(bc);
+    const bMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.108, 0.048),
+      new THREE.MeshBasicMaterial({ map: bTex, transparent: true, side: THREE.DoubleSide })
+    );
+    bMesh.position.set((i - 1) * 0.120, -0.272, Z);
+    bMesh.userData.canvas = bc;
+    bMesh.userData.tex = bTex;
+    bMesh.userData.skyPreset = preset;
+    root.add(bMesh);
+    skyBtnMeshes.push(bMesh);
+  });
+  root.userData.skyBtnMeshes = skyBtnMeshes;
 
   root.position.set(0.85, 1.12, -0.9);
   root.rotation.set(-0.12, 0, 0);
@@ -617,6 +677,7 @@ function _applyBrightness(b) {
   _drawBrightnessValue(_controlTablet.userData.labelCanvas, _controlTablet.userData.labelTex, b);
 }
 _applyBrightness(1.0);
+_refreshSkyBtns();
 
 function _updateLasers(dt) {
   if (_laserActive) {
@@ -669,66 +730,7 @@ function _buildWorldPanel() {
 const _worldPanel = _buildWorldPanel();
 scene.add(_worldPanel);
 
-// ─── Sky-picker panels ────────────────────────────────────────────────────────
-// Fixed panels arranged in a gentle arc. Trigger/grip while nearby switches sky.
-function _buildSkyPickerPanel(presetName) {
-  const p = SKY_PRESETS[presetName];
-  const root = new THREE.Group();
-
-  const cw = 320, ch = 160;
-  const c = document.createElement('canvas');
-  c.width = cw; c.height = ch;
-  const ctx = c.getContext('2d');
-
-  // Background gradient matching the preset horizon colour
-  const bg = ctx.createLinearGradient(0, 0, 0, ch);
-  const h = p.horizon;
-  const z = p.zenith;
-  bg.addColorStop(0, `rgb(${Math.round(z.r*255)},${Math.round(z.g*255)},${Math.round(z.b*255)})`);
-  bg.addColorStop(1, `rgb(${Math.round(h.r*255)},${Math.round(h.g*255)},${Math.round(h.b*255)})`);
-  ctx.fillStyle = bg;
-  ctx.fillRect(0, 0, cw, ch);
-
-  // Border
-  ctx.strokeStyle = p.accentHex;
-  ctx.lineWidth = 5;
-  ctx.strokeRect(4, 4, cw - 8, ch - 8);
-
-  // Label
-  ctx.fillStyle = p.accentHex;
-  ctx.font = 'bold 44px Georgia';
-  ctx.textAlign = 'center';
-  ctx.fillText(p.label, cw / 2, 72);
-
-  // Sub-label
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.font = '22px Georgia';
-  ctx.fillText('Grip / Trigger to select', cw / 2, 120);
-
-  const tex = new THREE.CanvasTexture(c);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.20, 0.10),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
-  );
-  root.add(mesh);
-  root.userData.skyPreset = presetName;
-  return root;
-}
-
-// Arc: three panels centred at z=-1.1, spread ±0.55 on X
-const _skyPickers = [];
-const _skyPickerDefs = [
-  { name: 'blue',  x: -0.60, z: -1.05 },
-  { name: 'green', x:  0.00, z: -1.15 },
-  { name: 'red',   x:  0.60, z: -1.05 },
-];
-_skyPickerDefs.forEach(({ name, x, z }) => {
-  const panel = _buildSkyPickerPanel(name);
-  panel.position.set(x, 0.95, z);
-  panel.rotation.set(-0.10, 0, 0);
-  scene.add(panel);
-  _skyPickers.push(panel);
-});
+// Sky buttons live on the control tablet (see _buildControlTablet)
 
 function _deadzone(v) {
   return Math.abs(v) < STICK_DEADZONE ? 0 : v;
@@ -829,12 +831,12 @@ function _updatePanelInteraction(leftGp, rightGp) {
       if (!ctrl) continue;
       ctrl.getWorldPosition(_tmpCtrlPos);
 
-      // Sky pickers
+      // Sky buttons on control tablet
       let hitSky = false;
-      for (const picker of _skyPickers) {
-        picker.getWorldPosition(_tmpPanelPos);
-        if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= PANEL_GRAB_DISTANCE) {
-          _applySkyPreset(picker.userData.skyPreset);
+      for (const skyBtn of (_controlTablet.userData.skyBtnMeshes || [])) {
+        skyBtn.getWorldPosition(_tmpPanelPos);
+        if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.12) {
+          _applySkyPreset(skyBtn.userData.skyPreset);
           hitSky = true; break;
         }
       }
