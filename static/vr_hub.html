@@ -234,6 +234,61 @@ floor.rotation.x = -Math.PI / 2;
 floor.position.y = 0;
 scene.add(floor);
 
+// XYZ compass — placed 1.5m in front of the player at floor level
+(function buildCompass() {
+  const root = new THREE.Group();
+  root.position.set(0, 0.01, -1.5); // just above floor, 1.5m ahead
+
+  const axes = [
+    { dir: new THREE.Vector3(1, 0, 0),  color: 0xff2222, label: '+X' },
+    { dir: new THREE.Vector3(0, 1, 0),  color: 0x22ff22, label: '+Y' },
+    { dir: new THREE.Vector3(0, 0, -1), color: 0x2288ff, label: '-Z (fwd)' },
+  ];
+
+  axes.forEach(({ dir, color, label }) => {
+    // Arrow shaft
+    const points = [new THREE.Vector3(0,0,0), dir.clone().multiplyScalar(0.3)];
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color, linewidth: 2 })
+    );
+    root.add(line);
+
+    // Arrowhead (small cone)
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.02, 0.07, 6),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    cone.position.copy(dir.clone().multiplyScalar(0.33));
+    // Orient cone along axis
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+    root.add(cone);
+
+    // Text sprite (canvas texture)
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 64, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+    sprite.scale.set(0.18, 0.09, 1);
+    sprite.position.copy(dir.clone().multiplyScalar(0.45));
+    root.add(sprite);
+  });
+
+  // Origin dot
+  root.add(new THREE.Mesh(
+    new THREE.SphereGeometry(0.025, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  ));
+
+  scene.add(root);
+})();
+
 // Controllers (ray lines visible in VR) + gloves attached to grip spaces
 const _gloveLoader = new GLTFLoader();
 const _gripSpaces = [renderer.xr.getControllerGrip(0), renderer.xr.getControllerGrip(1)];
