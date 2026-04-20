@@ -257,7 +257,6 @@
       </div>
       <div class="actions">
         <button id="refresh-btn" class="btn" type="button">Refresh</button>
-        <button id="enter-world-btn" class="btn is-hidden" type="button" disabled aria-hidden="true">Enter World</button>
         <a class="btn" href="/account-hub">Return to Account Hub</a>
       </div>
     </div>
@@ -338,7 +337,6 @@ const selectedCharacterLabelEl = document.getElementById('selected-character');
 const statusEl = document.getElementById('status');
 const modelGridEl = document.getElementById('model-grid');
 const refreshBtn = document.getElementById('refresh-btn');
-const enterWorldBtn = document.getElementById('enter-world-btn');
 const modelFileEl = document.getElementById('model-file');
 const uploadBtn = document.getElementById('upload-btn');
 const uploadFolderBtn = document.getElementById('upload-folder-btn');
@@ -1279,10 +1277,6 @@ if (loadSelectedCharacter()) {
   }
   if (previewDanceBtn) {
     previewDanceBtn.addEventListener('click', toggleSwingDancePreview);
-  }
-
-  if (enterWorldBtn) {
-    enterWorldBtn.disabled = true;
   }
 
   loadModels().catch((err) => {
