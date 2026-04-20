@@ -575,7 +575,32 @@ function initWebXR() {
 
 initWebXR();
 
-// --- Compass gizmo ---
+// Auto-enter VR when arriving via VR hub handoff (sessionStorage flag set by source page)
+(function checkVrHandoff() {
+  let flagFound = false;
+  try {
+    flagFound = sessionStorage.getItem('vr-handoff') === '1';
+    if (flagFound) sessionStorage.removeItem('vr-handoff');
+  } catch (_) {}
+  if (!flagFound) return;
+
+  // Wait for both the XR button to exist and the scene to be interactive.
+  // Poll at 200 ms intervals; give up after 12 s.
+  let attempts = 0;
+  const MAX_ATTEMPTS = 60;
+  const poll = setInterval(() => {
+    attempts++;
+    const btn = document.getElementById('xr-enter-btn');
+    if (btn && !btn.disabled && btn.textContent === 'Enter VR') {
+      clearInterval(poll);
+      btn.click();
+    } else if (attempts >= MAX_ATTEMPTS) {
+      clearInterval(poll);
+    }
+  }, 200);
+})();
+
+
 const _compassCanvas = document.getElementById('compass-gizmo');
 const _compassCtx = _compassCanvas ? _compassCanvas.getContext('2d') : null;
 const _compassDir = new THREE.Vector3();

@@ -417,13 +417,48 @@ scene.add(controller1);
 });
 
 // ─── Navigate helper ─────────────────────────────────────────────────────────
+// Fade-to-black plane parented to camera so it fills the VR view.
+let _vrFadeMesh = null;
+function _getVrFadeMesh() {
+  if (_vrFadeMesh) return _vrFadeMesh;
+  const geo = new THREE.PlaneGeometry(4, 4);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0x000000, transparent: true, opacity: 0,
+    depthTest: false, depthWrite: false, side: THREE.DoubleSide,
+  });
+  _vrFadeMesh = new THREE.Mesh(geo, mat);
+  _vrFadeMesh.renderOrder = 9999;
+  _vrFadeMesh.position.set(0, 0, -0.35); // ~35 cm in front of eyes
+  camera.add(_vrFadeMesh);
+  return _vrFadeMesh;
+}
+
 function triggerNavigate(panel) {
+  if (navigating) return;
   navigating = true;
+  const href = panel.userData.def.href;
+
+  // Mark VR handoff so the destination page can auto-enter VR
+  try { sessionStorage.setItem('vr-handoff', '1'); } catch (_) {}
+
   const session = renderer.xr.getSession();
-  if (session) {
-    session.end().then(() => { window.location.href = panel.userData.def.href; });
+  if (session && renderer.xr.isPresenting) {
+    // Fade to black inside the headset, then navigate (session ends naturally on unload)
+    const fadeMesh = _getVrFadeMesh();
+    const FADE_MS = 420;
+    const start = performance.now();
+    function doFade() {
+      const p = Math.min((performance.now() - start) / FADE_MS, 1);
+      fadeMesh.material.opacity = p;
+      if (p < 1) {
+        requestAnimationFrame(doFade);
+      } else {
+        window.location.href = href;
+      }
+    }
+    requestAnimationFrame(doFade);
   } else {
-    window.location.href = panel.userData.def.href;
+    window.location.href = href;
   }
 }
 
