@@ -476,6 +476,61 @@
     .status.error { color: #ffb2b8; }
     .status.ok { color: var(--mint); }
 
+    .resume-strip {
+      margin-top: 14px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .resume-title {
+      color: #fff1c9;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .resume-links {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .resume-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(6, 11, 19, 0.78);
+      color: #f7f8fb;
+      text-decoration: none;
+      font-size: 0.74rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 7px 10px;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .resume-link:hover,
+    .resume-link:focus-visible {
+      transform: translateY(-1px);
+      border-color: rgba(135, 216, 255, 0.35);
+      background: rgba(10, 18, 30, 0.94);
+      outline: none;
+    }
+
+    .resume-hint {
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
     @keyframes float {
       0%, 100% { transform: translateY(0px); }
       50% { transform: translateY(-10px); }
@@ -635,6 +690,12 @@
             <span>Open reference content, documents, and adjacent tools.</span>
           </a>
         </div>
+
+        <div class="resume-strip" aria-label="Resume navigation">
+          <div class="resume-title">Quick Resume</div>
+          <div id="hub-resume-links" class="resume-links"></div>
+          <div id="hub-entry-hint" class="resume-hint"></div>
+        </div>
       </section>
     </main>
   </div>
@@ -702,6 +763,12 @@
 
   <script type="module">
     (async function () {
+      const {
+        buildHubResumeLinks,
+        readEntryFromSearch,
+        writeNavContext,
+      } = await import('/static/utils/navigationContext.js');
+
       const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
       const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
       const miniLabelEl = document.getElementById('account-mini-label');
@@ -710,6 +777,8 @@
       const roleEl = document.getElementById('account-role');
       const confirmEl = document.getElementById('account-confirm');
       const statusEl = document.getElementById('status');
+      const resumeLinksEl = document.getElementById('hub-resume-links');
+      const entryHintEl = document.getElementById('hub-entry-hint');
 
       function setStatus(message, tone) {
         if (!statusEl) return;
@@ -730,6 +799,26 @@
         if (emailEl) emailEl.textContent = email || 'No email on file';
         if (roleEl) roleEl.textContent = `Role: ${role}`;
         if (confirmEl) confirmEl.textContent = `Email ${confirmed ? 'confirmed' : 'unconfirmed'}`;
+      }
+
+      function renderResumeLinks() {
+        if (!resumeLinksEl) return;
+        const links = buildHubResumeLinks();
+        resumeLinksEl.innerHTML = links
+          .map((link) => `<a class="resume-link" href="${link.href}">${link.label}</a>`)
+          .join('');
+      }
+
+      const requestedEntry = readEntryFromSearch(window.location.search);
+      writeNavContext({
+        lastPage: 'account-hub',
+        requestedEntry,
+      });
+      renderResumeLinks();
+      if (entryHintEl) {
+        entryHintEl.textContent = requestedEntry
+          ? `Requested entry path: ${requestedEntry.replace(/-/g, ' ')}`
+          : 'Use these links to continue your previous workflow from the hub.';
       }
 
       async function syncServerSession(accessToken) {

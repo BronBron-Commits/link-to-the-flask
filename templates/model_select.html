@@ -258,7 +258,7 @@
       <div class="actions">
         <button id="refresh-btn" class="btn" type="button">Refresh</button>
         <button id="enter-world-btn" class="btn is-hidden" type="button" disabled aria-hidden="true">Enter World</button>
-        <a class="btn" href="/hub">Back to Hub</a>
+        <a class="btn" href="/account-hub">Return to Account Hub</a>
       </div>
     </div>
 
@@ -1289,6 +1289,10 @@ if (loadSelectedCharacter()) {
     setStatus(`Failed loading models: ${err && err.message ? err.message : String(err)}`, 'error');
   });
 }
+</script>
+<script type="module">
+import { writeNavContext } from '/static/utils/navigationContext.js';
+writeNavContext({ lastPage: 'model-select' });
 </script>
 <script src="/static/transition.js"></script>
 </body>

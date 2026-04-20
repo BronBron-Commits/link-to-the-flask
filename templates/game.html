@@ -18,7 +18,7 @@
   </style>
 </head>
 <body>
-  <a id="back-link" href="/">&#8592; Back</a>
+  <a id="back-link" href="/account-hub">&#8592; Account Hub</a>
   <canvas id="game" width="400" height="400"></canvas>
   <script>
     function resizeCanvas() {
@@ -31,6 +31,10 @@
   </script>
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <script type="module">
+    import { writeNavContext } from '/static/utils/navigationContext.js';
+    writeNavContext({ lastPage: 'game' });
+  </script>
   <script type="module" src="{{ asset_url('game.js') }}"></script>
 </body>
 </html>

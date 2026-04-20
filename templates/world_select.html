@@ -141,8 +141,9 @@
         <p id="context" class="sub">Loading character and model context...</p>
       </div>
       <div class="actions">
-        <a id="back-model-btn" class="btn" href="/model-select">Back to Model Select</a>
-        <button id="back-worlds-btn" class="btn" type="button" style="display:none;">Back to Worlds</button>
+        <a class="btn" href="/account-hub">Return to Account Hub</a>
+        <a id="back-model-btn" class="btn" href="/model-select">Shortcut: Model Select</a>
+        <button id="back-worlds-btn" class="btn" type="button" style="display:none;">Back to World Menu</button>
       </div>
     </div>
 
@@ -357,6 +358,10 @@ backWorldsBtn.addEventListener('click', () => {
 if (loadContext()) {
   renderWorlds();
 }
+</script>
+<script type="module">
+  import { writeNavContext } from '/static/utils/navigationContext.js';
+  writeNavContext({ lastPage: 'world-select' });
 </script>
 <script src="/static/transition.js"></script>
 </body>

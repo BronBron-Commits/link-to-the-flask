@@ -401,7 +401,7 @@
         <p id="whoami" class="sub">Loading account...</p>
       </div>
       <div class="actions">
-        <a class="btn" href="/account-hub">Account Hub</a>
+        <a class="btn" href="/account-hub">Return to Account Hub</a>
         <button id="refresh-btn" class="btn" type="button">Refresh</button>
         <button id="enter-world-btn" class="btn" type="button" disabled>Enter World</button>
         <button id="sign-out-btn" class="btn" type="button">Sign Out</button>
@@ -1062,6 +1062,10 @@ async function boot() {
 boot().catch((err) => {
   setStatus(`Hub init failed: ${err && err.message ? err.message : String(err)}`, 'error');
 });
+</script>
+<script type="module">
+  import { writeNavContext } from '/static/utils/navigationContext.js';
+  writeNavContext({ lastPage: 'hub' });
 </script>
 <script src="/static/transition.js"></script>
 </body>

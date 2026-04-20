@@ -520,11 +520,11 @@
   </section>
 
   <div class="guest-access" aria-label="Guest shortcuts">
-    <span>Skip account login and jump straight in</span>
+    <span>Skip account login and start from Account Hub</span>
     <div class="guest-links">
-      <a class="guest-link" href="/paraval-library">Enter Library as Guest</a>
-      <a class="guest-link" href="/map3d-single">Single Player Open World</a>
-      <a class="guest-link" href="{{ asset_url('dev_playground.html') }}">Dev Playground (Guest)</a>
+      <a class="guest-link" href="/account-hub?entry=library">Enter Library via Account Hub</a>
+      <a class="guest-link" href="/account-hub?entry=open-world">Enter Open World via Account Hub</a>
+      <a class="guest-link" href="/account-hub?entry=dev-playground">Dev Playground via Account Hub</a>
     </div>
   </div>
 </div>
@@ -623,7 +623,6 @@ const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim
 let currentMode = 'sign-in';
 let currentUser = null;
 let signInInFlight = false;
-let backendSessionSyncInFlight = false;
 
 function setStatus(message, tone = '') {
   statusEl.textContent = message;
@@ -703,78 +702,6 @@ async function signInViaSupabaseRest(email, password, timeoutMs = 10000) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function extractAccessToken(sessionLike) {
-  if (!sessionLike || typeof sessionLike !== 'object') {
-    return '';
-  }
-  return String(sessionLike.access_token || sessionLike.accessToken || '').trim();
-}
-
-async function exchangeBackendSession(accessToken, timeoutMs = 8000) {
-  const token = String(accessToken || '').trim();
-  if (!token) {
-    throw new Error('missing-access-token');
-  }
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Math.max(1000, Number(timeoutMs) || 8000));
-  try {
-    const response = await fetch('/api/auth/session', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ accessToken: token }),
-      signal: controller.signal,
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.ok === false) {
-      const reason = String(payload.error || payload.detail || response.statusText || 'backend-auth-session-failed');
-      throw new Error(reason);
-    }
-    return payload;
-  } catch (error) {
-    if (error && error.name === 'AbortError') {
-      throw new Error(`backend-auth-session-timeout-${Math.max(1000, Number(timeoutMs) || 8000)}ms`);
-    }
-    throw error;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function syncBackendSessionAndRedirect(sessionLike, statusLabel = 'Signing in...') {
-  const token = extractAccessToken(sessionLike);
-  if (!token) {
-    setStatus('Sign-in succeeded but access token is missing. Sending you to Account Hub...', 'error');
-    renderAccount(normalizeSupabaseUser(sessionLike && sessionLike.user ? sessionLike.user : null));
-    window.location.replace('/account-hub');
-    return false;
-  }
-
-  setStatus(statusLabel, '');
-  try {
-    await exchangeBackendSession(token);
-    if (window.__paravalAuth && typeof window.__paravalAuth === 'object') {
-      window.__paravalAuth.lastSessionExchange = { ok: true, at: Date.now() };
-    }
-  } catch (error) {
-    const msg = String(error && error.message ? error.message : error);
-    if (window.__paravalAuth && typeof window.__paravalAuth === 'object') {
-      window.__paravalAuth.lastSessionExchange = { ok: false, at: Date.now(), error: msg };
-    }
-    setStatus(`Could not establish server session: ${msg}. Sending you to Account Hub...`, 'error');
-    renderAccount(normalizeSupabaseUser(sessionLike.user));
-    window.location.replace('/account-hub');
-    return false;
-  }
-
-  renderAccount(normalizeSupabaseUser(sessionLike.user));
-  setStatus('Signed in successfully.', 'success');
-  window.location.replace('/account-hub');
-  return true;
 }
 
 function renderAccount(user) {
@@ -940,7 +867,9 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       }
 
       console.log('[SIGN IN] sign-in succeeded, redirecting to /account-hub');
-      await syncBackendSessionAndRedirect(session, 'Finalizing secure session...');
+      renderAccount(normalizeSupabaseUser(session.user));
+      setStatus('Signed in successfully.', 'success');
+      window.location.replace('/account-hub');
     } catch (error) {
       console.log('[SIGN IN] exchange failed:', error.message);
       const msg = String(error && error.message ? error.message : error);
@@ -1191,28 +1120,14 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       applyMode('sign-in');
       return;
     }
-
-    if (backendSessionSyncInFlight) {
-      return;
-    }
-    backendSessionSyncInFlight = true;
-    try {
-      await syncBackendSessionAndRedirect(session, 'Restoring session...');
-    } finally {
-      backendSessionSyncInFlight = false;
-    }
+    renderAccount(normalizeSupabaseUser(session.user));
+    window.location.replace('/account-hub');
   });
 
   const current = await supabase.auth.getSession();
   if (current.data.session) {
-    if (!backendSessionSyncInFlight) {
-      backendSessionSyncInFlight = true;
-      try {
-        await syncBackendSessionAndRedirect(current.data.session, 'Restoring session...');
-      } finally {
-        backendSessionSyncInFlight = false;
-      }
-    }
+    renderAccount(normalizeSupabaseUser(current.data.session.user));
+    window.location.replace('/account-hub');
   }
   }
 }
@@ -1220,6 +1135,10 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
 if (!currentUser) {
   applyMode('sign-in');
 }
+</script>
+<script type="module">
+import { writeNavContext } from '/static/utils/navigationContext.js';
+writeNavContext({ lastPage: 'index' });
 </script>
 <script src="/static/transition.js"></script>
 </body>

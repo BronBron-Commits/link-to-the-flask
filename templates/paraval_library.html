@@ -1326,8 +1326,9 @@
           <button id="ambient-toggle-btn" class="btn" type="button" aria-pressed="false">Ambient: Off</button>
           <button id="page-sfx-toggle-btn" class="btn" type="button" aria-pressed="false">Page SFX: Off</button>
           <button id="accessible-reader-fx-btn" class="btn" type="button" aria-pressed="false">Hyper Reader</button>
-          <a id="back-worlds-btn" class="btn" href="/world-select">Back to Worlds</a>
-          <a id="enter-world-btn" class="btn" href="/map3d">Enter Open World</a>
+          <a class="btn" href="/account-hub">Return to Account Hub</a>
+          <a id="back-worlds-btn" class="btn" href="/world-select">Shortcut: World Select</a>
+          <a id="enter-world-btn" class="btn" href="/map3d">Shortcut: Open World</a>
         </div>
       </div>
       <div id="context" class="meta"></div>
@@ -2753,6 +2754,10 @@ S: Who does? Tidus?
     } catch (_err) {
       // Ignore storage failures.
     }
+  </script>
+  <script type="module">
+    import { writeNavContext } from '/static/utils/navigationContext.js';
+    writeNavContext({ lastPage: 'paraval-library' });
   </script>
   <script src="/static/transition.js"></script>
 </body>
