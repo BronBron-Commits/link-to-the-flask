@@ -403,7 +403,6 @@
       <div class="actions">
         <a class="btn" href="/account-hub">Return to Account Hub</a>
         <button id="refresh-btn" class="btn" type="button">Refresh</button>
-        <button id="enter-world-btn" class="btn" type="button" disabled>Enter World</button>
         <button id="sign-out-btn" class="btn" type="button">Sign Out</button>
       </div>
     </div>
@@ -460,13 +459,11 @@ const statusEl = document.getElementById('status');
 const listEl = document.getElementById('character-list');
 const detailEl = document.getElementById('character-detail');
 const refreshBtn = document.getElementById('refresh-btn');
-const enterWorldBtn = document.getElementById('enter-world-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
 const pdfFileEl = document.getElementById('pdf-file');
 const pdfUploadBtn = document.getElementById('pdf-upload-btn');
 
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
-const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
 let selectedCharacter = null;
 let currentEntries = [];
 let supabaseClient = null;
@@ -714,7 +711,6 @@ async function deleteSelectedCharacter(entry) {
     selectedCharacter = null;
     localStorage.removeItem(SELECTED_CHARACTER_STORAGE_KEY);
   }
-  enterWorldBtn.disabled = true;
   await reloadCharacterEntries();
   setStatus(`${entry.name} deleted.`, 'ok');
 }
@@ -729,10 +725,9 @@ function selectEntry(entryId, shouldFocusStatus = true) {
   listEl.querySelectorAll('.list-item[data-character-id]').forEach((item) => {
     item.classList.toggle('selected', String(item.getAttribute('data-character-id')) === String(entry.id));
   });
-  enterWorldBtn.disabled = false;
   renderSelectedEntry(entry);
   if (shouldFocusStatus) {
-    setStatus(`Selected ${entry.name || entry.id}. Click Enter World to play as this character.`, 'ok');
+    setStatus(`Selected ${entry.name || entry.id}. Continue from Account Hub when ready.`, 'ok');
   }
 }
 
@@ -741,7 +736,6 @@ function renderEntryList(entries, emptyMessage, statusMessage) {
   if (!currentEntries.length) {
     listEl.innerHTML = `<div class="empty">${escapeHtml(emptyMessage)}</div>`;
     renderDetailPlaceholder(emptyMessage);
-    enterWorldBtn.disabled = false;
     setStatus(statusMessage, 'ok');
     return;
   }
@@ -775,7 +769,7 @@ function renderCharacters(rows) {
   renderEntryList(
     entries,
     'No characters found yet. You can still enter with a temporary character and upload a PDF later.',
-    'No character sheet yet. Enter World to continue with a temporary character.'
+    'No character sheet yet. Upload one here, then continue from Account Hub.'
   );
 }
 
@@ -784,7 +778,7 @@ function renderSheetCharacters(rows) {
   renderEntryList(
     entries,
     'No uploaded character sheets found yet. You can still enter with a temporary character and come back later.',
-    'No uploaded sheets found. Enter World to continue with a temporary character.'
+    'No uploaded sheets found. Upload one here, then continue from Account Hub.'
   );
 }
 
@@ -797,7 +791,6 @@ async function boot() {
         id: String(parsed.id),
         name: String(parsed.name || ''),
       };
-      enterWorldBtn.disabled = false;
     }
   } catch (_err) {
     selectedCharacter = null;
@@ -973,17 +966,6 @@ async function boot() {
   }
 
   refreshBtn.addEventListener('click', loadCharacters);
-
-  enterWorldBtn.addEventListener('click', () => {
-    if (!selectedCharacter || !selectedCharacter.id) {
-      selectedCharacter = { ...FALLBACK_CHARACTER };
-      localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
-      setStatus('Continuing with a temporary character. You can upload/select a PDF character later.', 'ok');
-    }
-    localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
-    const target = `/model-select?characterId=${encodeURIComponent(String(selectedCharacter.id))}`;
-    window.location.href = target;
-  });
 
   pdfUploadBtn.addEventListener('click', async () => {
     const file = pdfFileEl && pdfFileEl.files && pdfFileEl.files[0];
