@@ -343,10 +343,10 @@ const _panelGrabState = { holder: null };
 const _tmpCtrlPos = new THREE.Vector3();
 const _tmpPanelPos = new THREE.Vector3();
 
-// ─── Laser light show ─────────────────────────────────────────────────────────
+// ─── Laser light show (beams) ────────────────────────────────────────────────
 let _laserActive = false;
 const _laserGroup = new THREE.Group();
-const _laserPivots = []; // { pivot, speedX, speedY, speedZ, light }
+const _laserPivots = [];
 
 function _buildLasers() {
   const DEFS = [
@@ -357,161 +357,65 @@ function _buildLasers() {
     { col: 0x00ffff, sx: 0.7,  sy: -0.6, sz: 0.5  },
     { col: 0xffff00, sx: -0.3, sy: 0.5,  sz: -1.3 },
   ];
-
   DEFS.forEach(({ col, sx, sy, sz }) => {
     const outerPivot = new THREE.Group();
     outerPivot.position.set(0, 4.0, 0);
-
     const innerPivot = new THREE.Group();
     outerPivot.add(innerPivot);
-
-    // Beam — long thin cylinder pointing down from pivot
     const beam = new THREE.Mesh(
       new THREE.CylinderGeometry(0.006, 0.012, 10, 5),
       new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.65 })
     );
-    beam.position.y = -5; // hang down from pivot
+    beam.position.y = -5;
     innerPivot.add(beam);
-
-    // Glow dot at beam source
     const dot = new THREE.Mesh(
       new THREE.SphereGeometry(0.04, 8, 6),
       new THREE.MeshBasicMaterial({ color: col })
     );
     innerPivot.add(dot);
-
-    // Point light
     const light = new THREE.PointLight(col, 0, 14, 2);
     innerPivot.add(light);
-
     _laserGroup.add(outerPivot);
     _laserPivots.push({ outerPivot, innerPivot, speedX: sx, speedY: sy, speedZ: sz, light });
   });
-
   _laserGroup.visible = false;
   scene.add(_laserGroup);
 }
 _buildLasers();
 
-let _laserTogglePanel = null;
+// ─── Disco ball ───────────────────────────────────────────────────────────────
+let _discoActive = false;
+const _discoGroup = new THREE.Group();
+_discoGroup.position.set(0, 3.2, -1.5);
+_discoGroup.visible = false;
+scene.add(_discoGroup);
 
-function _drawLaserToggle(c, tex, active) {
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, c.width, c.height);
-  ctx.fillStyle = active ? 'rgba(30,5,15,0.92)' : 'rgba(10,16,34,0.88)';
-  ctx.fillRect(0, 0, c.width, c.height);
-  const border = active ? '#ff3355' : '#4488ff';
-  ctx.strokeStyle = border;
-  ctx.lineWidth = 4;
-  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
-  ctx.fillStyle = active ? '#ff5577' : '#aaccff';
-  ctx.font = 'bold 32px Georgia';
-  ctx.textAlign = 'center';
-  ctx.fillText('✦ LASER', c.width / 2, 56);
-  ctx.font = 'bold 22px Georgia';
-  ctx.fillStyle = active ? '#ff8899' : '#6699cc';
-  ctx.fillText(active ? '● ON' : '○ OFF', c.width / 2, 96);
-  tex.needsUpdate = true;
-}
+const _discoBall = new THREE.Mesh(
+  new THREE.SphereGeometry(0.22, 28, 20),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1.0, roughness: 0.04 })
+);
+_discoGroup.add(_discoBall);
 
-function _buildLaserToggle() {
-  const root = new THREE.Group();
-  const cw = 256, ch = 128;
-  const c = document.createElement('canvas');
-  c.width = cw; c.height = ch;
-  const tex = new THREE.CanvasTexture(c);
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.14, 0.07),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide })
-  );
-  root.add(mesh);
-  root.userData.labelCanvas = c;
-  root.userData.labelTex = tex;
-  _drawLaserToggle(c, tex, false);
-  root.position.set(0.85, 0.78, -0.9);
-  root.rotation.set(-0.10, 0, 0);
-  return root;
-}
-_laserTogglePanel = _buildLaserToggle();
-scene.add(_laserTogglePanel);
+const _discoLights = [];
+[0xff1133, 0x11ff66, 0x2266ff, 0xff9900].forEach((col, i) => {
+  const spot = new THREE.SpotLight(col, 0, 18, Math.PI / 8, 0.4, 1.5);
+  const angle = (i / 4) * Math.PI * 2;
+  spot.position.set(Math.cos(angle) * 0.5, 0, Math.sin(angle) * 0.5);
+  spot.target.position.set(Math.cos(angle + Math.PI) * 4, -3, Math.sin(angle + Math.PI) * 4);
+  _discoGroup.add(spot);
+  _discoGroup.add(spot.target);
+  _discoLights.push(spot);
+});
 
-function _updateLasers(dt) {
-  if (!_laserActive) return;
-  _laserPivots.forEach(({ outerPivot, innerPivot, speedX, speedY, speedZ }) => {
-    outerPivot.rotation.y += speedY * dt;
-    innerPivot.rotation.x += speedX * dt;
-    innerPivot.rotation.z += speedZ * dt;
-  });
-}
-
-// ─── Brightness slider ────────────────────────────────────────────────────────
+// ─── Brightness constants ────────────────────────────────────────────────────
 const BRIGHTNESS_MIN = 0.2;
 const BRIGHTNESS_MAX = 3.0;
-const BRIGHTNESS_HEIGHT = 0.40;  // physical travel distance in metres
-let _brightness = 1.0;           // current normalised exposure value
-
+const BRIGHTNESS_HEIGHT = 0.26;
+let _brightness = 1.0;
 const _sliderState = { holder: null, grabLocalY: 0, grabBrightness: 0 };
 const _tmpSliderPos = new THREE.Vector3();
 const _tmpSliderCtrl = new THREE.Vector3();
-
-function _buildBrightnessSlider() {
-  const root = new THREE.Group();
-
-  // Track — tall thin bar
-  const track = new THREE.Mesh(
-    new THREE.BoxGeometry(0.012, BRIGHTNESS_HEIGHT, 0.012),
-    new THREE.MeshBasicMaterial({ color: 0x334466 })
-  );
-  root.add(track);
-
-  // Handle — grabbable sphere, starts at centre
-  const handle = new THREE.Mesh(
-    new THREE.SphereGeometry(0.025, 16, 12),
-    new THREE.MeshBasicMaterial({ color: 0x88bbff })
-  );
-  handle.position.y = 0; // will be updated each frame
-  root.add(handle);
-  root.userData.handle = handle;
-
-  // Label canvas
-  const cw = 192, ch = 80;
-  const c = document.createElement('canvas');
-  c.width = cw; c.height = ch;
-  const labelTex = new THREE.CanvasTexture(c);
-  const label = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.09, 0.038),
-    new THREE.MeshBasicMaterial({ map: labelTex, transparent: true, side: THREE.DoubleSide })
-  );
-  label.position.set(0.075, 0, 0);
-  root.add(label);
-  root.userData.labelCanvas = c;
-  root.userData.labelTex = labelTex;
-
-  // Top/bottom tick labels
-  ['☀', '🌑'].forEach((sym, i) => {
-    const sc = document.createElement('canvas');
-    sc.width = 64; sc.height = 64;
-    const sctx = sc.getContext('2d');
-    sctx.font = '38px sans-serif';
-    sctx.textAlign = 'center';
-    sctx.textBaseline = 'middle';
-    sctx.fillText(sym, 32, 32);
-    const st = new THREE.CanvasTexture(sc);
-    const sm = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.04, 0.04),
-      new THREE.MeshBasicMaterial({ map: st, transparent: true, side: THREE.DoubleSide })
-    );
-    sm.position.set(0, i === 0 ? BRIGHTNESS_HEIGHT / 2 + 0.03 : -(BRIGHTNESS_HEIGHT / 2 + 0.03), 0);
-    root.add(sm);
-  });
-
-  root.position.set(0.85, 1.05, -0.9);
-  root.rotation.set(-0.10, 0, 0);
-  return root;
-}
-
-const _brightnessSlider = _buildBrightnessSlider();
-scene.add(_brightnessSlider);
+const _tmpTabletPos = new THREE.Vector3();
 
 function _brightnessToY(b) {
   const t = (b - BRIGHTNESS_MIN) / (BRIGHTNESS_MAX - BRIGHTNESS_MIN);
@@ -525,27 +429,208 @@ function _yToBrightness(y) {
   );
 }
 
+// ─── Control Tablet ───────────────────────────────────────────────────────────
+// One grabbable, movable panel: brightness slider + laser toggle + disco toggle.
+const _tabletGrabState = { holder: null };
+let _controlTablet = null;
+
+function _drawTabletBtn(c, tex, icon, label, active) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  if (active) { bg.addColorStop(0, '#3a0a18'); bg.addColorStop(1, '#1a0208'); }
+  else        { bg.addColorStop(0, '#0d1828'); bg.addColorStop(1, '#080e18'); }
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) { ctx.roundRect(0, 0, c.width, c.height, 12); } else { ctx.rect(0, 0, c.width, c.height); }
+  ctx.fill();
+  ctx.strokeStyle = active ? '#ff4466' : '#3366aa';
+  ctx.lineWidth = 3;
+  if (ctx.roundRect) { ctx.roundRect(2, 2, c.width - 4, c.height - 4, 10); } else { ctx.rect(2, 2, c.width - 4, c.height - 4); }
+  ctx.stroke();
+  ctx.fillStyle = active ? '#ff6688' : '#88aadd';
+  ctx.font = 'bold 30px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(icon + ' ' + label, c.width / 2, 46);
+  ctx.font = 'bold 22px Georgia';
+  ctx.fillStyle = active ? '#ffaabb' : '#557799';
+  ctx.fillText(active ? '● ON' : '○ OFF', c.width / 2, 84);
+  tex.needsUpdate = true;
+}
+
+function _drawBrightnessValue(c, tex, b) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.fillStyle = 'rgba(8,14,28,0.9)';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#2255aa';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, c.width - 2, c.height - 2);
+  ctx.fillStyle = '#99bbff';
+  ctx.font = 'bold 24px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(b.toFixed(2), c.width / 2, c.height / 2 + 8);
+  tex.needsUpdate = true;
+}
+
+function _buildControlTablet() {
+  const root = new THREE.Group();
+  const Z = 0.016; // local Z offset for face elements
+
+  // Tablet body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.40, 0.52, 0.018),
+    new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.55, metalness: 0.45 })
+  );
+  root.add(body);
+
+  // Header stripe
+  const hdrC = document.createElement('canvas'); hdrC.width = 512; hdrC.height = 80;
+  const hdrCtx = hdrC.getContext('2d');
+  const hdrG = hdrCtx.createLinearGradient(0, 0, 512, 0);
+  hdrG.addColorStop(0, '#0d1e3a'); hdrG.addColorStop(0.5, '#1a3060'); hdrG.addColorStop(1, '#0d1e3a');
+  hdrCtx.fillStyle = hdrG; hdrCtx.fillRect(0, 0, 512, 80);
+  hdrCtx.strokeStyle = '#4488cc'; hdrCtx.lineWidth = 3; hdrCtx.strokeRect(2, 2, 508, 76);
+  hdrCtx.fillStyle = '#88ccff'; hdrCtx.font = 'bold 36px Georgia'; hdrCtx.textAlign = 'center';
+  hdrCtx.fillText('⚙  CONTROL PANEL', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.37, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hdrC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.221, Z);
+  root.add(hdr);
+
+  // Vertical divider between left/right sections
+  const div = new THREE.Mesh(
+    new THREE.BoxGeometry(0.002, 0.37, 0.002),
+    new THREE.MeshBasicMaterial({ color: 0x223355 })
+  );
+  div.position.set(0, -0.02, Z);
+  root.add(div);
+
+  // ── Left: Brightness slider ─────────────────────────────────────────────────
+  const bLblC = document.createElement('canvas'); bLblC.width = 192; bLblC.height = 48;
+  const bLblCtx = bLblC.getContext('2d');
+  bLblCtx.fillStyle = '#5577aa'; bLblCtx.font = '22px Georgia'; bLblCtx.textAlign = 'center';
+  bLblCtx.fillText('BRIGHTNESS', 96, 34);
+  const bLbl = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.135, 0.034),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bLblC), transparent: true, side: THREE.DoubleSide })
+  );
+  bLbl.position.set(-0.10, 0.157, Z);
+  root.add(bLbl);
+
+  // ☀ top / 🌑 bottom icons
+  ['☀', '🌑'].forEach((sym, i) => {
+    const ic = document.createElement('canvas'); ic.width = 64; ic.height = 64;
+    const iCtx = ic.getContext('2d');
+    iCtx.font = '44px sans-serif'; iCtx.textAlign = 'center'; iCtx.textBaseline = 'middle';
+    iCtx.fillText(sym, 32, 32);
+    const im = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.038, 0.038),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ic), transparent: true, side: THREE.DoubleSide })
+    );
+    im.position.set(-0.10, i === 0 ? BRIGHTNESS_HEIGHT / 2 + 0.028 : -(BRIGHTNESS_HEIGHT / 2 + 0.028), Z);
+    root.add(im);
+  });
+
+  // Track
+  const track = new THREE.Mesh(
+    new THREE.BoxGeometry(0.010, BRIGHTNESS_HEIGHT, 0.010),
+    new THREE.MeshBasicMaterial({ color: 0x224466 })
+  );
+  track.position.set(-0.10, 0, Z);
+  root.add(track);
+
+  // Handle
+  const handle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.020, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0x66aaff })
+  );
+  handle.position.set(-0.10, 0, Z + 0.006);
+  root.add(handle);
+  root.userData.handle = handle;
+
+  // Value readout
+  const valC = document.createElement('canvas'); valC.width = 128; valC.height = 56;
+  const valTex = new THREE.CanvasTexture(valC);
+  const valMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.096, 0.042),
+    new THREE.MeshBasicMaterial({ map: valTex, transparent: true, side: THREE.DoubleSide })
+  );
+  valMesh.position.set(-0.10, -(BRIGHTNESS_HEIGHT / 2 + 0.066), Z);
+  root.add(valMesh);
+  root.userData.labelCanvas = valC;
+  root.userData.labelTex = valTex;
+
+  // ── Right: LASER button ─────────────────────────────────────────────────────
+  const laserC = document.createElement('canvas'); laserC.width = 256; laserC.height = 128;
+  const laserTex = new THREE.CanvasTexture(laserC);
+  const laserBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.155, 0.078),
+    new THREE.MeshBasicMaterial({ map: laserTex, transparent: true, side: THREE.DoubleSide })
+  );
+  laserBtn.position.set(0.105, 0.078, Z);
+  root.add(laserBtn);
+  root.userData.laserBtnCanvas = laserC;
+  root.userData.laserBtnTex = laserTex;
+  root.userData.laserBtnMesh = laserBtn;
+  _drawTabletBtn(laserC, laserTex, '✦', 'LASER', false);
+
+  // ── Right: DISCO button ─────────────────────────────────────────────────────
+  const discoC = document.createElement('canvas'); discoC.width = 256; discoC.height = 128;
+  const discoTex = new THREE.CanvasTexture(discoC);
+  const discoBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.155, 0.078),
+    new THREE.MeshBasicMaterial({ map: discoTex, transparent: true, side: THREE.DoubleSide })
+  );
+  discoBtn.position.set(0.105, -0.065, Z);
+  root.add(discoBtn);
+  root.userData.discoBtnCanvas = discoC;
+  root.userData.discoBtnTex = discoTex;
+  root.userData.discoBtnMesh = discoBtn;
+  _drawTabletBtn(discoC, discoTex, '🪩', 'DISCO', false);
+
+  // Footer hint
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#334455'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.285, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.237, Z);
+  root.add(ft);
+
+  root.position.set(0.85, 1.12, -0.9);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+_controlTablet = _buildControlTablet();
+scene.add(_controlTablet);
+
 function _applyBrightness(b) {
   _brightness = b;
   renderer.toneMappingExposure = b;
-  // Update handle position
-  _brightnessSlider.userData.handle.position.y = _brightnessToY(b);
-  // Redraw label
-  const c = _brightnessSlider.userData.labelCanvas;
-  const ctx = c.getContext('2d');
-  ctx.clearRect(0, 0, c.width, c.height);
-  ctx.fillStyle = 'rgba(10,16,34,0.85)';
-  ctx.fillRect(0, 0, c.width, c.height);
-  ctx.strokeStyle = '#4488ff';
-  ctx.lineWidth = 3;
-  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
-  ctx.fillStyle = '#aaccff';
-  ctx.font = 'bold 28px Georgia';
-  ctx.textAlign = 'center';
-  ctx.fillText('☀ ' + b.toFixed(2), c.width / 2, c.height / 2 + 8);
-  _brightnessSlider.userData.labelTex.needsUpdate = true;
+  _controlTablet.userData.handle.position.y = _brightnessToY(b);
+  _drawBrightnessValue(_controlTablet.userData.labelCanvas, _controlTablet.userData.labelTex, b);
 }
-_applyBrightness(1.0); // initialise
+_applyBrightness(1.0);
+
+function _updateLasers(dt) {
+  if (_laserActive) {
+    _laserPivots.forEach(({ outerPivot, innerPivot, speedX, speedY, speedZ }) => {
+      outerPivot.rotation.y += speedY * dt;
+      innerPivot.rotation.x += speedX * dt;
+      innerPivot.rotation.z += speedZ * dt;
+    });
+  }
+  if (_discoActive) {
+    _discoBall.rotation.y += 0.8 * dt;
+    _discoGroup.rotation.y += 0.3 * dt;
+  }
+}
 
 function _buildWorldPanel() {
   const root = new THREE.Group();
@@ -689,22 +774,18 @@ function _isGrabPressed(gp) {
 function _updatePanelInteraction(leftGp, rightGp) {
   const leftCtrl = _controllersByHand.left;
   const rightCtrl = _controllersByHand.right;
-
   const leftPressed = _isGrabPressed(leftGp);
   const rightPressed = _isGrabPressed(rightGp);
 
-  // ── Brightness slider drag ─────────────────────────────────────────────────
+  // ── Control tablet: slider drag (continuous hold) ─────────────────────────
   if (_sliderState.holder) {
     const holdCtrl = _controllersByHand[_sliderState.holder];
     const holdPressed = _sliderState.holder === 'left' ? leftPressed : rightPressed;
     if (!holdCtrl || !holdPressed) {
-      // release
       _sliderState.holder = null;
     } else {
-      // drag: map controller world Y to brightness
       holdCtrl.getWorldPosition(_tmpSliderCtrl);
-      // convert world Y to slider local Y
-      const localY = _brightnessSlider.worldToLocal(_tmpSliderCtrl.clone()).y;
+      const localY = _controlTablet.worldToLocal(_tmpSliderCtrl.clone()).y;
       const newB = _yToBrightness(localY - _sliderState.grabLocalY + _brightnessToY(_sliderState.grabBrightness));
       _applyBrightness(newB);
     }
@@ -713,10 +794,9 @@ function _updatePanelInteraction(leftGp, rightGp) {
     const trySliderGrab = (hand, ctrl, pressed, wasPressed) => {
       if (!ctrl || !pressed || wasPressed) return false;
       ctrl.getWorldPosition(_tmpSliderCtrl);
-      _brightnessSlider.userData.handle.getWorldPosition(_tmpSliderPos);
-      if (_tmpSliderCtrl.distanceTo(_tmpSliderPos) > PANEL_GRAB_DISTANCE) return false;
-      // record grab offset
-      const localY = _brightnessSlider.worldToLocal(_tmpSliderCtrl.clone()).y;
+      _controlTablet.userData.handle.getWorldPosition(_tmpSliderPos);
+      if (_tmpSliderCtrl.distanceTo(_tmpSliderPos) > 0.12) return false;
+      const localY = _controlTablet.worldToLocal(_tmpSliderCtrl.clone()).y;
       _sliderState.holder = hand;
       _sliderState.grabLocalY = localY;
       _sliderState.grabBrightness = _brightness;
@@ -726,71 +806,93 @@ function _updatePanelInteraction(leftGp, rightGp) {
     trySliderGrab('right', rightCtrl, rightPressed, _grabPressedPrev.right);
   }
 
-  // ── Sky-picker selection (fresh press near any picker panel) ───────────────
+  // ── Release tablet grab ───────────────────────────────────────────────────
+  if (_tabletGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_controlTablet); _tabletGrabState.holder = null;
+  }
+  if (_tabletGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_controlTablet); _tabletGrabState.holder = null;
+  }
+
+  // ── Fresh-press actions (buttons + tablet grab + sky pickers) ─────────────
   const anyFreshPress =
     (leftPressed  && !_grabPressedPrev.left) ||
     (rightPressed && !_grabPressedPrev.right);
 
-  if (anyFreshPress) {
+  if (anyFreshPress && !_sliderState.holder) {
     const ctrls = [
-      leftPressed  && !_grabPressedPrev.left  ? leftCtrl  : null,
-      rightPressed && !_grabPressedPrev.right ? rightCtrl : null,
+      leftPressed  && !_grabPressedPrev.left  ? { ctrl: leftCtrl,  hand: 'left'  } : null,
+      rightPressed && !_grabPressedPrev.right ? { ctrl: rightCtrl, hand: 'right' } : null,
     ].filter(Boolean);
 
-    for (const ctrl of ctrls) {
+    for (const { ctrl, hand } of ctrls) {
       if (!ctrl) continue;
       ctrl.getWorldPosition(_tmpCtrlPos);
+
+      // Sky pickers
+      let hitSky = false;
       for (const picker of _skyPickers) {
         picker.getWorldPosition(_tmpPanelPos);
         if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= PANEL_GRAB_DISTANCE) {
           _applySkyPreset(picker.userData.skyPreset);
-          break;
+          hitSky = true; break;
         }
       }
-      // Laser toggle
-      if (_laserTogglePanel) {
-        _laserTogglePanel.getWorldPosition(_tmpPanelPos);
+      if (hitSky) continue;
+
+      // LASER button
+      _controlTablet.userData.laserBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
+        _laserActive = !_laserActive;
+        _laserGroup.visible = _laserActive;
+        _laserPivots.forEach(({ light }) => { light.intensity = _laserActive ? 3.5 : 0; });
+        _drawTabletBtn(_controlTablet.userData.laserBtnCanvas, _controlTablet.userData.laserBtnTex, '✦', 'LASER', _laserActive);
+        continue;
+      }
+
+      // DISCO button
+      _controlTablet.userData.discoBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
+        _discoActive = !_discoActive;
+        _discoGroup.visible = _discoActive;
+        _discoLights.forEach(l => { l.intensity = _discoActive ? 8 : 0; });
+        _drawTabletBtn(_controlTablet.userData.discoBtnCanvas, _controlTablet.userData.discoBtnTex, '🪩', 'DISCO', _discoActive);
+        continue;
+      }
+
+      // Grab whole tablet to move it
+      if (!_tabletGrabState.holder) {
+        _controlTablet.getWorldPosition(_tmpTabletPos);
+        if (_tmpCtrlPos.distanceTo(_tmpTabletPos) <= PANEL_GRAB_DISTANCE) {
+          ctrl.attach(_controlTablet);
+          _tabletGrabState.holder = hand;
+          continue;
+        }
+      }
+
+      // World panel grab
+      if (!_panelGrabState.holder) {
+        _worldPanel.getWorldPosition(_tmpPanelPos);
         if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= PANEL_GRAB_DISTANCE) {
-          _laserActive = !_laserActive;
-          _laserGroup.visible = _laserActive;
-          _laserPivots.forEach(({ light }) => { light.intensity = _laserActive ? 3.5 : 0; });
-          _drawLaserToggle(
-            _laserTogglePanel.userData.labelCanvas,
-            _laserTogglePanel.userData.labelTex,
-            _laserActive
-          );
+          ctrl.attach(_worldPanel);
+          _panelGrabState.holder = hand;
         }
       }
     }
   }
 
+  // ── Release world panel grab ──────────────────────────────────────────────
   if (_panelGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
-    scene.attach(_worldPanel);
-    _panelGrabState.holder = null;
+    scene.attach(_worldPanel); _panelGrabState.holder = null;
   }
   if (_panelGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
-    scene.attach(_worldPanel);
-    _panelGrabState.holder = null;
-  }
-
-  if (!_panelGrabState.holder) {
-    const tryGrab = (hand, ctrl, pressed, wasPressed) => {
-      if (!ctrl || !pressed || wasPressed) return false;
-      ctrl.getWorldPosition(_tmpCtrlPos);
-      _worldPanel.getWorldPosition(_tmpPanelPos);
-      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) > PANEL_GRAB_DISTANCE) return false;
-      ctrl.attach(_worldPanel);
-      _panelGrabState.holder = hand;
-      return true;
-    };
-
-    tryGrab('left', leftCtrl, leftPressed, _grabPressedPrev.left) ||
-    tryGrab('right', rightCtrl, rightPressed, _grabPressedPrev.right);
+    scene.attach(_worldPanel); _panelGrabState.holder = null;
   }
 
   _grabPressedPrev.left = leftPressed;
   _grabPressedPrev.right = rightPressed;
 }
+
 
 function _updateQuestLocomotion(dt) {
   if (!renderer.xr.isPresenting) {
@@ -799,6 +901,10 @@ function _updateQuestLocomotion(dt) {
     if (_panelGrabState.holder) {
       scene.attach(_worldPanel);
       _panelGrabState.holder = null;
+    }
+    if (_tabletGrabState.holder) {
+      scene.attach(_controlTablet);
+      _tabletGrabState.holder = null;
     }
     return;
   }
