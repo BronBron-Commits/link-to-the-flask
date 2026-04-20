@@ -252,13 +252,7 @@ function _updateQuestLocomotion(dt) {
   if (left.x !== 0) playerRig.position.addScaledVector(_tmpRight, left.x * moveStep);
 
   if (right.x !== 0) playerRig.rotation.y -= right.x * TURN_SPEED * dt;
-  if (right.y !== 0) {
-    playerPitch.rotation.x = THREE.MathUtils.clamp(
-      playerPitch.rotation.x - (right.y * LOOK_SPEED * dt),
-      -LOOK_LIMIT,
-      LOOK_LIMIT
-    );
-  }
+  playerPitch.rotation.x = 0;
 
   // Keep artificial locomotion look upright: yaw on rig + pitch on pivot only.
   playerRig.rotation.x = 0;
