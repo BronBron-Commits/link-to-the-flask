@@ -911,6 +911,53 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     let cachedDiscordAppUrl = '';
     let discordUrlFetchInFlight = null;
 
+    const tryLaunchDiscordApp = (appUrl, oauthUrl) => {
+      let appOpened = false;
+      const markOpened = () => {
+        appOpened = true;
+      };
+
+      const onVisibility = () => {
+        if (document.hidden) {
+          markOpened();
+        }
+      };
+
+      const cleanup = () => {
+        window.removeEventListener('blur', markOpened);
+        window.removeEventListener('pagehide', markOpened);
+        document.removeEventListener('visibilitychange', onVisibility);
+      };
+
+      window.addEventListener('blur', markOpened, { once: true });
+      window.addEventListener('pagehide', markOpened, { once: true });
+      document.addEventListener('visibilitychange', onVisibility);
+
+      // Use both location and hidden iframe to maximize protocol-handler success across browsers.
+      try {
+        window.location.assign(appUrl);
+      } catch (_err) {}
+
+      try {
+        const iframe = document.createElement('iframe');
+        iframe.style.display = 'none';
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.src = appUrl;
+        document.body.appendChild(iframe);
+        window.setTimeout(() => {
+          try { iframe.remove(); } catch (_err) {}
+        }, 1500);
+      } catch (_err) {}
+
+      window.setTimeout(() => {
+        cleanup();
+        if (!appOpened) {
+          setStatus('Discord app not detected. Redirecting to web sign-in...', '');
+          window.location.assign(oauthUrl);
+        }
+      }, 1800);
+    };
+
     const toDiscordAppUrl = (oauthUrl) => {
       try {
         const parsed = new URL(String(oauthUrl || '').trim());
@@ -978,14 +1025,8 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
         const { oauthUrl, appUrl } = await fetchDiscordOauthUrl();
 
         if (appUrl) {
-          // Always attempt native app first; fallback to web OAuth if handoff fails.
-          window.location.assign(appUrl);
-          window.setTimeout(() => {
-            if (!document.hidden) {
-              setStatus('Discord app not detected. Redirecting to web sign-in...', '');
-              window.location.assign(oauthUrl);
-            }
-          }, 1200);
+          // Always attempt native app first; fallback to web OAuth only if app handoff is not observed.
+          tryLaunchDiscordApp(appUrl, oauthUrl);
           return;
         }
 
