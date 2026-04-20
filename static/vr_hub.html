@@ -619,11 +619,6 @@ const _handUpdaters = [];
 
   const staticHand = buildStaticHand(isRight);
   ctrl.add(staticHand);
-  const rayLine = new THREE.Line(
-    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-3)]),
-    new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.4 })
-  );
-  ctrl.add(rayLine);
   playerRig.add(ctrl);
   playerRig.add(xrHand);
 
@@ -658,7 +653,6 @@ const _handUpdaters = [];
     if (nowTracking !== _tracking) {
       _tracking = nowTracking;
       staticHand.visible = !nowTracking;
-      rayLine.visible    = !nowTracking;
       if (!nowTracking) {
         segMeshes.forEach(m => { m.visible = false; });
         capMeshes.forEach(m => { if (m) m.visible = false; });
