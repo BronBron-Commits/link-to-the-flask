@@ -910,6 +910,7 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
     let cachedDiscordOauthUrl = '';
     let cachedDiscordAppUrl = '';
     let discordUrlFetchInFlight = null;
+    let awaitingManualWebFallback = false;
 
     const forceOpenDiscordClient = () => {
       try {
@@ -928,10 +929,11 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       } catch (_err) {}
     };
 
-    const tryLaunchDiscordApp = (appUrl, oauthUrl) => {
+    const tryLaunchDiscordApp = (appUrl) => {
       let appOpened = false;
       const markOpened = () => {
         appOpened = true;
+        awaitingManualWebFallback = false;
       };
 
       const onVisibility = () => {
@@ -969,8 +971,8 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
       window.setTimeout(() => {
         cleanup();
         if (!appOpened) {
-          setStatus('Discord app not detected. Redirecting to web sign-in...', '');
-          window.location.assign(oauthUrl);
+          awaitingManualWebFallback = true;
+          setStatus('Discord app launch attempted. If it did not open, tap Sign In With Discord again for web sign-in.', '');
         }
       }, 3000);
     };
@@ -1049,9 +1051,16 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
 
         const { oauthUrl, appUrl } = direct;
 
+        if (awaitingManualWebFallback && oauthUrl) {
+          awaitingManualWebFallback = false;
+          setStatus('Opening Discord web sign-in...', '');
+          window.location.assign(oauthUrl);
+          return;
+        }
+
         if (appUrl) {
-          // Always attempt native app first; fallback to web OAuth only if app handoff is not observed.
-          tryLaunchDiscordApp(appUrl, oauthUrl);
+          // Always attempt native app first. If it fails to open, require a second tap for web fallback.
+          tryLaunchDiscordApp(appUrl);
           return;
         }
 
