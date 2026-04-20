@@ -662,6 +662,42 @@ function _buildControlTablet() {
   });
   root.userData.skyBtnMeshes = skyBtnMeshes;
 
+  // ── Side handles ─────────────────────────────────────────────────────────────
+  const handleMat = new THREE.MeshStandardMaterial({ color: 0x2a3a50, roughness: 0.35, metalness: 0.75 });
+  [-1, 1].forEach(side => {
+    // Outer bar (vertical rod along the edge)
+    const bar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.013, 0.013, 0.26, 12),
+      handleMat
+    );
+    bar.position.set(side * 0.228, 0.02, 0.012);
+    root.add(bar);
+    // Top cap
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
+    capTop.position.set(side * 0.228, 0.02 + 0.13, 0.012);
+    root.add(capTop);
+    // Bottom cap
+    const capBot = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
+    capBot.position.set(side * 0.228, 0.02 - 0.13, 0.012);
+    root.add(capBot);
+    // Horizontal brace connecting bar to body (top)
+    const braceTop = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.009, 0.009, 0.032, 8),
+      handleMat
+    );
+    braceTop.rotation.z = Math.PI / 2;
+    braceTop.position.set(side * 0.212, 0.02 + 0.09, 0.012);
+    root.add(braceTop);
+    // Horizontal brace connecting bar to body (bottom)
+    const braceBot = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.009, 0.009, 0.032, 8),
+      handleMat
+    );
+    braceBot.rotation.z = Math.PI / 2;
+    braceBot.position.set(side * 0.212, 0.02 - 0.09, 0.012);
+    root.add(braceBot);
+  });
+
   root.position.set(0.85, 1.12, -0.9);
   root.rotation.set(-0.12, 0, 0);
   return root;
