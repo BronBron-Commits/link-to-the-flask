@@ -94,7 +94,6 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { GLTFLoader } from '/static/GLTFLoader.js';
 
 // ─── Inline minimal VRButton ─────────────────────────────────────────────────
 function createVRButton(renderer) {
@@ -289,65 +288,65 @@ scene.add(floor);
   scene.add(root);
 })();
 
-// Controllers (ray lines visible in VR) + gloves centered on ray origin spaces
-const _gloveLoader = new GLTFLoader();
+// ── Procedural Hand Builder ─────────────────────────────────────────────────
+// Builds a simple box-segment hand in controller-local space.
+// Controller space: -Z = ray forward, +Y = up, +X = right (for right controller).
+// Knuckle line sits at z=0 (ray origin); fingers extend toward -Z; palm extends toward +Z.
+function buildProceduralHand(isRight) {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.85, metalness: 0.0 });
+  const root = new THREE.Group();
+  const flip = isRight ? 1 : -1;
+
+  function addBox(w, h, d, x, y, z) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    m.position.set(x, y, z);
+    root.add(m);
+  }
+
+  // Palm: knuckles at z=0, wrist at z=+0.095
+  addBox(0.078, 0.022, 0.095,  0, 0, 0.048);
+
+  // Four fingers (index → pinky), each with 3 phalanges extending in -Z
+  // xPos uses flip so the index is on the thumb-side for both hands
+  const fingers = [
+    { x: flip *  0.026, lens: [0.032, 0.022, 0.018], w: 0.016 }, // index
+    { x: flip *  0.009, lens: [0.036, 0.025, 0.019], w: 0.017 }, // middle
+    { x: -flip * 0.008, lens: [0.030, 0.021, 0.016], w: 0.015 }, // ring
+    { x: -flip * 0.025, lens: [0.022, 0.016, 0.013], w: 0.012 }, // pinky
+  ];
+  fingers.forEach(({ x, lens, w }) => {
+    let z = 0;
+    lens.forEach(len => {
+      addBox(w, w * 0.85, len, x, 0, z - len / 2);
+      z -= len + 0.002;
+    });
+  });
+
+  // Thumb: two phalanges from the palm side, splayed outward
+  const thumbPivot = new THREE.Group();
+  thumbPivot.position.set(flip * 0.040, 0, 0.038);
+  thumbPivot.rotation.z = flip * -0.55;  // splay out from palm
+  thumbPivot.rotation.y = flip *  0.30;  // angle toward -Z
+  const thumbSegs = [{ w: 0.018, d: 0.034 }, { w: 0.015, d: 0.026 }];
+  let tz = 0;
+  thumbSegs.forEach(({ w, d }) => {
+    const seg = new THREE.Mesh(new THREE.BoxGeometry(w, w * 0.85, d), mat);
+    seg.position.set(0, 0, tz - d / 2);
+    thumbPivot.add(seg);
+    tz -= d + 0.003;
+  });
+  root.add(thumbPivot);
+
+  return root;
+}
+
+// Controllers (ray lines visible in VR) + procedural hands
 const _rayOrigins = [renderer.xr.getController(0), renderer.xr.getController(1)];
-
-_gloveLoader.load('/static/gloves.glb', (gltf) => {
-  // Collect every Mesh in the scene, split into left/right by X bounding-box center
-  const allMeshes = [];
-  gltf.scene.traverse(node => { if (node.isMesh) allMeshes.push(node); });
-
-  const _bb = new THREE.Box3(), _ctr = new THREE.Vector3();
-  const centers = allMeshes.map(m => { _bb.setFromObject(m); _bb.getCenter(_ctr); return _ctr.x; });
-  const midX = (Math.min(...centers) + Math.max(...centers)) / 2;
-
-  // Build two Groups: one for each half
-  const groupL = new THREE.Group(), groupR = new THREE.Group();
-  allMeshes.forEach((m, i) => {
-    m.material = Array.isArray(m.material)
-      ? m.material.map(mt => { const c = mt.clone(); c.side = THREE.DoubleSide; return c; })
-      : (() => { const c = m.material.clone(); c.side = THREE.DoubleSide; return c; })();
-    const clone = m.clone();
-    // Preserve world transform relative to scene root
-    m.getWorldPosition(clone.position);
-    m.getWorldQuaternion(clone.quaternion);
-    m.getWorldScale(clone.scale);
-    (centers[i] < midX ? groupL : groupR).add(clone);
-  });
-
-  // XR: controller index 0 = right hand, index 1 = left hand
-  const gloveForGrip = [groupR, groupL];
-
-  _rayOrigins.forEach((rayOrigin, idx) => {
-    const glove = gloveForGrip[idx];
-
-    const bb2 = new THREE.Box3().setFromObject(glove);
-    const sz2 = new THREE.Vector3(); bb2.getSize(sz2);
-    const maxDim = Math.max(sz2.x, sz2.y, sz2.z);
-    const s = maxDim > 0 ? (0.2 / maxDim) : 1;
-
-    // Scale/rotate first, then recenter in controller-local space so mesh center sits on ray origin.
-    glove.scale.setScalar(s);
-    glove.rotation.y = Math.PI - 1.0; // continue same slight tweak direction
-    glove.position.set(0, 0, 0);
-
-    rayOrigin.add(glove);
-    scene.add(rayOrigin);
-
-    rayOrigin.updateMatrixWorld(true);
-    glove.updateMatrixWorld(true);
-    const centeredBox = new THREE.Box3().setFromObject(glove);
-    const worldCenter = new THREE.Vector3(); centeredBox.getCenter(worldCenter);
-    const localCenter = rayOrigin.worldToLocal(worldCenter.clone());
-    glove.position.sub(localCenter);
-
-    console.log('[VR Hub] Grip', idx, idx === 0 ? '(right)' : '(left)', 'sz:', sz2, 's:', s.toFixed(4));
-  });
-  console.log('[VR Hub] Gloves loaded, meshes split at midX:', midX.toFixed(2));
-}, undefined, (err) => {
-  console.warn('[VR Hub] Failed to load gloves.glb:', err);
-  _rayOrigins.forEach(rayOrigin => scene.add(rayOrigin));
+// index 0 = right hand, index 1 = left hand
+_rayOrigins.forEach((rayOrigin, idx) => {
+  const hand = buildProceduralHand(idx === 0);
+  rayOrigin.add(hand);
+  scene.add(rayOrigin);
 });
 
 [renderer.xr.getController(0), renderer.xr.getController(1)].forEach(ctrl => {
