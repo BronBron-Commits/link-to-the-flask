@@ -381,29 +381,40 @@ function _alignSegment(mesh, jA, jB) {
 function buildStaticHand(isRight) {
   const root = new THREE.Group();
   const flip = isRight ? 1 : -1;
-  function addBox(w, h, d, x, y, z) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), _handMatFlat);
-    m.position.set(x, y, z); root.add(m);
+  function addSphere(r, x, y, z) {
+    const m = new THREE.Mesh(_sphGeo(r), _handMatFlat);
+    m.position.set(x, y, z);
+    root.add(m);
   }
-  addBox(0.078, 0.022, 0.095, 0, 0, 0.048);
+
+  // Rounded palm cluster (cartoon style).
   [
-    { x: flip * 0.026,  lens: [0.032,0.022,0.018], w: 0.016 },
-    { x: flip * 0.009,  lens: [0.036,0.025,0.019], w: 0.017 },
-    { x: -flip * 0.008, lens: [0.030,0.021,0.016], w: 0.015 },
-    { x: -flip * 0.025, lens: [0.022,0.016,0.013], w: 0.012 },
-  ].forEach(({ x, lens, w }) => {
-    let z = 0;
-    lens.forEach(len => { addBox(w, w*0.85, len, x, 0, z - len/2); z -= len + 0.002; });
+    { r: 0.022, x: 0, y: 0, z: 0.048 },
+    { r: 0.019, x: 0, y: -0.001, z: 0.024 },
+    { r: 0.017, x: 0, y: -0.002, z: 0.002 },
+  ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
+  // Finger chains made of spheres from knuckle to tip.
+  [
+    { x: flip * 0.026, radii: [0.010, 0.009, 0.008, 0.007], gap: 0.014 },
+    { x: flip * 0.009, radii: [0.011, 0.010, 0.009, 0.008], gap: 0.015 },
+    { x: -flip * 0.008, radii: [0.010, 0.009, 0.008, 0.007], gap: 0.014 },
+    { x: -flip * 0.025, radii: [0.009, 0.008, 0.007, 0.006], gap: 0.013 },
+  ].forEach(({ x, radii, gap }) => {
+    let z = 0.010;
+    radii.forEach((r, i) => {
+      addSphere(r, x, -0.001 + (i * -0.0007), z);
+      z -= gap;
+    });
   });
-  const tp = new THREE.Group();
-  tp.position.set(flip * 0.040, 0, 0.038);
-  tp.rotation.z = flip * -0.55; tp.rotation.y = flip * 0.30;
-  let tz = 0;
-  [{ w: 0.018, d: 0.034 },{ w: 0.015, d: 0.026 }].forEach(({ w, d }) => {
-    const s = new THREE.Mesh(new THREE.BoxGeometry(w, w*0.85, d), _handMatFlat);
-    s.position.set(0, 0, tz - d/2); tp.add(s); tz -= d + 0.003;
-  });
-  root.add(tp);
+
+  // Thumb placed on the outside with a soft outward arc.
+  [
+    { r: 0.011, x: flip * 0.040, y: -0.004, z: 0.032 },
+    { r: 0.010, x: flip * 0.047, y: -0.006, z: 0.012 },
+    { r: 0.009, x: flip * 0.053, y: -0.008, z: -0.006 },
+  ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
   return root;
 }
 
