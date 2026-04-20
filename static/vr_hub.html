@@ -289,26 +289,78 @@ scene.add(floor);
 })();
 
 // ── Hand Tracking + Controller Fallback ──────────────────────────────────────
-// WebXR Hand Input joint names (25 joints per hand, WebXR spec order).
-const HAND_JOINT_NAMES = [
-  'wrist',
-  'thumb-metacarpal',              'thumb-phalanx-proximal',
-  'thumb-phalanx-distal',          'thumb-tip',
-  'index-finger-metacarpal',       'index-finger-phalanx-proximal',
-  'index-finger-phalanx-intermediate', 'index-finger-phalanx-distal', 'index-finger-tip',
-  'middle-finger-metacarpal',      'middle-finger-phalanx-proximal',
-  'middle-finger-phalanx-intermediate','middle-finger-phalanx-distal','middle-finger-tip',
-  'ring-finger-metacarpal',        'ring-finger-phalanx-proximal',
-  'ring-finger-phalanx-intermediate',  'ring-finger-phalanx-distal', 'ring-finger-tip',
-  'pinky-finger-metacarpal',       'pinky-finger-phalanx-proximal',
-  'pinky-finger-phalanx-intermediate', 'pinky-finger-phalanx-distal','pinky-finger-tip',
+// Bone connections: adjacent joint pairs used to build deforming cylinder segments.
+const HAND_BONES = [
+  // Wrist fan to metacarpals
+  ['wrist','thumb-metacarpal'],
+  ['wrist','index-finger-metacarpal'],
+  ['wrist','middle-finger-metacarpal'],
+  ['wrist','ring-finger-metacarpal'],
+  ['wrist','pinky-finger-metacarpal'],
+  // Knuckle cross-bar
+  ['index-finger-metacarpal', 'middle-finger-metacarpal'],
+  ['middle-finger-metacarpal','ring-finger-metacarpal'],
+  ['ring-finger-metacarpal',  'pinky-finger-metacarpal'],
+  // Thumb
+  ['thumb-metacarpal','thumb-phalanx-proximal'],
+  ['thumb-phalanx-proximal','thumb-phalanx-distal'],
+  ['thumb-phalanx-distal','thumb-tip'],
+  // Index
+  ['index-finger-metacarpal','index-finger-phalanx-proximal'],
+  ['index-finger-phalanx-proximal','index-finger-phalanx-intermediate'],
+  ['index-finger-phalanx-intermediate','index-finger-phalanx-distal'],
+  ['index-finger-phalanx-distal','index-finger-tip'],
+  // Middle
+  ['middle-finger-metacarpal','middle-finger-phalanx-proximal'],
+  ['middle-finger-phalanx-proximal','middle-finger-phalanx-intermediate'],
+  ['middle-finger-phalanx-intermediate','middle-finger-phalanx-distal'],
+  ['middle-finger-phalanx-distal','middle-finger-tip'],
+  // Ring
+  ['ring-finger-metacarpal','ring-finger-phalanx-proximal'],
+  ['ring-finger-phalanx-proximal','ring-finger-phalanx-intermediate'],
+  ['ring-finger-phalanx-intermediate','ring-finger-phalanx-distal'],
+  ['ring-finger-phalanx-distal','ring-finger-tip'],
+  // Pinky
+  ['pinky-finger-metacarpal','pinky-finger-phalanx-proximal'],
+  ['pinky-finger-phalanx-proximal','pinky-finger-phalanx-intermediate'],
+  ['pinky-finger-phalanx-intermediate','pinky-finger-phalanx-distal'],
+  ['pinky-finger-phalanx-distal','pinky-finger-tip'],
 ];
 
-const _handMat  = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.85, metalness: 0.0 });
-const _jointGeo = new THREE.SphereGeometry(0.010, 8, 6);
+// Joint sphere caps at knuckles + fingertips for visual roundness.
+const CAP_JOINTS = [
+  'wrist',
+  'thumb-tip','index-finger-tip','middle-finger-tip','ring-finger-tip','pinky-finger-tip',
+  'thumb-phalanx-proximal',
+  'index-finger-phalanx-proximal','middle-finger-phalanx-proximal',
+  'ring-finger-phalanx-proximal', 'pinky-finger-phalanx-proximal',
+];
 
-// Static procedural hand used when no hand-tracking data is available (controller mode).
-// Controller space: -Z = ray forward, +Y = up. Knuckle line at z=0, palm extends +Z.
+const _handMat    = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.85, metalness: 0.0 });
+// Unit-height cylinder (height=1m) — scale.y is set per-frame to match joint-to-joint distance.
+const _boneCylGeo = new THREE.CylinderGeometry(0.008, 0.008, 1, 8, 1);
+const _jointCapGeo = new THREE.SphereGeometry(0.009, 8, 6);
+
+// Reusable temporaries — avoid allocating on every frame.
+const _bpA = new THREE.Vector3(), _bpB = new THREE.Vector3();
+const _bdir = new THREE.Vector3(), _bUp = new THREE.Vector3(0, 1, 0);
+
+// Reorients a unit-height cylinder so it spans from joint A to joint B.
+function _updateBone(mesh, jA, jB) {
+  jA.getWorldPosition(_bpA);
+  jB.getWorldPosition(_bpB);
+  _bdir.subVectors(_bpB, _bpA);
+  const len = _bdir.length();
+  if (len < 0.001) { mesh.visible = false; return; }
+  mesh.visible = true;
+  mesh.position.addVectors(_bpA, _bpB).multiplyScalar(0.5);
+  mesh.scale.y = len;
+  mesh.quaternion.setFromUnitVectors(_bUp, _bdir.divideScalar(len));
+}
+
+const _boneUpdaters = []; // per-frame callbacks registered per hand
+
+// Static procedural hand — shown when hand tracking is unavailable (controller mode).
 function buildProceduralHand(isRight) {
   const root = new THREE.Group();
   const flip = isRight ? 1 : -1;
@@ -361,28 +413,63 @@ function buildProceduralHand(isRight) {
   ctrl.add(rayLine);
   scene.add(ctrl);
 
-  // Joint sphere meshes — children of each XRJointSpace, auto-updated by Three.js each frame
-  HAND_JOINT_NAMES.forEach(name => {
+  // Bone cylinder meshes — world-space objects repositioned every frame.
+  const boneMeshes = HAND_BONES.map(([nameA, nameB]) => {
+    const mesh = new THREE.Mesh(_boneCylGeo, _handMat);
+    mesh.visible = false;
+    scene.add(mesh);
+    return { mesh, nameA, nameB };
+  });
+
+  // Sphere caps at knuckles / fingertips — children of their XRJointSpace.
+  CAP_JOINTS.forEach(name => {
     const joint = xrHand.joints[name];
-    if (joint) joint.add(new THREE.Mesh(_jointGeo, _handMat));
+    if (joint) {
+      const cap = new THREE.Mesh(_jointCapGeo, _handMat);
+      cap.visible = false;
+      joint.add(cap);
+    }
   });
   scene.add(xrHand);
 
-  // When hand tracking connects: hide controller visuals, show joint spheres.
-  // When it disconnects (or controller reconnects): restore controller visuals.
+  let _tracking = false;
+
+  // Per-frame: update every bone cylinder from live joint world-space positions.
+  _boneUpdaters.push(() => {
+    if (!_tracking) return;
+    boneMeshes.forEach(({ mesh, nameA, nameB }) => {
+      const jA = xrHand.joints[nameA], jB = xrHand.joints[nameB];
+      if (jA && jB) _updateBone(mesh, jA, jB);
+    });
+  });
+
   xrHand.addEventListener('connected', e => {
-    const tracking = !!e.data.hand;
-    staticHand.visible = !tracking;
-    rayLine.visible    = !tracking;
+    _tracking = !!e.data.hand;
+    staticHand.visible = !_tracking;
+    rayLine.visible    = !_tracking;
+    boneMeshes.forEach(({ mesh }) => { mesh.visible = _tracking; });
+    CAP_JOINTS.forEach(name => {
+      const j = xrHand.joints[name];
+      if (j && j.children[0]) j.children[0].visible = _tracking;
+    });
   });
   xrHand.addEventListener('disconnected', () => {
+    _tracking = false;
     staticHand.visible = true;
     rayLine.visible    = true;
+    boneMeshes.forEach(({ mesh }) => { mesh.visible = false; });
+    CAP_JOINTS.forEach(name => {
+      const j = xrHand.joints[name];
+      if (j && j.children[0]) j.children[0].visible = false;
+    });
   });
 });
 
-// Animation loop
-renderer.setAnimationLoop(() => { renderer.render(scene, camera); });
+// Animation loop — drive hand bone deformation then render.
+renderer.setAnimationLoop(() => {
+  _boneUpdaters.forEach(fn => fn());
+  renderer.render(scene, camera);
+});
 </script>
 </body>
 </html>
