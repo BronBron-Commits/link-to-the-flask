@@ -362,8 +362,11 @@ const _dir = new THREE.Vector3(), _yUp = new THREE.Vector3(0, 1, 0);
 const _q   = new THREE.Quaternion();
 
 function _alignSegment(mesh, jA, jB) {
-  jA.getWorldPosition(_pA);
-  jB.getWorldPosition(_pB);
+  // joint.position is already world-space: the XR manager sets joint.matrix
+  // directly from the world-space XR pose, and the parent _hand Group sits at
+  // the scene origin (identity). No updateWorldMatrix traversal needed.
+  _pA.copy(jA.position);
+  _pB.copy(jB.position);
   _dir.subVectors(_pB, _pA);
   const len = _dir.length();
   if (len < 0.0005) { mesh.visible = false; return; }
@@ -445,39 +448,38 @@ const _handUpdaters = [];
   let _tracking = false;
 
   _handUpdaters.push(() => {
+    // Three.js sets xrHand.visible = true only when it has a valid hand pose
+    // each frame. Polling this is more reliable than the 'connected' event
+    // whose e.data.hand may be null/undefined depending on session type.
+    const nowTracking = xrHand.visible;
+    if (nowTracking !== _tracking) {
+      _tracking = nowTracking;
+      staticHand.visible = !nowTracking;
+      rayLine.visible    = !nowTracking;
+      if (!nowTracking) {
+        segMeshes.forEach(m => { m.visible = false; });
+        capMeshes.forEach(m => { if (m) m.visible = false; });
+        wristCap.visible = false;
+      }
+    }
     if (!_tracking) return;
+
     HAND_SEGMENTS.forEach(([nameA, nameB], i) => {
       const jA = xrHand.joints[nameA], jB = xrHand.joints[nameB];
-      if (jA && jB) {
+      // Only align when both joints have a valid pose from the XR runtime.
+      if (jA && jB && jA.visible && jB.visible) {
         _alignSegment(segMeshes[i], jA, jB);
-        // Position the sphere cap at the distal joint.
         const cap = capMeshes[i];
-        if (cap) {
-          jB.getWorldPosition(_pB);
-          cap.position.copy(_pB);
-        }
+        if (cap) { cap.position.copy(jB.position); cap.visible = true; }
+      } else {
+        segMeshes[i].visible = false;
+        if (capMeshes[i]) capMeshes[i].visible = false;
       }
     });
     // Wrist cap
     const wj = xrHand.joints['wrist'];
-    if (wj) { wj.getWorldPosition(_pA); wristCap.position.copy(_pA); }
-  });
-
-  function _setTrackingVisible(v) {
-    segMeshes.forEach(m => { m.visible = v; });
-    capMeshes.forEach(m => { if (m) m.visible = v; });
-    wristCap.visible = v;
-    staticHand.visible = !v;
-    rayLine.visible    = !v;
-  }
-
-  xrHand.addEventListener('connected', e => {
-    _tracking = !!e.data.hand;
-    _setTrackingVisible(_tracking);
-  });
-  xrHand.addEventListener('disconnected', () => {
-    _tracking = false;
-    _setTrackingVisible(false);
+    if (wj && wj.visible) { wristCap.position.copy(wj.position); wristCap.visible = true; }
+    else { wristCap.visible = false; }
   });
 });
 // Animation loop — drive hand segment deformation then render.
