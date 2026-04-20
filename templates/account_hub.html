@@ -650,10 +650,15 @@
             <span>Open reference content, documents, and adjacent tools.</span>
           </a>
 
-          <a class="bubble nav-bubble vr" href="/vr-hub">
+          <a class="bubble nav-bubble vr" href="/vr-hub" id="enter-vr-bubble">
             <strong>Enter VR</strong>
             <span>Step into the 3D hub in WebXR.</span>
           </a>
+          <script>
+            document.getElementById('enter-vr-bubble').addEventListener('click', function() {
+              try { sessionStorage.setItem('vr-autostart', '1'); } catch(_) {}
+            });
+          </script>
         </div>
 
       </section>

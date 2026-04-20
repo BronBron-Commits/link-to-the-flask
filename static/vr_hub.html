@@ -149,6 +149,10 @@ function createVRButton(renderer) {
           session.end();
         }
       };
+      // Auto-start if arriving from account hub Enter VR button
+      let autostart = false;
+      try { autostart = sessionStorage.getItem('vr-autostart') === '1'; sessionStorage.removeItem('vr-autostart'); } catch(_) {}
+      if (autostart) btn.onclick();
     }
   }).catch(() => {
     document.getElementById('no-xr-msg').classList.add('show');
