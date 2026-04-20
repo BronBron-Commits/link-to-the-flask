@@ -931,8 +931,8 @@ if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
 
   if (signInDiscordBtn) {
     signInDiscordBtn.addEventListener('click', () => {
-      setStatus('Redirecting to Discord sign-in...', '');
-      window.location.assign('/auth/discord/start');
+      setStatus('Opening Discord app...', '');
+      window.location.assign('/auth/discord/app-start');
     });
   }
 

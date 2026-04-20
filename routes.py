@@ -295,6 +295,20 @@ def _redirect_index_with_auth_error(error_code: str):
     return redirect(f"/?{urlencode({'authError': safe_error})}", code=302)
 
 
+def _discord_authorize_urls(config: dict, state: str) -> tuple[str, str]:
+    params = {
+        "response_type": "code",
+        "client_id": str(config.get("client_id") or "").strip(),
+        "scope": str(config.get("scope") or "identify email").strip() or "identify email",
+        "state": str(state or "").strip(),
+        "redirect_uri": str(config.get("redirect_uri") or "").strip(),
+        "prompt": "consent",
+    }
+    web_url = f"https://discord.com/oauth2/authorize?{urlencode(params)}"
+    app_url = f"discord://-/oauth2/authorize?{urlencode(params)}"
+    return web_url, app_url
+
+
 def _supabase_is_configured() -> bool:
     cfg = _supabase_public_config()
     return bool(cfg["url"] and cfg["anon_key"])
@@ -728,17 +742,49 @@ def auth_discord_start():
 
     state = uuid4().hex
     session["discord_oauth_state"] = state
-
-    params = {
-        "response_type": "code",
-        "client_id": cfg["client_id"],
-        "scope": cfg["scope"],
-        "state": state,
-        "redirect_uri": cfg["redirect_uri"],
-        "prompt": "consent",
-    }
-    authorize_url = f"https://discord.com/oauth2/authorize?{urlencode(params)}"
+    authorize_url, _app_url = _discord_authorize_urls(cfg, state)
     return redirect(authorize_url, code=302)
+
+
+@app.route("/auth/discord/app-start", methods=["GET"])
+def auth_discord_app_start():
+    cfg = _discord_oauth_config()
+    if not _discord_is_configured(cfg):
+        return _redirect_index_with_auth_error("discord-not-configured")
+
+    state = uuid4().hex
+    session["discord_oauth_state"] = state
+    web_url, app_url = _discord_authorize_urls(cfg, state)
+
+    # Try native Discord protocol first, then fall back to the normal web OAuth URL.
+    html = f"""<!doctype html>
+<html lang=\"en\">\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Redirecting to Discord...</title></head>
+<body>
+  <p style=\"font-family:sans-serif;padding:16px\">Opening Discord app...</p>
+  <script>
+    (function () {{
+      var appUrl = {json.dumps(app_url)};
+      var webUrl = {json.dumps(web_url)};
+      var fellBack = false;
+      var fallbackTimer = setTimeout(function () {{
+        if (fellBack) return;
+        fellBack = true;
+        window.location.replace(webUrl);
+      }}, 1400);
+
+      document.addEventListener('visibilitychange', function () {{
+        if (document.hidden) {{
+          clearTimeout(fallbackTimer);
+        }}
+      }});
+
+      window.location.replace(appUrl);
+    }})();
+  </script>
+</body>
+</html>
+"""
+    return Response(html, mimetype="text/html")
 
 
 @app.route("/auth/discord/callback", methods=["GET"])
