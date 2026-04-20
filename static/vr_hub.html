@@ -180,6 +180,51 @@ window.addEventListener('resize', () => {
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x06090f, 0.045);
 
+// ─── Procedural midnight skybox ───────────────────────────────────────────────
+(function _buildSkybox() {
+  const skyGeo = new THREE.SphereGeometry(60, 32, 16);
+  const skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {},
+    vertexShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        // normalised height in [-1, 1], clamp to [0, 1] for gradient
+        float t = clamp(normalize(vWorldPos).y * 0.5 + 0.5, 0.0, 1.0);
+
+        // zenith: near-black deep-space blue
+        vec3 zenith  = vec3(0.012, 0.016, 0.040);
+        // horizon: dark indigo / midnight blue
+        vec3 horizon = vec3(0.040, 0.055, 0.120);
+        // below-horizon: darker still
+        vec3 nadir   = vec3(0.006, 0.008, 0.018);
+
+        vec3 sky = (t >= 0.5)
+          ? mix(horizon, zenith,  (t - 0.5) * 2.0)
+          : mix(nadir,   horizon, t * 2.0);
+
+        // subtle star-field sparkle based on world position hash
+        vec3 p = floor(vWorldPos * 120.0);
+        float h = fract(sin(dot(p, vec3(127.1, 311.7, 74.3))) * 43758.5453);
+        float star = step(0.994, h) * smoothstep(0.0, 0.3, normalize(vWorldPos).y);
+
+        gl_FragColor = vec4(sky + star * 0.9, 1.0);
+      }
+    `
+  });
+  const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+  skyMesh.renderOrder = -1;
+  scene.add(skyMesh);
+})();
+
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
 const playerRig = new THREE.Group();
 const playerPitch = new THREE.Group();
