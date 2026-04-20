@@ -76,7 +76,7 @@
 <body>
 <canvas id="c"></canvas>
 <a id="back-link" href="/">← Home</a>
-<div id="hint">LOOK AT A PANEL TO NAVIGATE · GAZE 2 SECONDS TO ENTER</div>
+<div id="hint">POINT A CONTROLLER AT A PANEL · PULL TRIGGER TO ENTER</div>
 <div id="vr-btn-wrap"></div>
 <div id="no-xr-msg">
   <span>WebXR / immersive-VR is not supported in this browser.</span>
@@ -307,16 +307,6 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Build dwell ring geometry (arc progress indicator)
-function makeDwellRing() {
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.04, 0.07, 48),
-    new THREE.MeshBasicMaterial({ color: 0xffd06e, side: THREE.DoubleSide, transparent: true, opacity: 0 })
-  );
-  ring.userData.isDwellRing = true;
-  return ring;
-}
-
 // Create panel meshes
 const panelMeshes = [];
 const totalAngle = Math.PI * 0.85; // ~153° arc
@@ -343,77 +333,60 @@ PANELS.forEach((def, i) => {
   );
   mesh.lookAt(0, PANEL_Y, 0);
 
-  const dwell = makeDwellRing();
-  dwell.position.set(0, 0, 0.005);
-  mesh.add(dwell);
-
-  mesh.userData = { def, highlighted: false, dwellRing: dwell, dwellStart: null };
+  mesh.userData = { def, highlighted: false };
   scene.add(mesh);
   panelMeshes.push(mesh);
 });
 
-// ─── Gaze cursor (center dot) ─────────────────────────────────────────────────
+// ─── Gaze cursor (desktop fallback dot) ──────────────────────────────────────
 const cursor = new THREE.Mesh(
   new THREE.RingGeometry(0.006, 0.010, 32),
   new THREE.MeshBasicMaterial({ color: 0xfff5cc, side: THREE.DoubleSide, depthTest: false })
 );
 cursor.renderOrder = 999;
-camera.add(cursor);
 cursor.position.set(0, 0, -1.2);
-scene.add(camera);
+camera.add(cursor);
 
-// Progress arc for cursor dwell
-const arcCanvas = document.createElement('canvas');
-arcCanvas.width = 64; arcCanvas.height = 64;
-const arcCtx = arcCanvas.getContext('2d');
-const arcTex = new THREE.CanvasTexture(arcCanvas);
-const arcMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(0.06, 0.06),
-  new THREE.MeshBasicMaterial({ map: arcTex, transparent: true, depthTest: false, side: THREE.DoubleSide })
-);
-arcMesh.renderOrder = 1000;
-arcMesh.position.set(0, 0, -1.19);
-camera.add(arcMesh);
-
-function drawArc(progress) {
-  const c = arcCtx;
-  c.clearRect(0, 0, 64, 64);
-  if (progress <= 0) { arcTex.needsUpdate = true; return; }
-  c.beginPath();
-  c.arc(32, 32, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress, false);
-  c.strokeStyle = '#ffd06e';
-  c.lineWidth = 6;
-  c.stroke();
-  arcTex.needsUpdate = true;
-}
-
-// ─── Raycaster for gaze ───────────────────────────────────────────────────────
+// ─── Raycaster ───────────────────────────────────────────────────────────────
 const raycaster = new THREE.Raycaster();
 const gazeDir = new THREE.Vector3(0, 0, -1);
-const DWELL_MS = 2000;
-let activePanel = null;
 let navigating = false;
 
-// ─── Controller support ───────────────────────────────────────────────────────
-const controller0 = renderer.xr.getController(0);
-const controller1 = renderer.xr.getController(1);
+// Per-controller hover state
+const ctrlHovered = [null, null]; // panel mesh hovered by each controller
 
-function onControllerSelect() {
-  if (activePanel && !navigating) triggerNavigate(activePanel);
+// ─── Controllers ─────────────────────────────────────────────────────────────
+const controllers = [renderer.xr.getController(0), renderer.xr.getController(1)];
+const ctrlRayLines = []; // Line mesh per controller so we can update endpoint
+
+const _ctrlMat = new THREE.Matrix4();
+
+function raycastFromController(ctrl) {
+  _ctrlMat.identity().extractRotation(ctrl.matrixWorld);
+  raycaster.ray.origin.setFromMatrixPosition(ctrl.matrixWorld);
+  raycaster.ray.direction.set(0, 0, -1).applyMatrix4(_ctrlMat);
+  const hits = raycaster.intersectObjects(panelMeshes);
+  return hits.length > 0 ? hits[0] : null;
 }
-controller0.addEventListener('selectstart', onControllerSelect);
-controller1.addEventListener('selectstart', onControllerSelect);
-scene.add(controller0);
-scene.add(controller1);
 
-// Controller ray lines
-[controller0, controller1].forEach(ctrl => {
-  const lineMat = new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.45 });
-  const lineGeo = new THREE.BufferGeometry().setFromPoints([
-    new THREE.Vector3(0, 0, 0),
-    new THREE.Vector3(0, 0, -4),
-  ]);
-  ctrl.add(new THREE.Line(lineGeo, lineMat));
+controllers.forEach((ctrl, idx) => {
+  // Trigger fires navigation on the panel this controller is pointing at
+  ctrl.addEventListener('selectstart', () => {
+    const hit = raycastFromController(ctrl);
+    if (hit && !navigating) triggerNavigate(hit.object);
+  });
+
+  // Ray line — we update the far endpoint each frame based on hit distance
+  const positions = new Float32Array(6); // origin(0,0,0) + tip(0,0,-dist)
+  const lineGeo = new THREE.BufferGeometry();
+  lineGeo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  lineGeo.setDrawRange(0, 2);
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.55, linewidth: 1 });
+  const line = new THREE.Line(lineGeo, lineMat);
+  ctrl.add(line);
+  ctrlRayLines.push(line);
+
+  scene.add(ctrl);
 });
 
 // ─── Navigate helper ─────────────────────────────────────────────────────────
@@ -466,43 +439,53 @@ function triggerNavigate(panel) {
 const clock = new THREE.Clock();
 
 renderer.setAnimationLoop(() => {
-  const now = performance.now();
+  const t = clock.getElapsedTime();
 
-  // Gaze raycast
-  camera.getWorldDirection(gazeDir);
-  raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+  // ── Controller raycasts (primary in VR) ──────────────────────────────────
+  const inVR = renderer.xr.isPresenting;
 
-  const hits = raycaster.intersectObjects(panelMeshes);
-  const gazed = hits.length > 0 ? hits[0].object : null;
+  // Reset per-controller hover
+  ctrlHovered[0] = null;
+  ctrlHovered[1] = null;
+
+  controllers.forEach((ctrl, idx) => {
+    const line = ctrlRayLines[idx];
+    const posAttr = line.geometry.attributes.position;
+    const hit = raycastFromController(ctrl);
+    if (hit) {
+      ctrlHovered[idx] = hit.object;
+      // Shorten ray to hit point
+      const d = -Math.min(hit.distance, 8);
+      posAttr.setXYZ(1, 0, 0, d);
+    } else {
+      posAttr.setXYZ(1, 0, 0, -6);
+    }
+    posAttr.needsUpdate = true;
+  });
+
+  // ── Gaze raycast (desktop / phone fallback) ───────────────────────────────
+  let gazed = null;
+  if (!inVR) {
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const hits = raycaster.intersectObjects(panelMeshes);
+    gazed = hits.length > 0 ? hits[0].object : null;
+  }
+
+  // Any panel hit by either controller or gaze counts as highlighted
+  const anyHovered = new Set([ctrlHovered[0], ctrlHovered[1], gazed].filter(Boolean));
 
   panelMeshes.forEach(m => {
-    const isGazed = (m === gazed);
-
-    // Highlight update
-    if (isGazed !== m.userData.highlighted) {
-      m.userData.highlighted = isGazed;
+    const isHit = anyHovered.has(m);
+    if (isHit !== m.userData.highlighted) {
+      m.userData.highlighted = isHit;
       const old = m.material.map;
-      m.material.map = makePanelTexture(m.userData.def, isGazed);
+      m.material.map = makePanelTexture(m.userData.def, isHit);
       m.material.needsUpdate = true;
       if (old) old.dispose();
-    }
-
-    // Dwell timer
-    if (isGazed) {
-      if (!m.userData.dwellStart) m.userData.dwellStart = now;
-      const elapsed = now - m.userData.dwellStart;
-      const progress = Math.min(elapsed / DWELL_MS, 1);
-      drawArc(progress);
-      activePanel = m;
-      if (elapsed >= DWELL_MS && !navigating) triggerNavigate(m);
-    } else {
-      if (m.userData.dwellStart) { m.userData.dwellStart = null; }
-      if (activePanel === m) { activePanel = null; drawArc(0); }
     }
   });
 
   // Gentle float on panels
-  const t = clock.getElapsedTime();
   panelMeshes.forEach((m, i) => {
     m.position.y = PANEL_Y + Math.sin(t * 0.5 + i * 1.1) * 0.03;
   });
