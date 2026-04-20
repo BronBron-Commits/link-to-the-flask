@@ -370,10 +370,11 @@ function raycastFromController(ctrl) {
 }
 
 controllers.forEach((ctrl, idx) => {
-  // Trigger fires navigation on the panel this controller is pointing at
+  // Trigger fires navigation using the per-frame hover state (matrixWorld is
+  // only valid inside the animation loop, not during XR input events)
   ctrl.addEventListener('selectstart', () => {
-    const hit = raycastFromController(ctrl);
-    if (hit && !navigating) triggerNavigate(hit.object);
+    const hovered = ctrlHovered[idx];
+    if (hovered && !navigating) triggerNavigate(hovered);
   });
 
   // Ray line — we update the far endpoint each frame based on hit distance
