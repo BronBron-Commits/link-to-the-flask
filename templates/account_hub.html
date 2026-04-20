@@ -257,22 +257,46 @@
     }
 
     .nav-bubble {
-      transition: opacity 0.3s ease, filter 0.3s ease, visibility 0s linear 0.3s;
+      translate: 0px 0px;
+      scale: 1;
+      transition:
+        opacity   0.42s ease,
+        filter    0.42s ease,
+        visibility 0s linear 0.42s,
+        translate 0.42s cubic-bezier(0.34, 1.4, 0.64, 1),
+        scale     0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
     }
 
     .network-wrap.is-collapsed .nav-bubble {
       opacity: 0;
       visibility: hidden;
       pointer-events: none;
-      filter: blur(8px);
+      filter: blur(10px);
+      translate: var(--tx, 0px) var(--ty, 0px);
+      scale: 0.55;
     }
 
+    /* Expand: path outward with staggered start per bubble */
     .network-wrap:not(.is-collapsed) .nav-bubble {
       opacity: 1;
       visibility: visible;
       pointer-events: auto;
       filter: blur(0);
-      transition-delay: 0s, 0s, 0s;
+      translate: 0px 0px;
+      scale: 1;
+    }
+
+    .network-wrap:not(.is-collapsed) .bubble.character {
+      transition-delay: 0.04s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.models {
+      transition-delay: 0.10s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.worlds {
+      transition-delay: 0.16s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.library {
+      transition-delay: 0.22s;
     }
 
     .bubble:hover,
@@ -326,6 +350,8 @@
 
     .bubble.character {
       --bubble-accent: rgba(154, 226, 255, 1);
+      --tx: 150px;
+      --ty: 115px;
       left: 5%;
       top: 16%;
       width: 210px;
@@ -335,6 +361,8 @@
 
     .bubble.models {
       --bubble-accent: rgba(255, 166, 204, 1);
+      --tx: -195px;
+      --ty: 115px;
       right: 8%;
       top: 10%;
       width: 190px;
@@ -344,6 +372,8 @@
 
     .bubble.worlds {
       --bubble-accent: rgba(134, 255, 196, 1);
+      --tx: 150px;
+      --ty: -165px;
       left: 11%;
       bottom: 10%;
       width: 230px;
@@ -353,6 +383,8 @@
 
     .bubble.library {
       --bubble-accent: rgba(194, 180, 255, 1);
+      --tx: -195px;
+      --ty: -165px;
       right: 14%;
       bottom: 7%;
       width: 185px;
@@ -523,6 +555,8 @@
         padding: 18px 20px;
         transform: none;
         animation-duration: 7s;
+        translate: 0px 0px !important;
+        scale: 1 !important;
       }
 
       .bubble.core:hover,
