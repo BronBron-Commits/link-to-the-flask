@@ -181,8 +181,65 @@ const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(0x06090f, 0.045);
 
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
+const playerRig = new THREE.Group();
+const playerPitch = new THREE.Group();
+playerRig.position.set(0, 0, 0);
+playerPitch.add(camera);
+playerRig.add(playerPitch);
 camera.position.set(0, 1.6, 0);
-scene.add(camera);
+scene.add(playerRig);
+
+const LOOK_LIMIT = Math.PI * 0.32;
+const MOVE_SPEED = 2.3;
+const TURN_SPEED = 2.2;
+const LOOK_SPEED = 1.8;
+const STICK_DEADZONE = 0.14;
+const _clock = new THREE.Clock();
+const _tmpForward = new THREE.Vector3();
+const _tmpRight = new THREE.Vector3();
+const _tmpUp = new THREE.Vector3(0, 1, 0);
+const _controllersByHand = { left: null, right: null };
+
+function _deadzone(v) {
+  return Math.abs(v) < STICK_DEADZONE ? 0 : v;
+}
+
+function _readStick(gamepad) {
+  if (!gamepad || !gamepad.axes || gamepad.axes.length < 2) return { x: 0, y: 0 };
+  return {
+    x: _deadzone(gamepad.axes[0] || 0),
+    y: _deadzone(gamepad.axes[1] || 0),
+  };
+}
+
+function _updateQuestLocomotion(dt) {
+  if (!renderer.xr.isPresenting) return;
+
+  const leftGp = _controllersByHand.left?.userData?.inputSource?.gamepad;
+  const rightGp = _controllersByHand.right?.userData?.inputSource?.gamepad;
+  const left = _readStick(leftGp);
+  const right = _readStick(rightGp);
+
+  const xrCam = renderer.xr.getCamera(camera);
+  xrCam.getWorldDirection(_tmpForward);
+  _tmpForward.y = 0;
+  if (_tmpForward.lengthSq() < 1e-6) _tmpForward.set(0, 0, -1);
+  else _tmpForward.normalize();
+  _tmpRight.crossVectors(_tmpForward, _tmpUp).normalize();
+
+  const moveStep = MOVE_SPEED * dt;
+  if (left.y !== 0) playerRig.position.addScaledVector(_tmpForward, -left.y * moveStep);
+  if (left.x !== 0) playerRig.position.addScaledVector(_tmpRight, left.x * moveStep);
+
+  if (right.x !== 0) playerRig.rotation.y -= right.x * TURN_SPEED * dt;
+  if (right.y !== 0) {
+    playerPitch.rotation.x = THREE.MathUtils.clamp(
+      playerPitch.rotation.x - (right.y * LOOK_SPEED * dt),
+      -LOOK_LIMIT,
+      LOOK_LIMIT
+    );
+  }
+}
 
 // VR button
 const vrBtn = createVRButton(renderer);
@@ -433,6 +490,21 @@ const _handUpdaters = [];
   const xrHand  = renderer.xr.getHand(idx);
   const isRight = idx === 0;
 
+  ctrl.addEventListener('connected', (e) => {
+    ctrl.userData.inputSource = e.data;
+    const handedness = e.data?.handedness;
+    if (handedness === 'left' || handedness === 'right') {
+      _controllersByHand[handedness] = ctrl;
+    }
+  });
+  ctrl.addEventListener('disconnected', () => {
+    const hand = ctrl.userData?.inputSource?.handedness;
+    if (hand === 'left' || hand === 'right') {
+      if (_controllersByHand[hand] === ctrl) _controllersByHand[hand] = null;
+    }
+    ctrl.userData.inputSource = null;
+  });
+
   const staticHand = buildStaticHand(isRight);
   ctrl.add(staticHand);
   const rayLine = new THREE.Line(
@@ -503,6 +575,8 @@ const _handUpdaters = [];
 });
 // Animation loop — drive hand segment deformation then render.
 renderer.setAnimationLoop(() => {
+  const dt = Math.min(_clock.getDelta(), 0.05);
+  _updateQuestLocomotion(dt);
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
 });
