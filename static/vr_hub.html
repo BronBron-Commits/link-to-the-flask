@@ -94,6 +94,7 @@
 
 <script type="module">
 import * as THREE from 'three';
+import { GLTFLoader } from '/static/GLTFLoader.js';
 
 // ─── Inline minimal VRButton ─────────────────────────────────────────────────
 function createVRButton(renderer) {
@@ -233,7 +234,33 @@ floor.rotation.x = -Math.PI / 2;
 floor.position.y = 0;
 scene.add(floor);
 
-// Controllers (ray lines visible in VR)
+// Controllers (ray lines visible in VR) + gloves attached to grip spaces
+const _gloveLoader = new GLTFLoader();
+const _gripSpaces = [renderer.xr.getControllerGrip(0), renderer.xr.getControllerGrip(1)];
+
+// Offsets: adjust position/rotation so the glove sits naturally on the hand
+// These can be tuned once you see the result in-headset.
+const GLOVE_OFFSET_POS = new THREE.Vector3(0, 0, -0.02);   // slight forward
+const GLOVE_OFFSET_ROT = new THREE.Euler(Math.PI / 6, Math.PI, 0); // palm-forward
+
+_gloveLoader.load('/static/gloves.glb', (gltf) => {
+  _gripSpaces.forEach((grip, idx) => {
+    const glove = gltf.scene.clone();
+
+    // Mirror for right vs left hand: flip X scale on right (idx 0 = right in XR)
+    glove.scale.set(idx === 0 ? -1 : 1, 1, 1);
+    glove.position.copy(GLOVE_OFFSET_POS);
+    glove.rotation.copy(GLOVE_OFFSET_ROT);
+
+    grip.add(glove);
+    scene.add(grip);
+  });
+}, undefined, (err) => {
+  console.warn('[VR Hub] Failed to load gloves.glb:', err);
+  // Fallback: add grip spaces without gloves so controller tracking still works
+  _gripSpaces.forEach(grip => scene.add(grip));
+});
+
 [renderer.xr.getController(0), renderer.xr.getController(1)].forEach(ctrl => {
   ctrl.add(new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0), new THREE.Vector3(0,0,-3)]),
