@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Paraval VR Hub</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #06090f;
+      font-family: Georgia, serif;
+    }
+    #c {
+      display: block;
+      width: 100%; height: 100%;
+    }
+    #vr-btn-wrap {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #back-link {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 10;
+      text-decoration: none;
+      color: rgba(200,185,140,0.72);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      border: 1px solid rgba(200,185,140,0.22);
+      border-radius: 8px;
+      padding: 7px 11px;
+      background: rgba(6,9,15,0.7);
+      backdrop-filter: blur(4px);
+    }
+    #back-link:hover { color: #e8d89a; border-color: rgba(200,185,140,0.55); }
+    #hint {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      color: rgba(200,185,140,0.5);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #no-xr-msg {
+      display: none;
+      position: fixed;
+      inset: 0;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+      color: #c8b98c;
+      font-size: 16px;
+      letter-spacing: 0.06em;
+      text-align: center;
+      padding: 24px;
+    }
+    #no-xr-msg.show { display: flex; }
+    #no-xr-msg a { color: #a0c4e8; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<a id="back-link" href="/">← Home</a>
+<div id="hint">LOOK AT A PANEL TO NAVIGATE · GAZE 2 SECONDS TO ENTER</div>
+<div id="vr-btn-wrap"></div>
+<div id="no-xr-msg">
+  <span>WebXR / immersive-VR is not supported in this browser.</span>
+  <span>Try Chrome on Android, Meta Browser, or a WebXR-capable desktop browser.</span>
+  <a href="/">← Return to Home</a>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─── Inline minimal VRButton ─────────────────────────────────────────────────
+function createVRButton(renderer) {
+  const btn = document.createElement('button');
+  btn.style.cssText = [
+    'padding:12px 22px',
+    'border:1px solid rgba(200,185,140,0.55)',
+    'border-radius:10px',
+    'background:rgba(15,19,31,0.94)',
+    'color:#e8d89a',
+    'font-size:13px',
+    'letter-spacing:0.12em',
+    'text-transform:uppercase',
+    'cursor:pointer',
+    'backdrop-filter:blur(4px)',
+  ].join(';');
+
+  if (!('xr' in navigator)) {
+    document.getElementById('no-xr-msg').classList.add('show');
+    return null;
+  }
+
+  let session = null;
+
+  async function onStart(s) {
+    s.addEventListener('end', onEnd);
+    await renderer.xr.setSession(s);
+    btn.textContent = 'Exit VR';
+    session = s;
+  }
+
+  function onEnd() {
+    session.removeEventListener('end', onEnd);
+    btn.textContent = 'Enter VR';
+    session = null;
+  }
+
+  navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+    if (!supported) {
+      document.getElementById('no-xr-msg').classList.add('show');
+      btn.textContent = 'VR Not Supported';
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      btn.style.cursor = 'not-allowed';
+    } else {
+      btn.textContent = 'Enter VR';
+      btn.onclick = () => {
+        if (!session) {
+          navigator.xr.requestSession('immersive-vr', {
+            optionalFeatures: ['local-floor', 'bounded-floor', 'layers'],
+          }).then(onStart);
+        } else {
+          session.end();
+        }
+      };
+    }
+  }).catch(() => {
+    document.getElementById('no-xr-msg').classList.add('show');
+  });
+
+  return btn;
+}
+
+// ─── Scene setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+renderer.setClearColor(0x06090f, 1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+window.addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x06090f, 0.045);
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
+camera.position.set(0, 1.6, 0);
+scene.add(camera);
+
+// VR button
+const vrBtn = createVRButton(renderer);
+if (vrBtn) document.getElementById('vr-btn-wrap').appendChild(vrBtn);
+
+// ─── Lighting ─────────────────────────────────────────────────────────────────
+scene.add(new THREE.AmbientLight(0x1a1830, 3.5));
+
+const sun = new THREE.DirectionalLight(0xfff5d0, 1.8);
+sun.position.set(4, 8, 3);
+scene.add(sun);
+
+const rimLight = new THREE.DirectionalLight(0x4466ff, 0.6);
+rimLight.position.set(-5, 2, -4);
+scene.add(rimLight);
+
+// ─── Starfield ────────────────────────────────────────────────────────────────
+(function buildStars() {
+  const count = 1800;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = 30 + Math.random() * 20;
+    pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i * 3 + 2] = r * Math.cos(phi);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xfff8e8, size: 0.06, sizeAttenuation: true, transparent: true, opacity: 0.7,
+  })));
+})();
+
+// ─── Floor grid ───────────────────────────────────────────────────────────────
+const floorGeo = new THREE.PlaneGeometry(30, 30, 30, 30);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x0a0e1a,
+  roughness: 0.9,
+  metalness: 0.1,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.18,
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = 0;
+scene.add(floor);
+
+// ─── Panel definitions ────────────────────────────────────────────────────────
+const PANELS = [
+  { label: 'Account Hub',   sub: 'Manage your player profile',       href: '/account-hub',          color: 0xd4a84b, glow: 0xffd06e },
+  { label: 'Library',       sub: 'Reference docs & tools',           href: '/paraval-library',       color: 0x5ab4d4, glow: 0x88d4f0 },
+  { label: 'World Select',  sub: 'Choose a world to enter',          href: '/world-select',          color: 0x7ac87a, glow: 0xa8e8a8 },
+  { label: 'Open World',    sub: 'Jump into the 3D open world',      href: '/map3d',                 color: 0xa070d8, glow: 0xc898f8 },
+  { label: 'Dev Playground',sub: 'Interactive development tools',    href: '/static/dev_playground.html', color: 0xd47050, glow: 0xf09070 },
+];
+
+const PANEL_W = 1.1;
+const PANEL_H = 0.6;
+const RADIUS = 3.2;
+const PANEL_Y = 1.55;
+
+// Build a canvas texture for a panel
+function makePanelTexture(panel, highlighted) {
+  const W = 512, H = 256;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  const col = '#' + panel.color.toString(16).padStart(6, '0');
+  const glow = '#' + panel.glow.toString(16).padStart(6, '0');
+
+  // Background
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, highlighted ? 'rgba(20,26,44,0.98)' : 'rgba(10,14,26,0.95)');
+  bg.addColorStop(1, highlighted ? 'rgba(12,16,32,0.98)' : 'rgba(6,9,18,0.95)');
+  ctx.fillStyle = bg;
+  roundRect(ctx, 0, 0, W, H, 24);
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = highlighted ? glow : col;
+  ctx.lineWidth = highlighted ? 6 : 3;
+  roundRect(ctx, 2, 2, W - 4, H - 4, 22);
+  ctx.stroke();
+
+  if (highlighted) {
+    ctx.save();
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 32;
+    ctx.strokeStyle = glow;
+    ctx.lineWidth = 2;
+    roundRect(ctx, 6, 6, W - 12, H - 12, 18);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Label
+  ctx.fillStyle = highlighted ? '#ffffff' : '#f0e8d0';
+  ctx.font = 'bold 52px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(panel.label, W / 2, H / 2 - 22);
+
+  // Sub label
+  ctx.fillStyle = highlighted ? 'rgba(255,255,255,0.7)' : col;
+  ctx.font = '26px Georgia, serif';
+  ctx.fillText(panel.sub, W / 2, H / 2 + 38);
+
+  return new THREE.CanvasTexture(cv);
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// Build dwell ring geometry (arc progress indicator)
+function makeDwellRing() {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.04, 0.07, 48),
+    new THREE.MeshBasicMaterial({ color: 0xffd06e, side: THREE.DoubleSide, transparent: true, opacity: 0 })
+  );
+  ring.userData.isDwellRing = true;
+  return ring;
+}
+
+// Create panel meshes
+const panelMeshes = [];
+const totalAngle = Math.PI * 0.85; // ~153° arc
+const startAngle = -totalAngle / 2;
+const step = totalAngle / (PANELS.length - 1);
+
+PANELS.forEach((def, i) => {
+  const angle = startAngle + i * step;
+  const geo = new THREE.PlaneGeometry(PANEL_W, PANEL_H, 1, 1);
+  const mat = new THREE.MeshStandardMaterial({
+    map: makePanelTexture(def, false),
+    roughness: 0.6,
+    metalness: 0.1,
+    side: THREE.DoubleSide,
+    transparent: true,
+    opacity: 0.96,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+
+  mesh.position.set(
+    Math.sin(angle) * RADIUS,
+    PANEL_Y,
+    -Math.cos(angle) * RADIUS,
+  );
+  mesh.lookAt(0, PANEL_Y, 0);
+
+  const dwell = makeDwellRing();
+  dwell.position.set(0, 0, 0.005);
+  mesh.add(dwell);
+
+  mesh.userData = { def, highlighted: false, dwellRing: dwell, dwellStart: null };
+  scene.add(mesh);
+  panelMeshes.push(mesh);
+});
+
+// ─── Gaze cursor (center dot) ─────────────────────────────────────────────────
+const cursor = new THREE.Mesh(
+  new THREE.RingGeometry(0.006, 0.010, 32),
+  new THREE.MeshBasicMaterial({ color: 0xfff5cc, side: THREE.DoubleSide, depthTest: false })
+);
+cursor.renderOrder = 999;
+camera.add(cursor);
+cursor.position.set(0, 0, -1.2);
+scene.add(camera);
+
+// Progress arc for cursor dwell
+const arcCanvas = document.createElement('canvas');
+arcCanvas.width = 64; arcCanvas.height = 64;
+const arcCtx = arcCanvas.getContext('2d');
+const arcTex = new THREE.CanvasTexture(arcCanvas);
+const arcMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.06, 0.06),
+  new THREE.MeshBasicMaterial({ map: arcTex, transparent: true, depthTest: false, side: THREE.DoubleSide })
+);
+arcMesh.renderOrder = 1000;
+arcMesh.position.set(0, 0, -1.19);
+camera.add(arcMesh);
+
+function drawArc(progress) {
+  const c = arcCtx;
+  c.clearRect(0, 0, 64, 64);
+  if (progress <= 0) { arcTex.needsUpdate = true; return; }
+  c.beginPath();
+  c.arc(32, 32, 24, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress, false);
+  c.strokeStyle = '#ffd06e';
+  c.lineWidth = 6;
+  c.stroke();
+  arcTex.needsUpdate = true;
+}
+
+// ─── Raycaster for gaze ───────────────────────────────────────────────────────
+const raycaster = new THREE.Raycaster();
+const gazeDir = new THREE.Vector3(0, 0, -1);
+const DWELL_MS = 2000;
+let activePanel = null;
+let navigating = false;
+
+// ─── Controller support ───────────────────────────────────────────────────────
+const controller0 = renderer.xr.getController(0);
+const controller1 = renderer.xr.getController(1);
+
+function onControllerSelect() {
+  if (activePanel && !navigating) triggerNavigate(activePanel);
+}
+controller0.addEventListener('selectstart', onControllerSelect);
+controller1.addEventListener('selectstart', onControllerSelect);
+scene.add(controller0);
+scene.add(controller1);
+
+// Controller ray lines
+[controller0, controller1].forEach(ctrl => {
+  const lineMat = new THREE.LineBasicMaterial({ color: 0xffeebb, transparent: true, opacity: 0.45 });
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -4),
+  ]);
+  ctrl.add(new THREE.Line(lineGeo, lineMat));
+});
+
+// ─── Navigate helper ─────────────────────────────────────────────────────────
+function triggerNavigate(panel) {
+  navigating = true;
+  const session = renderer.xr.getSession();
+  if (session) {
+    session.end().then(() => { window.location.href = panel.userData.def.href; });
+  } else {
+    window.location.href = panel.userData.def.href;
+  }
+}
+
+// ─── Animation loop ───────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+renderer.setAnimationLoop(() => {
+  const now = performance.now();
+
+  // Gaze raycast
+  camera.getWorldDirection(gazeDir);
+  raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+
+  const hits = raycaster.intersectObjects(panelMeshes);
+  const gazed = hits.length > 0 ? hits[0].object : null;
+
+  panelMeshes.forEach(m => {
+    const isGazed = (m === gazed);
+
+    // Highlight update
+    if (isGazed !== m.userData.highlighted) {
+      m.userData.highlighted = isGazed;
+      const old = m.material.map;
+      m.material.map = makePanelTexture(m.userData.def, isGazed);
+      m.material.needsUpdate = true;
+      if (old) old.dispose();
+    }
+
+    // Dwell timer
+    if (isGazed) {
+      if (!m.userData.dwellStart) m.userData.dwellStart = now;
+      const elapsed = now - m.userData.dwellStart;
+      const progress = Math.min(elapsed / DWELL_MS, 1);
+      drawArc(progress);
+      activePanel = m;
+      if (elapsed >= DWELL_MS && !navigating) triggerNavigate(m);
+    } else {
+      if (m.userData.dwellStart) { m.userData.dwellStart = null; }
+      if (activePanel === m) { activePanel = null; drawArc(0); }
+    }
+  });
+
+  // Gentle float on panels
+  const t = clock.getElapsedTime();
+  panelMeshes.forEach((m, i) => {
+    m.position.y = PANEL_Y + Math.sin(t * 0.5 + i * 1.1) * 0.03;
+  });
+
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

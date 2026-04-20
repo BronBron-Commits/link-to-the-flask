@@ -156,6 +156,16 @@
       box-shadow: 0 8px 18px rgba(0,0,0,0.28);
     }
 
+    .guest-link.vr {
+      border-color: rgba(120, 80, 220, 0.55);
+      background: linear-gradient(135deg, rgba(22, 12, 48, 0.97), rgba(14, 8, 32, 0.97));
+      color: #c8a8ff;
+    }
+    .guest-link.vr:hover {
+      border-color: rgba(160, 110, 255, 0.85);
+      box-shadow: 0 8px 22px rgba(0,0,0,0.36), 0 0 0 1px rgba(120,80,220,0.28) inset;
+    }
+
     .guest-links {
       display: flex;
       gap: 8px;
@@ -513,6 +523,7 @@
       <a class="guest-link" href="/paraval-library">Enter Library</a>
       <a class="guest-link" href="/world-select">Enter Open World</a>
       <a class="guest-link" href="/static/dev_playground.html">Dev Playground</a>
+      <a class="guest-link vr" href="/vr-hub">Enter VR</a>
     </div>
   </div>
 </div>

@@ -599,6 +599,11 @@ def auth_logout():
     return jsonify(ok=True, authenticated=False)
 
 
+@app.route("/vr-hub")
+def vr_hub_page():
+    return send_from_directory(gs.STATIC_DIR, "vr_hub.html")
+
+
 @app.route("/map3d")
 def map3d_page():
     # Canonicalize Open World to one URL so CDN/browser caching cannot pin stale query variants.
