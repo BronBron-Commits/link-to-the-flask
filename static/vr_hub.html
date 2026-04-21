@@ -1276,31 +1276,58 @@ function _updateArcaneShots(dt) {
 }
 
 function _castLightningStrike() {
+  const cam = renderer.xr.getCamera();
   const origin = new THREE.Vector3();
-  renderer.xr.getCamera().getWorldPosition(origin);
-  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderer.xr.getCamera().quaternion).normalize();
+  cam.getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).normalize();
 
+  // Project look direction onto the ground plane (y=0) to find strike point.
+  // If looking up or level, fall back to 10 units ahead on the XZ plane.
+  let strikeX, strikeZ;
+  if (dir.y < -0.01) {
+    const t = Math.min(-origin.y / dir.y, 22);
+    strikeX = origin.x + dir.x * t;
+    strikeZ = origin.z + dir.z * t;
+  } else {
+    strikeX = origin.x + dir.x * 10;
+    strikeZ = origin.z + dir.z * 10;
+  }
+
+  const BOLT_HEIGHT = 7;
   const bolt = new THREE.Group();
-  // Core bolt — thin elongated capsule
-  const core = new THREE.Mesh(
-    new THREE.CapsuleGeometry(0.022, 0.28, 4, 8),
-    new THREE.MeshBasicMaterial({ color: 0xeef8ff })
-  );
-  core.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-  bolt.add(core);
-  // Electric glow shell
-  const glow = new THREE.Mesh(
-    new THREE.SphereGeometry(0.12, 10, 8),
-    new THREE.MeshBasicMaterial({ color: 0x55ddff, transparent: true, opacity: 0.30, side: THREE.BackSide })
-  );
-  bolt.add(glow);
-  // Bright white-cyan point light
-  const light = new THREE.PointLight(0xaaffff, 8.0, 10, 2);
-  bolt.add(light);
+  bolt.position.set(strikeX, 0, strikeZ);
 
-  bolt.position.copy(origin).addScaledVector(dir, 0.5);
-  bolt.userData.velocity = dir.clone().multiplyScalar(28);
-  bolt.userData.life = 1.4;
+  // Outer shaft — wide electric column
+  const shaft = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.055, BOLT_HEIGHT, 4, 8),
+    new THREE.MeshBasicMaterial({ color: 0x88ddff, transparent: true, opacity: 0.55 })
+  );
+  shaft.position.y = BOLT_HEIGHT / 2;
+  bolt.add(shaft); // children[0]
+
+  // Inner bright core
+  const core = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.018, BOLT_HEIGHT, 4, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 })
+  );
+  core.position.y = BOLT_HEIGHT / 2;
+  bolt.add(core); // children[1]
+
+  // Ground impact splash
+  const impact = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 10, 6),
+    new THREE.MeshBasicMaterial({ color: 0x99eeff, transparent: true, opacity: 0.45, side: THREE.BackSide })
+  );
+  impact.position.y = 0.1;
+  bolt.add(impact); // children[2]
+
+  // Intense point light at ground strike
+  const light = new THREE.PointLight(0xaaffff, 14.0, 18, 2);
+  light.position.y = 0.5;
+  bolt.add(light); // children[3]
+
+  bolt.userData.life = 0.65;
+  bolt.userData.maxLife = 0.65;
   scene.add(bolt);
   _lightningBolts.push(bolt);
 }
@@ -1312,10 +1339,12 @@ function _updateLightningBolts(dt) {
     if (bolt.userData.life <= 0) {
       scene.remove(bolt); _lightningBolts.splice(i, 1); continue;
     }
-    bolt.position.addScaledVector(bolt.userData.velocity, dt);
-    // Flicker the glow
-    bolt.children[1].material.opacity = 0.18 + 0.22 * Math.abs(Math.sin(bolt.userData.life * 42));
-    bolt.children[2].intensity = 5.0 + 4.0 * Math.abs(Math.sin(bolt.userData.life * 38));
+    const t = bolt.userData.life / bolt.userData.maxLife; // 1 → 0
+    const flicker = 0.35 + 0.65 * Math.abs(Math.sin(bolt.userData.life * 58));
+    bolt.children[0].material.opacity = t * 0.55 * flicker;
+    bolt.children[1].material.opacity = t * 0.90 * flicker;
+    bolt.children[2].material.opacity = t * 0.45 * flicker;
+    bolt.children[3].intensity = 14.0 * t * flicker;
   }
 }
 
