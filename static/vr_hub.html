@@ -378,6 +378,7 @@ const _grabPressedPrev = { left: false, right: false };
 const _tmpCtrlPos = new THREE.Vector3();
 const _tmpPanelPos = new THREE.Vector3();
 const _tmpCompassPos = new THREE.Vector3();
+const _tmpCompassAxisPos = new THREE.Vector3();
 const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 
@@ -1263,7 +1264,16 @@ const _drawPanelGrabState = { holder: null };
 let _drawPanel = null;
 let _compassRoot = null;
 let _compassCenter = null;
-const _compassGrabState = { holder: null, offset: new THREE.Vector3() };
+const _compassAxisHandles = [];
+const _compassGrabState = {
+  holder: null,
+  mode: null,
+  offset: new THREE.Vector3(),
+  axis: new THREE.Vector3(),
+  startCtrl: new THREE.Vector3(),
+  selectedVerts: [],
+  startVerts: [],
+};
 
 function _buildDrawPanel() {
   const root = new THREE.Group();
@@ -2333,16 +2343,37 @@ function _updatePanelInteraction(leftGp, rightGp) {
   const leftPressed = _isGrabPressed(leftGp);
   const rightPressed = _isGrabPressed(rightGp);
 
-  // World compass grab (by center sphere only), translation-only with locked rotation.
+  // World compass interactions:
+  // - center sphere: move the compass itself (translation only)
+  // - axis pull in draw mode: move selected draw elements along that axis
   if (_compassGrabState.holder) {
     const holdCtrl = _controllersByHand[_compassGrabState.holder];
     const holdPressed = _compassGrabState.holder === 'left' ? leftPressed : rightPressed;
     if (!holdCtrl || !holdPressed || !_compassRoot) {
       _compassGrabState.holder = null;
+      _compassGrabState.mode = null;
+      _compassGrabState.selectedVerts = [];
+      _compassGrabState.startVerts = [];
     } else {
       holdCtrl.getWorldPosition(_tmpCtrlPos);
-      _compassRoot.position.copy(_tmpCtrlPos).add(_compassGrabState.offset);
-      _compassRoot.quaternion.identity();
+      if (_compassGrabState.mode === 'drag-selection' && _drawMode && _compassGrabState.selectedVerts.length) {
+        const amount = _tmpDrawWork
+          .copy(_tmpCtrlPos)
+          .sub(_compassGrabState.startCtrl)
+          .dot(_compassGrabState.axis);
+        for (let i = 0; i < _compassGrabState.selectedVerts.length; i++) {
+          const idx = _compassGrabState.selectedVerts[i];
+          const start = _compassGrabState.startVerts[i];
+          if (!start || !_drawVerts[idx] || !_drawVertMeshes[idx]) continue;
+          _drawVerts[idx].copy(start).addScaledVector(_compassGrabState.axis, amount);
+          _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+        }
+        _updateDrawMeshGeometry();
+        _updateDrawPreview();
+      } else {
+        _compassRoot.position.copy(_tmpCtrlPos).add(_compassGrabState.offset);
+        _compassRoot.quaternion.identity();
+      }
     }
   }
 
@@ -2410,11 +2441,42 @@ function _updatePanelInteraction(leftGp, rightGp) {
       if (!ctrl) continue;
       ctrl.getWorldPosition(_tmpCtrlPos);
 
+      // Pull a compass axis to move current draw selection along that axis.
+      if (
+        !_compassGrabState.holder &&
+        _drawMode &&
+        _compassRoot &&
+        _compassAxisHandles.length
+      ) {
+        const selVerts = _selectedVertexIndices();
+        if (selVerts.length) {
+          let hitAxis = null;
+          for (const axisHandle of _compassAxisHandles) {
+            axisHandle.node.getWorldPosition(_tmpCompassAxisPos);
+            if (_tmpCtrlPos.distanceTo(_tmpCompassAxisPos) <= 0.13) {
+              hitAxis = axisHandle;
+              break;
+            }
+          }
+          if (hitAxis) {
+            if (_drawTransform.active) _cancelDrawTransform();
+            _compassGrabState.holder = hand;
+            _compassGrabState.mode = 'drag-selection';
+            _compassGrabState.axis.copy(hitAxis.dir).normalize();
+            _compassGrabState.startCtrl.copy(_tmpCtrlPos);
+            _compassGrabState.selectedVerts = selVerts;
+            _compassGrabState.startVerts = selVerts.map(i => _drawVerts[i].clone());
+            continue;
+          }
+        }
+      }
+
       // Grab/move world compass by center sphere only.
       if (!_compassGrabState.holder && _compassCenter && _compassRoot) {
         _compassCenter.getWorldPosition(_tmpCompassPos);
         if (_tmpCtrlPos.distanceTo(_tmpCompassPos) <= 0.12) {
           _compassGrabState.holder = hand;
+          _compassGrabState.mode = 'move-compass';
           _compassGrabState.offset.copy(_compassRoot.position).sub(_tmpCtrlPos);
           _compassRoot.quaternion.identity();
           continue;
@@ -2613,10 +2675,16 @@ function _updatePanelInteraction(leftGp, rightGp) {
   }
   if (_compassGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
     _compassGrabState.holder = null;
+    _compassGrabState.mode = null;
+    _compassGrabState.selectedVerts = [];
+    _compassGrabState.startVerts = [];
     if (_compassRoot) _compassRoot.quaternion.identity();
   }
   if (_compassGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
     _compassGrabState.holder = null;
+    _compassGrabState.mode = null;
+    _compassGrabState.selectedVerts = [];
+    _compassGrabState.startVerts = [];
     if (_compassRoot) _compassRoot.quaternion.identity();
   }
 
@@ -2647,6 +2715,9 @@ function _updateQuestLocomotion(dt) {
     }
     if (_compassGrabState.holder) {
       _compassGrabState.holder = null;
+      _compassGrabState.mode = null;
+      _compassGrabState.selectedVerts = [];
+      _compassGrabState.startVerts = [];
       if (_compassRoot) _compassRoot.quaternion.identity();
     }
     return;
@@ -3020,6 +3091,12 @@ scene.add(floor);
     sprite.scale.set(0.18, 0.09, 1);
     sprite.position.copy(dir.clone().multiplyScalar(0.45));
     root.add(sprite);
+
+    // Axis pull handle (invisible anchor used for distance-based grabbing).
+    const axisHandle = new THREE.Object3D();
+    axisHandle.position.copy(dir.clone().multiplyScalar(0.36));
+    root.add(axisHandle);
+    _compassAxisHandles.push({ node: axisHandle, dir: dir.clone().normalize() });
   });
 
   // Origin dot (grab handle)
