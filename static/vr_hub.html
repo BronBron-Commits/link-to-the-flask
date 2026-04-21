@@ -377,6 +377,7 @@ const PANEL_GRAB_DISTANCE = 0.22;
 const _grabPressedPrev = { left: false, right: false };
 const _tmpCtrlPos = new THREE.Vector3();
 const _tmpPanelPos = new THREE.Vector3();
+const _tmpCompassPos = new THREE.Vector3();
 const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 
@@ -1260,6 +1261,9 @@ _startPresencePolling();
 // ─── Draw Panel ───────────────────────────────────────────────────────────────
 const _drawPanelGrabState = { holder: null };
 let _drawPanel = null;
+let _compassRoot = null;
+let _compassCenter = null;
+const _compassGrabState = { holder: null, offset: new THREE.Vector3() };
 
 function _buildDrawPanel() {
   const root = new THREE.Group();
@@ -2329,6 +2333,19 @@ function _updatePanelInteraction(leftGp, rightGp) {
   const leftPressed = _isGrabPressed(leftGp);
   const rightPressed = _isGrabPressed(rightGp);
 
+  // World compass grab (by center sphere only), translation-only with locked rotation.
+  if (_compassGrabState.holder) {
+    const holdCtrl = _controllersByHand[_compassGrabState.holder];
+    const holdPressed = _compassGrabState.holder === 'left' ? leftPressed : rightPressed;
+    if (!holdCtrl || !holdPressed || !_compassRoot) {
+      _compassGrabState.holder = null;
+    } else {
+      holdCtrl.getWorldPosition(_tmpCtrlPos);
+      _compassRoot.position.copy(_tmpCtrlPos).add(_compassGrabState.offset);
+      _compassRoot.quaternion.identity();
+    }
+  }
+
   // ── Control tablet: slider drag (continuous hold) ─────────────────────────
   if (_sliderState.holder) {
     const holdCtrl = _controllersByHand[_sliderState.holder];
@@ -2392,6 +2409,17 @@ function _updatePanelInteraction(leftGp, rightGp) {
     for (const { ctrl, hand } of ctrls) {
       if (!ctrl) continue;
       ctrl.getWorldPosition(_tmpCtrlPos);
+
+      // Grab/move world compass by center sphere only.
+      if (!_compassGrabState.holder && _compassCenter && _compassRoot) {
+        _compassCenter.getWorldPosition(_tmpCompassPos);
+        if (_tmpCtrlPos.distanceTo(_tmpCompassPos) <= 0.12) {
+          _compassGrabState.holder = hand;
+          _compassGrabState.offset.copy(_compassRoot.position).sub(_tmpCtrlPos);
+          _compassRoot.quaternion.identity();
+          continue;
+        }
+      }
 
       // Sky buttons on control tablet
       let hitSky = false;
@@ -2583,6 +2611,14 @@ function _updatePanelInteraction(leftGp, rightGp) {
   if (_spellGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
     scene.attach(_spellPanel); _spellGrabState.holder = null;
   }
+  if (_compassGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    _compassGrabState.holder = null;
+    if (_compassRoot) _compassRoot.quaternion.identity();
+  }
+  if (_compassGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    _compassGrabState.holder = null;
+    if (_compassRoot) _compassRoot.quaternion.identity();
+  }
 
   _grabPressedPrev.left = leftPressed;
   _grabPressedPrev.right = rightPressed;
@@ -2608,6 +2644,10 @@ function _updateQuestLocomotion(dt) {
     if (_drawPanelGrabState.holder) {
       scene.attach(_drawPanel);
       _drawPanelGrabState.holder = null;
+    }
+    if (_compassGrabState.holder) {
+      _compassGrabState.holder = null;
+      if (_compassRoot) _compassRoot.quaternion.identity();
     }
     return;
   }
@@ -2933,15 +2973,18 @@ floor.rotation.x = -Math.PI / 2;
 floor.position.y = 0;
 scene.add(floor);
 
-// XYZ compass — placed 1.5m in front of the player at floor level
+// XYZ compass gizmo — full 6 axes, anchored near world origin, raised 1 meter.
 (function buildCompass() {
   const root = new THREE.Group();
-  root.position.set(0, 0.01, -1.5); // just above floor, 1.5m ahead
+  root.position.set(0, 1.01, 0);
 
   const axes = [
-    { dir: new THREE.Vector3(1, 0, 0),  color: 0xff2222, label: '+X' },
-    { dir: new THREE.Vector3(0, 1, 0),  color: 0x22ff22, label: '+Y' },
-    { dir: new THREE.Vector3(0, 0, -1), color: 0x2288ff, label: '-Z (fwd)' },
+    { dir: new THREE.Vector3( 1,  0,  0), color: 0xff2222, label: '+X' },
+    { dir: new THREE.Vector3(-1,  0,  0), color: 0xaa1111, label: '-X' },
+    { dir: new THREE.Vector3( 0,  1,  0), color: 0x22ff22, label: '+Y' },
+    { dir: new THREE.Vector3( 0, -1,  0), color: 0x11aa11, label: '-Y' },
+    { dir: new THREE.Vector3( 0,  0, -1), color: 0x2288ff, label: '-Z' },
+    { dir: new THREE.Vector3( 0,  0,  1), color: 0x1155aa, label: '+Z' },
   ];
 
   axes.forEach(({ dir, color, label }) => {
@@ -2979,13 +3022,16 @@ scene.add(floor);
     root.add(sprite);
   });
 
-  // Origin dot
-  root.add(new THREE.Mesh(
+  // Origin dot (grab handle)
+  const center = new THREE.Mesh(
     new THREE.SphereGeometry(0.025, 8, 8),
     new THREE.MeshBasicMaterial({ color: 0xffffff })
-  ));
+  );
+  root.add(center);
 
   scene.add(root);
+  _compassRoot = root;
+  _compassCenter = center;
 })();
 
 // ── Hand Tracking — per-segment live deformation ─────────────────────────────
@@ -3223,6 +3269,7 @@ renderer.setAnimationLoop(() => {
   _updateFireballs(dt);
   _updateArcaneShots(dt);
   _updateLightningBolts(dt);
+  if (_compassRoot) _compassRoot.quaternion.identity();
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
 });
