@@ -751,6 +751,7 @@ const _spellGrabState = { holder: null };
 let _spellPanel = null;
 const _fireballs = [];
 const _arcaneShots = [];
+const _lightningBolts = [];
 
 function _drawSpellBtn(c, tex, icon, label, flavor, theme = {}) {
   const topBg = theme.topBg || '#2a0a00';
@@ -789,7 +790,7 @@ function _buildSpellPanel() {
 
   // Body
   root.add(new THREE.Mesh(
-    new THREE.BoxGeometry(0.36, 0.52, 0.016),
+    new THREE.BoxGeometry(0.36, 0.66, 0.016),
     new THREE.MeshStandardMaterial({ color: 0x180800, roughness: 0.50, metalness: 0.55 })
   ));
 
@@ -845,6 +846,28 @@ function _buildSpellPanel() {
   root.userData.arcaneBtnTex = arcTex;
   root.userData.arcaneBtnMesh = arcBtn;
 
+  // Lightning Strike button
+  const ltC = document.createElement('canvas'); ltC.width = 280; ltC.height = 148;
+  const ltTex = new THREE.CanvasTexture(ltC);
+  _drawSpellBtn(ltC, ltTex, '⚡', 'LIGHTNING', 'Chain bolt', {
+    topBg: '#060d1a',
+    bottomBg: '#020509',
+    border: '#aaefff',
+    innerGlow: 'rgba(160,230,255,0.35)',
+    iconColor: '#fff7aa',
+    labelColor: '#aaeeff',
+    flavorColor: '#6ab8cc',
+  });
+  const ltBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: ltTex, transparent: true, side: THREE.DoubleSide })
+  );
+  ltBtn.position.set(0, -0.240, Z);
+  root.add(ltBtn);
+  root.userData.lightningBtnCanvas = ltC;
+  root.userData.lightningBtnTex = ltTex;
+  root.userData.lightningBtnMesh = ltBtn;
+
   // Footer
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
   const ftCtx = ftC.getContext('2d');
@@ -854,20 +877,20 @@ function _buildSpellPanel() {
     new THREE.PlaneGeometry(0.28, 0.036),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
   );
-  ft.position.set(0, -0.228, Z);
+  ft.position.set(0, -0.316, Z);
   root.add(ft);
 
-  // Side handles (same style)
+  // Side handles (taller to match expanded panel)
   const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1500, roughness: 0.35, metalness: 0.75 });
   root.userData.sideHandles = [];
   [-1, 1].forEach(side => {
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.22, 12), hMat);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.30, 12), hMat);
     bar.position.set(side * 0.248, 0, Z);
     root.add(bar); root.userData.sideHandles.push(bar);
     const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cT.position.set(side * 0.248, 0.11, Z); root.add(cT);
+    cT.position.set(side * 0.248, 0.15, Z); root.add(cT);
     const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cB.position.set(side * 0.248, -0.11, Z); root.add(cB);
+    cB.position.set(side * 0.248, -0.15, Z); root.add(cB);
     const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
     br.rotation.z = Math.PI / 2;
     br.position.set(side * 0.214, 0, Z); root.add(br);
@@ -1252,6 +1275,50 @@ function _updateArcaneShots(dt) {
   }
 }
 
+function _castLightningStrike() {
+  const origin = new THREE.Vector3();
+  renderer.xr.getCamera().getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderer.xr.getCamera().quaternion).normalize();
+
+  const bolt = new THREE.Group();
+  // Core bolt — thin elongated capsule
+  const core = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.022, 0.28, 4, 8),
+    new THREE.MeshBasicMaterial({ color: 0xeef8ff })
+  );
+  core.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+  bolt.add(core);
+  // Electric glow shell
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.12, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0x55ddff, transparent: true, opacity: 0.30, side: THREE.BackSide })
+  );
+  bolt.add(glow);
+  // Bright white-cyan point light
+  const light = new THREE.PointLight(0xaaffff, 8.0, 10, 2);
+  bolt.add(light);
+
+  bolt.position.copy(origin).addScaledVector(dir, 0.5);
+  bolt.userData.velocity = dir.clone().multiplyScalar(28);
+  bolt.userData.life = 1.4;
+  scene.add(bolt);
+  _lightningBolts.push(bolt);
+}
+
+function _updateLightningBolts(dt) {
+  for (let i = _lightningBolts.length - 1; i >= 0; i--) {
+    const bolt = _lightningBolts[i];
+    bolt.userData.life -= dt;
+    if (bolt.userData.life <= 0) {
+      scene.remove(bolt); _lightningBolts.splice(i, 1); continue;
+    }
+    bolt.position.addScaledVector(bolt.userData.velocity, dt);
+    // Flicker the glow
+    bolt.children[1].material.opacity = 0.18 + 0.22 * Math.abs(Math.sin(bolt.userData.life * 42));
+    bolt.children[2].intensity = 5.0 + 4.0 * Math.abs(Math.sin(bolt.userData.life * 38));
+  }
+}
+
 function _applyBrightness(b) {
   _brightness = b;
   renderer.toneMappingExposure = b;
@@ -1422,6 +1489,13 @@ function _updatePanelInteraction(leftGp, rightGp) {
         continue;
       }
 
+      // Spell panel — lightning strike button
+      _spellPanel.userData.lightningBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
+        _castLightningStrike();
+        continue;
+      }
+
       // Spell panel — grab to move
       if (!_spellGrabState.holder) {
         let spellInRange = false;
@@ -1559,7 +1633,7 @@ function _updateDesktopHint() {
   }
   if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  _hintEl.textContent = `Desktop: WASD move, mouse look (left/right/up), click panel buttons, 1/2/3 sky, L laser, K disco, F/G spells, [/] brightness • ${lockHint}`;
+  _hintEl.textContent = `Desktop: WASD move, mouse look (left/right/up), click panel buttons, 1/2/3 sky, L laser, K disco, F/G/H spells, [/] brightness • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -1569,6 +1643,7 @@ function _desktopInteractTargets() {
     _controlTablet?.userData?.discoBtnMesh,
     _spellPanel?.userData?.fireballBtnMesh,
     _spellPanel?.userData?.arcaneBtnMesh,
+    _spellPanel?.userData?.lightningBtnMesh,
   ].filter(Boolean);
 }
 
@@ -1592,6 +1667,10 @@ function _desktopTriggerInteraction(target) {
   }
   if (target === _spellPanel?.userData?.arcaneBtnMesh) {
     _castArcaneShot();
+    return true;
+  }
+  if (target === _spellPanel?.userData?.lightningBtnMesh) {
+    _castLightningStrike();
     return true;
   }
   return false;
@@ -1651,6 +1730,7 @@ function _initDesktopControls() {
     else if (key === 'k') _setDiscoActive(!_discoActive);
     else if (key === 'f') _castFireball();
     else if (key === 'g') _castArcaneShot();
+    else if (key === 'h') _castLightningStrike();
     else if (key === '[') _applyBrightness(_brightness - 0.1);
     else if (key === ']') _applyBrightness(_brightness + 0.1);
   });
@@ -2036,6 +2116,7 @@ renderer.setAnimationLoop(() => {
   _updateLasers(dt);
   _updateFireballs(dt);
   _updateArcaneShots(dt);
+  _updateLightningBolts(dt);
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
 });
