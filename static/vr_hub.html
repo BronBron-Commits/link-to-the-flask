@@ -477,6 +477,7 @@ const _tmpSliderPos = new THREE.Vector3();
 const _tmpSliderCtrl = new THREE.Vector3();
 const _tmpTabletPos = new THREE.Vector3();
 const _tmpPlayersPos = new THREE.Vector3();
+const _tmpDrawPanelPos = new THREE.Vector3();
 const _tmpDrawHit   = new THREE.Vector3();
 const _tmpDrawQuat  = new THREE.Quaternion();
 const _tmpDrawDir   = new THREE.Vector3();
@@ -690,20 +691,6 @@ function _buildControlTablet() {
   root.userData.discoBtnTex = discoTex;
   root.userData.discoBtnMesh = discoBtn;
   _drawTabletBtn(discoC, discoTex, '🪩', 'DISCO', false);
-
-  // ── Right: DRAW button ──────────────────────────────────────────────────────
-  const drawC = document.createElement('canvas'); drawC.width = 256; drawC.height = 128;
-  const drawTex = new THREE.CanvasTexture(drawC);
-  const drawBtn = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.155, 0.072),
-    new THREE.MeshBasicMaterial({ map: drawTex, transparent: true, side: THREE.DoubleSide })
-  );
-  drawBtn.position.set(0.105, -0.172, Z);
-  root.add(drawBtn);
-  root.userData.drawBtnCanvas = drawC;
-  root.userData.drawBtnTex = drawTex;
-  root.userData.drawBtnMesh = drawBtn;
-  _drawTabletBtn(drawC, drawTex, '✏️', 'DRAW', false);
 
   // Footer hint
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
@@ -1234,8 +1221,116 @@ _playersTablet = _buildPlayersTablet();
 scene.add(_playersTablet);
 _refreshPlayersTablet();
 _startPresencePolling();
+// ─── Draw Panel ───────────────────────────────────────────────────────────────
+const _drawPanelGrabState = { holder: null };
+let _drawPanel = null;
 
-function _castFireball() {
+function _buildDrawPanel() {
+  const root = new THREE.Group();
+  const Z = 0.012;
+
+  // Body — deep purple
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.46, 0.016),
+    new THREE.MeshStandardMaterial({ color: 0x120818, roughness: 0.50, metalness: 0.55 })
+  ));
+
+  // Header
+  const hC = document.createElement('canvas'); hC.width = 512; hC.height = 80;
+  const hCtx = hC.getContext('2d');
+  const hG = hCtx.createLinearGradient(0, 0, 512, 0);
+  hG.addColorStop(0, '#1a0830'); hG.addColorStop(0.5, '#320a5a'); hG.addColorStop(1, '#1a0830');
+  hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
+  hCtx.strokeStyle = '#9944dd'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
+  hCtx.fillStyle = '#dd99ff'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
+  hCtx.fillText('✏️  DRAW', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.33, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.165, Z);
+  root.add(hdr);
+
+  // Toggle DRAW button
+  const drawBtnC = document.createElement('canvas'); drawBtnC.width = 280; drawBtnC.height = 148;
+  const drawBtnTex = new THREE.CanvasTexture(drawBtnC);
+  _drawSpellBtn(drawBtnC, drawBtnTex, '✏️', 'DRAW MODE', 'Place vertices', {
+    topBg: '#160720',
+    bottomBg: '#0a0416',
+    border: '#cc55ff',
+    innerGlow: 'rgba(180,80,255,0.35)',
+    iconColor: '#eeaaff',
+    labelColor: '#cc66ff',
+    flavorColor: '#8844aa',
+  });
+  const drawBtnMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: drawBtnTex, transparent: true, side: THREE.DoubleSide })
+  );
+  drawBtnMesh.position.set(0, 0.024, Z);
+  root.add(drawBtnMesh);
+  root.userData.drawToggleBtnCanvas = drawBtnC;
+  root.userData.drawToggleBtnTex = drawBtnTex;
+  root.userData.drawToggleBtnMesh = drawBtnMesh;
+
+  // Finish Shape button
+  const finishC = document.createElement('canvas'); finishC.width = 280; finishC.height = 148;
+  const finishTex = new THREE.CanvasTexture(finishC);
+  _drawSpellBtn(finishC, finishTex, '✔️', 'FINISH', 'Close shape', {
+    topBg: '#0a1a0a',
+    bottomBg: '#040a04',
+    border: '#44cc88',
+    innerGlow: 'rgba(60,200,120,0.30)',
+    iconColor: '#aaffcc',
+    labelColor: '#55dd99',
+    flavorColor: '#3a8858',
+  });
+  const finishMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: finishTex, transparent: true, side: THREE.DoubleSide })
+  );
+  finishMesh.position.set(0, -0.120, Z);
+  root.add(finishMesh);
+  root.userData.drawFinishBtnCanvas = finishC;
+  root.userData.drawFinishBtnTex = finishTex;
+  root.userData.drawFinishBtnMesh = finishMesh;
+
+  // Footer
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#553366'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.28, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.198, Z);
+  root.add(ft);
+
+  // Side handles — purple tint
+  const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1060, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.22, 12), hMat);
+    bar.position.set(side * 0.248, 0, Z);
+    root.add(bar); root.userData.sideHandles.push(bar);
+    const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cT.position.set(side * 0.248, 0.11, Z); root.add(cT);
+    const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cB.position.set(side * 0.248, -0.11, Z); root.add(cB);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
+    br.rotation.z = Math.PI / 2;
+    br.position.set(side * 0.214, 0, Z); root.add(br);
+  });
+
+  root.position.set(0, 1.12, -1.22);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+_drawPanel = _buildDrawPanel();
+scene.add(_drawPanel);
+
   // Spawn a fireball from the player's eye position, shoot it forward
   const origin = new THREE.Vector3();
   renderer.xr.getCamera().getWorldPosition(origin);
@@ -1398,11 +1493,22 @@ function _updateLightningBolts(dt) {
 function _setDrawActive(next) {
   _drawMode = !!next;
   if (!_drawMode) _cancelDraw();
-  _drawTabletBtn(
-    _controlTablet.userData.drawBtnCanvas,
-    _controlTablet.userData.drawBtnTex,
-    '✏️', 'DRAW', _drawMode
-  );
+  if (_drawPanel) {
+    _drawSpellBtn(
+      _drawPanel.userData.drawToggleBtnCanvas,
+      _drawPanel.userData.drawToggleBtnTex,
+      '✏️', 'DRAW MODE', 'Place vertices',
+      _drawMode ? {
+        topBg: '#2a0a40', bottomBg: '#1a0630', border: '#ff88ff',
+        innerGlow: 'rgba(255,140,255,0.45)', iconColor: '#ffffff',
+        labelColor: '#ff99ff', flavorColor: '#cc66ee',
+      } : {
+        topBg: '#160720', bottomBg: '#0a0416', border: '#cc55ff',
+        innerGlow: 'rgba(180,80,255,0.35)', iconColor: '#eeaaff',
+        labelColor: '#cc66ff', flavorColor: '#8844aa',
+      }
+    );
+  }
   _updateDrawUi();
   _updateDesktopHint();
 }
@@ -1616,6 +1722,12 @@ function _updatePanelInteraction(leftGp, rightGp) {
   if (_playersGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
     scene.attach(_playersTablet); _playersGrabState.holder = null;
   }
+  if (_drawPanelGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_drawPanel); _drawPanelGrabState.holder = null;
+  }
+  if (_drawPanelGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_drawPanel); _drawPanelGrabState.holder = null;
+  }
 
   // ── Fresh-press actions (buttons + tablet grab + sky pickers) ─────────────
   const anyFreshPress =
@@ -1696,10 +1808,17 @@ function _updatePanelInteraction(leftGp, rightGp) {
         continue;
       }
 
-      // DRAW button
-      _controlTablet.userData.drawBtnMesh.getWorldPosition(_tmpPanelPos);
-      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
+      // Draw panel — toggle draw mode button
+      _drawPanel.userData.drawToggleBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
         _toggleDrawMode();
+        continue;
+      }
+
+      // Draw panel — finish shape button
+      _drawPanel.userData.drawFinishBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (_drawMode) _finishDrawShape();
         continue;
       }
 
@@ -1750,6 +1869,24 @@ function _updatePanelInteraction(leftGp, rightGp) {
         }
       }
 
+      // Draw panel grab
+      if (!_drawPanelGrabState.holder) {
+        let drawInRange = false;
+        for (const sh of (_drawPanel.userData.sideHandles || [])) {
+          sh.getWorldPosition(_tmpDrawPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.14) { drawInRange = true; break; }
+        }
+        if (!drawInRange) {
+          _drawPanel.getWorldPosition(_tmpDrawPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= PANEL_GRAB_DISTANCE) drawInRange = true;
+        }
+        if (drawInRange) {
+          ctrl.attach(_drawPanel);
+          _drawPanelGrabState.holder = hand;
+          continue;
+        }
+      }
+
     }
   }
   if (_spellGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
@@ -1779,6 +1916,10 @@ function _updateQuestLocomotion(dt) {
     if (_playersGrabState.holder) {
       scene.attach(_playersTablet);
       _playersGrabState.holder = null;
+    }
+    if (_drawPanelGrabState.holder) {
+      scene.attach(_drawPanel);
+      _drawPanelGrabState.holder = null;
     }
     return;
   }
@@ -1831,7 +1972,8 @@ function _desktopInteractTargets() {
     _spellPanel?.userData?.fireballBtnMesh,
     _spellPanel?.userData?.arcaneBtnMesh,
     _spellPanel?.userData?.lightningBtnMesh,
-    _controlTablet?.userData?.drawBtnMesh,
+    _drawPanel?.userData?.drawToggleBtnMesh,
+    _drawPanel?.userData?.drawFinishBtnMesh,
   ].filter(Boolean);
 }
 
@@ -1859,6 +2001,14 @@ function _desktopTriggerInteraction(target) {
   }
   if (target === _spellPanel?.userData?.lightningBtnMesh) {
     _castLightningStrike();
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawToggleBtnMesh) {
+    _toggleDrawMode();
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawFinishBtnMesh) {
+    if (_drawMode) _finishDrawShape();
     return true;
   }
   if (target === _controlTablet?.userData?.drawBtnMesh) {
