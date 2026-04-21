@@ -2467,8 +2467,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
       // Draw panel — vertex button
       _drawPanel.userData.drawToggleBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        if (!_drawMode) _setDrawActive(true);
-        _setDrawSelectMode('vertex');
+        if (_drawMode) _setDrawSelectMode('vertex');
         continue;
       }
 
@@ -2701,8 +2700,7 @@ function _desktopTriggerInteraction(target) {
     return true;
   }
   if (target === _drawPanel?.userData?.drawToggleBtnMesh) {
-    if (!_drawMode) _setDrawActive(true);
-    _setDrawSelectMode('vertex');
+    if (_drawMode) _setDrawSelectMode('vertex');
     return true;
   }
   if (target === _drawPanel?.userData?.drawEdgeBtnMesh) {
