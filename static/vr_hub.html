@@ -712,27 +712,35 @@ scene.add(_controlTablet);
 const _spellGrabState = { holder: null };
 let _spellPanel = null;
 const _fireballs = [];
+const _arcaneShots = [];
 
-function _drawSpellBtn(c, tex, icon, label, flavor) {
+function _drawSpellBtn(c, tex, icon, label, flavor, theme = {}) {
+  const topBg = theme.topBg || '#2a0a00';
+  const bottomBg = theme.bottomBg || '#100400';
+  const border = theme.border || '#ff6600';
+  const innerGlow = theme.innerGlow || 'rgba(255,120,0,0.35)';
+  const iconColor = theme.iconColor || '#ffaa44';
+  const labelColor = theme.labelColor || '#ff8822';
+  const flavorColor = theme.flavorColor || '#aa5522';
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, c.width, c.height);
   const bg = ctx.createLinearGradient(0, 0, 0, c.height);
-  bg.addColorStop(0, '#2a0a00'); bg.addColorStop(1, '#100400');
+  bg.addColorStop(0, topBg); bg.addColorStop(1, bottomBg);
   ctx.fillStyle = bg;
   if (ctx.roundRect) ctx.roundRect(0, 0, c.width, c.height, 14); else ctx.rect(0, 0, c.width, c.height);
   ctx.fill();
-  ctx.strokeStyle = '#ff6600'; ctx.lineWidth = 3;
+  ctx.strokeStyle = border; ctx.lineWidth = 3;
   if (ctx.roundRect) ctx.roundRect(2, 2, c.width-4, c.height-4, 12); else ctx.rect(2, 2, c.width-4, c.height-4);
   ctx.stroke();
   // inner glow line
-  ctx.strokeStyle = 'rgba(255,120,0,0.35)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = innerGlow; ctx.lineWidth = 1;
   if (ctx.roundRect) ctx.roundRect(5, 5, c.width-10, c.height-10, 9); else ctx.rect(5, 5, c.width-10, c.height-10);
   ctx.stroke();
-  ctx.fillStyle = '#ffaa44'; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = iconColor; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
   ctx.fillText(icon, c.width/2, 70);
-  ctx.fillStyle = '#ff8822'; ctx.font = 'bold 26px Georgia'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = labelColor; ctx.font = 'bold 26px Georgia'; ctx.textBaseline = 'alphabetic';
   ctx.fillText(label, c.width/2, 108);
-  ctx.fillStyle = '#aa5522'; ctx.font = '18px Georgia';
+  ctx.fillStyle = flavorColor; ctx.font = '18px Georgia';
   ctx.fillText(flavor, c.width/2, 132);
   tex.needsUpdate = true;
 }
@@ -777,19 +785,27 @@ function _buildSpellPanel() {
   root.userData.fireballBtnTex = fbTex;
   root.userData.fireballBtnMesh = fbBtn;
 
-  // Placeholder slot (empty, greyed out)
-  const ph1C = document.createElement('canvas'); ph1C.width = 280; ph1C.height = 148;
-  const ph1Ctx = ph1C.getContext('2d');
-  ph1Ctx.fillStyle = '#0a0804'; ph1Ctx.fillRect(0, 0, 280, 148);
-  ph1Ctx.strokeStyle = '#442200'; ph1Ctx.lineWidth = 2; ph1Ctx.strokeRect(2, 2, 276, 144);
-  ph1Ctx.fillStyle = '#553311'; ph1Ctx.font = '22px Georgia'; ph1Ctx.textAlign = 'center'; ph1Ctx.textBaseline = 'middle';
-  ph1Ctx.fillText('— empty slot —', 140, 74);
-  const ph1 = new THREE.Mesh(
+  // Arcane Shot button
+  const arcC = document.createElement('canvas'); arcC.width = 280; arcC.height = 148;
+  const arcTex = new THREE.CanvasTexture(arcC);
+  _drawSpellBtn(arcC, arcTex, '🟣', 'ARCANE SHOT', 'Slow orb', {
+    topBg: '#160720',
+    bottomBg: '#09030f',
+    border: '#b070ff',
+    innerGlow: 'rgba(180,120,255,0.35)',
+    iconColor: '#d7b3ff',
+    labelColor: '#b887ff',
+    flavorColor: '#8e66bb',
+  });
+  const arcBtn = new THREE.Mesh(
     new THREE.PlaneGeometry(0.22, 0.116),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ph1C), transparent: true, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ map: arcTex, transparent: true, side: THREE.DoubleSide })
   );
-  ph1.position.set(0, -0.096, Z);
-  root.add(ph1);
+  arcBtn.position.set(0, -0.096, Z);
+  root.add(arcBtn);
+  root.userData.arcaneBtnCanvas = arcC;
+  root.userData.arcaneBtnTex = arcTex;
+  root.userData.arcaneBtnMesh = arcBtn;
 
   // Footer
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
@@ -857,6 +873,36 @@ function _castFireball() {
   _fireballs.push(fb);
 }
 
+function _castArcaneShot() {
+  // Spawn an arcane orb from the player's eye position and shoot forward slower than fireball
+  const origin = new THREE.Vector3();
+  renderer.xr.getCamera().getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderer.xr.getCamera().quaternion).normalize();
+
+  const orb = new THREE.Group();
+  // Core sphere
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.095, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xb06aff })
+  );
+  orb.add(core);
+  // Outer glow shell
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.165, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0x7a36ff, transparent: true, opacity: 0.38, side: THREE.BackSide })
+  );
+  orb.add(glow);
+  // Point light
+  const light = new THREE.PointLight(0x9a5cff, 5.2, 8, 2);
+  orb.add(light);
+
+  orb.position.copy(origin).addScaledVector(dir, 0.5);
+  orb.userData.velocity = dir.clone().multiplyScalar(5.2);
+  orb.userData.life = 4.8;
+  scene.add(orb);
+  _arcaneShots.push(orb);
+}
+
 function _updateFireballs(dt) {
   for (let i = _fireballs.length - 1; i >= 0; i--) {
     const fb = _fireballs[i];
@@ -867,6 +913,19 @@ function _updateFireballs(dt) {
     fb.position.addScaledVector(fb.userData.velocity, dt);
     // Slight wobble
     fb.children[0].scale.setScalar(0.9 + 0.1 * Math.sin(fb.userData.life * 18));
+  }
+}
+
+function _updateArcaneShots(dt) {
+  for (let i = _arcaneShots.length - 1; i >= 0; i--) {
+    const orb = _arcaneShots[i];
+    orb.userData.life -= dt;
+    if (orb.userData.life <= 0) {
+      scene.remove(orb); _arcaneShots.splice(i, 1); continue;
+    }
+    orb.position.addScaledVector(orb.userData.velocity, dt);
+    // Slightly slower pulse than fireball for a heavier magical feel
+    orb.children[0].scale.setScalar(0.92 + 0.08 * Math.sin(orb.userData.life * 14));
   }
 }
 
@@ -1046,6 +1105,13 @@ function _updatePanelInteraction(leftGp, rightGp) {
       _spellPanel.userData.fireballBtnMesh.getWorldPosition(_tmpPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
         _castFireball();
+        continue;
+      }
+
+      // Spell panel — arcane shot button
+      _spellPanel.userData.arcaneBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
+        _castArcaneShot();
         continue;
       }
 
@@ -1522,6 +1588,7 @@ renderer.setAnimationLoop(() => {
   _updateQuestLocomotion(dt);
   _updateLasers(dt);
   _updateFireballs(dt);
+  _updateArcaneShots(dt);
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
 });
