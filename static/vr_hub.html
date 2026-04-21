@@ -1279,7 +1279,7 @@ function _buildDrawPanel() {
   hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
   hCtx.strokeStyle = '#9944dd'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
   hCtx.fillStyle = '#dd99ff'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
-  hCtx.fillText('DRAW', 256, 52);
+  hCtx.fillText('DRAW MODE', 256, 52);
   const hdr = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.058),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
