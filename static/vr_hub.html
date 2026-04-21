@@ -355,6 +355,9 @@ const _presenceState = {
   connected: false,
   roster: {},
   lastPublishTime: 0,
+  pollTimer: null,
+  lastPollSuccessAt: 0,
+  usingSocket: false,
 };
 
 // ─── Laser light show (beams) ────────────────────────────────────────────────
@@ -1021,6 +1024,34 @@ function _refreshPlayersTablet() {
   _drawPresenceRows(_playersTablet.userData.rosterCanvas, _playersTablet.userData.rosterTex);
 }
 
+async function _pollPresenceState() {
+  try {
+    const res = await fetch('/state', { cache: 'no-store' });
+    if (!res.ok) return;
+    const payload = await res.json();
+    const players = (payload && typeof payload.players === 'object') ? payload.players : {};
+    _presenceState.roster = players;
+    _presenceState.lastPollSuccessAt = performance.now() * 0.001;
+    if (!_presenceState.usingSocket) _presenceState.connected = true;
+    _refreshPlayersTablet();
+  } catch (_) {
+    if (!_presenceState.usingSocket) {
+      const now = performance.now() * 0.001;
+      // Keep a brief grace window so transient fetch failures don't flap UI state.
+      if ((now - _presenceState.lastPollSuccessAt) > 6) {
+        _presenceState.connected = false;
+        _refreshPlayersTablet();
+      }
+    }
+  }
+}
+
+function _startPresencePolling() {
+  if (_presenceState.pollTimer) return;
+  _pollPresenceState();
+  _presenceState.pollTimer = setInterval(_pollPresenceState, 2000);
+}
+
 function _publishLocalPresence(force = false) {
   const socket = _presenceState.socket;
   if (!socket || !_presenceState.connected) return;
@@ -1047,11 +1078,17 @@ function _publishLocalPresence(force = false) {
 }
 
 function _connectPresenceSocket() {
-  if (_presenceState.socket || typeof window.io !== 'function') return;
+  if (_presenceState.socket) return;
+  if (typeof window.io !== 'function') {
+    _presenceState.connected = false;
+    _refreshPlayersTablet();
+    return;
+  }
   const socket = window.io();
   _presenceState.socket = socket;
 
   socket.on('connect', () => {
+    _presenceState.usingSocket = true;
     _presenceState.connected = true;
     _presenceState.localSid = String(socket.id || _presenceState.localSid || '').trim();
     socket.emit('register-role', { role: 'player' });
@@ -1059,7 +1096,14 @@ function _connectPresenceSocket() {
     _refreshPlayersTablet();
   });
 
+  socket.on('connect_error', () => {
+    _presenceState.usingSocket = false;
+    _presenceState.connected = false;
+    _refreshPlayersTablet();
+  });
+
   socket.on('disconnect', () => {
+    _presenceState.usingSocket = false;
     _presenceState.connected = false;
     _refreshPlayersTablet();
   });
@@ -1098,6 +1142,7 @@ function _connectPresenceSocket() {
 _playersTablet = _buildPlayersTablet();
 scene.add(_playersTablet);
 _refreshPlayersTablet();
+_startPresencePolling();
 
 function _castFireball() {
   // Spawn a fireball from the player's eye position, shoot it forward
