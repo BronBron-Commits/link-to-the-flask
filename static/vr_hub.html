@@ -55,12 +55,45 @@
       pointer-events: none;
       white-space: nowrap;
     }
+    #desktop-crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 11;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+    #desktop-crosshair.show { opacity: 0.9; }
+    #desktop-crosshair::before,
+    #desktop-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(232, 216, 154, 0.88);
+      box-shadow: 0 0 8px rgba(200, 185, 140, 0.4);
+    }
+    #desktop-crosshair::before {
+      left: 9px;
+      top: 2px;
+      width: 2px;
+      height: 16px;
+    }
+    #desktop-crosshair::after {
+      left: 2px;
+      top: 9px;
+      width: 16px;
+      height: 2px;
+    }
   </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <a id="back-link" href="/">← Home</a>
 <div id="hint"></div>
+<div id="desktop-crosshair" aria-hidden="true"></div>
 <div id="vr-btn-wrap"></div>
 
 <script type="importmap">
@@ -337,6 +370,7 @@ const _presenceState = {
   usingSocket: false,
 };
 const _hintEl = document.getElementById('hint');
+const _crosshairEl = document.getElementById('desktop-crosshair');
 const _desktopState = {
   active: true,
   pointerLocked: false,
@@ -1520,10 +1554,12 @@ function _updateDesktopHint() {
   if (!_hintEl) return;
   if (renderer.xr.isPresenting) {
     _hintEl.textContent = 'VR active';
+    if (_crosshairEl) _crosshairEl.classList.remove('show');
     return;
   }
+  if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  _hintEl.textContent = `Desktop: WASD move, mouse look, click panel buttons, 1/2/3 sky, L laser, K disco, F/G spells, [/] brightness • ${lockHint}`;
+  _hintEl.textContent = `Desktop: WASD move, mouse look (left/right), click panel buttons, 1/2/3 sky, L laser, K disco, F/G spells, [/] brightness • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -1598,8 +1634,7 @@ function _initDesktopControls() {
   window.addEventListener('mousemove', (e) => {
     if (renderer.xr.isPresenting || !_desktopState.pointerLocked) return;
     _desktopState.yaw -= e.movementX * _desktopState.mouseSensitivity;
-    _desktopState.pitch -= e.movementY * _desktopState.mouseSensitivity;
-    _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch, -LOOK_LIMIT, LOOK_LIMIT);
+    _desktopState.pitch = 0;
   });
 
   window.addEventListener('keydown', (e) => {
@@ -1627,7 +1662,7 @@ function _initDesktopControls() {
   renderer.xr.addEventListener('sessionstart', _updateDesktopHint);
   renderer.xr.addEventListener('sessionend', () => {
     _desktopState.yaw = playerRig.rotation.y;
-    _desktopState.pitch = playerPitch.rotation.x;
+    _desktopState.pitch = 0;
     _updateDesktopHint();
   });
 }
@@ -1647,8 +1682,7 @@ function _updateDesktopLocomotion(dt) {
 
   if (keys['arrowleft']) _desktopState.yaw += TURN_SPEED * dt;
   if (keys['arrowright']) _desktopState.yaw -= TURN_SPEED * dt;
-  if (keys['arrowup']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch + LOOK_SPEED * dt * 0.7, -LOOK_LIMIT, LOOK_LIMIT);
-  if (keys['arrowdown']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch - LOOK_SPEED * dt * 0.7, -LOOK_LIMIT, LOOK_LIMIT);
+  _desktopState.pitch = 0;
 
   playerRig.rotation.set(0, _desktopState.yaw, 0);
   playerPitch.rotation.set(_desktopState.pitch, 0, 0);
