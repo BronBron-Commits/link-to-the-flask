@@ -664,6 +664,7 @@ function _buildControlTablet() {
 
   // ── Side handles ─────────────────────────────────────────────────────────────
   const handleMat = new THREE.MeshStandardMaterial({ color: 0x2a3a50, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
   [-1, 1].forEach(side => {
     // Outer bar (vertical rod along the edge)
     const bar = new THREE.Mesh(
@@ -672,6 +673,7 @@ function _buildControlTablet() {
     );
     bar.position.set(side * 0.275, 0.02, 0.012);
     root.add(bar);
+    root.userData.sideHandles.push(bar);
     // Top cap
     const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
     capTop.position.set(side * 0.275, 0.02 + 0.13, 0.012);
@@ -898,10 +900,18 @@ function _updatePanelInteraction(leftGp, rightGp) {
         continue;
       }
 
-      // Grab whole tablet to move it
+      // Grab whole tablet to move it (check handles first, then center)
       if (!_tabletGrabState.holder) {
-        _controlTablet.getWorldPosition(_tmpTabletPos);
-        if (_tmpCtrlPos.distanceTo(_tmpTabletPos) <= PANEL_GRAB_DISTANCE) {
+        let tabletInRange = false;
+        for (const handleBar of (_controlTablet.userData.sideHandles || [])) {
+          handleBar.getWorldPosition(_tmpTabletPos);
+          if (_tmpCtrlPos.distanceTo(_tmpTabletPos) <= 0.14) { tabletInRange = true; break; }
+        }
+        if (!tabletInRange) {
+          _controlTablet.getWorldPosition(_tmpTabletPos);
+          if (_tmpCtrlPos.distanceTo(_tmpTabletPos) <= PANEL_GRAB_DISTANCE) tabletInRange = true;
+        }
+        if (tabletInRange) {
           ctrl.attach(_controlTablet);
           _tabletGrabState.holder = hand;
           continue;
