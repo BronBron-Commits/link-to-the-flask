@@ -490,6 +490,11 @@ let   _drawMode     = false;
 let   _drawModeType = 'draw'; // 'draw' | 'select'
 let   _drawPlaneY   = 0.0;
 let   _drawSelectMode = 'vertex'; // 'vertex' | 'edge' | 'face'
+const _toolSystem = {
+  mode: 'off', // 'off' | 'draw' | 'select'
+  selectionKind: 'vertex',
+  activeTool: 'idle', // 'idle' | 'grab-vertex' | 'drag-selection' | 'move-gizmo'
+};
 const _drawVerts    = [];
 const _drawVertMeshes = [];
 const _drawEdges    = [];
@@ -499,6 +504,7 @@ let   _drawPreviewLine = null;
 let   _drawPreviewFace = null;
 const _tmpDrawPivot = new THREE.Vector3();
 const _tmpDrawWork = new THREE.Vector3();
+const _tmpSelectionCenter = new THREE.Vector3();
 const _drawTransform = {
   active: false,
   op: null,
@@ -1428,6 +1434,7 @@ function _buildDrawPanel() {
     const yJitter = (i >= 4) ? -0.072 : 0;
     const xJitter = (i >= 4) ? (i === 4 ? 0.060 : -0.060) : 0;
     m.position.set(gizmoBaseX + def.dx + xJitter, gizmoBaseY + def.dy + yJitter, Z);
+    m.visible = false;
     m.userData.nudge = new THREE.Vector3(def.nudge[0], def.nudge[1], def.nudge[2]);
     root.add(m);
     root.userData.gizmoButtons.push(m);
@@ -1697,8 +1704,29 @@ function _updateLightningBolts(dt) {
 }
 
 // ─── Draw Mode ───────────────────────────────────────────────────────────────
+function _syncLegacyEditStateFromToolSystem() {
+  _drawMode = _toolSystem.mode !== 'off';
+  _drawModeType = _toolSystem.mode === 'draw' ? 'draw' : 'select';
+  _drawSelectMode = _toolSystem.selectionKind;
+}
+
+function _setToolSystemMode(mode) {
+  if (!['off', 'draw', 'select'].includes(mode)) return;
+  _toolSystem.mode = mode;
+  _toolSystem.activeTool = 'idle';
+  _syncLegacyEditStateFromToolSystem();
+}
+
+function _setToolSystemSelectionKind(kind) {
+  if (!['vertex', 'edge', 'face'].includes(kind)) return;
+  _toolSystem.selectionKind = kind;
+  _syncLegacyEditStateFromToolSystem();
+}
+
+_syncLegacyEditStateFromToolSystem();
+
 function _setDrawActive(next) {
-  _drawMode = !!next;
+  _setToolSystemMode(next ? (_drawModeType === 'select' ? 'select' : 'draw') : 'off');
   if (!_drawMode) {
     _cancelDraw(true);
     _vertexGrabState.holder = null;
@@ -1732,8 +1760,7 @@ function _toggleDrawMode() { _setDrawActive(!_drawMode); }
 
 function _setDrawModeType(nextType) {
   if (nextType !== 'draw' && nextType !== 'select') return;
-  if (!_drawMode) _setDrawActive(true);
-  _drawModeType = nextType;
+  _setToolSystemMode(nextType);
   _refreshDrawModeHeader();
   _updateDrawUi();
   _updateDesktopHint();
@@ -1753,7 +1780,7 @@ function _cycleEditMode() {
 
 function _setDrawSelectMode(mode) {
   if (!['vertex', 'edge', 'face'].includes(mode)) return;
-  _drawSelectMode = mode;
+  _setToolSystemSelectionKind(mode);
   _drawSelection.length = 0;
   _updateDrawSelectionVisuals();
   _updateDrawPreview();
@@ -1817,6 +1844,18 @@ function _selectedVertexIndices() {
     out.push(f.a, f.b, f.c);
   }
   return [...new Set(out)];
+}
+
+function _updateWorldGizmoFromSelection() {
+  if (!_compassRoot || _compassGrabState.holder || !_drawMode) return;
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  _tmpSelectionCenter.set(0, 0, 0);
+  for (const idx of verts) {
+    if (_drawVerts[idx]) _tmpSelectionCenter.add(_drawVerts[idx]);
+  }
+  _tmpSelectionCenter.multiplyScalar(1 / verts.length);
+  _compassRoot.position.copy(_tmpSelectionCenter);
 }
 
 function _updateDrawSelectionVisuals() {
@@ -2426,9 +2465,11 @@ function _updatePanelInteraction(leftGp, rightGp) {
       _compassGrabState.mode = null;
       _compassGrabState.selectedVerts = [];
       _compassGrabState.startVerts = [];
+      _toolSystem.activeTool = 'idle';
     } else {
       holdCtrl.getWorldPosition(_tmpCtrlPos);
       if (_compassGrabState.mode === 'drag-selection' && _drawMode && _compassGrabState.selectedVerts.length) {
+        _toolSystem.activeTool = 'drag-selection';
         const amount = _tmpDrawWork
           .copy(_tmpCtrlPos)
           .sub(_compassGrabState.startCtrl)
@@ -2443,6 +2484,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
         _updateDrawMeshGeometry();
         _updateDrawPreview();
       } else {
+        _toolSystem.activeTool = 'move-gizmo';
         _compassRoot.position.copy(_tmpCtrlPos).add(_compassGrabState.offset);
         _compassRoot.quaternion.identity();
       }
@@ -2457,7 +2499,9 @@ function _updatePanelInteraction(leftGp, rightGp) {
     if (!holdCtrl || !holdPressed || !_drawMode || idx < 0 || idx >= _drawVerts.length || !_drawVertMeshes[idx]) {
       _vertexGrabState.holder = null;
       _vertexGrabState.vertIndex = -1;
+      _toolSystem.activeTool = 'idle';
     } else {
+      _toolSystem.activeTool = 'grab-vertex';
       holdCtrl.getWorldPosition(_tmpCtrlPos);
       _drawVerts[idx].copy(_tmpCtrlPos).add(_vertexGrabState.offset);
       _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
@@ -2690,19 +2734,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
       }
 
       // Draw panel — XYZ gizmo nudge buttons
-      let hitGizmo = false;
-      for (const gizBtn of (_drawPanel.userData.gizmoButtons || [])) {
-        gizBtn.getWorldPosition(_tmpDrawPanelPos);
-        if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.12) {
-          if (_drawMode && gizBtn.userData?.nudge) {
-            const n = gizBtn.userData.nudge;
-            _nudgeDrawSelection(n.x, n.y, n.z);
-          }
-          hitGizmo = true;
-          break;
-        }
-      }
-      if (hitGizmo) continue;
+      // Panel nudge buttons are intentionally inactive; use hand+gizmo interactions.
 
       // Draw mode only — place vertex on ground via controller ray
       if (_drawMode && _drawModeType === 'draw') {
@@ -2780,6 +2812,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
     _compassGrabState.mode = null;
     _compassGrabState.selectedVerts = [];
     _compassGrabState.startVerts = [];
+    _toolSystem.activeTool = 'idle';
     if (_compassRoot) _compassRoot.quaternion.identity();
   }
   if (_compassGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
@@ -2787,15 +2820,18 @@ function _updatePanelInteraction(leftGp, rightGp) {
     _compassGrabState.mode = null;
     _compassGrabState.selectedVerts = [];
     _compassGrabState.startVerts = [];
+    _toolSystem.activeTool = 'idle';
     if (_compassRoot) _compassRoot.quaternion.identity();
   }
   if (_vertexGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
     _vertexGrabState.holder = null;
     _vertexGrabState.vertIndex = -1;
+    _toolSystem.activeTool = 'idle';
   }
   if (_vertexGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
     _vertexGrabState.holder = null;
     _vertexGrabState.vertIndex = -1;
+    _toolSystem.activeTool = 'idle';
   }
 
   _grabPressedPrev.left = leftPressed;
@@ -2834,6 +2870,7 @@ function _updateQuestLocomotion(dt) {
       _vertexGrabState.holder = null;
       _vertexGrabState.vertIndex = -1;
     }
+    _toolSystem.activeTool = 'idle';
     return;
   }
 
@@ -2892,7 +2929,6 @@ function _desktopInteractTargets() {
     _drawPanel?.userData?.drawEdgeBtnMesh,
     _drawPanel?.userData?.drawFaceBtnMesh,
     _drawPanel?.userData?.drawUndoBtnMesh,
-    ...(_drawPanel?.userData?.gizmoButtons || []),
   ].filter(Boolean);
 }
 
@@ -2944,13 +2980,6 @@ function _desktopTriggerInteraction(target) {
     if (_drawMode) {
       if (_drawTransform.active) _cancelDrawTransform();
       else _undoDrawStep();
-    }
-    return true;
-  }
-  if (target?.userData?.nudge) {
-    if (_drawMode) {
-      const n = target.userData.nudge;
-      _nudgeDrawSelection(n.x, n.y, n.z);
     }
     return true;
   }
@@ -3462,6 +3491,7 @@ renderer.setAnimationLoop(() => {
   _updateFireballs(dt);
   _updateArcaneShots(dt);
   _updateLightningBolts(dt);
+  _updateWorldGizmoFromSelection();
   if (_compassRoot) _compassRoot.quaternion.identity();
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
