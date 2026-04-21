@@ -1282,7 +1282,10 @@ const _compassGrabState = {
   selectedVerts: [],
   startVerts: [],
 };
-const _vertexGrabState = { holder: null, vertIndex: -1, offset: new THREE.Vector3() };
+const _handGrab = {
+  left:  { active: false, vertIndex: -1, offset: new THREE.Vector3() },
+  right: { active: false, vertIndex: -1, offset: new THREE.Vector3() },
+};
 
 function _buildDrawPanel() {
   const root = new THREE.Group();
@@ -1410,35 +1413,8 @@ function _buildDrawPanel() {
   root.userData.drawUndoBtnTex = undoTex;
   root.userData.drawUndoBtnMesh = undoMesh;
 
-  // Mini XYZ gizmo controls (panel-side movement buttons)
-  const gizmoBaseX = 0.155;
-  const gizmoBaseY = -0.130;
+  // Panel-side nudge buttons removed — world gizmo is the only transform tool.
   root.userData.gizmoButtons = [];
-  const axisDefs = [
-    { label: 'X+', color: '#ff6666', dx:  0.06, dy:  0.00, nudge: [ 0.06, 0.00, 0.00] },
-    { label: 'X-', color: '#ff6666', dx: -0.06, dy:  0.00, nudge: [-0.06, 0.00, 0.00] },
-    { label: 'Y+', color: '#66ff99', dx:  0.00, dy:  0.05, nudge: [ 0.00, 0.06, 0.00] },
-    { label: 'Y-', color: '#66ff99', dx:  0.00, dy: -0.05, nudge: [ 0.00,-0.06, 0.00] },
-    { label: 'Z+', color: '#66b8ff', dx:  0.03, dy: -0.00, nudge: [ 0.00, 0.00, 0.06] },
-    { label: 'Z-', color: '#66b8ff', dx: -0.03, dy: -0.00, nudge: [ 0.00, 0.00,-0.06] },
-  ];
-  axisDefs.forEach((def, i) => {
-    const c = document.createElement('canvas'); c.width = 128; c.height = 90;
-    const t = new THREE.CanvasTexture(c);
-    _drawAxisMiniBtn(c, t, def.label, def.color);
-    const m = new THREE.Mesh(
-      new THREE.PlaneGeometry(0.082, 0.050),
-      new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide })
-    );
-    // Stagger Z buttons below X/Y so all six are visible and easy to hit.
-    const yJitter = (i >= 4) ? -0.072 : 0;
-    const xJitter = (i >= 4) ? (i === 4 ? 0.060 : -0.060) : 0;
-    m.position.set(gizmoBaseX + def.dx + xJitter, gizmoBaseY + def.dy + yJitter, Z);
-    m.visible = false;
-    m.userData.nudge = new THREE.Vector3(def.nudge[0], def.nudge[1], def.nudge[2]);
-    root.add(m);
-    root.userData.gizmoButtons.push(m);
-  });
 
   // Visible mini axis gizmo at the center of control cluster.
   const gizmoRoot = new THREE.Group();
@@ -1729,8 +1705,8 @@ function _setDrawActive(next) {
   _setToolSystemMode(next ? (_drawModeType === 'select' ? 'select' : 'draw') : 'off');
   if (!_drawMode) {
     _cancelDraw(true);
-    _vertexGrabState.holder = null;
-    _vertexGrabState.vertIndex = -1;
+    _handGrab.left.active = false;  _handGrab.left.vertIndex = -1;
+    _handGrab.right.active = false; _handGrab.right.vertIndex = -1;
   }
   if (_drawMode && _drawModeType !== 'draw' && _drawModeType !== 'select') {
     _drawModeType = 'draw';
@@ -2491,19 +2467,20 @@ function _updatePanelInteraction(leftGp, rightGp) {
     }
   }
 
-  // Direct vertex grab: move a single vertex by hand/controller while held.
-  if (_vertexGrabState.holder) {
-    const holdCtrl = _controllersByHand[_vertexGrabState.holder];
-    const holdPressed = _vertexGrabState.holder === 'left' ? leftPressed : rightPressed;
-    const idx = _vertexGrabState.vertIndex;
+  // Direct vertex grab — both hands can independently hold a vertex.
+  for (const hand of ['left', 'right']) {
+    const hg = _handGrab[hand];
+    if (!hg.active) continue;
+    const holdCtrl = _controllersByHand[hand];
+    const holdPressed = hand === 'left' ? leftPressed : rightPressed;
+    const idx = hg.vertIndex;
     if (!holdCtrl || !holdPressed || !_drawMode || idx < 0 || idx >= _drawVerts.length || !_drawVertMeshes[idx]) {
-      _vertexGrabState.holder = null;
-      _vertexGrabState.vertIndex = -1;
-      _toolSystem.activeTool = 'idle';
+      hg.active = false;
+      hg.vertIndex = -1;
     } else {
       _toolSystem.activeTool = 'grab-vertex';
       holdCtrl.getWorldPosition(_tmpCtrlPos);
-      _drawVerts[idx].copy(_tmpCtrlPos).add(_vertexGrabState.offset);
+      _drawVerts[idx].copy(_tmpCtrlPos).add(hg.offset);
       _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
       _updateDrawMeshGeometry();
       _updateDrawPreview();
@@ -2575,14 +2552,14 @@ function _updatePanelInteraction(leftGp, rightGp) {
       ctrl.getWorldPosition(_tmpCtrlPos);
 
       // Grab an existing vertex directly with the hand/controller.
-      if (!_vertexGrabState.holder && _drawMode && _drawVerts.length) {
+      if (!_handGrab[hand].active && _drawMode && _drawVerts.length) {
         const nearIdx = _findNearestDrawVertex(_tmpCtrlPos, 0.11);
         if (nearIdx >= 0) {
           if (_drawSelectMode !== 'vertex') _setDrawSelectMode('vertex');
           _selectDrawElement(nearIdx, false);
-          _vertexGrabState.holder = hand;
-          _vertexGrabState.vertIndex = nearIdx;
-          _vertexGrabState.offset.copy(_drawVerts[nearIdx]).sub(_tmpCtrlPos);
+          _handGrab[hand].active = true;
+          _handGrab[hand].vertIndex = nearIdx;
+          _handGrab[hand].offset.copy(_drawVerts[nearIdx]).sub(_tmpCtrlPos);
           continue;
         }
       }
@@ -2823,15 +2800,14 @@ function _updatePanelInteraction(leftGp, rightGp) {
     _toolSystem.activeTool = 'idle';
     if (_compassRoot) _compassRoot.quaternion.identity();
   }
-  if (_vertexGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
-    _vertexGrabState.holder = null;
-    _vertexGrabState.vertIndex = -1;
-    _toolSystem.activeTool = 'idle';
+  if (_handGrab.left.active && (!leftCtrl || !leftPressed)) {
+    _handGrab.left.active = false; _handGrab.left.vertIndex = -1;
   }
-  if (_vertexGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
-    _vertexGrabState.holder = null;
-    _vertexGrabState.vertIndex = -1;
-    _toolSystem.activeTool = 'idle';
+  if (_handGrab.right.active && (!rightCtrl || !rightPressed)) {
+    _handGrab.right.active = false; _handGrab.right.vertIndex = -1;
+  }
+  if (!_handGrab.left.active && !_handGrab.right.active) {
+    if (_toolSystem.activeTool === 'grab-vertex') _toolSystem.activeTool = 'idle';
   }
 
   _grabPressedPrev.left = leftPressed;
@@ -3415,6 +3391,17 @@ const _handUpdaters = [];
 
   const staticHand = buildStaticHand(isRight);
   ctrl.add(staticHand);
+
+  // Controller ray beam — visual pointer, 3 m long, forward (-Z).
+  const _rayBeamGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -3),
+  ]);
+  const _rayBeamMat = new THREE.LineBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.45 });
+  const _rayBeamLine = new THREE.Line(_rayBeamGeo, _rayBeamMat);
+  ctrl.add(_rayBeamLine);
+  ctrl.userData.rayBeam = _rayBeamLine;
+
   playerRig.add(ctrl);
   playerRig.add(xrHand);
 
