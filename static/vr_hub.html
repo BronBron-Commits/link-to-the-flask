@@ -485,6 +485,7 @@ const _drawRay      = new THREE.Ray();
 const _groundPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let   _drawMode     = false;
 let   _drawPlaneY   = 0.0;
+let   _drawSelectMode = 'vertex'; // 'vertex' | 'edge' | 'face'
 const _drawVerts    = [];
 const _drawVertMeshes = [];
 const _drawEdges    = [];
@@ -492,6 +493,17 @@ const _drawFaces    = [];
 const _drawSelection = [];
 let   _drawPreviewLine = null;
 let   _drawPreviewFace = null;
+const _tmpDrawPivot = new THREE.Vector3();
+const _tmpDrawWork = new THREE.Vector3();
+const _drawTransform = {
+  active: false,
+  op: null,
+  axis: null,
+  amount: 0,
+  selectedVerts: [],
+  startVerts: [],
+  pivot: new THREE.Vector3(),
+};
 let _currentSky = 'blue';
 
 function _brightnessToY(b) {
@@ -1540,12 +1552,12 @@ function _updateLightningBolts(dt) {
 // ─── Draw Mode ───────────────────────────────────────────────────────────────
 function _setDrawActive(next) {
   _drawMode = !!next;
-  if (!_drawMode) _cancelDraw();
+  if (!_drawMode) _cancelDraw(true);
   if (_drawPanel) {
     _drawSpellBtn(
       _drawPanel.userData.drawToggleBtnCanvas,
       _drawPanel.userData.drawToggleBtnTex,
-      '✶', 'VERTEX', 'Place/select',
+      '✶', _drawSelectMode.toUpperCase(), 'Select mode',
       _drawMode ? {
         topBg: '#2a0a40', bottomBg: '#1a0630', border: '#ff88ff',
         innerGlow: 'rgba(255,140,255,0.45)', iconColor: '#ffffff',
@@ -1563,8 +1575,38 @@ function _setDrawActive(next) {
 
 function _toggleDrawMode() { _setDrawActive(!_drawMode); }
 
-function _selectDrawVertex(idx, additive = false) {
-  if (idx < 0 || idx >= _drawVerts.length) return false;
+function _setDrawSelectMode(mode) {
+  if (!['vertex', 'edge', 'face'].includes(mode)) return;
+  _drawSelectMode = mode;
+  _drawSelection.length = 0;
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+  _updateDesktopHint();
+  if (_drawPanel) {
+    _drawSpellBtn(
+      _drawPanel.userData.drawToggleBtnCanvas,
+      _drawPanel.userData.drawToggleBtnTex,
+      '✶', _drawSelectMode.toUpperCase(), 'Select mode',
+      _drawMode ? {
+        topBg: '#2a0a40', bottomBg: '#1a0630', border: '#ff88ff',
+        innerGlow: 'rgba(255,140,255,0.45)', iconColor: '#ffffff',
+        labelColor: '#ff99ff', flavorColor: '#cc66ee',
+      } : {
+        topBg: '#160720', bottomBg: '#0a0416', border: '#cc55ff',
+        innerGlow: 'rgba(180,80,255,0.35)', iconColor: '#eeaaff',
+        labelColor: '#cc66ff', flavorColor: '#8844aa',
+      }
+    );
+  }
+}
+
+function _selectDrawElement(idx, additive = false) {
+  let max = 0;
+  if (_drawSelectMode === 'vertex') max = _drawVerts.length;
+  else if (_drawSelectMode === 'edge') max = _drawEdges.length;
+  else max = _drawFaces.length;
+  if (idx < 0 || idx >= max) return false;
   if (!additive) {
     _drawSelection.length = 0;
     _drawSelection.push(idx);
@@ -1579,10 +1621,40 @@ function _selectDrawVertex(idx, additive = false) {
   return true;
 }
 
+function _selectedVertexIndices() {
+  if (_drawSelectMode === 'vertex') {
+    return [...new Set(_drawSelection)].filter(i => i >= 0 && i < _drawVerts.length);
+  }
+  if (_drawSelectMode === 'edge') {
+    const out = [];
+    for (const si of _drawSelection) {
+      const e = _drawEdges[si];
+      if (!e) continue;
+      out.push(e.a, e.b);
+    }
+    return [...new Set(out)];
+  }
+  const out = [];
+  for (const si of _drawSelection) {
+    const f = _drawFaces[si];
+    if (!f) continue;
+    out.push(f.a, f.b, f.c);
+  }
+  return [...new Set(out)];
+}
+
 function _updateDrawSelectionVisuals() {
   for (let i = 0; i < _drawVertMeshes.length; i++) {
-    const selected = _drawSelection.includes(i);
+    const selected = _selectedVertexIndices().includes(i);
     _drawVertMeshes[i].material.color.setHex(selected ? 0x66ffee : 0xffee00);
+  }
+  for (let i = 0; i < _drawEdges.length; i++) {
+    const edge = _drawEdges[i];
+    edge.line.material.color.setHex(_drawSelectMode === 'edge' && _drawSelection.includes(i) ? 0x99ffff : 0x66d1ff);
+  }
+  for (let i = 0; i < _drawFaces.length; i++) {
+    const face = _drawFaces[i];
+    face.mesh.material.color.setHex(_drawSelectMode === 'face' && _drawSelection.includes(i) ? 0xffdd99 : 0xb587ff);
   }
 }
 
@@ -1596,8 +1668,10 @@ function _placeDrawVertex(worldPos) {
   marker.position.copy(v);
   scene.add(marker);
   _drawVertMeshes.push(marker);
-  _drawSelection.length = 0;
-  _drawSelection.push(_drawVerts.length - 1);
+  if (_drawSelectMode === 'vertex') {
+    _drawSelection.length = 0;
+    _drawSelection.push(_drawVerts.length - 1);
+  }
   _updateDrawSelectionVisuals();
   _updateDrawPreview();
   _updateDrawUi();
@@ -1629,18 +1703,21 @@ function _ensureDrawEdge(a, b) {
 }
 
 function _createEdgeFromSelection() {
-  if (_drawSelection.length < 2) return;
-  const a = _drawSelection[_drawSelection.length - 2];
-  const b = _drawSelection[_drawSelection.length - 1];
+  const verts = _selectedVertexIndices();
+  if (verts.length < 2) return;
+  const a = verts[verts.length - 2];
+  const b = verts[verts.length - 1];
   _ensureDrawEdge(a, b);
+  _updateDrawSelectionVisuals();
   _updateDrawUi();
 }
 
 function _createFaceFromSelection() {
-  if (_drawSelection.length < 3) return;
-  const a = _drawSelection[_drawSelection.length - 3];
-  const b = _drawSelection[_drawSelection.length - 2];
-  const c = _drawSelection[_drawSelection.length - 1];
+  const verts = _selectedVertexIndices();
+  if (verts.length < 3) return;
+  const a = verts[verts.length - 3];
+  const b = verts[verts.length - 2];
+  const c = verts[verts.length - 1];
   if (a === b || b === c || a === c) return;
   const geo = new THREE.BufferGeometry();
   const pos = new Float32Array(9);
@@ -1655,6 +1732,162 @@ function _createFaceFromSelection() {
   _ensureDrawEdge(b, c);
   _ensureDrawEdge(c, a);
   _updateDrawMeshGeometry();
+  _updateDrawSelectionVisuals();
+  _updateDrawUi();
+}
+
+function _fillFromSelection() {
+  _createFaceFromSelection();
+}
+
+function _extrudeSelection() {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  const map = new Map();
+  const newIndices = [];
+  for (const vi of verts) {
+    const v = _drawVerts[vi].clone();
+    v.y += 0.20;
+    _drawVerts.push(v);
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 9, 7),
+      new THREE.MeshBasicMaterial({ color: 0xffee00 })
+    );
+    marker.position.copy(v);
+    scene.add(marker);
+    _drawVertMeshes.push(marker);
+    const ni = _drawVerts.length - 1;
+    map.set(vi, ni);
+    newIndices.push(ni);
+    _ensureDrawEdge(vi, ni);
+  }
+  for (const edge of _drawEdges.slice()) {
+    if (map.has(edge.a) && map.has(edge.b)) {
+      _ensureDrawEdge(map.get(edge.a), map.get(edge.b));
+    }
+  }
+  if (_drawSelectMode === 'vertex') {
+    _drawSelection.length = 0;
+    _drawSelection.push(...newIndices);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawMeshGeometry();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _duplicateSelection() {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  const map = new Map();
+  const newIndices = [];
+  for (const vi of verts) {
+    const v = _drawVerts[vi].clone().add(new THREE.Vector3(0.15, 0, 0.15));
+    _drawVerts.push(v);
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 9, 7),
+      new THREE.MeshBasicMaterial({ color: 0xffee00 })
+    );
+    marker.position.copy(v);
+    scene.add(marker);
+    _drawVertMeshes.push(marker);
+    const ni = _drawVerts.length - 1;
+    map.set(vi, ni);
+    newIndices.push(ni);
+  }
+  for (const edge of _drawEdges) {
+    if (map.has(edge.a) && map.has(edge.b)) _ensureDrawEdge(map.get(edge.a), map.get(edge.b));
+  }
+  for (const face of _drawFaces) {
+    if (map.has(face.a) && map.has(face.b) && map.has(face.c)) {
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(9);
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({ color: 0xb587ff, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+      );
+      scene.add(mesh);
+      _drawFaces.push({ a: map.get(face.a), b: map.get(face.b), c: map.get(face.c), mesh });
+    }
+  }
+  if (_drawSelectMode === 'vertex') {
+    _drawSelection.length = 0;
+    _drawSelection.push(...newIndices);
+  }
+  _updateDrawMeshGeometry();
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _deleteSelection() {
+  if (_drawSelectMode === 'face' && _drawSelection.length) {
+    const toDelete = [...new Set(_drawSelection)].sort((a, b) => b - a);
+    for (const idx of toDelete) {
+      const face = _drawFaces[idx];
+      if (!face) continue;
+      scene.remove(face.mesh);
+      _drawFaces.splice(idx, 1);
+    }
+    _drawSelection.length = 0;
+    _updateDrawSelectionVisuals();
+    _updateDrawPreview();
+    _updateDrawUi();
+    return;
+  }
+  if (_drawSelectMode === 'edge' && _drawSelection.length) {
+    const toDelete = [...new Set(_drawSelection)].sort((a, b) => b - a);
+    for (const idx of toDelete) {
+      const edge = _drawEdges[idx];
+      if (!edge) continue;
+      scene.remove(edge.line);
+      _drawEdges.splice(idx, 1);
+    }
+    _drawFaces.forEach((f, i) => {
+      const hasAB = _drawEdges.some(e => (e.a === f.a && e.b === f.b) || (e.a === f.b && e.b === f.a));
+      const hasBC = _drawEdges.some(e => (e.a === f.b && e.b === f.c) || (e.a === f.c && e.b === f.b));
+      const hasCA = _drawEdges.some(e => (e.a === f.c && e.b === f.a) || (e.a === f.a && e.b === f.c));
+      if (!(hasAB && hasBC && hasCA)) {
+        scene.remove(f.mesh);
+        _drawFaces[i] = null;
+      }
+    });
+    for (let i = _drawFaces.length - 1; i >= 0; i--) if (_drawFaces[i] === null) _drawFaces.splice(i, 1);
+    _drawSelection.length = 0;
+    _updateDrawSelectionVisuals();
+    _updateDrawPreview();
+    _updateDrawUi();
+    return;
+  }
+}
+
+function _mergeSelection() {
+  const verts = _selectedVertexIndices();
+  if (verts.length < 2) return;
+  const keep = verts[0];
+  _tmpDrawPivot.set(0, 0, 0);
+  for (const vi of verts) _tmpDrawPivot.add(_drawVerts[vi]);
+  _tmpDrawPivot.multiplyScalar(1 / verts.length);
+  _drawVerts[keep].copy(_tmpDrawPivot);
+  _drawVertMeshes[keep].position.copy(_tmpDrawPivot);
+  for (let i = 1; i < verts.length; i++) {
+    const old = verts[i];
+    for (const edge of _drawEdges) {
+      if (edge.a === old) edge.a = keep;
+      if (edge.b === old) edge.b = keep;
+    }
+    for (const face of _drawFaces) {
+      if (face.a === old) face.a = keep;
+      if (face.b === old) face.b = keep;
+      if (face.c === old) face.c = keep;
+    }
+  }
+  _drawSelection.length = 0;
+  _drawSelection.push(keep);
+  _updateDrawMeshGeometry();
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
   _updateDrawUi();
 }
 
@@ -1673,8 +1906,9 @@ function _updateDrawMeshGeometry() {
 }
 
 function _nudgeDrawSelection(dx, dy, dz) {
-  if (!_drawSelection.length) return;
-  for (const idx of _drawSelection) {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  for (const idx of verts) {
     _drawVerts[idx].x += dx;
     _drawVerts[idx].y += dy;
     _drawVerts[idx].z += dz;
@@ -1713,19 +1947,130 @@ function _undoDrawStep() {
   }
 }
 
+function _startDrawTransform(op) {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  _drawTransform.active = true;
+  _drawTransform.op = op;
+  _drawTransform.axis = null;
+  _drawTransform.amount = 0;
+  _drawTransform.selectedVerts = verts;
+  _drawTransform.startVerts = verts.map(i => _drawVerts[i].clone());
+  _drawTransform.pivot.set(0, 0, 0);
+  for (const v of _drawTransform.startVerts) _drawTransform.pivot.add(v);
+  _drawTransform.pivot.multiplyScalar(1 / _drawTransform.startVerts.length);
+  _updateDrawUi();
+}
+
+function _setDrawTransformAxis(axis, exclude = false) {
+  if (!_drawTransform.active) return;
+  _drawTransform.axis = exclude ? `not-${axis}` : axis;
+  _applyDrawTransform();
+}
+
+function _accumulateDrawTransform(delta) {
+  if (!_drawTransform.active) return;
+  _drawTransform.amount += delta;
+  _applyDrawTransform();
+}
+
+function _applyDrawTransform() {
+  if (!_drawTransform.active) return;
+  const axis = _drawTransform.axis;
+  const op = _drawTransform.op;
+  const amount = _drawTransform.amount;
+  for (let i = 0; i < _drawTransform.selectedVerts.length; i++) {
+    const idx = _drawTransform.selectedVerts[i];
+    const start = _drawTransform.startVerts[i];
+    const out = _drawVerts[idx];
+    out.copy(start);
+    if (op === 'grab') {
+      if (axis === 'x') out.x = start.x + amount;
+      else if (axis === 'y') out.y = start.y + amount;
+      else if (axis === 'z') out.z = start.z + amount;
+      else if (axis === 'not-x') { out.y = start.y + amount * 0.6; out.z = start.z + amount; }
+      else if (axis === 'not-y') { out.x = start.x + amount; out.z = start.z + amount * 0.6; }
+      else if (axis === 'not-z') { out.x = start.x + amount; out.y = start.y + amount * 0.6; }
+      else { out.x = start.x + amount; out.z = start.z + amount * 0.8; }
+    }
+    if (op === 'scale') {
+      const base = 1 + amount * 0.45;
+      const sx = axis === 'y' || axis === 'z' || axis === 'not-x' ? 1 : base;
+      const sy = axis === 'x' || axis === 'z' || axis === 'not-y' ? 1 : base;
+      const sz = axis === 'x' || axis === 'y' || axis === 'not-z' ? 1 : base;
+      out.x = _drawTransform.pivot.x + (start.x - _drawTransform.pivot.x) * sx;
+      out.y = _drawTransform.pivot.y + (start.y - _drawTransform.pivot.y) * sy;
+      out.z = _drawTransform.pivot.z + (start.z - _drawTransform.pivot.z) * sz;
+    }
+    if (op === 'rotate') {
+      const ang = amount * 0.9;
+      const rel = _tmpDrawWork.copy(start).sub(_drawTransform.pivot);
+      if (axis === 'x') rel.applyAxisAngle(new THREE.Vector3(1, 0, 0), ang);
+      else if (axis === 'z') rel.applyAxisAngle(new THREE.Vector3(0, 0, 1), ang);
+      else rel.applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
+      out.copy(_drawTransform.pivot).add(rel);
+    }
+    _drawVertMeshes[idx].position.copy(out);
+  }
+  _updateDrawMeshGeometry();
+  _updateDrawPreview();
+}
+
+function _confirmDrawTransform() {
+  if (!_drawTransform.active) return;
+  _drawTransform.active = false;
+  _drawTransform.op = null;
+  _drawTransform.axis = null;
+  _drawTransform.selectedVerts = [];
+  _drawTransform.startVerts = [];
+  _updateDrawUi();
+}
+
+function _cancelDrawTransform() {
+  if (!_drawTransform.active) return;
+  for (let i = 0; i < _drawTransform.selectedVerts.length; i++) {
+    const idx = _drawTransform.selectedVerts[i];
+    _drawVerts[idx].copy(_drawTransform.startVerts[i]);
+    _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+  }
+  _updateDrawMeshGeometry();
+  _drawTransform.active = false;
+  _drawTransform.op = null;
+  _drawTransform.axis = null;
+  _drawTransform.selectedVerts = [];
+  _drawTransform.startVerts = [];
+  _updateDrawUi();
+}
+
+function _toggleSelectAllDraw() {
+  let max = 0;
+  if (_drawSelectMode === 'vertex') max = _drawVerts.length;
+  else if (_drawSelectMode === 'edge') max = _drawEdges.length;
+  else max = _drawFaces.length;
+  if (_drawSelection.length === max) _drawSelection.length = 0;
+  else {
+    _drawSelection.length = 0;
+    for (let i = 0; i < max; i++) _drawSelection.push(i);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
 function _updateDrawPreview() {
   if (_drawPreviewLine) { scene.remove(_drawPreviewLine); _drawPreviewLine = null; }
   if (_drawPreviewFace) { scene.remove(_drawPreviewFace); _drawPreviewFace = null; }
-  if (_drawSelection.length >= 2) {
-    const pts = _drawSelection.map(i => _drawVerts[i].clone());
+  const verts = _selectedVertexIndices();
+  if (verts.length >= 2) {
+    const pts = verts.map(i => _drawVerts[i].clone());
     const geo = new THREE.BufferGeometry().setFromPoints(pts);
     _drawPreviewLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffee00 }));
     scene.add(_drawPreviewLine);
   }
-  if (_drawSelection.length >= 3) {
-    const i0 = _drawSelection[_drawSelection.length - 3];
-    const i1 = _drawSelection[_drawSelection.length - 2];
-    const i2 = _drawSelection[_drawSelection.length - 1];
+  if (verts.length >= 3) {
+    const i0 = verts[verts.length - 3];
+    const i1 = verts[verts.length - 2];
+    const i2 = verts[verts.length - 1];
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute([
       _drawVerts[i0].x, _drawVerts[i0].y, _drawVerts[i0].z,
@@ -1742,30 +2087,47 @@ function _updateDrawPreview() {
 }
 
 function _drawPointFromRay(ray, additiveSelect = false, raycaster = null) {
-  if (raycaster) {
+  if (raycaster && _drawSelectMode === 'vertex') {
     const markerHits = raycaster.intersectObjects(_drawVertMeshes, false);
     if (markerHits.length) {
       const idx = _drawVertMeshes.indexOf(markerHits[0].object);
-      if (idx >= 0) {
-        _selectDrawVertex(idx, additiveSelect);
-        return true;
-      }
+      if (idx >= 0) return _selectDrawElement(idx, additiveSelect);
+    }
+  }
+  if (raycaster && _drawSelectMode === 'edge') {
+    raycaster.params.Line.threshold = 0.09;
+    const edgeHits = raycaster.intersectObjects(_drawEdges.map(e => e.line), false);
+    if (edgeHits.length) {
+      const idx = _drawEdges.findIndex(e => e.line === edgeHits[0].object);
+      if (idx >= 0) return _selectDrawElement(idx, additiveSelect);
+    }
+  }
+  if (raycaster && _drawSelectMode === 'face') {
+    const faceHits = raycaster.intersectObjects(_drawFaces.map(f => f.mesh), false);
+    if (faceHits.length) {
+      const idx = _drawFaces.findIndex(f => f.mesh === faceHits[0].object);
+      if (idx >= 0) return _selectDrawElement(idx, additiveSelect);
     }
   }
   _groundPlane.constant = -_drawPlaneY;
   if (ray.intersectPlane(_groundPlane, _tmpDrawHit)) {
+    if (_drawSelectMode !== 'vertex') return false;
     const nearIdx = _findNearestDrawVertex(_tmpDrawHit, 0.12);
-    if (nearIdx >= 0) _selectDrawVertex(nearIdx, additiveSelect);
+    if (nearIdx >= 0) _selectDrawElement(nearIdx, additiveSelect);
     else _placeDrawVertex(_tmpDrawHit);
     return true;
   }
   return false;
 }
 
-function _cancelDraw() {
+function _cancelDraw(full = false) {
+  _cancelDrawTransform();
   _drawSelection.length = 0;
   _updateDrawSelectionVisuals();
   _updateDrawPreview();
+  if (full) {
+    _drawSelectMode = 'vertex';
+  }
   _updateDrawUi();
 }
 
@@ -1777,10 +2139,12 @@ function _updateDrawUi() {
     const e = _drawEdges.length;
     const f = _drawFaces.length;
     const s = _drawSelection.length;
+    const mode = _drawSelectMode.toUpperCase();
+    const tx = _drawTransform.active ? ` | ${_drawTransform.op.toUpperCase()}${_drawTransform.axis ? ` ${_drawTransform.axis.toUpperCase()}` : ''}` : '';
     el.style.display = 'block';
     el.innerHTML =
-      `✏️ EDIT MODE — V:${n} E:${e} F:${f} | Selected:${s} | Plane Y:${_drawPlaneY.toFixed(2)}` +
-      `<br><small>Click/Trigger: vertex/select • Shift+Click: multi-select • E: edge • T: face • Backspace: undo • U/O/N/M/,/.: nudge • Z/X: plane down/up • V: exit</small>`;
+      `✏️ EDIT MODE (${mode}) — V:${n} E:${e} F:${f} | Sel:${s} | Plane Y:${_drawPlaneY.toFixed(2)}${tx}` +
+      `<br><small>Tab: edit mode • 1/2/3: select mode • A: select all • G/R/S then X/Y/Z • Shift+X/Y/Z exclude axis • E: extrude • F: fill • Shift+D: duplicate • X/Delete: delete • M: merge • Enter/Click confirm • Esc/RightClick cancel</small>`;
   } else {
     el.style.display = 'none';
   }
@@ -2004,28 +2368,34 @@ function _updatePanelInteraction(leftGp, rightGp) {
       // Draw panel — toggle draw mode button
       _drawPanel.userData.drawToggleBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        _toggleDrawMode();
+        if (!_drawMode) _setDrawActive(true);
+        _setDrawSelectMode('vertex');
         continue;
       }
 
       // Draw panel — edge button
       _drawPanel.userData.drawEdgeBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        if (_drawMode) _createEdgeFromSelection();
+        if (!_drawMode) _setDrawActive(true);
+        _setDrawSelectMode('edge');
         continue;
       }
 
       // Draw panel — face button
       _drawPanel.userData.drawFaceBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        if (_drawMode) _createFaceFromSelection();
+        if (!_drawMode) _setDrawActive(true);
+        _setDrawSelectMode('face');
         continue;
       }
 
       // Draw panel — undo button
       _drawPanel.userData.drawUndoBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        if (_drawMode) _undoDrawStep();
+        if (_drawMode) {
+          if (_drawTransform.active) _cancelDrawTransform();
+          else _undoDrawStep();
+        }
         continue;
       }
 
@@ -2034,7 +2404,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
         ctrl.getWorldQuaternion(_tmpDrawQuat);
         _tmpDrawDir.set(0, 0, -1).applyQuaternion(_tmpDrawQuat);
         _drawRay.set(_tmpCtrlPos, _tmpDrawDir);
-        _drawPointFromRay(_drawRay, false);
+        _drawPointFromRay(_drawRay, false, null);
         continue;
       }
 
@@ -2165,8 +2535,8 @@ function _updateDesktopHint() {
   }
   if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  const drawHint = _drawMode ? ' | EDIT: click/select, E edge, T face, U/O/N/M/,/. nudge, Z/X plane, Backspace undo' : '';
-  _hintEl.textContent = `Desktop: WASD move, mouse look, 1/2/3 sky, L laser, K disco, F/G/H spells, V edit, [/] brightness${drawHint} • ${lockHint}`;
+  const drawHint = _drawMode ? ` | EDIT(${_drawSelectMode}): 1/2/3 select, G/R/S transform, X/Y/Z axis, E extrude, F fill` : '';
+  _hintEl.textContent = `Desktop: WASD move, mouse look, sky 1/2/3, spells F/G/H, Tab edit mode${drawHint} • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -2211,19 +2581,25 @@ function _desktopTriggerInteraction(target) {
     return true;
   }
   if (target === _drawPanel?.userData?.drawToggleBtnMesh) {
-    _toggleDrawMode();
+    if (!_drawMode) _setDrawActive(true);
+    _setDrawSelectMode('vertex');
     return true;
   }
   if (target === _drawPanel?.userData?.drawEdgeBtnMesh) {
-    if (_drawMode) _createEdgeFromSelection();
+    if (!_drawMode) _setDrawActive(true);
+    _setDrawSelectMode('edge');
     return true;
   }
   if (target === _drawPanel?.userData?.drawFaceBtnMesh) {
-    if (_drawMode) _createFaceFromSelection();
+    if (!_drawMode) _setDrawActive(true);
+    _setDrawSelectMode('face');
     return true;
   }
   if (target === _drawPanel?.userData?.drawUndoBtnMesh) {
-    if (_drawMode) _undoDrawStep();
+    if (_drawMode) {
+      if (_drawTransform.active) _cancelDrawTransform();
+      else _undoDrawStep();
+    }
     return true;
   }
   return false;
@@ -2259,7 +2635,18 @@ function _initDesktopControls() {
       canvas.requestPointerLock();
       return;
     }
+    if (_drawMode && _drawTransform.active) {
+      _confirmDrawTransform();
+      return;
+    }
     _desktopClickInteract(e.clientX, e.clientY, _desktopState.pointerLocked, !!e.shiftKey);
+  });
+
+  canvas.addEventListener('contextmenu', (e) => {
+    if (_drawMode && _drawTransform.active) {
+      e.preventDefault();
+      _cancelDrawTransform();
+    }
   });
 
   document.addEventListener('pointerlockchange', () => {
@@ -2269,6 +2656,10 @@ function _initDesktopControls() {
 
   window.addEventListener('mousemove', (e) => {
     if (renderer.xr.isPresenting || !_desktopState.pointerLocked) return;
+    if (_drawMode && _drawTransform.active) {
+      _accumulateDrawTransform((e.movementX - e.movementY * 0.5) * 0.01);
+      return;
+    }
     _desktopState.yaw -= e.movementX * _desktopState.mouseSensitivity;
     _desktopState.pitch -= e.movementY * _desktopState.mouseSensitivity;
     _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch, -LOOK_LIMIT, 0);
@@ -2280,6 +2671,39 @@ function _initDesktopControls() {
     _desktopState.keys[key] = true;
     if (e.repeat) return;
 
+    if (key === 'tab') {
+      e.preventDefault();
+      _toggleDrawMode();
+      return;
+    }
+
+    if (_drawMode) {
+      if (key === '1') { _setDrawSelectMode('vertex'); return; }
+      if (key === '2') { _setDrawSelectMode('edge'); return; }
+      if (key === '3') { _setDrawSelectMode('face'); return; }
+      if (key === 'a') { _toggleSelectAllDraw(); return; }
+
+      if (_drawTransform.active) {
+        if (key === 'x' || key === 'y' || key === 'z') {
+          _setDrawTransformAxis(key, !!e.shiftKey);
+          return;
+        }
+        if (key === 'enter') { _confirmDrawTransform(); return; }
+        if (key === 'escape') { _cancelDrawTransform(); return; }
+      }
+
+      if (key === 'g') { _startDrawTransform('grab'); return; }
+      if (key === 'r') { _startDrawTransform('rotate'); return; }
+      if (key === 's') { _startDrawTransform('scale'); return; }
+      if (key === 'e') { _extrudeSelection(); return; }
+      if (key === 'f') { _fillFromSelection(); return; }
+      if (key === 'm') { _mergeSelection(); return; }
+      if (key === 'x' || key === 'delete') { _deleteSelection(); return; }
+      if (key === 'd' && e.shiftKey) { _duplicateSelection(); return; }
+      if (key === 'backspace') { e.preventDefault(); _undoDrawStep(); return; }
+      if (key === 'escape') { _setDrawActive(false); return; }
+    }
+
     if (key === '1') _applySkyPreset('blue');
     else if (key === '2') _applySkyPreset('green');
     else if (key === '3') _applySkyPreset('red');
@@ -2288,19 +2712,6 @@ function _initDesktopControls() {
     else if (key === 'f') _castFireball();
     else if (key === 'g') _castArcaneShot();
     else if (key === 'h') _castLightningStrike();
-    else if (key === 'v') _toggleDrawMode();
-    else if (key === 'e') { if (_drawMode) _createEdgeFromSelection(); }
-    else if (key === 't') { if (_drawMode) _createFaceFromSelection(); }
-    else if (key === 'backspace') { if (_drawMode) { e.preventDefault(); _undoDrawStep(); } }
-    else if (key === 'z') { if (_drawMode) { _drawPlaneY -= 0.1; _updateDrawUi(); } }
-    else if (key === 'x') { if (_drawMode) { _drawPlaneY += 0.1; _updateDrawUi(); } }
-    else if (key === 'u') { if (_drawMode) _nudgeDrawSelection(0, 0.05, 0); }
-    else if (key === 'o') { if (_drawMode) _nudgeDrawSelection(0, -0.05, 0); }
-    else if (key === 'n') { if (_drawMode) _nudgeDrawSelection(-0.05, 0, 0); }
-    else if (key === 'm') { if (_drawMode) _nudgeDrawSelection(0.05, 0, 0); }
-    else if (key === ',') { if (_drawMode) _nudgeDrawSelection(0, 0, -0.05); }
-    else if (key === '.') { if (_drawMode) _nudgeDrawSelection(0, 0, 0.05); }
-    else if (key === 'escape') { if (_drawMode) _setDrawActive(false); }
     else if (key === '[') _applyBrightness(_brightness - 0.1);
     else if (key === ']') _applyBrightness(_brightness + 0.1);
   });
