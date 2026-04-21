@@ -708,6 +708,168 @@ function _buildControlTablet() {
 _controlTablet = _buildControlTablet();
 scene.add(_controlTablet);
 
+// ─── Spell Panel ─────────────────────────────────────────────────────────────
+const _spellGrabState = { holder: null };
+let _spellPanel = null;
+const _fireballs = [];
+
+function _drawSpellBtn(c, tex, icon, label, flavor) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, '#2a0a00'); bg.addColorStop(1, '#100400');
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) ctx.roundRect(0, 0, c.width, c.height, 14); else ctx.rect(0, 0, c.width, c.height);
+  ctx.fill();
+  ctx.strokeStyle = '#ff6600'; ctx.lineWidth = 3;
+  if (ctx.roundRect) ctx.roundRect(2, 2, c.width-4, c.height-4, 12); else ctx.rect(2, 2, c.width-4, c.height-4);
+  ctx.stroke();
+  // inner glow line
+  ctx.strokeStyle = 'rgba(255,120,0,0.35)'; ctx.lineWidth = 1;
+  if (ctx.roundRect) ctx.roundRect(5, 5, c.width-10, c.height-10, 9); else ctx.rect(5, 5, c.width-10, c.height-10);
+  ctx.stroke();
+  ctx.fillStyle = '#ffaa44'; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(icon, c.width/2, 70);
+  ctx.fillStyle = '#ff8822'; ctx.font = 'bold 26px Georgia'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, c.width/2, 108);
+  ctx.fillStyle = '#aa5522'; ctx.font = '18px Georgia';
+  ctx.fillText(flavor, c.width/2, 132);
+  tex.needsUpdate = true;
+}
+
+function _buildSpellPanel() {
+  const root = new THREE.Group();
+  const Z = 0.012;
+
+  // Body
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.52, 0.016),
+    new THREE.MeshStandardMaterial({ color: 0x180800, roughness: 0.50, metalness: 0.55 })
+  ));
+
+  // Header
+  const hC = document.createElement('canvas'); hC.width = 512; hC.height = 80;
+  const hCtx = hC.getContext('2d');
+  const hG = hCtx.createLinearGradient(0, 0, 512, 0);
+  hG.addColorStop(0, '#1a0800'); hG.addColorStop(0.5, '#3a1200'); hG.addColorStop(1, '#1a0800');
+  hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
+  hCtx.strokeStyle = '#cc4400'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
+  hCtx.fillStyle = '#ffaa44'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
+  hCtx.fillText('🔮  SPELLBOOK', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.33, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.196, Z);
+  root.add(hdr);
+
+  // Fireball button
+  const fbC = document.createElement('canvas'); fbC.width = 280; fbC.height = 148;
+  const fbTex = new THREE.CanvasTexture(fbC);
+  _drawSpellBtn(fbC, fbTex, '🔥', 'FIREBALL', 'Cast forward');
+  const fbBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: fbTex, transparent: true, side: THREE.DoubleSide })
+  );
+  fbBtn.position.set(0, 0.048, Z);
+  root.add(fbBtn);
+  root.userData.fireballBtnCanvas = fbC;
+  root.userData.fireballBtnTex = fbTex;
+  root.userData.fireballBtnMesh = fbBtn;
+
+  // Placeholder slot (empty, greyed out)
+  const ph1C = document.createElement('canvas'); ph1C.width = 280; ph1C.height = 148;
+  const ph1Ctx = ph1C.getContext('2d');
+  ph1Ctx.fillStyle = '#0a0804'; ph1Ctx.fillRect(0, 0, 280, 148);
+  ph1Ctx.strokeStyle = '#442200'; ph1Ctx.lineWidth = 2; ph1Ctx.strokeRect(2, 2, 276, 144);
+  ph1Ctx.fillStyle = '#553311'; ph1Ctx.font = '22px Georgia'; ph1Ctx.textAlign = 'center'; ph1Ctx.textBaseline = 'middle';
+  ph1Ctx.fillText('— empty slot —', 140, 74);
+  const ph1 = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ph1C), transparent: true, side: THREE.DoubleSide })
+  );
+  ph1.position.set(0, -0.096, Z);
+  root.add(ph1);
+
+  // Footer
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#442211'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.28, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.228, Z);
+  root.add(ft);
+
+  // Side handles (same style)
+  const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1500, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.22, 12), hMat);
+    bar.position.set(side * 0.248, 0, Z);
+    root.add(bar); root.userData.sideHandles.push(bar);
+    const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cT.position.set(side * 0.248, 0.11, Z); root.add(cT);
+    const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cB.position.set(side * 0.248, -0.11, Z); root.add(cB);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
+    br.rotation.z = Math.PI / 2;
+    br.position.set(side * 0.214, 0, Z); root.add(br);
+  });
+
+  root.position.set(-0.85, 1.12, -0.9);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+_spellPanel = _buildSpellPanel();
+scene.add(_spellPanel);
+
+function _castFireball() {
+  // Spawn a fireball from the player's eye position, shoot it forward
+  const origin = new THREE.Vector3();
+  renderer.xr.getCamera().getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderer.xr.getCamera().quaternion).normalize();
+
+  const fb = new THREE.Group();
+  // Core sphere
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.10, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xff4400 })
+  );
+  fb.add(core);
+  // Outer glow shell
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.17, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.35, side: THREE.BackSide })
+  );
+  fb.add(glow);
+  // Point light
+  const light = new THREE.PointLight(0xff5500, 6, 8, 2);
+  fb.add(light);
+
+  fb.position.copy(origin).addScaledVector(dir, 0.5);
+  fb.userData.velocity = dir.clone().multiplyScalar(8);
+  fb.userData.life = 4.0;
+  scene.add(fb);
+  _fireballs.push(fb);
+}
+
+function _updateFireballs(dt) {
+  for (let i = _fireballs.length - 1; i >= 0; i--) {
+    const fb = _fireballs[i];
+    fb.userData.life -= dt;
+    if (fb.userData.life <= 0) {
+      scene.remove(fb); _fireballs.splice(i, 1); continue;
+    }
+    fb.position.addScaledVector(fb.userData.velocity, dt);
+    // Slight wobble
+    fb.children[0].scale.setScalar(0.9 + 0.1 * Math.sin(fb.userData.life * 18));
+  }
+}
+
 function _applyBrightness(b) {
   _brightness = b;
   renderer.toneMappingExposure = b;
@@ -880,6 +1042,31 @@ function _updatePanelInteraction(leftGp, rightGp) {
       }
       if (hitSky) continue;
 
+      // Spell panel — fireball button
+      _spellPanel.userData.fireballBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
+        _castFireball();
+        continue;
+      }
+
+      // Spell panel — grab to move
+      if (!_spellGrabState.holder) {
+        let spellInRange = false;
+        for (const sh of (_spellPanel.userData.sideHandles || [])) {
+          sh.getWorldPosition(_tmpPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) { spellInRange = true; break; }
+        }
+        if (!spellInRange) {
+          _spellPanel.getWorldPosition(_tmpPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= PANEL_GRAB_DISTANCE) spellInRange = true;
+        }
+        if (spellInRange) {
+          ctrl.attach(_spellPanel);
+          _spellGrabState.holder = hand;
+          continue;
+        }
+      }
+
       // LASER button
       _controlTablet.userData.laserBtnMesh.getWorldPosition(_tmpPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
@@ -936,6 +1123,12 @@ function _updatePanelInteraction(leftGp, rightGp) {
   if (_panelGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
     scene.attach(_worldPanel); _panelGrabState.holder = null;
   }
+  if (_spellGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_spellPanel); _spellGrabState.holder = null;
+  }
+  if (_spellGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_spellPanel); _spellGrabState.holder = null;
+  }
 
   _grabPressedPrev.left = leftPressed;
   _grabPressedPrev.right = rightPressed;
@@ -953,6 +1146,10 @@ function _updateQuestLocomotion(dt) {
     if (_tabletGrabState.holder) {
       scene.attach(_controlTablet);
       _tabletGrabState.holder = null;
+    }
+    if (_spellGrabState.holder) {
+      scene.attach(_spellPanel);
+      _spellGrabState.holder = null;
     }
     return;
   }
@@ -1324,6 +1521,7 @@ renderer.setAnimationLoop(() => {
   const dt = Math.min(_clock.getDelta(), 0.05);
   _updateQuestLocomotion(dt);
   _updateLasers(dt);
+  _updateFireballs(dt);
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
 });
