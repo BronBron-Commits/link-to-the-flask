@@ -84,6 +84,8 @@
   <a href="/">← Return to Home</a>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
+
 <script type="importmap">
 {
   "imports": {
@@ -344,6 +346,16 @@ const _grabPressedPrev = { left: false, right: false };
 const _panelGrabState = { holder: null };
 const _tmpCtrlPos = new THREE.Vector3();
 const _tmpPanelPos = new THREE.Vector3();
+const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
+const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+
+const _presenceState = {
+  socket: null,
+  localSid: '',
+  connected: false,
+  roster: {},
+  lastPublishTime: 0,
+};
 
 // ─── Laser light show (beams) ────────────────────────────────────────────────
 let _laserActive = false;
@@ -418,6 +430,7 @@ const _sliderState = { holder: null, grabLocalY: 0, grabBrightness: 0 };
 const _tmpSliderPos = new THREE.Vector3();
 const _tmpSliderCtrl = new THREE.Vector3();
 const _tmpTabletPos = new THREE.Vector3();
+const _tmpPlayersPos = new THREE.Vector3();
 let _currentSky = 'blue';
 
 function _brightnessToY(b) {
@@ -843,6 +856,249 @@ function _buildSpellPanel() {
 _spellPanel = _buildSpellPanel();
 scene.add(_spellPanel);
 
+// ─── Presence Tablet ────────────────────────────────────────────────────────
+const _playersGrabState = { holder: null };
+let _playersTablet = null;
+
+function _resolveVrHubDisplayName() {
+  const fromStorage = String(localStorage.getItem(DISPLAY_NAME_STORAGE_KEY) || '').trim();
+  if (fromStorage) return fromStorage.slice(0, 32);
+  try {
+    const rawCharacter = String(localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY) || '').trim();
+    if (rawCharacter) {
+      const parsed = JSON.parse(rawCharacter);
+      const candidate = String(parsed?.name || parsed?.id || '').trim();
+      if (candidate) return candidate.slice(0, 32);
+    }
+  } catch (_) {}
+  return 'Traveler';
+}
+
+function _drawPresenceRows(c, tex) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, '#0a1120');
+  bg.addColorStop(1, '#060b14');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#2f4f82';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
+
+  const roster = (_presenceState.roster && typeof _presenceState.roster === 'object') ? _presenceState.roster : {};
+  const rows = Object.entries(roster)
+    .filter(([sid]) => Boolean(String(sid || '').trim()))
+    .sort((a, b) => {
+      const aIsLocal = a[0] === _presenceState.localSid;
+      const bIsLocal = b[0] === _presenceState.localSid;
+      if (aIsLocal && !bIsLocal) return -1;
+      if (!aIsLocal && bIsLocal) return 1;
+      const aName = String(a[1]?.name || a[0]).toLowerCase();
+      const bName = String(b[1]?.name || b[0]).toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+  ctx.fillStyle = '#7ea4dc';
+  ctx.font = 'bold 26px Georgia';
+  ctx.textAlign = 'left';
+  const countLabel = `${rows.length} present${_presenceState.connected ? '' : ' (offline)'}`;
+  ctx.fillText(countLabel, 26, 44);
+
+  const rowStart = 84;
+  const rowHeight = 42;
+  const maxRows = 10;
+  if (!rows.length) {
+    ctx.fillStyle = '#88a0bd';
+    ctx.font = '24px Georgia';
+    ctx.fillText(_presenceState.connected ? 'Waiting for players...' : 'Connecting to instance...', 26, rowStart + 8);
+    tex.needsUpdate = true;
+    return;
+  }
+
+  rows.slice(0, maxRows).forEach(([sid, entry], index) => {
+    const y = rowStart + index * rowHeight;
+    const isLocal = sid === _presenceState.localSid;
+    const baseName = String(entry?.name || sid || 'Unknown').trim();
+    const role = String(entry?.role || 'player').toUpperCase();
+    const label = isLocal ? `${baseName} (YOU)` : baseName;
+
+    ctx.fillStyle = index % 2 ? 'rgba(24,34,56,0.65)' : 'rgba(18,26,44,0.65)';
+    ctx.fillRect(18, y - 24, c.width - 36, 32);
+    ctx.strokeStyle = isLocal ? '#89d3ff' : '#304f78';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(18.5, y - 23.5, c.width - 37, 31);
+
+    ctx.fillStyle = isLocal ? '#e8f8ff' : '#c8d9f2';
+    ctx.font = `bold ${isLocal ? 21 : 20}px Georgia`;
+    ctx.fillText(label.slice(0, 30), 28, y - 2);
+
+    ctx.fillStyle = '#8aa8ce';
+    ctx.font = '16px Georgia';
+    ctx.textAlign = 'right';
+    ctx.fillText(role.slice(0, 10), c.width - 30, y - 2);
+    ctx.textAlign = 'left';
+  });
+
+  if (rows.length > maxRows) {
+    ctx.fillStyle = '#6f86a8';
+    ctx.font = '18px Georgia';
+    ctx.fillText(`+${rows.length - maxRows} more`, 26, rowStart + maxRows * rowHeight + 6);
+  }
+
+  tex.needsUpdate = true;
+}
+
+function _buildPlayersTablet() {
+  const root = new THREE.Group();
+  const Z = 0.012;
+
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.38, 0.56, 0.016),
+    new THREE.MeshStandardMaterial({ color: 0x071020, roughness: 0.52, metalness: 0.52 })
+  ));
+
+  const hC = document.createElement('canvas'); hC.width = 512; hC.height = 80;
+  const hCtx = hC.getContext('2d');
+  const hG = hCtx.createLinearGradient(0, 0, 512, 0);
+  hG.addColorStop(0, '#0e1d3a'); hG.addColorStop(0.5, '#21457a'); hG.addColorStop(1, '#0e1d3a');
+  hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
+  hCtx.strokeStyle = '#6cb5ff'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
+  hCtx.fillStyle = '#b9ddff'; hCtx.font = 'bold 34px Georgia'; hCtx.textAlign = 'center';
+  hCtx.fillText('👥  INSTANCE ROSTER', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.34, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.214, Z);
+  root.add(hdr);
+
+  const rosterCanvas = document.createElement('canvas'); rosterCanvas.width = 512; rosterCanvas.height = 620;
+  const rosterTex = new THREE.CanvasTexture(rosterCanvas);
+  const rosterMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.332, 0.402),
+    new THREE.MeshBasicMaterial({ map: rosterTex, transparent: true, side: THREE.DoubleSide })
+  );
+  rosterMesh.position.set(0, -0.01, Z);
+  root.add(rosterMesh);
+  root.userData.rosterCanvas = rosterCanvas;
+  root.userData.rosterTex = rosterTex;
+
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#3d5578'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.28, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.25, Z);
+  root.add(ft);
+
+  const hMat = new THREE.MeshStandardMaterial({ color: 0x244060, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.22, 12), hMat);
+    bar.position.set(side * 0.262, 0.0, Z);
+    root.add(bar); root.userData.sideHandles.push(bar);
+    const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cT.position.set(side * 0.262, 0.11, Z); root.add(cT);
+    const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cB.position.set(side * 0.262, -0.11, Z); root.add(cB);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.068, 8), hMat);
+    br.rotation.z = Math.PI / 2;
+    br.position.set(side * 0.228, 0.0, Z); root.add(br);
+  });
+
+  root.position.set(0, 1.12, -1.05);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+function _refreshPlayersTablet() {
+  if (!_playersTablet) return;
+  _drawPresenceRows(_playersTablet.userData.rosterCanvas, _playersTablet.userData.rosterTex);
+}
+
+function _publishLocalPresence(force = false) {
+  const socket = _presenceState.socket;
+  if (!socket || !_presenceState.connected) return;
+  const now = performance.now() * 0.001;
+  if (!force && (now - _presenceState.lastPublishTime) < 0.75) return;
+  _presenceState.lastPublishTime = now;
+
+  const payload = {
+    name: _resolveVrHubDisplayName(),
+    role: 'player',
+    side: 'heroes',
+    position: {
+      x: Number(playerRig.position.x.toFixed(3)),
+      y: Number(playerRig.position.y.toFixed(3)),
+      z: Number(playerRig.position.z.toFixed(3)),
+    },
+    rotation: {
+      x: 0,
+      y: Number(playerRig.rotation.y.toFixed(4)),
+      z: 0,
+    },
+  };
+  socket.emit('player-update', payload);
+}
+
+function _connectPresenceSocket() {
+  if (_presenceState.socket || typeof window.io !== 'function') return;
+  const socket = window.io();
+  _presenceState.socket = socket;
+
+  socket.on('connect', () => {
+    _presenceState.connected = true;
+    _presenceState.localSid = String(socket.id || _presenceState.localSid || '').trim();
+    socket.emit('register-role', { role: 'player' });
+    _publishLocalPresence(true);
+    _refreshPlayersTablet();
+  });
+
+  socket.on('disconnect', () => {
+    _presenceState.connected = false;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-id', (payload) => {
+    const sid = String(payload?.id || '').trim();
+    if (sid) _presenceState.localSid = sid;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('players-state', (players) => {
+    _presenceState.roster = (players && typeof players === 'object') ? players : {};
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-update', (entry) => {
+    if (!entry || !entry.id) return;
+    _presenceState.roster[entry.id] = entry;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-joined', (entry) => {
+    if (!entry || !entry.id) return;
+    _presenceState.roster[entry.id] = entry;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-left', (payload) => {
+    const sid = String(payload?.id || '').trim();
+    if (!sid) return;
+    delete _presenceState.roster[sid];
+    _refreshPlayersTablet();
+  });
+}
+
+_playersTablet = _buildPlayersTablet();
+scene.add(_playersTablet);
+_refreshPlayersTablet();
+
 function _castFireball() {
   // Spawn a fireball from the player's eye position, shoot it forward
   const origin = new THREE.Vector3();
@@ -1074,6 +1330,12 @@ function _updatePanelInteraction(leftGp, rightGp) {
   if (_tabletGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
     scene.attach(_controlTablet); _tabletGrabState.holder = null;
   }
+  if (_playersGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_playersTablet); _playersGrabState.holder = null;
+  }
+  if (_playersGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_playersTablet); _playersGrabState.holder = null;
+  }
 
   // ── Fresh-press actions (buttons + tablet grab + sky pickers) ─────────────
   const anyFreshPress =
@@ -1171,6 +1433,24 @@ function _updatePanelInteraction(leftGp, rightGp) {
         }
       }
 
+      // Players panel grab
+      if (!_playersGrabState.holder) {
+        let playersInRange = false;
+        for (const handleBar of (_playersTablet.userData.sideHandles || [])) {
+          handleBar.getWorldPosition(_tmpPlayersPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPlayersPos) <= 0.14) { playersInRange = true; break; }
+        }
+        if (!playersInRange) {
+          _playersTablet.getWorldPosition(_tmpPlayersPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPlayersPos) <= PANEL_GRAB_DISTANCE) playersInRange = true;
+        }
+        if (playersInRange) {
+          ctrl.attach(_playersTablet);
+          _playersGrabState.holder = hand;
+          continue;
+        }
+      }
+
       // World panel grab
       if (!_panelGrabState.holder) {
         _worldPanel.getWorldPosition(_tmpPanelPos);
@@ -1217,6 +1497,10 @@ function _updateQuestLocomotion(dt) {
       scene.attach(_spellPanel);
       _spellGrabState.holder = null;
     }
+    if (_playersGrabState.holder) {
+      scene.attach(_playersTablet);
+      _playersGrabState.holder = null;
+    }
     return;
   }
 
@@ -1250,6 +1534,7 @@ function _updateQuestLocomotion(dt) {
 // VR button
 const vrBtn = createVRButton(renderer);
 if (vrBtn) document.getElementById('vr-btn-wrap').appendChild(vrBtn);
+_connectPresenceSocket();
 
 // ─── Lighting ─────────────────────────────────────────────────────────────────
 const _sceneAmbient = new THREE.AmbientLight(0x1a2050, 4.0);
@@ -1586,6 +1871,7 @@ const _handUpdaters = [];
 renderer.setAnimationLoop(() => {
   const dt = Math.min(_clock.getDelta(), 0.05);
   _updateQuestLocomotion(dt);
+  _publishLocalPresence(false);
   _updateLasers(dt);
   _updateFireballs(dt);
   _updateArcaneShots(dt);
