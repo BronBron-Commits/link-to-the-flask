@@ -87,6 +87,26 @@
       width: 16px;
       height: 2px;
     }
+    #draw-ui {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: rgba(6, 12, 24, 0.88);
+      border: 1px solid rgba(80, 200, 255, 0.55);
+      border-radius: 10px;
+      padding: 9px 18px;
+      color: #aaeeff;
+      font-size: 13px;
+      letter-spacing: 0.07em;
+      text-align: center;
+      line-height: 1.6;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -94,6 +114,7 @@
 <a id="back-link" href="/">← Home</a>
 <div id="hint"></div>
 <div id="desktop-crosshair" aria-hidden="true"></div>
+<div id="draw-ui" aria-live="polite"></div>
 <div id="vr-btn-wrap"></div>
 
 <script type="importmap">
@@ -456,6 +477,17 @@ const _tmpSliderPos = new THREE.Vector3();
 const _tmpSliderCtrl = new THREE.Vector3();
 const _tmpTabletPos = new THREE.Vector3();
 const _tmpPlayersPos = new THREE.Vector3();
+const _tmpDrawHit   = new THREE.Vector3();
+const _tmpDrawQuat  = new THREE.Quaternion();
+const _tmpDrawDir   = new THREE.Vector3();
+const _drawRay      = new THREE.Ray();
+const _groundPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+let   _drawMode     = false;
+const _drawVerts    = [];
+const _drawMarkers  = [];
+let   _drawPreviewLine = null;
+const _drawnObjects = [];
+const _drawTriggerPrev = { left: false, right: false };
 let _currentSky = 'blue';
 
 function _brightnessToY(b) {
@@ -658,6 +690,20 @@ function _buildControlTablet() {
   root.userData.discoBtnTex = discoTex;
   root.userData.discoBtnMesh = discoBtn;
   _drawTabletBtn(discoC, discoTex, '🪩', 'DISCO', false);
+
+  // ── Right: DRAW button ──────────────────────────────────────────────────────
+  const drawC = document.createElement('canvas'); drawC.width = 256; drawC.height = 128;
+  const drawTex = new THREE.CanvasTexture(drawC);
+  const drawBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.155, 0.072),
+    new THREE.MeshBasicMaterial({ map: drawTex, transparent: true, side: THREE.DoubleSide })
+  );
+  drawBtn.position.set(0.105, -0.172, Z);
+  root.add(drawBtn);
+  root.userData.drawBtnCanvas = drawC;
+  root.userData.drawBtnTex = drawTex;
+  root.userData.drawBtnMesh = drawBtn;
+  _drawTabletBtn(drawC, drawTex, '✏️', 'DRAW', false);
 
   // Footer hint
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
@@ -1348,6 +1394,99 @@ function _updateLightningBolts(dt) {
   }
 }
 
+// ─── Draw Mode ───────────────────────────────────────────────────────────────
+function _setDrawActive(next) {
+  _drawMode = !!next;
+  if (!_drawMode) _cancelDraw();
+  _drawTabletBtn(
+    _controlTablet.userData.drawBtnCanvas,
+    _controlTablet.userData.drawBtnTex,
+    '✏️', 'DRAW', _drawMode
+  );
+  _updateDrawUi();
+  _updateDesktopHint();
+}
+
+function _toggleDrawMode() { _setDrawActive(!_drawMode); }
+
+function _placeDrawVertex(worldPos) {
+  const v = new THREE.Vector3(worldPos.x, 0, worldPos.z);
+  _drawVerts.push(v);
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.055, 8, 6),
+    new THREE.MeshBasicMaterial({ color: 0xffee00 })
+  );
+  marker.position.set(v.x, 0.055, v.z);
+  scene.add(marker);
+  _drawMarkers.push(marker);
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _removeLastVertex() {
+  if (!_drawVerts.length) return;
+  _drawVerts.pop();
+  const m = _drawMarkers.pop();
+  if (m) scene.remove(m);
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _updateDrawPreview() {
+  if (_drawPreviewLine) { scene.remove(_drawPreviewLine); _drawPreviewLine = null; }
+  if (_drawVerts.length < 2) return;
+  const pts = _drawVerts.map(v => new THREE.Vector3(v.x, 0.04, v.z));
+  if (_drawVerts.length >= 3) pts.push(pts[0].clone());
+  const geo = new THREE.BufferGeometry().setFromPoints(pts);
+  _drawPreviewLine = new THREE.Line(
+    geo,
+    new THREE.LineBasicMaterial({ color: 0xffee00 })
+  );
+  scene.add(_drawPreviewLine);
+}
+
+function _finishDrawShape() {
+  if (_drawVerts.length < 3) { _cancelDraw(); return; }
+  // Build a flat XZ polygon via THREE.Shape (which works in XY, so we use x/z)
+  const shape = new THREE.Shape(_drawVerts.map(v => new THREE.Vector2(v.x, v.z)));
+  const geo = new THREE.ShapeGeometry(shape);
+  geo.rotateX(-Math.PI / 2); // flip from XY plane to XZ ground plane
+  const color = new THREE.Color().setHSL(Math.random(), 0.65, 0.50);
+  const mat = new THREE.MeshStandardMaterial({
+    color,
+    roughness: 0.55,
+    metalness: 0.15,
+    side: THREE.DoubleSide,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.y = 0.012;
+  scene.add(mesh);
+  _drawnObjects.push(mesh);
+  _cancelDraw();
+}
+
+function _cancelDraw() {
+  _drawVerts.length = 0;
+  _drawMarkers.forEach(m => scene.remove(m));
+  _drawMarkers.length = 0;
+  if (_drawPreviewLine) { scene.remove(_drawPreviewLine); _drawPreviewLine = null; }
+  _updateDrawUi();
+}
+
+function _updateDrawUi() {
+  const el = document.getElementById('draw-ui');
+  if (!el) return;
+  if (_drawMode) {
+    const n = _drawVerts.length;
+    el.style.display = 'block';
+    el.innerHTML =
+      `✏️ DRAW MODE &nbsp;—&nbsp; ${n} vert${n !== 1 ? 's' : ''} placed` +
+      `<br><small>Click/Trigger: place &nbsp;•&nbsp; Enter: finish &nbsp;•&nbsp; Backspace: undo &nbsp;•&nbsp; V: cancel</small>`;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
 function _applyBrightness(b) {
   _brightness = b;
   renderer.toneMappingExposure = b;
@@ -1557,6 +1696,24 @@ function _updatePanelInteraction(leftGp, rightGp) {
         continue;
       }
 
+      // DRAW button
+      _controlTablet.userData.drawBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
+        _toggleDrawMode();
+        continue;
+      }
+
+      // Draw mode — place vertex on ground via controller ray
+      if (_drawMode) {
+        ctrl.getWorldQuaternion(_tmpDrawQuat);
+        _tmpDrawDir.set(0, 0, -1).applyQuaternion(_tmpDrawQuat);
+        _drawRay.set(_tmpCtrlPos, _tmpDrawDir);
+        if (_drawRay.intersectPlane(_groundPlane, _tmpDrawHit)) {
+          _placeDrawVertex(_tmpDrawHit);
+        }
+        continue;
+      }
+
       // Grab whole tablet to move it (check handles first, then center)
       if (!_tabletGrabState.holder) {
         let tabletInRange = false;
@@ -1662,7 +1819,8 @@ function _updateDesktopHint() {
   }
   if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  _hintEl.textContent = `Desktop: WASD move, mouse look (left/right/up), click panel buttons, 1/2/3 sky, L laser, K disco, F/G/H spells, [/] brightness • ${lockHint}`;
+  const drawHint = _drawMode ? ' | DRAW: click=vert, Enter=finish, Backspace=undo, V=cancel' : '';
+  _hintEl.textContent = `Desktop: WASD move, mouse look, 1/2/3 sky, L laser, K disco, F/G/H spells, V draw, [/] brightness${drawHint} • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -1673,6 +1831,7 @@ function _desktopInteractTargets() {
     _spellPanel?.userData?.fireballBtnMesh,
     _spellPanel?.userData?.arcaneBtnMesh,
     _spellPanel?.userData?.lightningBtnMesh,
+    _controlTablet?.userData?.drawBtnMesh,
   ].filter(Boolean);
 }
 
@@ -1702,6 +1861,10 @@ function _desktopTriggerInteraction(target) {
     _castLightningStrike();
     return true;
   }
+  if (target === _controlTablet?.userData?.drawBtnMesh) {
+    _toggleDrawMode();
+    return true;
+  }
   return false;
 }
 
@@ -1716,8 +1879,15 @@ function _desktopClickInteract(clientX, clientY, centerRay = false) {
   }
   _desktopState.raycaster.setFromCamera(_desktopState.mouseNdc, camera);
   const hits = _desktopState.raycaster.intersectObjects(_desktopInteractTargets(), false);
-  if (!hits.length) return false;
-  return _desktopTriggerInteraction(hits[0].object);
+  if (hits.length) return _desktopTriggerInteraction(hits[0].object);
+  // Draw mode: no button hit — place vertex on ground plane
+  if (_drawMode) {
+    if (_desktopState.raycaster.ray.intersectPlane(_groundPlane, _tmpDrawHit)) {
+      _placeDrawVertex(_tmpDrawHit);
+      return true;
+    }
+  }
+  return false;
 }
 
 function _initDesktopControls() {
@@ -1760,6 +1930,10 @@ function _initDesktopControls() {
     else if (key === 'f') _castFireball();
     else if (key === 'g') _castArcaneShot();
     else if (key === 'h') _castLightningStrike();
+    else if (key === 'v') _toggleDrawMode();
+    else if (key === 'enter') { if (_drawMode) _finishDrawShape(); }
+    else if (key === 'backspace') { if (_drawMode) { e.preventDefault(); _removeLastVertex(); } }
+    else if (key === 'escape') { if (_drawMode) _setDrawActive(false); }
     else if (key === '[') _applyBrightness(_brightness - 0.1);
     else if (key === ']') _applyBrightness(_brightness + 0.1);
   });
