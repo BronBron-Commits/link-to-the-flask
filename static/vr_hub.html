@@ -832,6 +832,27 @@ function _drawSpellBtn(c, tex, icon, label, flavor, theme = {}) {
   tex.needsUpdate = true;
 }
 
+function _drawAxisMiniBtn(c, tex, label, accent) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, '#110a19');
+  bg.addColorStop(1, '#09050f');
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) ctx.roundRect(0, 0, c.width, c.height, 10); else ctx.rect(0, 0, c.width, c.height);
+  ctx.fill();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 3;
+  if (ctx.roundRect) ctx.roundRect(2, 2, c.width - 4, c.height - 4, 8); else ctx.rect(2, 2, c.width - 4, c.height - 4);
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 34px Georgia';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, c.width / 2, c.height / 2 + 1);
+  tex.needsUpdate = true;
+}
+
 function _buildSpellPanel() {
   const root = new THREE.Group();
   const Z = 0.012;
@@ -1246,7 +1267,7 @@ function _buildDrawPanel() {
 
   // Body — deep purple
   root.add(new THREE.Mesh(
-    new THREE.BoxGeometry(0.38, 0.78, 0.016),
+    new THREE.BoxGeometry(0.38, 0.90, 0.016),
     new THREE.MeshStandardMaterial({ color: 0x120818, roughness: 0.50, metalness: 0.55 })
   ));
 
@@ -1354,6 +1375,54 @@ function _buildDrawPanel() {
   root.userData.drawUndoBtnTex = undoTex;
   root.userData.drawUndoBtnMesh = undoMesh;
 
+  // Mini XYZ gizmo controls (panel-side movement buttons)
+  const gizmoBaseY = -0.340;
+  root.userData.gizmoButtons = [];
+  const axisDefs = [
+    { label: 'X+', color: '#ff6666', dx:  0.06, dy:  0.00, nudge: [ 0.06, 0.00, 0.00] },
+    { label: 'X-', color: '#ff6666', dx: -0.06, dy:  0.00, nudge: [-0.06, 0.00, 0.00] },
+    { label: 'Y+', color: '#66ff99', dx:  0.00, dy:  0.05, nudge: [ 0.00, 0.06, 0.00] },
+    { label: 'Y-', color: '#66ff99', dx:  0.00, dy: -0.05, nudge: [ 0.00,-0.06, 0.00] },
+    { label: 'Z+', color: '#66b8ff', dx:  0.03, dy: -0.00, nudge: [ 0.00, 0.00, 0.06] },
+    { label: 'Z-', color: '#66b8ff', dx: -0.03, dy: -0.00, nudge: [ 0.00, 0.00,-0.06] },
+  ];
+  axisDefs.forEach((def, i) => {
+    const c = document.createElement('canvas'); c.width = 128; c.height = 90;
+    const t = new THREE.CanvasTexture(c);
+    _drawAxisMiniBtn(c, t, def.label, def.color);
+    const m = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.082, 0.050),
+      new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide })
+    );
+    // Stagger Z buttons a bit lower so all six are visible and tappable.
+    const yJitter = (i >= 4) ? -0.072 : 0;
+    const xJitter = (i >= 4) ? (i === 4 ? 0.060 : -0.060) : 0;
+    m.position.set(def.dx + xJitter, gizmoBaseY + def.dy + yJitter, Z);
+    m.userData.nudge = new THREE.Vector3(def.nudge[0], def.nudge[1], def.nudge[2]);
+    root.add(m);
+    root.userData.gizmoButtons.push(m);
+  });
+
+  // Visible mini axis gizmo at the center of control cluster.
+  const gizmoRoot = new THREE.Group();
+  gizmoRoot.position.set(0, gizmoBaseY - 0.004, Z + 0.001);
+  const xLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.032, 0, 0), new THREE.Vector3(0.032, 0, 0)]),
+    new THREE.LineBasicMaterial({ color: 0xff5555 })
+  );
+  const yLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -0.028, 0), new THREE.Vector3(0, 0.028, 0)]),
+    new THREE.LineBasicMaterial({ color: 0x55ff88 })
+  );
+  const zLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.022, -0.022, 0), new THREE.Vector3(0.022, 0.022, 0)]),
+    new THREE.LineBasicMaterial({ color: 0x55aaff })
+  );
+  gizmoRoot.add(xLine);
+  gizmoRoot.add(yLine);
+  gizmoRoot.add(zLine);
+  root.add(gizmoRoot);
+
   // Footer
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
   const ftCtx = ftC.getContext('2d');
@@ -1363,20 +1432,20 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.28, 0.036),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
   );
-  ft.position.set(0, -0.350, Z);
+  ft.position.set(0, -0.412, Z);
   root.add(ft);
 
   // Side handles — purple tint
   const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1060, roughness: 0.35, metalness: 0.75 });
   root.userData.sideHandles = [];
   [-1, 1].forEach(side => {
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.34, 12), hMat);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.44, 12), hMat);
     bar.position.set(side * 0.248, 0, Z);
     root.add(bar); root.userData.sideHandles.push(bar);
     const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cT.position.set(side * 0.248, 0.17, Z); root.add(cT);
+    cT.position.set(side * 0.248, 0.22, Z); root.add(cT);
     const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cB.position.set(side * 0.248, -0.17, Z); root.add(cB);
+    cB.position.set(side * 0.248, -0.22, Z); root.add(cB);
     const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
     br.rotation.z = Math.PI / 2;
     br.position.set(side * 0.214, 0, Z); root.add(br);
@@ -2399,6 +2468,21 @@ function _updatePanelInteraction(leftGp, rightGp) {
         continue;
       }
 
+      // Draw panel — XYZ gizmo nudge buttons
+      let hitGizmo = false;
+      for (const gizBtn of (_drawPanel.userData.gizmoButtons || [])) {
+        gizBtn.getWorldPosition(_tmpDrawPanelPos);
+        if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.12) {
+          if (_drawMode && gizBtn.userData?.nudge) {
+            const n = gizBtn.userData.nudge;
+            _nudgeDrawSelection(n.x, n.y, n.z);
+          }
+          hitGizmo = true;
+          break;
+        }
+      }
+      if (hitGizmo) continue;
+
       // Draw mode — place vertex on ground via controller ray
       if (_drawMode) {
         ctrl.getWorldQuaternion(_tmpDrawQuat);
@@ -2551,6 +2635,7 @@ function _desktopInteractTargets() {
     _drawPanel?.userData?.drawEdgeBtnMesh,
     _drawPanel?.userData?.drawFaceBtnMesh,
     _drawPanel?.userData?.drawUndoBtnMesh,
+    ...(_drawPanel?.userData?.gizmoButtons || []),
   ].filter(Boolean);
 }
 
@@ -2599,6 +2684,13 @@ function _desktopTriggerInteraction(target) {
     if (_drawMode) {
       if (_drawTransform.active) _cancelDrawTransform();
       else _undoDrawStep();
+    }
+    return true;
+  }
+  if (target?.userData?.nudge) {
+    if (_drawMode) {
+      const n = target.userData.nudge;
+      _nudgeDrawSelection(n.x, n.y, n.z);
     }
     return true;
   }
