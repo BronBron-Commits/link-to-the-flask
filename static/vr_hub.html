@@ -379,6 +379,7 @@ const _tmpCtrlPos = new THREE.Vector3();
 const _tmpPanelPos = new THREE.Vector3();
 const _tmpCompassPos = new THREE.Vector3();
 const _tmpCompassAxisPos = new THREE.Vector3();
+const _tmpVertGrabPos = new THREE.Vector3();
 const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
 const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
 
@@ -1275,6 +1276,7 @@ const _compassGrabState = {
   selectedVerts: [],
   startVerts: [],
 };
+const _vertexGrabState = { holder: null, vertIndex: -1, offset: new THREE.Vector3() };
 
 function _buildDrawPanel() {
   const root = new THREE.Group();
@@ -1697,7 +1699,11 @@ function _updateLightningBolts(dt) {
 // ─── Draw Mode ───────────────────────────────────────────────────────────────
 function _setDrawActive(next) {
   _drawMode = !!next;
-  if (!_drawMode) _cancelDraw(true);
+  if (!_drawMode) {
+    _cancelDraw(true);
+    _vertexGrabState.holder = null;
+    _vertexGrabState.vertIndex = -1;
+  }
   if (_drawMode && _drawModeType !== 'draw' && _drawModeType !== 'select') {
     _drawModeType = 'draw';
   }
@@ -2443,6 +2449,23 @@ function _updatePanelInteraction(leftGp, rightGp) {
     }
   }
 
+  // Direct vertex grab: move a single vertex by hand/controller while held.
+  if (_vertexGrabState.holder) {
+    const holdCtrl = _controllersByHand[_vertexGrabState.holder];
+    const holdPressed = _vertexGrabState.holder === 'left' ? leftPressed : rightPressed;
+    const idx = _vertexGrabState.vertIndex;
+    if (!holdCtrl || !holdPressed || !_drawMode || idx < 0 || idx >= _drawVerts.length || !_drawVertMeshes[idx]) {
+      _vertexGrabState.holder = null;
+      _vertexGrabState.vertIndex = -1;
+    } else {
+      holdCtrl.getWorldPosition(_tmpCtrlPos);
+      _drawVerts[idx].copy(_tmpCtrlPos).add(_vertexGrabState.offset);
+      _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+      _updateDrawMeshGeometry();
+      _updateDrawPreview();
+    }
+  }
+
   // ── Control tablet: slider drag (continuous hold) ─────────────────────────
   if (_sliderState.holder) {
     const holdCtrl = _controllersByHand[_sliderState.holder];
@@ -2506,6 +2529,19 @@ function _updatePanelInteraction(leftGp, rightGp) {
     for (const { ctrl, hand } of ctrls) {
       if (!ctrl) continue;
       ctrl.getWorldPosition(_tmpCtrlPos);
+
+      // Grab an existing vertex directly with the hand/controller.
+      if (!_vertexGrabState.holder && _drawMode && _drawVerts.length) {
+        const nearIdx = _findNearestDrawVertex(_tmpCtrlPos, 0.11);
+        if (nearIdx >= 0) {
+          if (_drawSelectMode !== 'vertex') _setDrawSelectMode('vertex');
+          _selectDrawElement(nearIdx, false);
+          _vertexGrabState.holder = hand;
+          _vertexGrabState.vertIndex = nearIdx;
+          _vertexGrabState.offset.copy(_drawVerts[nearIdx]).sub(_tmpCtrlPos);
+          continue;
+        }
+      }
 
       // Pull a compass axis to move current draw selection along that axis.
       if (
@@ -2753,6 +2789,14 @@ function _updatePanelInteraction(leftGp, rightGp) {
     _compassGrabState.startVerts = [];
     if (_compassRoot) _compassRoot.quaternion.identity();
   }
+  if (_vertexGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    _vertexGrabState.holder = null;
+    _vertexGrabState.vertIndex = -1;
+  }
+  if (_vertexGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    _vertexGrabState.holder = null;
+    _vertexGrabState.vertIndex = -1;
+  }
 
   _grabPressedPrev.left = leftPressed;
   _grabPressedPrev.right = rightPressed;
@@ -2785,6 +2829,10 @@ function _updateQuestLocomotion(dt) {
       _compassGrabState.selectedVerts = [];
       _compassGrabState.startVerts = [];
       if (_compassRoot) _compassRoot.quaternion.identity();
+    }
+    if (_vertexGrabState.holder) {
+      _vertexGrabState.holder = null;
+      _vertexGrabState.vertIndex = -1;
     }
     return;
   }
