@@ -2844,10 +2844,8 @@ function _updateQuestLocomotion(dt) {
       _compassGrabState.startVerts = [];
       if (_compassRoot) _compassRoot.quaternion.identity();
     }
-    if (_vertexGrabState.holder) {
-      _vertexGrabState.holder = null;
-      _vertexGrabState.vertIndex = -1;
-    }
+    _handGrab.left.active = false;  _handGrab.left.vertIndex = -1;
+    _handGrab.right.active = false; _handGrab.right.vertIndex = -1;
     _toolSystem.activeTool = 'idle';
     return;
   }
