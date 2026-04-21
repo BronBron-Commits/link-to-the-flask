@@ -1279,13 +1279,14 @@ function _buildDrawPanel() {
   hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
   hCtx.strokeStyle = '#9944dd'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
   hCtx.fillStyle = '#dd99ff'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
-  hCtx.fillText('✏️  DRAW', 256, 52);
+  hCtx.fillText('DRAW', 256, 52);
   const hdr = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.058),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
   );
   hdr.position.set(0, 0.346, Z);
   root.add(hdr);
+  root.userData.drawModeBtnMesh = hdr;
 
   // Center divider between edit tools and gizmo controls
   const colDiv = new THREE.Mesh(
@@ -2457,6 +2458,13 @@ function _updatePanelInteraction(leftGp, rightGp) {
       }
 
       // Draw panel — toggle draw mode button
+      _drawPanel.userData.drawModeBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        _setDrawActive(!_drawMode);
+        continue;
+      }
+
+      // Draw panel — vertex button
       _drawPanel.userData.drawToggleBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
         if (!_drawMode) _setDrawActive(true);
@@ -2653,6 +2661,7 @@ function _desktopInteractTargets() {
     _spellPanel?.userData?.fireballBtnMesh,
     _spellPanel?.userData?.arcaneBtnMesh,
     _spellPanel?.userData?.lightningBtnMesh,
+    _drawPanel?.userData?.drawModeBtnMesh,
     _drawPanel?.userData?.drawToggleBtnMesh,
     _drawPanel?.userData?.drawEdgeBtnMesh,
     _drawPanel?.userData?.drawFaceBtnMesh,
@@ -2685,6 +2694,10 @@ function _desktopTriggerInteraction(target) {
   }
   if (target === _spellPanel?.userData?.lightningBtnMesh) {
     _castLightningStrike();
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawModeBtnMesh) {
+    _setDrawActive(!_drawMode);
     return true;
   }
   if (target === _drawPanel?.userData?.drawToggleBtnMesh) {
