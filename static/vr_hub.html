@@ -1267,7 +1267,7 @@ function _buildDrawPanel() {
 
   // Body — deep purple
   root.add(new THREE.Mesh(
-    new THREE.BoxGeometry(0.38, 0.90, 0.016),
+    new THREE.BoxGeometry(0.62, 0.94, 0.016),
     new THREE.MeshStandardMaterial({ color: 0x120818, roughness: 0.50, metalness: 0.55 })
   ));
 
@@ -1281,11 +1281,19 @@ function _buildDrawPanel() {
   hCtx.fillStyle = '#dd99ff'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
   hCtx.fillText('✏️  DRAW', 256, 52);
   const hdr = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.33, 0.058),
+    new THREE.PlaneGeometry(0.55, 0.058),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
   );
-  hdr.position.set(0, 0.318, Z);
+  hdr.position.set(0, 0.346, Z);
   root.add(hdr);
+
+  // Center divider between edit tools and gizmo controls
+  const colDiv = new THREE.Mesh(
+    new THREE.BoxGeometry(0.002, 0.74, 0.002),
+    new THREE.MeshBasicMaterial({ color: 0x442266 })
+  );
+  colDiv.position.set(0, -0.02, Z);
+  root.add(colDiv);
 
   // Vertex mode button
   const drawBtnC = document.createElement('canvas'); drawBtnC.width = 280; drawBtnC.height = 148;
@@ -1303,7 +1311,7 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.22, 0.116),
     new THREE.MeshBasicMaterial({ map: drawBtnTex, transparent: true, side: THREE.DoubleSide })
   );
-  drawBtnMesh.position.set(0, 0.176, Z);
+  drawBtnMesh.position.set(-0.155, 0.190, Z);
   root.add(drawBtnMesh);
   root.userData.drawToggleBtnCanvas = drawBtnC;
   root.userData.drawToggleBtnTex = drawBtnTex;
@@ -1325,7 +1333,7 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.22, 0.116),
     new THREE.MeshBasicMaterial({ map: edgeTex, transparent: true, side: THREE.DoubleSide })
   );
-  edgeMesh.position.set(0, 0.030, Z);
+  edgeMesh.position.set(-0.155, 0.042, Z);
   root.add(edgeMesh);
   root.userData.drawEdgeBtnCanvas = edgeC;
   root.userData.drawEdgeBtnTex = edgeTex;
@@ -1347,7 +1355,7 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.22, 0.116),
     new THREE.MeshBasicMaterial({ map: faceTex, transparent: true, side: THREE.DoubleSide })
   );
-  faceMesh.position.set(0, -0.116, Z);
+  faceMesh.position.set(-0.155, -0.106, Z);
   root.add(faceMesh);
   root.userData.drawFaceBtnCanvas = faceC;
   root.userData.drawFaceBtnTex = faceTex;
@@ -1369,14 +1377,15 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.22, 0.096),
     new THREE.MeshBasicMaterial({ map: undoTex, transparent: true, side: THREE.DoubleSide })
   );
-  undoMesh.position.set(0, -0.254, Z);
+  undoMesh.position.set(-0.155, -0.254, Z);
   root.add(undoMesh);
   root.userData.drawUndoBtnCanvas = undoC;
   root.userData.drawUndoBtnTex = undoTex;
   root.userData.drawUndoBtnMesh = undoMesh;
 
   // Mini XYZ gizmo controls (panel-side movement buttons)
-  const gizmoBaseY = -0.340;
+  const gizmoBaseX = 0.155;
+  const gizmoBaseY = -0.130;
   root.userData.gizmoButtons = [];
   const axisDefs = [
     { label: 'X+', color: '#ff6666', dx:  0.06, dy:  0.00, nudge: [ 0.06, 0.00, 0.00] },
@@ -1394,10 +1403,10 @@ function _buildDrawPanel() {
       new THREE.PlaneGeometry(0.082, 0.050),
       new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide })
     );
-    // Stagger Z buttons a bit lower so all six are visible and tappable.
+    // Stagger Z buttons below X/Y so all six are visible and easy to hit.
     const yJitter = (i >= 4) ? -0.072 : 0;
     const xJitter = (i >= 4) ? (i === 4 ? 0.060 : -0.060) : 0;
-    m.position.set(def.dx + xJitter, gizmoBaseY + def.dy + yJitter, Z);
+    m.position.set(gizmoBaseX + def.dx + xJitter, gizmoBaseY + def.dy + yJitter, Z);
     m.userData.nudge = new THREE.Vector3(def.nudge[0], def.nudge[1], def.nudge[2]);
     root.add(m);
     root.userData.gizmoButtons.push(m);
@@ -1405,7 +1414,7 @@ function _buildDrawPanel() {
 
   // Visible mini axis gizmo at the center of control cluster.
   const gizmoRoot = new THREE.Group();
-  gizmoRoot.position.set(0, gizmoBaseY - 0.004, Z + 0.001);
+  gizmoRoot.position.set(gizmoBaseX, gizmoBaseY - 0.004, Z + 0.001);
   const xLine = new THREE.Line(
     new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.032, 0, 0), new THREE.Vector3(0.032, 0, 0)]),
     new THREE.LineBasicMaterial({ color: 0xff5555 })
@@ -1423,16 +1432,29 @@ function _buildDrawPanel() {
   gizmoRoot.add(zLine);
   root.add(gizmoRoot);
 
+  const gizmoLblC = document.createElement('canvas'); gizmoLblC.width = 280; gizmoLblC.height = 56;
+  const gizmoLblCtx = gizmoLblC.getContext('2d');
+  gizmoLblCtx.fillStyle = '#88ccff';
+  gizmoLblCtx.font = '22px Georgia';
+  gizmoLblCtx.textAlign = 'center';
+  gizmoLblCtx.fillText('MOVE GIZMO', 140, 36);
+  const gizmoLbl = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.19, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(gizmoLblC), transparent: true, side: THREE.DoubleSide })
+  );
+  gizmoLbl.position.set(gizmoBaseX, 0.035, Z);
+  root.add(gizmoLbl);
+
   // Footer
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
   const ftCtx = ftC.getContext('2d');
   ftCtx.fillStyle = '#553366'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
-  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  ftCtx.fillText('◈  Left: edit tools  |  Right: XYZ move gizmo', 192, 32);
   const ft = new THREE.Mesh(
-    new THREE.PlaneGeometry(0.28, 0.036),
+    new THREE.PlaneGeometry(0.52, 0.036),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
   );
-  ft.position.set(0, -0.412, Z);
+  ft.position.set(0, -0.434, Z);
   root.add(ft);
 
   // Side handles — purple tint
@@ -1440,15 +1462,15 @@ function _buildDrawPanel() {
   root.userData.sideHandles = [];
   [-1, 1].forEach(side => {
     const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.44, 12), hMat);
-    bar.position.set(side * 0.248, 0, Z);
+    bar.position.set(side * 0.366, 0, Z);
     root.add(bar); root.userData.sideHandles.push(bar);
     const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cT.position.set(side * 0.248, 0.22, Z); root.add(cT);
+    cT.position.set(side * 0.366, 0.22, Z); root.add(cT);
     const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cB.position.set(side * 0.248, -0.22, Z); root.add(cB);
+    cB.position.set(side * 0.366, -0.22, Z); root.add(cB);
     const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
     br.rotation.z = Math.PI / 2;
-    br.position.set(side * 0.214, 0, Z); root.add(br);
+    br.position.set(side * 0.332, 0, Z); root.add(br);
   });
 
   root.position.set(1.7, 1.12, -0.9);
