@@ -393,6 +393,7 @@ const _presenceState = {
   lastPollSuccessAt: 0,
   usingSocket: false,
 };
+const _remotePlayers = {};
 const _hintEl = document.getElementById('hint');
 const _crosshairEl = document.getElementById('desktop-crosshair');
 const _desktopState = {
@@ -410,6 +411,29 @@ const _desktopState = {
 let _laserActive = false;
 const _laserGroup = new THREE.Group();
 const _laserPivots = [];
+
+function _spawnRemotePlayer(id) {
+  const mesh = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.2, 1.0, 8, 16),
+    new THREE.MeshStandardMaterial({ color: 0x66aaff })
+  );
+
+  scene.add(mesh);
+
+  _remotePlayers[id] = {
+    mesh,
+    targetPos: new THREE.Vector3(),
+    targetRot: 0
+  };
+}
+
+function _removeRemotePlayer(id) {
+  const p = _remotePlayers[id];
+  if (!p) return;
+
+  scene.remove(p.mesh);
+  delete _remotePlayers[id];
+}
 
 function _buildLasers() {
   const DEFS = [
@@ -1238,16 +1262,39 @@ function _connectPresenceSocket() {
     _refreshPlayersTablet();
   });
 
-  socket.on('players-state', (players) => {
-    _presenceState.roster = (players && typeof players === 'object') ? players : {};
-    _refreshPlayersTablet();
-  });
+socket.on('players-state', (players) => {
+  _presenceState.roster = players;
 
-  socket.on('player-update', (entry) => {
-    if (!entry || !entry.id) return;
-    _presenceState.roster[entry.id] = entry;
-    _refreshPlayersTablet();
-  });
+  for (const id in players) {
+    if (id === _presenceState.localSid) continue;
+
+    if (!_remotePlayers[id]) {
+      _spawnRemotePlayer(id);
+    }
+  }
+
+  _refreshPlayersTablet();
+});
+socket.on('player-update', (data) => {
+  const id = data.id;
+
+  // Ignore yourself
+  if (id === _presenceState.localSid) return;
+
+  if (!_remotePlayers[id]) {
+    _spawnRemotePlayer(id);
+  }
+
+  const p = _remotePlayers[id];
+
+  p.targetPos.set(
+    data.position.x,
+    data.position.y,
+    data.position.z
+  );
+
+  p.targetRot = data.rotation.y;
+});
 
   socket.on('player-joined', (entry) => {
     if (!entry || !entry.id) return;
@@ -1260,6 +1307,7 @@ function _connectPresenceSocket() {
     if (!sid) return;
     delete _presenceState.roster[sid];
     _refreshPlayersTablet();
+    _removeRemotePlayer(payload.id);
   });
 }
 
@@ -3540,6 +3588,19 @@ renderer.setAnimationLoop(() => {
   _updateArcaneShots(dt);
   _updateLightningBolts(dt);
   _updateWorldGizmoFromSelection();
+
+  for (const id in _remotePlayers) {
+  const p = _remotePlayers[id];
+
+  // Smooth movement
+  p.mesh.position.lerp(p.targetPos, 0.15);
+
+  // Fix height (VR)
+  p.mesh.position.y += 0.8;
+
+  // Smooth rotation
+  p.mesh.rotation.y += (p.targetRot - p.mesh.rotation.y) * 0.15;
+}
   if (_compassRoot) _compassRoot.quaternion.identity();
   _handUpdaters.forEach(fn => fn());
   renderer.render(scene, camera);
