@@ -486,6 +486,7 @@ const _tmpDrawDir   = new THREE.Vector3();
 const _drawRay      = new THREE.Ray();
 const _groundPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let   _drawMode     = false;
+let   _drawModeType = 'draw'; // 'draw' | 'select'
 let   _drawPlaneY   = 0.0;
 let   _drawSelectMode = 'vertex'; // 'vertex' | 'edge' | 'face'
 const _drawVerts    = [];
@@ -1294,12 +1295,15 @@ function _buildDrawPanel() {
   hCtx.strokeStyle = '#9944dd'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
   hCtx.fillStyle = '#dd99ff'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
   hCtx.fillText('DRAW MODE', 256, 52);
+  const hTex = new THREE.CanvasTexture(hC);
   const hdr = new THREE.Mesh(
     new THREE.PlaneGeometry(0.55, 0.058),
-    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ map: hTex, transparent: true, side: THREE.DoubleSide })
   );
   hdr.position.set(0, 0.346, Z);
   root.add(hdr);
+  root.userData.drawHeaderCanvas = hC;
+  root.userData.drawHeaderTex = hTex;
   root.userData.drawModeBtnMesh = hdr;
 
   // Center divider between edit tools and gizmo controls
@@ -1496,6 +1500,41 @@ function _buildDrawPanel() {
 _drawPanel = _buildDrawPanel();
 scene.add(_drawPanel);
 
+function _refreshDrawModeHeader() {
+  if (!_drawPanel?.userData?.drawHeaderCanvas || !_drawPanel?.userData?.drawHeaderTex) return;
+  const c = _drawPanel.userData.drawHeaderCanvas;
+  const tex = _drawPanel.userData.drawHeaderTex;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 512, 0);
+  let title = 'OFF MODE';
+  let stroke = '#777777';
+  let fill = '#d0d0d0';
+  if (_drawMode && _drawModeType === 'draw') {
+    title = 'DRAW MODE';
+    g.addColorStop(0, '#1a0830'); g.addColorStop(0.5, '#320a5a'); g.addColorStop(1, '#1a0830');
+    stroke = '#9944dd';
+    fill = '#dd99ff';
+  } else if (_drawMode && _drawModeType === 'select') {
+    title = 'SELECT MODE';
+    g.addColorStop(0, '#081a2e'); g.addColorStop(0.5, '#0f355e'); g.addColorStop(1, '#081a2e');
+    stroke = '#55b4ff';
+    fill = '#a9ddff';
+  } else {
+    g.addColorStop(0, '#181818'); g.addColorStop(0.5, '#2a2a2a'); g.addColorStop(1, '#181818');
+  }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 80);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, 508, 76);
+  ctx.fillStyle = fill;
+  ctx.font = 'bold 36px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, 256, 52);
+  tex.needsUpdate = true;
+}
+_refreshDrawModeHeader();
+
 function _castFireball() {
   // Spawn a fireball from the player's eye position, shoot it forward
   const origin = new THREE.Vector3();
@@ -1659,6 +1698,10 @@ function _updateLightningBolts(dt) {
 function _setDrawActive(next) {
   _drawMode = !!next;
   if (!_drawMode) _cancelDraw(true);
+  if (_drawMode && _drawModeType !== 'draw' && _drawModeType !== 'select') {
+    _drawModeType = 'draw';
+  }
+  _refreshDrawModeHeader();
   if (_drawPanel) {
     _drawSpellBtn(
       _drawPanel.userData.drawToggleBtnCanvas,
@@ -1680,6 +1723,27 @@ function _setDrawActive(next) {
 }
 
 function _toggleDrawMode() { _setDrawActive(!_drawMode); }
+
+function _setDrawModeType(nextType) {
+  if (nextType !== 'draw' && nextType !== 'select') return;
+  if (!_drawMode) _setDrawActive(true);
+  _drawModeType = nextType;
+  _refreshDrawModeHeader();
+  _updateDrawUi();
+  _updateDesktopHint();
+}
+
+function _cycleEditMode() {
+  if (!_drawMode) {
+    _setDrawModeType('draw');
+    return;
+  }
+  if (_drawModeType === 'draw') {
+    _setDrawModeType('select');
+    return;
+  }
+  _setDrawActive(false);
+}
 
 function _setDrawSelectMode(mode) {
   if (!['vertex', 'edge', 'face'].includes(mode)) return;
@@ -2220,7 +2284,8 @@ function _drawPointFromRay(ray, additiveSelect = false, raycaster = null) {
     if (_drawSelectMode !== 'vertex') return false;
     const nearIdx = _findNearestDrawVertex(_tmpDrawHit, 0.12);
     if (nearIdx >= 0) _selectDrawElement(nearIdx, additiveSelect);
-    else _placeDrawVertex(_tmpDrawHit);
+    else if (_drawMode && _drawModeType === 'draw') _placeDrawVertex(_tmpDrawHit);
+    else return false;
     return true;
   }
   return false;
@@ -2245,12 +2310,13 @@ function _updateDrawUi() {
     const e = _drawEdges.length;
     const f = _drawFaces.length;
     const s = _drawSelection.length;
+    const editMode = _drawModeType.toUpperCase();
     const mode = _drawSelectMode.toUpperCase();
     const tx = _drawTransform.active ? ` | ${_drawTransform.op.toUpperCase()}${_drawTransform.axis ? ` ${_drawTransform.axis.toUpperCase()}` : ''}` : '';
     el.style.display = 'block';
     el.innerHTML =
-      `✏️ EDIT MODE (${mode}) — V:${n} E:${e} F:${f} | Sel:${s} | Plane Y:${_drawPlaneY.toFixed(2)}${tx}` +
-      `<br><small>Tab: edit mode • 1/2/3: select mode • A: select all • G/R/S then X/Y/Z • Shift+X/Y/Z exclude axis • E: extrude • F: fill • Shift+D: duplicate • X/Delete: delete • M: merge • Enter/Click confirm • Esc/RightClick cancel</small>`;
+      `✏️ ${editMode} (${mode}) — V:${n} E:${e} F:${f} | Sel:${s} | Plane Y:${_drawPlaneY.toFixed(2)}${tx}` +
+      `<br><small>Tab / header: cycle OFF→DRAW→SELECT • 1/2/3: select type • A: select all • G/R/S then X/Y/Z • Shift+X/Y/Z exclude axis • E: extrude • F: fill • Shift+D: duplicate • X/Delete: delete • M: merge • Enter/Click confirm • Esc/RightClick cancel</small>`;
   } else {
     el.style.display = 'none';
   }
@@ -2550,7 +2616,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
       // Draw panel — toggle draw mode button
       _drawPanel.userData.drawModeBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        _setDrawActive(!_drawMode);
+        _cycleEditMode();
         continue;
       }
 
@@ -2602,8 +2668,8 @@ function _updatePanelInteraction(leftGp, rightGp) {
       }
       if (hitGizmo) continue;
 
-      // Draw mode — place vertex on ground via controller ray
-      if (_drawMode) {
+      // Draw mode only — place vertex on ground via controller ray
+      if (_drawMode && _drawModeType === 'draw') {
         ctrl.getWorldQuaternion(_tmpDrawQuat);
         _tmpDrawDir.set(0, 0, -1).applyQuaternion(_tmpDrawQuat);
         _drawRay.set(_tmpCtrlPos, _tmpDrawDir);
@@ -2759,8 +2825,10 @@ function _updateDesktopHint() {
   }
   if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  const drawHint = _drawMode ? ` | EDIT(${_drawSelectMode}): 1/2/3 select, G/R/S transform, X/Y/Z axis, E extrude, F fill` : '';
-  _hintEl.textContent = `Desktop: WASD move, mouse look, sky 1/2/3, spells F/G/H, Tab edit mode${drawHint} • ${lockHint}`;
+  const drawHint = _drawMode
+    ? ` | ${_drawModeType.toUpperCase()}(${_drawSelectMode}): 1/2/3 select, G/R/S transform, X/Y/Z axis, E extrude, F fill`
+    : '';
+  _hintEl.textContent = `Desktop: WASD move, mouse look, sky 1/2/3, spells F/G/H, Tab cycles off/draw/select${drawHint} • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -2807,7 +2875,7 @@ function _desktopTriggerInteraction(target) {
     return true;
   }
   if (target === _drawPanel?.userData?.drawModeBtnMesh) {
-    _setDrawActive(!_drawMode);
+    _cycleEditMode();
     return true;
   }
   if (target === _drawPanel?.userData?.drawToggleBtnMesh) {
@@ -2909,7 +2977,7 @@ function _initDesktopControls() {
 
     if (key === 'tab') {
       e.preventDefault();
-      _toggleDrawMode();
+      _cycleEditMode();
       return;
     }
 
