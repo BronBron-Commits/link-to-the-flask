@@ -1559,7 +1559,7 @@ function _updateDesktopHint() {
   }
   if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  _hintEl.textContent = `Desktop: WASD move, mouse look (left/right), click panel buttons, 1/2/3 sky, L laser, K disco, F/G spells, [/] brightness • ${lockHint}`;
+  _hintEl.textContent = `Desktop: WASD move, mouse look (left/right/down), click panel buttons, 1/2/3 sky, L laser, K disco, F/G spells, [/] brightness • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -1634,7 +1634,8 @@ function _initDesktopControls() {
   window.addEventListener('mousemove', (e) => {
     if (renderer.xr.isPresenting || !_desktopState.pointerLocked) return;
     _desktopState.yaw -= e.movementX * _desktopState.mouseSensitivity;
-    _desktopState.pitch = 0;
+    _desktopState.pitch += e.movementY * _desktopState.mouseSensitivity;
+    _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch, 0, LOOK_LIMIT);
   });
 
   window.addEventListener('keydown', (e) => {
@@ -1682,7 +1683,8 @@ function _updateDesktopLocomotion(dt) {
 
   if (keys['arrowleft']) _desktopState.yaw += TURN_SPEED * dt;
   if (keys['arrowright']) _desktopState.yaw -= TURN_SPEED * dt;
-  _desktopState.pitch = 0;
+  if (keys['arrowdown']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch + LOOK_SPEED * dt * 0.7, 0, LOOK_LIMIT);
+  if (keys['arrowup']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch - LOOK_SPEED * dt * 0.7, 0, LOOK_LIMIT);
 
   playerRig.rotation.set(0, _desktopState.yaw, 0);
   playerPitch.rotation.set(_desktopState.pitch, 0, 0);
