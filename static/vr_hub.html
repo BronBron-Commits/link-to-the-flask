@@ -484,11 +484,14 @@ const _tmpDrawDir   = new THREE.Vector3();
 const _drawRay      = new THREE.Ray();
 const _groundPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 let   _drawMode     = false;
+let   _drawPlaneY   = 0.0;
 const _drawVerts    = [];
-const _drawMarkers  = [];
+const _drawVertMeshes = [];
+const _drawEdges    = [];
+const _drawFaces    = [];
+const _drawSelection = [];
 let   _drawPreviewLine = null;
-const _drawnObjects = [];
-const _drawTriggerPrev = { left: false, right: false };
+let   _drawPreviewFace = null;
 let _currentSky = 'blue';
 
 function _brightnessToY(b) {
@@ -1231,7 +1234,7 @@ function _buildDrawPanel() {
 
   // Body — deep purple
   root.add(new THREE.Mesh(
-    new THREE.BoxGeometry(0.36, 0.46, 0.016),
+    new THREE.BoxGeometry(0.38, 0.78, 0.016),
     new THREE.MeshStandardMaterial({ color: 0x120818, roughness: 0.50, metalness: 0.55 })
   ));
 
@@ -1248,13 +1251,13 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.33, 0.058),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
   );
-  hdr.position.set(0, 0.165, Z);
+  hdr.position.set(0, 0.318, Z);
   root.add(hdr);
 
-  // Toggle DRAW button
+  // Vertex mode button
   const drawBtnC = document.createElement('canvas'); drawBtnC.width = 280; drawBtnC.height = 148;
   const drawBtnTex = new THREE.CanvasTexture(drawBtnC);
-  _drawSpellBtn(drawBtnC, drawBtnTex, '✏️', 'DRAW MODE', 'Place vertices', {
+  _drawSpellBtn(drawBtnC, drawBtnTex, '✶', 'VERTEX', 'Place/select', {
     topBg: '#160720',
     bottomBg: '#0a0416',
     border: '#cc55ff',
@@ -1267,33 +1270,77 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.22, 0.116),
     new THREE.MeshBasicMaterial({ map: drawBtnTex, transparent: true, side: THREE.DoubleSide })
   );
-  drawBtnMesh.position.set(0, 0.024, Z);
+  drawBtnMesh.position.set(0, 0.176, Z);
   root.add(drawBtnMesh);
   root.userData.drawToggleBtnCanvas = drawBtnC;
   root.userData.drawToggleBtnTex = drawBtnTex;
   root.userData.drawToggleBtnMesh = drawBtnMesh;
 
-  // Finish Shape button
-  const finishC = document.createElement('canvas'); finishC.width = 280; finishC.height = 148;
-  const finishTex = new THREE.CanvasTexture(finishC);
-  _drawSpellBtn(finishC, finishTex, '✔️', 'FINISH', 'Close shape', {
-    topBg: '#0a1a0a',
-    bottomBg: '#040a04',
-    border: '#44cc88',
-    innerGlow: 'rgba(60,200,120,0.30)',
-    iconColor: '#aaffcc',
-    labelColor: '#55dd99',
-    flavorColor: '#3a8858',
+  // Edge button
+  const edgeC = document.createElement('canvas'); edgeC.width = 280; edgeC.height = 148;
+  const edgeTex = new THREE.CanvasTexture(edgeC);
+  _drawSpellBtn(edgeC, edgeTex, '⟍', 'EDGE', 'Connect 2 verts', {
+    topBg: '#0a1b28',
+    bottomBg: '#051018',
+    border: '#66d9ff',
+    innerGlow: 'rgba(120,220,255,0.30)',
+    iconColor: '#c4efff',
+    labelColor: '#77ddff',
+    flavorColor: '#4b9bbb',
   });
-  const finishMesh = new THREE.Mesh(
+  const edgeMesh = new THREE.Mesh(
     new THREE.PlaneGeometry(0.22, 0.116),
-    new THREE.MeshBasicMaterial({ map: finishTex, transparent: true, side: THREE.DoubleSide })
+    new THREE.MeshBasicMaterial({ map: edgeTex, transparent: true, side: THREE.DoubleSide })
   );
-  finishMesh.position.set(0, -0.120, Z);
-  root.add(finishMesh);
-  root.userData.drawFinishBtnCanvas = finishC;
-  root.userData.drawFinishBtnTex = finishTex;
-  root.userData.drawFinishBtnMesh = finishMesh;
+  edgeMesh.position.set(0, 0.030, Z);
+  root.add(edgeMesh);
+  root.userData.drawEdgeBtnCanvas = edgeC;
+  root.userData.drawEdgeBtnTex = edgeTex;
+  root.userData.drawEdgeBtnMesh = edgeMesh;
+
+  // Face button
+  const faceC = document.createElement('canvas'); faceC.width = 280; faceC.height = 148;
+  const faceTex = new THREE.CanvasTexture(faceC);
+  _drawSpellBtn(faceC, faceTex, '△', 'FACE', 'Build triangle', {
+    topBg: '#1a1508',
+    bottomBg: '#100a04',
+    border: '#f3c05f',
+    innerGlow: 'rgba(245,200,120,0.30)',
+    iconColor: '#ffe3aa',
+    labelColor: '#f8ca72',
+    flavorColor: '#c49348',
+  });
+  const faceMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: faceTex, transparent: true, side: THREE.DoubleSide })
+  );
+  faceMesh.position.set(0, -0.116, Z);
+  root.add(faceMesh);
+  root.userData.drawFaceBtnCanvas = faceC;
+  root.userData.drawFaceBtnTex = faceTex;
+  root.userData.drawFaceBtnMesh = faceMesh;
+
+  // Undo button
+  const undoC = document.createElement('canvas'); undoC.width = 280; undoC.height = 148;
+  const undoTex = new THREE.CanvasTexture(undoC);
+  _drawSpellBtn(undoC, undoTex, '↶', 'UNDO', 'Step back', {
+    topBg: '#1a0a0a',
+    bottomBg: '#0c0505',
+    border: '#dd7777',
+    innerGlow: 'rgba(240,140,140,0.28)',
+    iconColor: '#ffcccc',
+    labelColor: '#ff9999',
+    flavorColor: '#bb6666',
+  });
+  const undoMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.096),
+    new THREE.MeshBasicMaterial({ map: undoTex, transparent: true, side: THREE.DoubleSide })
+  );
+  undoMesh.position.set(0, -0.254, Z);
+  root.add(undoMesh);
+  root.userData.drawUndoBtnCanvas = undoC;
+  root.userData.drawUndoBtnTex = undoTex;
+  root.userData.drawUndoBtnMesh = undoMesh;
 
   // Footer
   const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
@@ -1304,20 +1351,20 @@ function _buildDrawPanel() {
     new THREE.PlaneGeometry(0.28, 0.036),
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
   );
-  ft.position.set(0, -0.198, Z);
+  ft.position.set(0, -0.350, Z);
   root.add(ft);
 
   // Side handles — purple tint
   const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1060, roughness: 0.35, metalness: 0.75 });
   root.userData.sideHandles = [];
   [-1, 1].forEach(side => {
-    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.22, 12), hMat);
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.34, 12), hMat);
     bar.position.set(side * 0.248, 0, Z);
     root.add(bar); root.userData.sideHandles.push(bar);
     const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cT.position.set(side * 0.248, 0.11, Z); root.add(cT);
+    cT.position.set(side * 0.248, 0.17, Z); root.add(cT);
     const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
-    cB.position.set(side * 0.248, -0.11, Z); root.add(cB);
+    cB.position.set(side * 0.248, -0.17, Z); root.add(cB);
     const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
     br.rotation.z = Math.PI / 2;
     br.position.set(side * 0.214, 0, Z); root.add(br);
@@ -1498,7 +1545,7 @@ function _setDrawActive(next) {
     _drawSpellBtn(
       _drawPanel.userData.drawToggleBtnCanvas,
       _drawPanel.userData.drawToggleBtnTex,
-      '✏️', 'DRAW MODE', 'Place vertices',
+      '✶', 'VERTEX', 'Place/select',
       _drawMode ? {
         topBg: '#2a0a40', bottomBg: '#1a0630', border: '#ff88ff',
         innerGlow: 'rgba(255,140,255,0.45)', iconColor: '#ffffff',
@@ -1516,67 +1563,209 @@ function _setDrawActive(next) {
 
 function _toggleDrawMode() { _setDrawActive(!_drawMode); }
 
+function _selectDrawVertex(idx, additive = false) {
+  if (idx < 0 || idx >= _drawVerts.length) return false;
+  if (!additive) {
+    _drawSelection.length = 0;
+    _drawSelection.push(idx);
+  } else {
+    const at = _drawSelection.indexOf(idx);
+    if (at >= 0) _drawSelection.splice(at, 1);
+    else _drawSelection.push(idx);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+  return true;
+}
+
+function _updateDrawSelectionVisuals() {
+  for (let i = 0; i < _drawVertMeshes.length; i++) {
+    const selected = _drawSelection.includes(i);
+    _drawVertMeshes[i].material.color.setHex(selected ? 0x66ffee : 0xffee00);
+  }
+}
+
 function _placeDrawVertex(worldPos) {
-  const v = new THREE.Vector3(worldPos.x, 0, worldPos.z);
+  const v = worldPos.clone();
   _drawVerts.push(v);
   const marker = new THREE.Mesh(
-    new THREE.SphereGeometry(0.055, 8, 6),
+    new THREE.SphereGeometry(0.05, 9, 7),
     new THREE.MeshBasicMaterial({ color: 0xffee00 })
   );
-  marker.position.set(v.x, 0.055, v.z);
+  marker.position.copy(v);
   scene.add(marker);
-  _drawMarkers.push(marker);
+  _drawVertMeshes.push(marker);
+  _drawSelection.length = 0;
+  _drawSelection.push(_drawVerts.length - 1);
+  _updateDrawSelectionVisuals();
   _updateDrawPreview();
   _updateDrawUi();
 }
 
-function _removeLastVertex() {
-  if (!_drawVerts.length) return;
-  _drawVerts.pop();
-  const m = _drawMarkers.pop();
-  if (m) scene.remove(m);
-  _updateDrawPreview();
+function _findNearestDrawVertex(point, radius = 0.16) {
+  let best = -1;
+  let bestSq = radius * radius;
+  for (let i = 0; i < _drawVerts.length; i++) {
+    const dSq = _drawVerts[i].distanceToSquared(point);
+    if (dSq <= bestSq) { bestSq = dSq; best = i; }
+  }
+  return best;
+}
+
+function _ensureDrawEdge(a, b) {
+  if (a === b) return false;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  if (_drawEdges.some(e => e.a === lo && e.b === hi)) return false;
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    _drawVerts[lo].clone(),
+    _drawVerts[hi].clone(),
+  ]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x66d1ff }));
+  scene.add(line);
+  _drawEdges.push({ a: lo, b: hi, line });
+  return true;
+}
+
+function _createEdgeFromSelection() {
+  if (_drawSelection.length < 2) return;
+  const a = _drawSelection[_drawSelection.length - 2];
+  const b = _drawSelection[_drawSelection.length - 1];
+  _ensureDrawEdge(a, b);
   _updateDrawUi();
+}
+
+function _createFaceFromSelection() {
+  if (_drawSelection.length < 3) return;
+  const a = _drawSelection[_drawSelection.length - 3];
+  const b = _drawSelection[_drawSelection.length - 2];
+  const c = _drawSelection[_drawSelection.length - 1];
+  if (a === b || b === c || a === c) return;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(9);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ color: 0xb587ff, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+  );
+  scene.add(mesh);
+  _drawFaces.push({ a, b, c, mesh });
+  _ensureDrawEdge(a, b);
+  _ensureDrawEdge(b, c);
+  _ensureDrawEdge(c, a);
+  _updateDrawMeshGeometry();
+  _updateDrawUi();
+}
+
+function _updateDrawMeshGeometry() {
+  for (const edge of _drawEdges) {
+    edge.line.geometry.setFromPoints([_drawVerts[edge.a], _drawVerts[edge.b]]);
+  }
+  for (const face of _drawFaces) {
+    const attr = face.mesh.geometry.getAttribute('position');
+    attr.setXYZ(0, _drawVerts[face.a].x, _drawVerts[face.a].y, _drawVerts[face.a].z);
+    attr.setXYZ(1, _drawVerts[face.b].x, _drawVerts[face.b].y, _drawVerts[face.b].z);
+    attr.setXYZ(2, _drawVerts[face.c].x, _drawVerts[face.c].y, _drawVerts[face.c].z);
+    attr.needsUpdate = true;
+    face.mesh.geometry.computeVertexNormals();
+  }
+}
+
+function _nudgeDrawSelection(dx, dy, dz) {
+  if (!_drawSelection.length) return;
+  for (const idx of _drawSelection) {
+    _drawVerts[idx].x += dx;
+    _drawVerts[idx].y += dy;
+    _drawVerts[idx].z += dz;
+    _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+  }
+  _updateDrawMeshGeometry();
+  _updateDrawPreview();
+}
+
+function _undoDrawStep() {
+  if (_drawFaces.length) {
+    const lastFace = _drawFaces.pop();
+    scene.remove(lastFace.mesh);
+    _updateDrawUi();
+    return;
+  }
+  if (_drawEdges.length) {
+    const lastEdge = _drawEdges.pop();
+    scene.remove(lastEdge.line);
+    _updateDrawUi();
+    return;
+  }
+  if (_drawVerts.length) {
+    const lastIdx = _drawVerts.length - 1;
+    const inUse = _drawEdges.some(e => e.a === lastIdx || e.b === lastIdx) || _drawFaces.some(f => f.a === lastIdx || f.b === lastIdx || f.c === lastIdx);
+    if (inUse) return;
+    _drawVerts.pop();
+    const marker = _drawVertMeshes.pop();
+    if (marker) scene.remove(marker);
+    for (let i = _drawSelection.length - 1; i >= 0; i--) {
+      if (_drawSelection[i] >= _drawVerts.length) _drawSelection.splice(i, 1);
+    }
+    _updateDrawSelectionVisuals();
+    _updateDrawPreview();
+    _updateDrawUi();
+  }
 }
 
 function _updateDrawPreview() {
   if (_drawPreviewLine) { scene.remove(_drawPreviewLine); _drawPreviewLine = null; }
-  if (_drawVerts.length < 2) return;
-  const pts = _drawVerts.map(v => new THREE.Vector3(v.x, 0.04, v.z));
-  if (_drawVerts.length >= 3) pts.push(pts[0].clone());
-  const geo = new THREE.BufferGeometry().setFromPoints(pts);
-  _drawPreviewLine = new THREE.Line(
-    geo,
-    new THREE.LineBasicMaterial({ color: 0xffee00 })
-  );
-  scene.add(_drawPreviewLine);
+  if (_drawPreviewFace) { scene.remove(_drawPreviewFace); _drawPreviewFace = null; }
+  if (_drawSelection.length >= 2) {
+    const pts = _drawSelection.map(i => _drawVerts[i].clone());
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    _drawPreviewLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffee00 }));
+    scene.add(_drawPreviewLine);
+  }
+  if (_drawSelection.length >= 3) {
+    const i0 = _drawSelection[_drawSelection.length - 3];
+    const i1 = _drawSelection[_drawSelection.length - 2];
+    const i2 = _drawSelection[_drawSelection.length - 1];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      _drawVerts[i0].x, _drawVerts[i0].y, _drawVerts[i0].z,
+      _drawVerts[i1].x, _drawVerts[i1].y, _drawVerts[i1].z,
+      _drawVerts[i2].x, _drawVerts[i2].y, _drawVerts[i2].z,
+    ], 3));
+    geo.computeVertexNormals();
+    _drawPreviewFace = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+    );
+    scene.add(_drawPreviewFace);
+  }
 }
 
-function _finishDrawShape() {
-  if (_drawVerts.length < 3) { _cancelDraw(); return; }
-  // Build a flat XZ polygon via THREE.Shape (which works in XY, so we use x/z)
-  const shape = new THREE.Shape(_drawVerts.map(v => new THREE.Vector2(v.x, v.z)));
-  const geo = new THREE.ShapeGeometry(shape);
-  geo.rotateX(-Math.PI / 2); // flip from XY plane to XZ ground plane
-  const color = new THREE.Color().setHSL(Math.random(), 0.65, 0.50);
-  const mat = new THREE.MeshStandardMaterial({
-    color,
-    roughness: 0.55,
-    metalness: 0.15,
-    side: THREE.DoubleSide,
-  });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.y = 0.012;
-  scene.add(mesh);
-  _drawnObjects.push(mesh);
-  _cancelDraw();
+function _drawPointFromRay(ray, additiveSelect = false, raycaster = null) {
+  if (raycaster) {
+    const markerHits = raycaster.intersectObjects(_drawVertMeshes, false);
+    if (markerHits.length) {
+      const idx = _drawVertMeshes.indexOf(markerHits[0].object);
+      if (idx >= 0) {
+        _selectDrawVertex(idx, additiveSelect);
+        return true;
+      }
+    }
+  }
+  _groundPlane.constant = -_drawPlaneY;
+  if (ray.intersectPlane(_groundPlane, _tmpDrawHit)) {
+    const nearIdx = _findNearestDrawVertex(_tmpDrawHit, 0.12);
+    if (nearIdx >= 0) _selectDrawVertex(nearIdx, additiveSelect);
+    else _placeDrawVertex(_tmpDrawHit);
+    return true;
+  }
+  return false;
 }
 
 function _cancelDraw() {
-  _drawVerts.length = 0;
-  _drawMarkers.forEach(m => scene.remove(m));
-  _drawMarkers.length = 0;
-  if (_drawPreviewLine) { scene.remove(_drawPreviewLine); _drawPreviewLine = null; }
+  _drawSelection.length = 0;
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
   _updateDrawUi();
 }
 
@@ -1585,10 +1774,13 @@ function _updateDrawUi() {
   if (!el) return;
   if (_drawMode) {
     const n = _drawVerts.length;
+    const e = _drawEdges.length;
+    const f = _drawFaces.length;
+    const s = _drawSelection.length;
     el.style.display = 'block';
     el.innerHTML =
-      `✏️ DRAW MODE &nbsp;—&nbsp; ${n} vert${n !== 1 ? 's' : ''} placed` +
-      `<br><small>Click/Trigger: place &nbsp;•&nbsp; Enter: finish &nbsp;•&nbsp; Backspace: undo &nbsp;•&nbsp; V: cancel</small>`;
+      `✏️ EDIT MODE — V:${n} E:${e} F:${f} | Selected:${s} | Plane Y:${_drawPlaneY.toFixed(2)}` +
+      `<br><small>Click/Trigger: vertex/select • Shift+Click: multi-select • E: edge • T: face • Backspace: undo • U/O/N/M/,/.: nudge • Z/X: plane down/up • V: exit</small>`;
   } else {
     el.style.display = 'none';
   }
@@ -1816,10 +2008,24 @@ function _updatePanelInteraction(leftGp, rightGp) {
         continue;
       }
 
-      // Draw panel — finish shape button
-      _drawPanel.userData.drawFinishBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      // Draw panel — edge button
+      _drawPanel.userData.drawEdgeBtnMesh.getWorldPosition(_tmpDrawPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
-        if (_drawMode) _finishDrawShape();
+        if (_drawMode) _createEdgeFromSelection();
+        continue;
+      }
+
+      // Draw panel — face button
+      _drawPanel.userData.drawFaceBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (_drawMode) _createFaceFromSelection();
+        continue;
+      }
+
+      // Draw panel — undo button
+      _drawPanel.userData.drawUndoBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (_drawMode) _undoDrawStep();
         continue;
       }
 
@@ -1828,9 +2034,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
         ctrl.getWorldQuaternion(_tmpDrawQuat);
         _tmpDrawDir.set(0, 0, -1).applyQuaternion(_tmpDrawQuat);
         _drawRay.set(_tmpCtrlPos, _tmpDrawDir);
-        if (_drawRay.intersectPlane(_groundPlane, _tmpDrawHit)) {
-          _placeDrawVertex(_tmpDrawHit);
-        }
+        _drawPointFromRay(_drawRay, false);
         continue;
       }
 
@@ -1961,8 +2165,8 @@ function _updateDesktopHint() {
   }
   if (_crosshairEl) _crosshairEl.classList.add('show');
   const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
-  const drawHint = _drawMode ? ' | DRAW: click=vert, Enter=finish, Backspace=undo, V=cancel' : '';
-  _hintEl.textContent = `Desktop: WASD move, mouse look, 1/2/3 sky, L laser, K disco, F/G/H spells, V draw, [/] brightness${drawHint} • ${lockHint}`;
+  const drawHint = _drawMode ? ' | EDIT: click/select, E edge, T face, U/O/N/M/,/. nudge, Z/X plane, Backspace undo' : '';
+  _hintEl.textContent = `Desktop: WASD move, mouse look, 1/2/3 sky, L laser, K disco, F/G/H spells, V edit, [/] brightness${drawHint} • ${lockHint}`;
 }
 
 function _desktopInteractTargets() {
@@ -1974,7 +2178,9 @@ function _desktopInteractTargets() {
     _spellPanel?.userData?.arcaneBtnMesh,
     _spellPanel?.userData?.lightningBtnMesh,
     _drawPanel?.userData?.drawToggleBtnMesh,
-    _drawPanel?.userData?.drawFinishBtnMesh,
+    _drawPanel?.userData?.drawEdgeBtnMesh,
+    _drawPanel?.userData?.drawFaceBtnMesh,
+    _drawPanel?.userData?.drawUndoBtnMesh,
   ].filter(Boolean);
 }
 
@@ -2008,18 +2214,22 @@ function _desktopTriggerInteraction(target) {
     _toggleDrawMode();
     return true;
   }
-  if (target === _drawPanel?.userData?.drawFinishBtnMesh) {
-    if (_drawMode) _finishDrawShape();
+  if (target === _drawPanel?.userData?.drawEdgeBtnMesh) {
+    if (_drawMode) _createEdgeFromSelection();
     return true;
   }
-  if (target === _controlTablet?.userData?.drawBtnMesh) {
-    _toggleDrawMode();
+  if (target === _drawPanel?.userData?.drawFaceBtnMesh) {
+    if (_drawMode) _createFaceFromSelection();
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawUndoBtnMesh) {
+    if (_drawMode) _undoDrawStep();
     return true;
   }
   return false;
 }
 
-function _desktopClickInteract(clientX, clientY, centerRay = false) {
+function _desktopClickInteract(clientX, clientY, centerRay = false, additiveSelect = false) {
   if (renderer.xr.isPresenting) return false;
   const rect = canvas.getBoundingClientRect();
   if (!centerRay) {
@@ -2031,12 +2241,9 @@ function _desktopClickInteract(clientX, clientY, centerRay = false) {
   _desktopState.raycaster.setFromCamera(_desktopState.mouseNdc, camera);
   const hits = _desktopState.raycaster.intersectObjects(_desktopInteractTargets(), false);
   if (hits.length) return _desktopTriggerInteraction(hits[0].object);
-  // Draw mode: no button hit — place vertex on ground plane
+  // Draw mode: no button hit — place/select vertices in 3D edit mode
   if (_drawMode) {
-    if (_desktopState.raycaster.ray.intersectPlane(_groundPlane, _tmpDrawHit)) {
-      _placeDrawVertex(_tmpDrawHit);
-      return true;
-    }
+    return _drawPointFromRay(_desktopState.raycaster.ray, additiveSelect, _desktopState.raycaster);
   }
   return false;
 }
@@ -2052,7 +2259,7 @@ function _initDesktopControls() {
       canvas.requestPointerLock();
       return;
     }
-    _desktopClickInteract(e.clientX, e.clientY, _desktopState.pointerLocked);
+    _desktopClickInteract(e.clientX, e.clientY, _desktopState.pointerLocked, !!e.shiftKey);
   });
 
   document.addEventListener('pointerlockchange', () => {
@@ -2082,8 +2289,17 @@ function _initDesktopControls() {
     else if (key === 'g') _castArcaneShot();
     else if (key === 'h') _castLightningStrike();
     else if (key === 'v') _toggleDrawMode();
-    else if (key === 'enter') { if (_drawMode) _finishDrawShape(); }
-    else if (key === 'backspace') { if (_drawMode) { e.preventDefault(); _removeLastVertex(); } }
+    else if (key === 'e') { if (_drawMode) _createEdgeFromSelection(); }
+    else if (key === 't') { if (_drawMode) _createFaceFromSelection(); }
+    else if (key === 'backspace') { if (_drawMode) { e.preventDefault(); _undoDrawStep(); } }
+    else if (key === 'z') { if (_drawMode) { _drawPlaneY -= 0.1; _updateDrawUi(); } }
+    else if (key === 'x') { if (_drawMode) { _drawPlaneY += 0.1; _updateDrawUi(); } }
+    else if (key === 'u') { if (_drawMode) _nudgeDrawSelection(0, 0.05, 0); }
+    else if (key === 'o') { if (_drawMode) _nudgeDrawSelection(0, -0.05, 0); }
+    else if (key === 'n') { if (_drawMode) _nudgeDrawSelection(-0.05, 0, 0); }
+    else if (key === 'm') { if (_drawMode) _nudgeDrawSelection(0.05, 0, 0); }
+    else if (key === ',') { if (_drawMode) _nudgeDrawSelection(0, 0, -0.05); }
+    else if (key === '.') { if (_drawMode) _nudgeDrawSelection(0, 0, 0.05); }
     else if (key === 'escape') { if (_drawMode) _setDrawActive(false); }
     else if (key === '[') _applyBrightness(_brightness - 0.1);
     else if (key === ']') _applyBrightness(_brightness + 0.1);
