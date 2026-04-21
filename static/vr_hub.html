@@ -124,7 +124,7 @@
   }
 }
 </script>
-
+<script src="/socket.io/socket.io.js"></script>
 <script type="module">
 import * as THREE from 'three';
 
@@ -1315,6 +1315,7 @@ _playersTablet = _buildPlayersTablet();
 scene.add(_playersTablet);
 _refreshPlayersTablet();
 _startPresencePolling();
+_connectPresenceSocket();
 // ─── Draw Panel ───────────────────────────────────────────────────────────────
 const _drawPanelGrabState = { holder: null };
 let _drawPanel = null;
