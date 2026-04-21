@@ -1286,6 +1286,26 @@ const _handGrab = {
   left:  { active: false, vertIndex: -1, offset: new THREE.Vector3() },
   right: { active: false, vertIndex: -1, offset: new THREE.Vector3() },
 };
+const _hapticsState = {
+  left:  { hovering: false, grabbing: false, lastPulse: 0 },
+  right: { hovering: false, grabbing: false, lastPulse: 0 },
+};
+
+function _pulseHaptics(ctrl, intensity = 0.5, duration = 40) {
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  const handedness = ctrl?.userData?.inputSource?.handedness;
+  if (!handedness) return;
+  const src = [...session.inputSources].find(s => s.handedness === handedness);
+  if (!src?.gamepad?.hapticActuators?.length) return;
+  try { src.gamepad.hapticActuators[0].pulse(intensity, duration); } catch (_) {}
+}
+
+function _hapticHover(hand, ctrl)   { _pulseHaptics(ctrl, 0.2, 20); }
+function _hapticGrab(hand, ctrl)    { _pulseHaptics(ctrl, 0.9, 35); }
+function _hapticDrag(hand, ctrl)    { _pulseHaptics(ctrl, 0.08, 30); }
+function _hapticRelease(hand, ctrl) { _pulseHaptics(ctrl, 0.3, 25); }
+function _hapticAxis(hand, ctrl)    { _pulseHaptics(ctrl, 0.5, 30); }
 
 function _buildDrawPanel() {
   const root = new THREE.Group();
@@ -2447,7 +2467,8 @@ function _updatePanelInteraction(leftGp, rightGp) {
     } else {
       holdCtrl.getWorldPosition(_tmpCtrlPos);
       if (_compassGrabState.mode === 'drag-selection' && _drawMode && _compassGrabState.selectedVerts.length) {
-        _toolSystem.activeTool = 'drag-selection';
+        if (_toolSystem.activeTool !== 'drag-selection') console.log('GRAB vs TOOL', _toolSystem.activeTool, '-> drag-selection');
+      _toolSystem.activeTool = 'drag-selection';
         const amount = _tmpDrawWork
           .copy(_tmpCtrlPos)
           .sub(_compassGrabState.startCtrl)
@@ -2462,6 +2483,7 @@ function _updatePanelInteraction(leftGp, rightGp) {
         _updateDrawMeshGeometry();
         _updateDrawPreview();
       } else {
+        if (_toolSystem.activeTool !== 'move-gizmo') console.log('GRAB vs TOOL', _toolSystem.activeTool, '-> move-gizmo');
         _toolSystem.activeTool = 'move-gizmo';
         _compassRoot.position.copy(_tmpCtrlPos).add(_compassGrabState.offset);
         _compassRoot.quaternion.identity();
@@ -2472,11 +2494,32 @@ function _updatePanelInteraction(leftGp, rightGp) {
   // Direct vertex grab — both hands can independently hold a vertex.
   for (const hand of ['left', 'right']) {
     const hg = _handGrab[hand];
-    if (!hg.active) continue;
     const holdCtrl = _controllersByHand[hand];
     const holdPressed = hand === 'left' ? leftPressed : rightPressed;
+    if (!hg.active) {
+      // Hover detection — light pulse when within grab radius of a vertex.
+      if (_drawMode && _drawVerts.length && holdCtrl) {
+        holdCtrl.getWorldPosition(_tmpCtrlPos);
+        const hoverIdx = _findNearestDrawVertex(_tmpCtrlPos, 0.08);
+        if (hoverIdx >= 0) {
+          if (!_hapticsState[hand].hovering) {
+            _hapticHover(hand, holdCtrl);
+            _hapticsState[hand].hovering = true;
+          }
+        } else {
+          _hapticsState[hand].hovering = false;
+        }
+      }
+      continue;
+    }
+    _hapticsState[hand].hovering = false;
     const idx = hg.vertIndex;
     if (!holdCtrl || !holdPressed || !_drawMode || idx < 0 || idx >= _drawVerts.length || !_drawVertMeshes[idx]) {
+      // Release feedback.
+      if (_hapticsState[hand].grabbing) {
+        _hapticRelease(hand, holdCtrl);
+        _hapticsState[hand].grabbing = false;
+      }
       hg.active = false;
       hg.vertIndex = -1;
     } else {
@@ -2486,6 +2529,12 @@ function _updatePanelInteraction(leftGp, rightGp) {
       _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
       _updateDrawMeshGeometry();
       _updateDrawPreview();
+      // Subtle drag tension pulse (throttled to every 60 ms).
+      const now = performance.now();
+      if (now - _hapticsState[hand].lastPulse > 60) {
+        _hapticDrag(hand, holdCtrl);
+        _hapticsState[hand].lastPulse = now;
+      }
     }
   }
 
@@ -2562,6 +2611,12 @@ function _updatePanelInteraction(leftGp, rightGp) {
           _handGrab[hand].active = true;
           _handGrab[hand].vertIndex = nearIdx;
           _handGrab[hand].offset.copy(_drawVerts[nearIdx]).sub(_tmpCtrlPos);
+          if (_toolSystem.activeTool !== 'idle') console.log('GRAB vs TOOL', _toolSystem.activeTool, hand);
+          _toolSystem.activeTool = 'grab-vertex';
+          // Grab-start haptic click.
+          _hapticGrab(hand, ctrl);
+          _hapticsState[hand].grabbing = true;
+          _hapticsState[hand].hovering = false;
           continue;
         }
       }
@@ -2591,6 +2646,8 @@ function _updatePanelInteraction(leftGp, rightGp) {
             _compassGrabState.startCtrl.copy(_tmpCtrlPos);
             _compassGrabState.selectedVerts = selVerts;
             _compassGrabState.startVerts = selVerts.map(i => _drawVerts[i].clone());
+            // Axis-lock haptic feedback.
+            _hapticAxis(hand, ctrl);
             continue;
           }
         }
@@ -3049,9 +3106,13 @@ function _initDesktopControls() {
         if (key === 'escape') { _cancelDrawTransform(); return; }
       }
 
-      if (key === 'g') { _startDrawTransform('grab'); return; }
-      if (key === 'r') { _startDrawTransform('rotate'); return; }
-      if (key === 's') { _startDrawTransform('scale'); return; }
+      // _drawTransform keyboard ops gated — _handGrab is the primary path in VR.
+      // Re-enable with: _toolSystem.mode = 'legacy'
+      if (_toolSystem.mode === 'legacy') {
+        if (key === 'g') { _startDrawTransform('grab'); return; }
+        if (key === 'r') { _startDrawTransform('rotate'); return; }
+        if (key === 's') { _startDrawTransform('scale'); return; }
+      }
       if (key === 'e') { _extrudeSelection(); return; }
       if (key === 'f') { _fillFromSelection(); return; }
       if (key === 'm') { _mergeSelection(); return; }
