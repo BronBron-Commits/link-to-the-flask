@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Account Hub - Paraval</title>
+  <style>
+    :root {
+      --bg-1: #07111c;
+      --bg-2: #102536;
+      --bg-3: #25161d;
+      --panel: rgba(7, 12, 20, 0.76);
+      --panel-edge: rgba(147, 211, 255, 0.18);
+      --text: #eef5f7;
+      --muted: #9ab1bf;
+      --gold: #f3cb7a;
+      --sky: #87d8ff;
+      --rose: #ff9eb7;
+      --mint: #85f5cc;
+      --shadow: rgba(0, 0, 0, 0.35);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+
+    html, body {
+      min-height: 100%;
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(135, 216, 255, 0.18), transparent 34%),
+        radial-gradient(circle at 82% 18%, rgba(255, 158, 183, 0.16), transparent 30%),
+        linear-gradient(145deg, var(--bg-2), var(--bg-1) 52%, #05080d 100%);
+      color: var(--text);
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+
+    body::before,
+    body::after {
+      content: "";
+      position: fixed;
+      inset: auto;
+      border-radius: 50%;
+      filter: blur(20px);
+      opacity: 0.5;
+      pointer-events: none;
+    }
+
+    body::before {
+      width: 280px;
+      height: 280px;
+      left: -80px;
+      top: 10vh;
+      background: rgba(135, 216, 255, 0.18);
+    }
+
+    body::after {
+      width: 240px;
+      height: 240px;
+      right: -60px;
+      bottom: 10vh;
+      background: rgba(255, 158, 183, 0.14);
+    }
+
+    .shell {
+      width: min(1180px, calc(100vw - 32px));
+      margin: 0 auto;
+      min-height: 100vh;
+      display: grid;
+      align-items: center;
+      padding: 28px 0;
+    }
+
+    .panel {
+      position: relative;
+      overflow: hidden;
+      border-radius: 28px;
+      border: 1px solid var(--panel-edge);
+      background: linear-gradient(160deg, rgba(10, 16, 28, 0.88), rgba(8, 14, 24, 0.72));
+      box-shadow: 0 32px 80px var(--shadow);
+      backdrop-filter: blur(14px);
+      padding: 28px;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.45), transparent 75%);
+      pointer-events: none;
+    }
+
+    .panel::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      border: 1px solid rgba(243, 203, 122, 0.55);
+      box-shadow:
+        0 0 0 1px rgba(243, 203, 122, 0.2) inset,
+        0 0 22px rgba(243, 203, 122, 0.16);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .header,
+    .hub-stage {
+      position: relative;
+      z-index: 1;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .eyebrow,
+    .meta,
+    .mini-label {
+      font-family: Consolas, 'Courier New', monospace;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      color: var(--sky);
+      font-size: 0.78rem;
+      margin-bottom: 10px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2.2rem, 4vw, 3.8rem);
+      line-height: 0.94;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fbf5e8;
+      max-width: 12ch;
+    }
+
+    .lead {
+      max-width: 58ch;
+      margin: 12px 0 0;
+      color: #c3d4dd;
+      line-height: 1.6;
+      font-size: 1rem;
+    }
+
+    .account-card {
+      min-width: min(100%, 310px);
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(147, 211, 255, 0.2);
+      background: rgba(255,255,255,0.04);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    .account-actions {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .account-signout-btn {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(6, 11, 19, 0.82);
+      color: #fff1c9;
+      border-radius: 12px;
+      padding: 10px 12px;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .account-signout-btn:hover,
+    .account-signout-btn:focus-visible {
+      transform: translateX(3px);
+      border-color: rgba(243, 203, 122, 0.52);
+      background: rgba(10, 18, 30, 0.94);
+      outline: none;
+    }
+
+    .account-name {
+      font-size: 1.1rem;
+      color: #fff6df;
+      margin: 6px 0 8px;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 0.74rem;
+      line-height: 1.7;
+      word-break: break-word;
+    }
+
+    .hub-stage {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 24px;
+      align-items: stretch;
+    }
+
+    .network-wrap {
+      position: relative;
+      min-height: 620px;
+      border-radius: 22px;
+      border: 1px solid rgba(255,255,255,0.06);
+      background: radial-gradient(circle at 50% 50%, rgba(135, 216, 255, 0.08), rgba(0, 0, 0, 0.08) 42%, rgba(255,255,255,0.02));
+      overflow: hidden;
+    }
+
+    .network-lines {
+      display: none;
+    }
+
+    .bubble {
+      --bubble-accent: rgba(243, 203, 122, 1);
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+      border-radius: 999px;
+      text-decoration: none;
+      color: var(--text);
+      padding: 16px 20px;
+      background: radial-gradient(circle at 30% 28%, rgba(255,255,255,0.18), rgba(255,255,255,0.03) 42%, rgba(255,255,255,0.06));
+      border: 1px solid color-mix(in srgb, var(--bubble-accent) 34%, transparent);
+      box-shadow:
+        0 18px 34px rgba(0, 0, 0, 0.28),
+        0 0 16px color-mix(in srgb, var(--bubble-accent) 22%, transparent),
+        inset 0 1px 0 rgba(255,255,255,0.08);
+      transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+      animation: float 9s ease-in-out infinite;
+    }
+
+    .bubble::after {
+      content: "";
+      position: absolute;
+      inset: -3px;
+      border-radius: inherit;
+      border: 1px solid color-mix(in srgb, var(--bubble-accent) 56%, transparent);
+      box-shadow: 0 0 18px color-mix(in srgb, var(--bubble-accent) 30%, transparent);
+      opacity: 0.9;
+      pointer-events: none;
+    }
+
+    .nav-bubble {
+      translate: 0px 0px;
+      scale: 1;
+      transition:
+        opacity   0.42s ease,
+        filter    0.42s ease,
+        visibility 0s linear 0.42s,
+        translate 0.42s cubic-bezier(0.34, 1.4, 0.64, 1),
+        scale     0.42s cubic-bezier(0.34, 1.4, 0.64, 1);
+    }
+
+    .network-wrap.is-collapsed .nav-bubble {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      filter: blur(10px);
+      translate: var(--tx, 0px) var(--ty, 0px);
+      scale: 0.55;
+    }
+
+    /* Expand: path outward with staggered start per bubble */
+    .network-wrap:not(.is-collapsed) .nav-bubble {
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      filter: blur(0);
+      translate: 0px 0px;
+      scale: 1;
+    }
+
+    .network-wrap:not(.is-collapsed) .bubble.character {
+      transition-delay: 0.04s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.models {
+      transition-delay: 0.10s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.worlds {
+      transition-delay: 0.16s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.library {
+      transition-delay: 0.22s;
+    }
+    .network-wrap:not(.is-collapsed) .bubble.vr {
+      transition-delay: 0.28s;
+    }
+
+    .bubble:hover,
+    .bubble:focus-visible {
+      transform: translateY(-6px) scale(1.02);
+      border-color: color-mix(in srgb, var(--bubble-accent) 72%, transparent);
+      box-shadow: 0 24px 44px rgba(0, 0, 0, 0.34), 0 0 26px color-mix(in srgb, var(--bubble-accent) 34%, transparent), 0 0 0 1px rgba(255,255,255,0.08) inset;
+      outline: none;
+    }
+
+    .bubble strong {
+      font-size: 1rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #fff9eb;
+    }
+
+    .bubble span {
+      color: #c0d4de;
+      line-height: 1.35;
+      font-size: 0.85rem;
+    }
+
+    .bubble.core {
+      --bubble-accent: rgba(243, 203, 122, 1);
+      left: 33%;
+      top: 34%;
+      width: 270px;
+      height: 270px;
+      padding: 32px;
+      background: radial-gradient(circle at 30% 25%, rgba(243, 203, 122, 0.3), rgba(135, 216, 255, 0.12) 38%, rgba(255,255,255,0.05));
+      border-color: rgba(243, 203, 122, 0.26);
+      animation-duration: 11s;
+    }
+
+    .bubble.core-toggle {
+      cursor: pointer;
+    }
+
+    .bubble.core-toggle:hover,
+    .bubble.core-toggle:focus-visible {
+      transform: translateY(-4px) scale(1.01);
+      border-color: rgba(243, 203, 122, 0.45);
+      box-shadow: 0 24px 40px rgba(0, 0, 0, 0.34), inset 0 1px 0 rgba(255,255,255,0.08);
+      outline: none;
+    }
+
+    .bubble.core strong {
+      font-size: 1.25rem;
+    }
+
+    .bubble.character {
+      --bubble-accent: rgba(154, 226, 255, 1);
+      --tx: 150px;
+      --ty: 115px;
+      left: 5%;
+      top: 16%;
+      width: 210px;
+      height: 210px;
+      animation-delay: -1.8s;
+    }
+
+    .bubble.models {
+      --bubble-accent: rgba(255, 166, 204, 1);
+      --tx: -195px;
+      --ty: 115px;
+      right: 8%;
+      top: 10%;
+      width: 190px;
+      height: 190px;
+      animation-delay: -3.4s;
+    }
+
+    .bubble.worlds {
+      --bubble-accent: rgba(134, 255, 196, 1);
+      --tx: 150px;
+      --ty: -165px;
+      left: 11%;
+      bottom: 10%;
+      width: 230px;
+      height: 230px;
+      animation-delay: -2.6s;
+    }
+
+    .bubble.library {
+      --bubble-accent: rgba(194, 180, 255, 1);
+      --tx: -195px;
+      --ty: -165px;
+      right: 14%;
+      bottom: 7%;
+      width: 185px;
+      height: 185px;
+      animation-delay: -5.2s;
+    }
+
+    .bubble.vr {
+      --bubble-accent: rgba(160, 110, 255, 1);
+      --tx: -20px;
+      --ty: -220px;
+      right: 4%;
+      bottom: 38%;
+      width: 160px;
+      height: 160px;
+      animation-delay: -1.8s;
+    }
+
+    .rail {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .info-card {
+      border-radius: 18px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      padding: 16px 18px;
+    }
+
+    .info-card h2 {
+      margin: 0 0 8px;
+      font-size: 0.95rem;
+      color: #fff1c9;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .info-card p {
+      margin: 0;
+      color: #c0d4de;
+      line-height: 1.6;
+      font-size: 0.93rem;
+    }
+
+    .action-stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .action-btn {
+      appearance: none;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(6, 11, 19, 0.8);
+      color: #f7f8fb;
+      border-radius: 14px;
+      padding: 12px 14px;
+      text-align: left;
+      font: inherit;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .action-btn:hover,
+    .action-btn:focus-visible {
+      transform: translateX(4px);
+      border-color: rgba(135, 216, 255, 0.32);
+      background: rgba(10, 18, 30, 0.94);
+      outline: none;
+    }
+
+    .action-btn strong,
+    .action-btn span {
+      display: block;
+    }
+
+    .action-btn strong {
+      font-size: 0.9rem;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #fff1c9;
+      margin-bottom: 4px;
+    }
+
+    .action-btn span {
+      color: var(--muted);
+      line-height: 1.45;
+      font-size: 0.84rem;
+    }
+
+    .status {
+      min-height: 22px;
+      color: var(--muted);
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.8rem;
+    }
+
+    .status.error { color: #ffb2b8; }
+    .status.ok { color: var(--mint); }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+    }
+
+    @media (max-width: 980px) {
+      .hub-stage {
+        grid-template-columns: 1fr;
+      }
+
+      .network-wrap {
+        min-height: 760px;
+      }
+
+      .bubble.core {
+        left: 50%;
+        top: 38%;
+        transform: translate(-50%, -50%);
+      }
+
+      .bubble.character { left: 6%; top: 8%; }
+      .bubble.models { right: 6%; top: 11%; }
+      .bubble.worlds { left: 10%; bottom: 11%; }
+      .bubble.library { right: 9%; bottom: 7%; }
+      .bubble.vr { right: 3%; bottom: 34%; }
+
+      .bubble:hover,
+      .bubble:focus-visible {
+        transform: translateY(-6px) scale(1.02);
+      }
+
+      .bubble.core:hover,
+      .bubble.core:focus-visible {
+        transform: translate(-50%, -50%) translateY(-6px) scale(1.02);
+      }
+
+      .bubble.core-toggle:hover,
+      .bubble.core-toggle:focus-visible {
+        transform: translate(-50%, -50%) translateY(-4px) scale(1.01);
+      }
+    }
+
+    @media (max-width: 720px) {
+      .shell {
+        width: min(100vw - 16px, 100%);
+        padding: 8px 0;
+      }
+
+      .panel {
+        padding: 18px;
+        border-radius: 22px;
+      }
+
+      .network-wrap {
+        min-height: auto;
+        display: grid;
+        gap: 12px;
+        background: none;
+        border: none;
+        overflow: visible;
+      }
+
+      .network-lines {
+        display: none;
+      }
+
+      .bubble,
+      .bubble.core,
+      .bubble.character,
+      .bubble.models,
+      .bubble.worlds,
+      .bubble.library {
+        position: relative;
+        inset: auto;
+        width: 100%;
+        height: auto;
+        min-height: 132px;
+        padding: 18px 20px;
+        transform: none;
+        animation-duration: 7s;
+        translate: 0px 0px !important;
+        scale: 1 !important;
+      }
+
+      .bubble.core:hover,
+      .bubble.core:focus-visible,
+      .bubble:hover,
+      .bubble:focus-visible {
+        transform: translateY(-4px);
+      }
+
+      .bubble.core-toggle:hover,
+      .bubble.core-toggle:focus-visible { transform: translateY(-4px); }
+    }
+  </style>
+</head>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
+  <div class="shell">
+    <main class="panel">
+      <header class="header">
+        <div>
+          <div class="eyebrow">Paraval Account Network</div>
+          <h1>Account Hub</h1>
+        </div>
+
+        <aside class="account-card" aria-label="Account summary">
+          <div id="account-mini-label" class="mini-label">{{ 'Signed In As' if is_authenticated else 'Guest Access' }}</div>
+          <div id="account-name" class="account-name">{{ auth_user.displayName or auth_user.email or 'Paraval Player' }}</div>
+          <div id="account-meta" class="meta">
+            <span id="account-email">{{ auth_user.email or 'No email on file' }}</span><br />
+            <span id="account-role">Role: {{ auth_user.role or 'authenticated' }}</span><br />
+            <span id="account-confirm">{% if is_authenticated %}Email {{ 'confirmed' if auth_user.emailConfirmed else 'unconfirmed' }}{% else %}Browse available resources from the hub map.{% endif %}</span>
+          </div>
+          <div class="account-actions">
+            <button id="sign-out-btn" class="account-signout-btn" type="button">Sign Out</button>
+            <div id="status" class="status" aria-live="polite"></div>
+          </div>
+        </aside>
+      </header>
+
+      <section class="hub-stage" aria-label="Account hub navigation">
+        <div class="network-wrap">
+          <svg class="network-lines" viewBox="0 0 1000 700" preserveAspectRatio="none" aria-hidden="true">
+            <defs>
+              <linearGradient id="lineA" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0%" stop-color="rgba(135,216,255,0.7)" />
+                <stop offset="100%" stop-color="rgba(243,203,122,0.18)" />
+              </linearGradient>
+            </defs>
+            <path d="M250 170 C365 245, 420 270, 500 350" fill="none" stroke="url(#lineA)" stroke-width="3" stroke-linecap="round" />
+            <path d="M760 160 C655 250, 625 278, 520 352" fill="none" stroke="url(#lineA)" stroke-width="3" stroke-linecap="round" />
+            <path d="M300 560 C380 500, 418 448, 500 370" fill="none" stroke="url(#lineA)" stroke-width="3" stroke-linecap="round" />
+            <path d="M710 565 C640 488, 598 438, 520 366" fill="none" stroke="url(#lineA)" stroke-width="3" stroke-linecap="round" />
+          </svg>
+
+          <a class="bubble nav-bubble character" href="/hub">
+            <strong>Character Hub</strong>
+            <span>Upload sheets, review roster data, and pick the character you want to carry forward.</span>
+          </a>
+
+          <div class="bubble core core-toggle" role="button" tabindex="0" aria-expanded="false" aria-label="Toggle hub destinations">
+            <strong>Welcome Home</strong>
+            <span>Choose where to step next across your worlds, models, and library.</span>
+          </div>
+
+          <a class="bubble nav-bubble worlds" href="/world-select">
+            <strong>World Select</strong>
+            <span>Jump into available environments and scene entry points.</span>
+          </a>
+
+          <a class="bubble nav-bubble library" href="/paraval-library">
+            <strong>Library</strong>
+            <span>Open reference content, documents, and adjacent tools.</span>
+          </a>
+
+          <a class="bubble nav-bubble vr" href="/vr-hub" id="enter-vr-bubble">
+            <strong>Enter VR</strong>
+            <span>Step into the 3D hub in WebXR.</span>
+          </a>
+          <script>
+            document.getElementById('enter-vr-bubble').addEventListener('click', function() {
+              try { sessionStorage.setItem('vr-autostart', '1'); } catch(_) {}
+            });
+          </script>
+        </div>
+
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      const statusEl = document.getElementById('status');
+      const signOutBtn = document.getElementById('sign-out-btn');
+      const networkWrap = document.querySelector('.network-wrap');
+      const coreBubble = document.querySelector('.bubble.core-toggle');
+
+      function setStatus(message, tone) {
+        statusEl.textContent = message || '';
+        statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+      }
+
+      if (networkWrap && coreBubble) {
+        let expanded = false;
+
+        const applyBubbleState = () => {
+          networkWrap.classList.toggle('is-collapsed', !expanded);
+          coreBubble.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        };
+
+        const toggleBubbleState = () => {
+          expanded = !expanded;
+          applyBubbleState();
+        };
+
+        applyBubbleState();
+        coreBubble.addEventListener('click', toggleBubbleState);
+        coreBubble.addEventListener('keydown', (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            toggleBubbleState();
+          }
+        });
+      }
+
+      if (!signOutBtn) {
+        return;
+      }
+
+      function clearClientAuthArtifacts() {
+        try {
+          sessionStorage.removeItem('paraval-auth-sync-token');
+        } catch (_e) {}
+
+        try {
+          const localKeys = [];
+          for (let i = 0; i < localStorage.length; i += 1) {
+            const key = String(localStorage.key(i) || '');
+            if (!key) continue;
+            if (/supabase/i.test(key) || /^sb-.*-auth-token$/i.test(key)) {
+              localKeys.push(key);
+            }
+          }
+          localKeys.forEach((key) => localStorage.removeItem(key));
+        } catch (_e) {}
+
+        try {
+          const sessionKeys = [];
+          for (let i = 0; i < sessionStorage.length; i += 1) {
+            const key = String(sessionStorage.key(i) || '');
+            if (!key) continue;
+            if (/supabase/i.test(key) || /^sb-.*-auth-token$/i.test(key)) {
+              sessionKeys.push(key);
+            }
+          }
+          sessionKeys.forEach((key) => sessionStorage.removeItem(key));
+        } catch (_e) {}
+      }
+
+      signOutBtn.addEventListener('click', async () => {
+        signOutBtn.disabled = true;
+        setStatus('Signing out...', '');
+        try {
+          const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          if (!response.ok) {
+            throw new Error(`logout-http-${response.status}`);
+          }
+          clearClientAuthArtifacts();
+          setStatus('Signed out. Redirecting...', 'ok');
+          window.location.replace('/?signedOut=1');
+        } catch (error) {
+          const message = String(error && error.message ? error.message : error);
+          setStatus(`Sign-out failed: ${message}`, 'error');
+          signOutBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
+
+  <script type="module">
+    (async function () {
+      const {
+        readEntryFromSearch,
+        writeNavContext,
+      } = await import('/static/utils/navigationContext.js');
+
+      const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
+      const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+      const miniLabelEl = document.getElementById('account-mini-label');
+      const nameEl = document.getElementById('account-name');
+      const emailEl = document.getElementById('account-email');
+      const roleEl = document.getElementById('account-role');
+      const confirmEl = document.getElementById('account-confirm');
+      const statusEl = document.getElementById('status');
+
+      function setStatus(message, tone) {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+      }
+
+      function renderUser(user) {
+        const metadata = (user && user.user_metadata && typeof user.user_metadata === 'object') ? user.user_metadata : {};
+        const appMetadata = (user && user.app_metadata && typeof user.app_metadata === 'object') ? user.app_metadata : {};
+        const displayName = String(metadata.display_name || metadata.full_name || metadata.name || '').trim();
+        const email = String((user && user.email) || '').trim();
+        const role = String(appMetadata.role || (user && user.role) || 'authenticated').trim() || 'authenticated';
+        const confirmed = Boolean(user && (user.email_confirmed_at || user.confirmed_at));
+
+        if (miniLabelEl) miniLabelEl.textContent = 'Signed In As';
+        if (nameEl) nameEl.textContent = displayName || email || 'Paraval Player';
+        if (emailEl) emailEl.textContent = email || 'No email on file';
+        if (roleEl) roleEl.textContent = `Role: ${role}`;
+        if (confirmEl) confirmEl.textContent = `Email ${confirmed ? 'confirmed' : 'unconfirmed'}`;
+      }
+
+      const requestedEntry = readEntryFromSearch(window.location.search);
+      writeNavContext({
+        lastPage: 'account-hub',
+        requestedEntry,
+      });
+
+      async function syncServerSession(accessToken) {
+        const token = String(accessToken || '').trim();
+        if (!token) return;
+
+        const tokenMarker = `token:${token.slice(0, 24)}`;
+        const alreadySynced = String(sessionStorage.getItem('paraval-auth-sync-token') || '').trim();
+        if (alreadySynced === tokenMarker) {
+          return;
+        }
+
+        await fetch('/api/auth/session', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: token }),
+        });
+
+        sessionStorage.setItem('paraval-auth-sync-token', tokenMarker);
+      }
+
+      if (!supabaseUrl || !supabaseAnonKey) {
+        return;
+      }
+
+      let createClient;
+      try {
+        ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+      } catch (_e1) {
+        try {
+          ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+        } catch (_e2) {
+          return;
+        }
+      }
+
+      if (typeof createClient !== 'function') {
+        return;
+      }
+
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+      });
+
+      const current = await supabase.auth.getSession();
+      const session = current && current.data ? current.data.session : null;
+      if (!session || !session.user) {
+        return;
+      }
+
+      renderUser(session.user);
+      const token = String(session.access_token || '').trim();
+      if (token) {
+        try {
+          await syncServerSession(token);
+        } catch (_err) {
+          setStatus('Signed in on this browser. Server session sync is delayed.', '');
+        }
+      }
+    })();
+  </script>
+</body>
+</html>

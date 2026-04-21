@@ -1,0 +1,249 @@
+{
+  "generatedAt": "2026-04-07T03:06:29.499Z",
+  "passed": 0,
+  "total": 28,
+  "percent": 0,
+  "sections": [
+    {
+      "title": "SYSTEM COVERAGE",
+      "checks": [
+        {
+          "label": "Combat system",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Networking",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Authority",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "UI",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Simulation",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "BEHAVIORAL GUARANTEES",
+      "checks": [
+        {
+          "label": "Determinism",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Multiplayer conflict resolution",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Chaos resilience",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Performance invariants",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test found for requirement-1, requirement-2"
+        }
+      ]
+    },
+    {
+      "title": "FLOW VALIDATION",
+      "checks": [
+        {
+          "label": "Network -> state -> UI",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Mode -> authority -> commands",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "COMBAT ENGINE",
+      "checks": [
+        {
+          "label": "Timeline initialization",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Turn state machine",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Action validation",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "NETWORKING",
+      "checks": [
+        {
+          "label": "Event emission",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Deduplication",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Timeline alignment",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "AUTHORITY",
+      "checks": [
+        {
+          "label": "Mode permissions",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "DM capability mapping",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Authority escalation blocked",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "SIMULATION GUARANTEES",
+      "checks": [
+        {
+          "label": "Determinism (same input -> same output)",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Replay correctness",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Order independence",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "CHAOS RESILIENCE",
+      "checks": [
+        {
+          "label": "Out-of-order packets",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Duplicate packets",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Dropped packets",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    },
+    {
+      "title": "PERFORMANCE",
+      "checks": [
+        {
+          "label": "100 actions < 16ms",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        },
+        {
+          "label": "Queue growth capped",
+          "ok": false,
+          "coverageCount": 0,
+          "proofs": [],
+          "failure": "No passing test matched this guarantee in this run."
+        }
+      ]
+    }
+  ]
+}

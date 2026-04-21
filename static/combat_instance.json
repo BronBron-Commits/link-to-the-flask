@@ -1,0 +1,82 @@
+{
+  "character_id": "6f3f990b7a7148f0b46cb16262321c7f",
+  "hit_points": {
+    "max_hp": 18,
+    "current_hp": 18,
+    "temp_hp": null,
+    "hit_dice": "3d8",
+    "death_saves": {
+      "successes": null,
+      "failures": null
+    }
+  },
+  "conditions": {
+    "active_conditions": [],
+    "concentration": {
+      "active": false,
+      "spell": null,
+      "dc": null
+    },
+    "exhaustion_level": 0,
+    "active_effects": []
+  },
+  "feature_uses": [
+    {
+      "id": "fuse_001_magical_cunning_phb_2024_154",
+      "feature_name": "Magical Cunning \u2022 PHB-2024 154",
+      "max_uses": 1,
+      "uses_spent": 0,
+      "uses_remaining": 1,
+      "recharge": "Long Rest"
+    }
+  ],
+  "equipment": {
+    "equipped_item_ids": [
+      "itm_002_dagger",
+      "itm_003_sickle"
+    ],
+    "equipped_armor": null,
+    "equipped_weapons": [
+      "Dagger",
+      "Sickle"
+    ],
+    "ac_sources": []
+  },
+  "advantage_state": {
+    "attack": false,
+    "ability_checks": [],
+    "saving_throws": [],
+    "vs_targets": []
+  },
+  "rest_state": {
+    "short_rests_taken": 0,
+    "long_rest_available": true,
+    "hit_dice_remaining": "3d8"
+  },
+  "combat_state": {
+    "in_combat": false,
+    "round": 0,
+    "turn_index": null,
+    "initiative_order": [],
+    "active_combatant_id": null,
+    "global_advantage": false,
+    "global_disadvantage": false
+  },
+  "render_registry_binding": {
+    "entity_id": "6f3f990b7a7148f0b46cb16262321c7f",
+    "render_instance_id": null,
+    "attachments": [
+      {
+        "item_id": "itm_002_dagger",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      },
+      {
+        "item_id": "itm_003_sickle",
+        "socket_name": "hand_r",
+        "render_instance_id": null
+      }
+    ],
+    "last_sync_tick": 0
+  }
+}

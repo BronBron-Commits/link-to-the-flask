@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Map 3D Ocean Combat Simulation</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #071220; }
+        canvas { display: block; }
+
+        #model-picker {
+            position: fixed;
+            top: 12px;
+            right: 12px;
+            z-index: 999;
+            background: rgba(4, 14, 30, 0.88);
+            border: 1px solid rgba(60, 140, 200, 0.45);
+            border-radius: 8px;
+            padding: 10px 14px 12px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #8acfee;
+            min-width: 200px;
+            backdrop-filter: blur(4px);
+        }
+        #model-picker h4 {
+            margin: 0 0 8px;
+            font-size: 11px;
+            letter-spacing: 0.08em;
+            color: #38b6d8;
+            text-transform: uppercase;
+        }
+        #model-picker label {
+            display: block;
+            margin-bottom: 3px;
+            color: #5daacc;
+        }
+        #model-picker select {
+            width: 100%;
+            margin-bottom: 9px;
+            background: #050f1e;
+            color: #a8ddf5;
+            border: 1px solid #1a3d5a;
+            border-radius: 4px;
+            padding: 4px 6px;
+            font-family: monospace;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        #model-picker select:focus {
+            outline: none;
+            border-color: #2a8ab8;
+        }
+    </style>
+</head>
+<body>
+    <script>
+        const params = new URLSearchParams(window.location.search || '');
+        if (!params.has('sim')) params.set('sim', '1');
+        if (!params.has('view')) params.set('view', 'isometric');
+        if (!params.has('scene')) params.set('scene', 'ocean');
+        const nextUrl = `${window.location.pathname}?${params.toString()}`;
+        if (nextUrl !== window.location.pathname + window.location.search) {
+            window.history.replaceState(null, '', nextUrl);
+        }
+    </script>
+
+    <!-- Model picker overlay -->
+    <div id="model-picker">
+        <h4>Model Picker</h4>
+        <label for="sel-player">Player Model</label>
+        <select id="sel-player">
+            <option value="">— Box (default) —</option>
+            <option value="/static/headsculpt2.glb">headsculpt2.glb</option>
+            <option value="/static/training dummy.glb">training dummy.glb</option>
+            <option value="/static/Untitled.glb">Untitled.glb</option>
+            <option value="/static/untitled2.glb">untitled2.glb</option>
+            <option value="/static/hammer.glb">hammer.glb</option>
+            <option value="/static/barrel.glb">barrel.glb</option>
+        </select>
+        <label for="sel-enemy">Enemy Model</label>
+        <select id="sel-enemy">
+            <option value="">— Box (default) —</option>
+            <option value="/static/headsculpt2.glb">headsculpt2.glb</option>
+            <option value="/static/training dummy.glb">training dummy.glb</option>
+            <option value="/static/Untitled.glb">Untitled.glb</option>
+            <option value="/static/untitled2.glb">untitled2.glb</option>
+            <option value="/static/hammer.glb">hammer.glb</option>
+            <option value="/static/barrel.glb">barrel.glb</option>
+        </select>
+    </div>
+
+    <script src="/runtime-asset-version.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module">import(window.__assetUrl('/static/map3d.js'));</script>
+    <script>
+        window.addEventListener('load', () => {
+            function bindPicker(selectId, team) {
+                const sel = document.getElementById(selectId);
+                if (!sel) return;
+                sel.addEventListener('change', () => {
+                    const rt = window.map3dRuntime;
+                    if (rt && typeof rt.setModelUrl === 'function') {
+                        rt.setModelUrl(team, sel.value);
+                    }
+                });
+            }
+            bindPicker('sel-player', 'player');
+            bindPicker('sel-enemy', 'enemy');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hub — Paraval</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #06090f;
+      color: #e8e0d0;
+      font-family: Georgia, 'Times New Roman', serif;
+      overflow: hidden;
+    }
+
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: stretch;
+      min-height: 100vh;
+      min-height: 100svh;
+      min-height: 100dvh;
+      padding: 12px;
+    }
+
+    .panel {
+      width: 100%;
+      height: calc(100vh - 24px);
+      height: calc(100svh - 24px);
+      height: calc(100dvh - 24px);
+      overflow: auto;
+      border-radius: 20px;
+      border: 1px solid rgba(210,175,70,0.16);
+      background: linear-gradient(155deg, rgba(18,22,36,0.94), rgba(12,15,26,0.98));
+      box-shadow: 0 22px 56px rgba(0,0,0,0.6);
+      padding: 24px;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .title {
+      font-size: 1.85rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #f0dfa0;
+    }
+
+    .sub {
+      color: #8f8778;
+      font-size: 0.95rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .detail-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      border: 1px solid rgba(210,175,70,0.24);
+      background: rgba(15, 19, 31, 0.96);
+      color: #f0dfa0;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn:hover {
+      border-color: rgba(210,175,70,0.65);
+      box-shadow: 0 0 14px rgba(210,175,70,0.18), inset 0 0 10px rgba(210,175,70,0.06);
+      transform: translateY(-1px);
+    }
+    .btn { transition: border-color 0.18s, box-shadow 0.18s, transform 0.14s; }
+
+    .btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .btn.danger {
+      border-color: rgba(213, 143, 131, 0.34);
+      color: #f0c1b9;
+      background: rgba(56, 20, 18, 0.92);
+    }
+
+    .btn.danger:hover {
+      border-color: rgba(213, 143, 131, 0.62);
+    }
+
+    .status {
+      margin: 12px 0 14px;
+      min-height: 22px;
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 1rem;
+    }
+
+    .status.error { color: #d58f83; }
+    .status.ok { color: #a8c78a; }
+
+    .upload-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .file-input {
+      flex: 1 1 260px;
+      min-width: 240px;
+      border: 1px solid rgba(210,175,70,0.2);
+      background: rgba(15, 19, 31, 0.7);
+      color: #d9cfae;
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 0.8rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .upload-note {
+      margin-bottom: 12px;
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.92rem;
+    }
+
+    .hub-layout {
+      display: grid;
+      grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+      gap: 12px;
+      min-height: 480px;
+    }
+
+    .list-panel,
+    .detail-panel {
+      border: 1px solid rgba(210,175,70,0.15);
+      background: rgba(255,255,255,0.03);
+      border-radius: 14px;
+      padding: 12px;
+      min-height: 0;
+    }
+
+    .list-panel {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .panel-title {
+      color: #bda77a;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.9rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .character-list {
+      display: grid;
+      gap: 8px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .list-item {
+      border: 1px solid rgba(210,175,70,0.15);
+      background: rgba(255,255,255,0.02);
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: border-color 0.18s, transform 0.18s, box-shadow 0.18s;
+    }
+
+    .list-item:hover {
+      border-color: rgba(210,175,70,0.6);
+      transform: translateY(-3px) scale(1.012);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.42), 0 0 0 1px rgba(210,175,70,0.18), inset 0 0 18px rgba(210,175,70,0.05);
+      background: rgba(255,255,255,0.045);
+    }
+
+    .list-item.selected {
+      border-color: rgba(210,175,70,0.82);
+      box-shadow: 0 0 0 2px rgba(210,175,70,0.28), 0 0 18px rgba(210,175,70,0.12);
+      background: rgba(210,175,70,0.06);
+    }
+
+    .list-item h3 {
+      color: #e8d898;
+      font-size: 1.05rem;
+      margin-bottom: 4px;
+      letter-spacing: 0.06em;
+    }
+
+    .list-head,
+    .detail-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .list-summary {
+      color: #9e937c;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .card-badge {
+      flex: 0 0 auto;
+      border-radius: 999px;
+      border: 1px solid rgba(210,175,70,0.22);
+      padding: 4px 8px;
+      color: #f0dfa0;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      background: rgba(255,255,255,0.04);
+    }
+
+    .detail-panel {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 12px;
+    }
+
+    .detail-title {
+      color: #f1dfaa;
+      font-size: 1.36rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .detail-subtitle {
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.92rem;
+      line-height: 1.45;
+    }
+
+    .detail-specs {
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .detail-section {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.12);
+      background: rgba(255,255,255,0.025);
+      transition: border-color 0.22s, box-shadow 0.22s, background 0.22s;
+    }
+    .detail-section:hover {
+      border-color: rgba(210,175,70,0.28);
+      box-shadow: 0 0 20px rgba(210,175,70,0.07);
+      background: rgba(255,255,255,0.04);
+    }
+
+    .detail-section-title {
+      color: #bda77a;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.86rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .ability-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+      gap: 10px;
+    }
+
+    .ability-card {
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.14);
+      background: rgba(255,255,255,0.03);
+      padding: 10px;
+      display: grid;
+      gap: 6px;
+      transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s, background 0.2s;
+    }
+    .ability-card:hover {
+      border-color: rgba(210,175,70,0.42);
+      box-shadow: 0 0 16px rgba(210,175,70,0.1);
+      transform: translateY(-2px) scale(1.03);
+      background: rgba(210,175,70,0.05);
+    }
+
+    .ability-name {
+      color: #f0dfa0;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.9rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .ability-score {
+      color: #fff3c6;
+      font-size: 1.35rem;
+      letter-spacing: 0.04em;
+    }
+
+    .ability-meta {
+      color: #ac9f85;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.86rem;
+      line-height: 1.4;
+    }
+
+    .spec-row {
+      display: grid;
+      grid-template-columns: 140px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+      border-radius: 6px;
+      padding: 4px 6px;
+      transition: background 0.15s;
+    }
+    .spec-row:hover {
+      background: rgba(210,175,70,0.055);
+    }
+    .spec-label {
+      color: #867b67;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.82rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .spec-value {
+      color: #d4c7a8;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.92rem;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    @media (max-width: 820px) {
+      .hub-layout {
+        grid-template-columns: 1fr;
+      }
+
+      .list-panel {
+        grid-template-rows: auto auto;
+      }
+
+      .character-list {
+        max-height: 240px;
+      }
+    }
+
+    .meta {
+      color: #9e937c;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.9rem;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .empty {
+      border: 1px dashed rgba(210,175,70,0.2);
+      border-radius: 14px;
+      padding: 18px;
+      text-align: center;
+      color: #857d6f;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 1rem;
+    }
+
+    /* Cursor glow overlay */
+    #cursor-glow {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+    #cursor-glow.active { opacity: 1; }
+  </style>
+</head>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
+<canvas id="bg-canvas"></canvas>
+<canvas id="cursor-glow"></canvas>
+
+<div class="shell">
+  <section class="panel">
+    <div class="header">
+      <div>
+        <h1 class="title">Character Hub</h1>
+        <p id="whoami" class="sub">Loading account...</p>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/account-hub">Return to Account Hub</a>
+        <button id="refresh-btn" class="btn" type="button">Refresh</button>
+        <button id="sign-out-btn" class="btn" type="button">Sign Out</button>
+      </div>
+    </div>
+
+    <div id="status" class="status">Checking session...</div>
+    <div class="upload-row">
+      <input id="pdf-file" class="file-input" type="file" accept=".pdf" />
+      <button id="pdf-upload-btn" class="btn" type="button">Upload PDF</button>
+    </div>
+    <div class="upload-note">Upload a character sheet PDF here. If Supabase table characters is missing, the hub falls back to uploaded sheets.</div>
+    <div class="hub-layout">
+      <aside class="list-panel">
+        <div class="panel-title">Characters</div>
+        <div id="character-list" class="character-list"></div>
+      </aside>
+      <section id="character-detail" class="detail-panel"></section>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  // ── Background particles ─────────────────────────────────────────────────
+  const canvas = document.getElementById('bg-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  const particles = [];
+  let mx = -9999, my = -9999;
+
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  for (let i = 0; i < 160; i++) {
+    particles.push({
+      x: rand(0, W), y: rand(0, H),
+      r: rand(0.5, 2.2),
+      vx: rand(-0.10, 0.10), vy: rand(-0.22, -0.06),
+      alpha: rand(0.07, 0.5), hue: rand(30, 55),
+      pulse: rand(0, Math.PI * 2), pulseSpeed: rand(0.008, 0.022),
+    });
+  }
+
+  window.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+  window.addEventListener('mouseleave', () => { mx = -9999; my = -9999; });
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of particles) {
+      // Mouse repulsion
+      const dx = p.x - mx, dy = p.y - my;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120 && dist > 0) {
+        const force = (120 - dist) / 120 * 0.38;
+        p.vx += (dx / dist) * force;
+        p.vy += (dy / dist) * force;
+      }
+      // Drag
+      p.vx *= 0.985; p.vy *= 0.985;
+      // Gentle drift back toward natural speed
+      p.vy -= 0.0008;
+      p.x += p.vx; p.y += p.vy;
+      p.pulse += p.pulseSpeed;
+      if (p.y < -4) { p.y = H + 4; p.x = rand(0, W); p.vx = rand(-0.10, 0.10); p.vy = rand(-0.22, -0.06); }
+      if (p.x < -4) p.x = W + 4;
+      if (p.x > W + 4) p.x = -4;
+      const a = p.alpha * (0.72 + 0.28 * Math.sin(p.pulse));
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 82%, 68%, ${a})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+
+  // ── Cursor glow ──────────────────────────────────────────────────────────
+  const glowCanvas = document.getElementById('cursor-glow');
+  const gctx = glowCanvas.getContext('2d');
+  let gW, gH;
+  function resizeGlow() { gW = glowCanvas.width = window.innerWidth; gH = glowCanvas.height = window.innerHeight; }
+  window.addEventListener('resize', resizeGlow);
+  resizeGlow();
+
+  let glowX = -9999, glowY = -9999;
+  window.addEventListener('mousemove', e => {
+    glowX = e.clientX; glowY = e.clientY;
+    glowCanvas.classList.add('active');
+  });
+  window.addEventListener('mouseleave', () => glowCanvas.classList.remove('active'));
+
+  (function glowLoop() {
+    gctx.clearRect(0, 0, gW, gH);
+    const grad = gctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, 260);
+    grad.addColorStop(0,   'rgba(210,175,70,0.055)');
+    grad.addColorStop(0.4, 'rgba(210,175,70,0.022)');
+    grad.addColorStop(1,   'rgba(210,175,70,0)');
+    gctx.fillStyle = grad;
+    gctx.fillRect(0, 0, gW, gH);
+    requestAnimationFrame(glowLoop);
+  })();
+})();
+</script>
+
+<script type="module">
+const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
+const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+const whoamiEl = document.getElementById('whoami');
+const statusEl = document.getElementById('status');
+const listEl = document.getElementById('character-list');
+const detailEl = document.getElementById('character-detail');
+const refreshBtn = document.getElementById('refresh-btn');
+const signOutBtn = document.getElementById('sign-out-btn');
+const pdfFileEl = document.getElementById('pdf-file');
+const pdfUploadBtn = document.getElementById('pdf-upload-btn');
+
+const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+let selectedCharacter = null;
+let currentEntries = [];
+let supabaseClient = null;
+let currentUserId = '';
+let reloadCharacterEntries = async () => {};
+
+function setStatus(msg, tone = '') {
+  statusEl.textContent = msg;
+  statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+}
+
+function escapeHtml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function formatValue(value, fallback = '-') {
+  const normalized = String(value ?? '').trim();
+  return normalized || fallback;
+}
+
+function formatTimestamp(value) {
+  const raw = String(value || '').trim();
+  if (!raw) {
+    return '-';
+  }
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return raw;
+  }
+  return parsed.toLocaleString();
+}
+
+function formatSignedNumber(value, fallback = '-') {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return fallback;
+  }
+  return numeric >= 0 ? `+${numeric}` : String(numeric);
+}
+
+function normalizeMetadata(row) {
+  return row && row.metadata && typeof row.metadata === 'object' ? row.metadata : {};
+}
+
+function normalizeObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function normalizeArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function buildSpecRows(entries) {
+  return entries.map(({ label, value }) => `
+        <div class="spec-row">
+          <div class="spec-label">${escapeHtml(label)}</div>
+          <div class="spec-value">${escapeHtml(value)}</div>
+        </div>`).join('');
+}
+
+function buildDetailSection(title, rows) {
+  return `
+    <section class="detail-section">
+      <div class="detail-section-title">${escapeHtml(title)}</div>
+      ${buildSpecRows(rows)}
+    </section>
+  `;
+}
+
+function buildAbilitySection(abilities) {
+  const order = ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'];
+  const cards = order.map((key) => {
+    const ability = normalizeObject(abilities[key]);
+    const score = formatValue(ability.score, '-');
+    const modifier = formatSignedNumber(ability.modifier);
+    const saveBonus = formatSignedNumber(ability.save_bonus);
+    const saveProficient = ability.save_proficient ? 'Yes' : 'No';
+    return `
+      <article class="ability-card">
+        <div class="ability-name">${escapeHtml(key)}</div>
+        <div class="ability-score">${escapeHtml(score)}</div>
+        <div class="ability-meta">Mod ${escapeHtml(modifier)}</div>
+        <div class="ability-meta">Save ${escapeHtml(saveBonus)}</div>
+        <div class="ability-meta">Save Proficient: ${escapeHtml(saveProficient)}</div>
+      </article>
+    `;
+  }).join('');
+
+  return `
+    <section class="detail-section">
+      <div class="detail-section-title">Ability Scores</div>
+      <div class="ability-grid">${cards}</div>
+    </section>
+  `;
+}
+
+function buildInventorySlotsSection(equipment = {}, attacks = []) {
+  const slotRows = [
+    { label: 'Main Hand', value: formatValue(equipment.main_hand || equipment.primary_weapon || equipment.weapon_main || '-') },
+    { label: 'Off Hand', value: formatValue(equipment.off_hand || equipment.secondary_weapon || equipment.weapon_off || '-') },
+    { label: 'Armor', value: formatValue(equipment.equipped_armor || equipment.armor || '-') },
+    { label: 'Shield', value: formatValue(equipment.shield || '-') },
+    { label: 'Attuned', value: formatValue(Array.isArray(equipment.equipped_item_ids) ? String(equipment.equipped_item_ids.length) : '-') },
+  ];
+
+  const equippedWeapons = normalizeArray(equipment.equipped_weapons);
+  if (equippedWeapons.length) {
+    slotRows.push({ label: 'Equipped Weapons', value: equippedWeapons.join(', ') });
+  } else {
+    const attackNames = normalizeArray(attacks).map((attack) => String((attack && attack.name) || '').trim()).filter(Boolean);
+    slotRows.push({ label: 'Equipped Weapons', value: attackNames.length ? attackNames.join(', ') : '-' });
+  }
+
+  return buildDetailSection('Inventory Slots', slotRows);
+}
+
+function buildInventoryItemsSection(items = []) {
+  const rows = normalizeArray(items)
+    .map((item) => normalizeObject(item))
+    .filter((item) => String(item.name || item.itemId || '').trim())
+    .slice(0, 40)
+    .map((item, index) => {
+      const name = formatValue(item.name || item.itemId || `Item ${index + 1}`);
+      const qty = formatValue(item.quantity ?? 1);
+      const weight = formatValue(item.weight || '-');
+      const equipped = item.equipped ? 'Equipped' : '-';
+      return { label: `${index + 1}. ${name}`, value: `Qty ${qty} | Wt ${weight} | ${equipped}` };
+    });
+
+  if (!rows.length) {
+    rows.push({ label: 'Items', value: 'No inventory items recorded.' });
+  }
+  return buildDetailSection('Inventory Items', rows);
+}
+
+function renderDetailPlaceholder(message) {
+  detailEl.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">Character Details</div>
+        <div class="detail-subtitle">Select a character from the left to inspect full specs.</div>
+      </div>
+    </div>
+    <div class="empty">${escapeHtml(message)}</div>
+  `;
+}
+
+function createCharacterEntry(row, idx) {
+  const metadata = normalizeMetadata(row);
+  const coreStats = normalizeObject(metadata.core_stats);
+  const hitPoints = normalizeObject(metadata.hit_points);
+  const abilities = normalizeObject(metadata.abilities);
+  const inventory = normalizeObject(metadata.inventory);
+  const equipment = normalizeObject(metadata.equipment);
+  const actions = normalizeObject(metadata.actions);
+  const actionAttacks = normalizeArray(actions.attacks);
+  const inventoryItems = normalizeArray(inventory.items);
+  const fallbackInventoryItems = normalizeArray(metadata.inventory_items);
+  const combinedItems = inventoryItems.length ? inventoryItems : fallbackInventoryItems;
+  const id = String(row.id || row.character_id || `character-${idx + 1}`);
+  const name = row.name || row.character_name || row.title || `Character ${idx + 1}`;
+  const level = row.level ?? row.character_level ?? '-';
+  const cls = row.class || row.class_name || '-';
+  const species = row.species || row.race || '-';
+  const updated = row.updated_at || row.created_at || '-';
+  const source = row.source || metadata.source || 'character-record';
+  const sheetId = row.sheet_id || row.character_id || metadata.sheet_id || '-';
+  const originFile = metadata.source_file || metadata.file_name || metadata.filename || '-';
+  const parsedAt = metadata.parsed_at_utc || metadata.imported_at || '';
+  const sections = [
+    buildDetailSection('Overview', [
+      { label: 'Class', value: formatValue(cls) },
+      { label: 'Species', value: formatValue(species) },
+      { label: 'Level', value: formatValue(level) },
+      { label: 'Source', value: formatValue(source) },
+      { label: 'Sheet ID', value: formatValue(sheetId) },
+      { label: 'File', value: formatValue(originFile) },
+      { label: 'Updated', value: formatTimestamp(updated) },
+      { label: 'Parsed', value: formatTimestamp(parsedAt) },
+    ]),
+  ];
+
+  if (Object.keys(coreStats).length || Object.keys(hitPoints).length) {
+    sections.push(buildDetailSection('Core Stats', [
+      { label: 'Armor Class', value: formatValue(coreStats.armor_class) },
+      { label: 'Initiative', value: formatSignedNumber(coreStats.initiative_bonus) },
+      { label: 'Speed', value: coreStats.speed_ft ? `${coreStats.speed_ft} ft` : '-' },
+      { label: 'Proficiency', value: formatSignedNumber(coreStats.proficiency_bonus) },
+      { label: 'Passive Per.', value: formatValue(coreStats.passive_perception) },
+      { label: 'Passive Ins.', value: formatValue(coreStats.passive_insight) },
+      { label: 'Passive Inv.', value: formatValue(coreStats.passive_investigation) },
+      { label: 'Save DC', value: formatValue(coreStats.ability_save_dc) },
+      { label: 'Max HP', value: formatValue(hitPoints.max_hp) },
+      { label: 'Current HP', value: formatValue(hitPoints.current_hp) },
+      { label: 'Temp HP', value: formatValue(hitPoints.temp_hp) },
+      { label: 'Hit Dice', value: formatValue(hitPoints.hit_dice) },
+    ]));
+  }
+
+  if (Object.keys(abilities).length) {
+    sections.push(buildAbilitySection(abilities));
+  }
+
+  sections.push(buildInventorySlotsSection(equipment, actionAttacks));
+  sections.push(buildInventoryItemsSection(combinedItems));
+
+  return {
+    id,
+    name,
+    badge: formatValue(source, 'record'),
+    summary: `${formatValue(cls)} · ${formatValue(species)} · Level ${formatValue(level)}`,
+    canDelete: Boolean(row && row.id),
+    deleteKind: 'saved-character',
+    sections,
+  };
+}
+
+function createSheetEntry(row, idx) {
+  const name = row.label || row.filename || `Sheet ${idx + 1}`;
+  const id = String(row.sheetId || row.filename || `sheet-${idx + 1}`);
+  const source = row.source || '-';
+  const rel = row.relativePath || row.filename || '-';
+  const filename = row.filename || '-';
+  return {
+    id,
+    name,
+    badge: 'sheet',
+    summary: `${formatValue(source)} · ${formatValue(filename)}`,
+    canDelete: false,
+    deleteKind: 'sheet',
+    sections: [
+      buildDetailSection('Overview', [
+        { label: 'Source', value: formatValue(source) },
+        { label: 'File', value: formatValue(filename) },
+        { label: 'Path', value: formatValue(rel) },
+        { label: 'Sheet ID', value: formatValue(id) },
+      ]),
+    ],
+  };
+}
+
+function renderSelectedEntry(entry) {
+  if (!entry) {
+    renderDetailPlaceholder('No character details are available yet.');
+    return;
+  }
+  detailEl.innerHTML = `
+    <div class="detail-head">
+      <div>
+        <div class="detail-title">${escapeHtml(entry.name)}</div>
+        <div class="detail-subtitle">${escapeHtml(entry.summary)}</div>
+      </div>
+      <div class="detail-actions">
+        ${entry.canDelete ? '<button id="delete-character-btn" class="btn danger" type="button">Delete Character</button>' : ''}
+        <div class="card-badge">${escapeHtml(entry.badge)}</div>
+      </div>
+    </div>
+    <div class="panel-title">Full Specs</div>
+    <div class="detail-specs">${Array.isArray(entry.sections) ? entry.sections.join('') : ''}</div>
+  `;
+
+  const deleteBtn = document.getElementById('delete-character-btn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      await deleteSelectedCharacter(entry);
+    });
+  }
+}
+
+async function deleteSelectedCharacter(entry) {
+  if (!entry || !entry.canDelete) {
+    return;
+  }
+  if (!supabaseClient) {
+    setStatus('Character deletion is unavailable because the auth client is not ready.', 'error');
+    return;
+  }
+  const confirmed = window.confirm(`Delete ${entry.name}? This cannot be undone.`);
+  if (!confirmed) {
+    return;
+  }
+
+  setStatus(`Deleting ${entry.name}...`, '');
+  const query = supabaseClient.from('characters').delete().eq('id', entry.id);
+  const guardedQuery = currentUserId ? query.eq('user_id', currentUserId) : query;
+  const { error } = await guardedQuery;
+  if (error) {
+    setStatus(`Could not delete character: ${error.message}`, 'error');
+    return;
+  }
+
+  if (selectedCharacter && String(selectedCharacter.id) === String(entry.id)) {
+    selectedCharacter = null;
+    localStorage.removeItem(SELECTED_CHARACTER_STORAGE_KEY);
+  }
+  await reloadCharacterEntries();
+  setStatus(`${entry.name} deleted.`, 'ok');
+}
+
+function selectEntry(entryId, shouldFocusStatus = true) {
+  const entry = currentEntries.find((item) => String(item.id) === String(entryId));
+  if (!entry) {
+    return;
+  }
+  selectedCharacter = { id: entry.id, name: entry.name };
+  localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
+  listEl.querySelectorAll('.list-item[data-character-id]').forEach((item) => {
+    item.classList.toggle('selected', String(item.getAttribute('data-character-id')) === String(entry.id));
+  });
+  renderSelectedEntry(entry);
+  if (shouldFocusStatus) {
+    setStatus(`Selected ${entry.name || entry.id}. Continue from Account Hub when ready.`, 'ok');
+  }
+}
+
+function renderEntryList(entries, emptyMessage, statusMessage) {
+  currentEntries = Array.isArray(entries) ? entries : [];
+  if (!currentEntries.length) {
+    listEl.innerHTML = `<div class="empty">${escapeHtml(emptyMessage)}</div>`;
+    renderDetailPlaceholder(emptyMessage);
+    setStatus(statusMessage, 'ok');
+    return;
+  }
+
+  listEl.innerHTML = currentEntries.map((entry) => {
+    const selected = selectedCharacter && String(selectedCharacter.id || '') === String(entry.id);
+    return `
+      <article class="list-item ${selected ? 'selected' : ''}" data-character-id="${escapeHtml(entry.id)}">
+        <div class="list-head">
+          <h3>${escapeHtml(entry.name)}</h3>
+        </div>
+        <div class="list-summary">${escapeHtml(entry.summary)}</div>
+      </article>
+    `;
+  }).join('');
+
+  listEl.querySelectorAll('.list-item[data-character-id]').forEach((item) => {
+    item.addEventListener('click', () => {
+      const id = String(item.getAttribute('data-character-id') || '').trim();
+      if (!id) return;
+      selectEntry(id, true);
+    });
+  });
+
+  const preferredId = selectedCharacter && selectedCharacter.id ? String(selectedCharacter.id) : String(currentEntries[0].id);
+  selectEntry(preferredId, false);
+}
+
+function renderCharacters(rows) {
+  const entries = Array.isArray(rows) ? rows.map(createCharacterEntry) : [];
+  renderEntryList(
+    entries,
+    'No characters found yet. You can still enter with a temporary character and upload a PDF later.',
+    'No character sheet yet. Upload one here, then continue from Account Hub.'
+  );
+}
+
+function renderSheetCharacters(rows) {
+  const entries = Array.isArray(rows) ? rows.map(createSheetEntry) : [];
+  renderEntryList(
+    entries,
+    'No uploaded character sheets found yet. You can still enter with a temporary character and come back later.',
+    'No uploaded sheets found. Upload one here, then continue from Account Hub.'
+  );
+}
+
+async function boot() {
+  try {
+    const raw = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
+    const parsed = raw ? JSON.parse(raw) : null;
+    if (parsed && typeof parsed === 'object' && parsed.id) {
+      selectedCharacter = {
+        id: String(parsed.id),
+        name: String(parsed.name || ''),
+      };
+    }
+  } catch (_err) {
+    selectedCharacter = null;
+  }
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    setStatus('Supabase is not configured on this server.', 'error');
+    return;
+  }
+
+  window.__paravalAuth = {
+    page: 'hub',
+    moduleLoaded: false,
+    clientReady: false,
+    lastError: null,
+  };
+
+  let createClient = null;
+  try {
+    ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+    window.__paravalAuth.moduleLoaded = true;
+  } catch (_primaryImportError) {
+    try {
+      ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+      window.__paravalAuth.moduleLoaded = true;
+    } catch (_fallbackImportError) {
+      window.__paravalAuth.lastError = 'supabase-module-load-failed';
+      setStatus('Could not load Supabase auth module in this browser. Disable content blocking and refresh.', 'error');
+      return;
+    }
+  }
+
+  if (!createClient) {
+    window.__paravalAuth.lastError = window.__paravalAuth.lastError || 'missing-create-client';
+    setStatus('Supabase auth module loaded without createClient export.', 'error');
+    return;
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+  });
+  supabaseClient = supabase;
+  window.supabase = supabase;
+  window.__paravalAuth.clientReady = true;
+
+  const current = await supabase.auth.getSession();
+  const session = current && current.data ? current.data.session : null;
+  if (!session || !session.user) {
+    window.location.replace('/');
+    return;
+  }
+
+  const user = session.user;
+  currentUserId = String(user.id || '').trim();
+  const meta = (user.user_metadata && typeof user.user_metadata === 'object') ? user.user_metadata : {};
+  const displayName = String(meta.display_name || meta.full_name || meta.name || '').trim();
+  whoamiEl.textContent = `Signed in as ${displayName || user.email || user.id}`;
+
+  async function loadBackendSheets() {
+    const response = await fetch('/api/character-sheets', { credentials: 'same-origin' });
+    const payload = await response.json().catch(() => ({ ok: false, sheets: [] }));
+    const sheets = Array.isArray(payload.sheets) ? payload.sheets : [];
+    renderSheetCharacters(sheets);
+    setStatus(`Loaded ${sheets.length} uploaded sheet(s) from backend fallback.`, 'ok');
+  }
+
+  reloadCharacterEntries = loadCharacters;
+
+  async function loadCharacters() {
+    setStatus('Loading characters from Supabase...');
+    const { data, error } = await supabase
+      .from('characters')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(50);
+    if (error) {
+      if (String(error.message || '').includes("Could not find the table 'public.characters'")) {
+        await loadBackendSheets();
+        return;
+      }
+      setStatus(`Could not load characters: ${error.message}`, 'error');
+      return;
+    }
+    renderCharacters(data || []);
+    setStatus(`Loaded ${(data || []).length} character(s).`, 'ok');
+  }
+
+  async function persistParsedCharacter(parsedPayload, uploadedFileName) {
+    const character = (parsedPayload && typeof parsedPayload === 'object' && parsedPayload.character && typeof parsedPayload.character === 'object')
+      ? parsedPayload.character
+      : {};
+    const identity = (parsedPayload && typeof parsedPayload === 'object' && parsedPayload.master && typeof parsedPayload.master === 'object'
+      && parsedPayload.master.identity && typeof parsedPayload.master.identity === 'object')
+      ? parsedPayload.master.identity
+      : {};
+
+    const rawClassLevel = String(character.class_level || identity.class_level || '').trim();
+    const className = String(identity.class_name || '').trim() || rawClassLevel.replace(/\s+\d+\s*$/, '').trim() || null;
+    const rawLevel = Number(character.level ?? identity.level ?? 1);
+    const safeLevel = Number.isFinite(rawLevel) && rawLevel > 0 ? Math.floor(rawLevel) : 1;
+
+    const row = {
+      user_id: String(currentUserId || '').trim(),
+      name: String(character.name || identity.character_name || uploadedFileName || 'Unnamed Character').trim(),
+      class_name: className,
+      species: String(character.species || identity.species || '').trim() || null,
+      level: safeLevel,
+      sheet_id: String(character.character_id || '').trim() || null,
+      source: 'pdf-import',
+      metadata: {
+        source_file: String(parsedPayload.source_file || uploadedFileName || '').trim() || null,
+        parsed_at_utc: new Date().toISOString(),
+        core_stats: parsedPayload && parsedPayload.master ? parsedPayload.master.core_stats || null : null,
+        hit_points: parsedPayload && parsedPayload.master ? parsedPayload.master.hit_points || null : null,
+        abilities: parsedPayload && parsedPayload.master ? parsedPayload.master.abilities || null : null,
+        inventory: parsedPayload && parsedPayload.master ? parsedPayload.master.inventory || null : null,
+        equipment: parsedPayload && parsedPayload.master ? parsedPayload.master.equipment || null : null,
+        actions: parsedPayload && parsedPayload.master ? parsedPayload.master.actions || null : null,
+      },
+    };
+
+    if (!row.user_id) {
+      return { ok: false, reason: 'missing-user-id' };
+    }
+
+    const { error: insertError } = await supabase.from('characters').insert(row);
+    if (insertError) {
+      return { ok: false, reason: insertError.message || 'insert-failed' };
+    }
+    return { ok: true };
+  }
+
+  async function waitForPdfImportJob(jobId) {
+    const id = String(jobId || '').trim();
+    if (!id) {
+      return { ok: false, reason: 'missing-job-id' };
+    }
+
+    const maxAttempts = 360;
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      let response;
+      try {
+        response = await fetch(`/api/import-pdf-status/${encodeURIComponent(id)}`, {
+          method: 'GET',
+          credentials: 'same-origin',
+        });
+      } catch (_networkErr) {
+        return { ok: false, reason: 'network-error' };
+      }
+
+      const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+      const payload = contentType.includes('application/json')
+        ? await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }))
+        : { ok: false, error: response.status === 504 ? 'gateway-timeout' : 'invalid-server-response' };
+
+      if (payload.done === true && payload.ok === true && payload.status === 'completed') {
+        return { ok: true, result: payload.result || {} };
+      }
+
+      if (payload.done === true && payload.ok === false) {
+        return { ok: false, reason: payload.error || payload.detail || 'pdf-import-failed' };
+      }
+
+      if (!response.ok && payload.done !== false) {
+        return { ok: false, reason: payload.error || response.statusText || `http-${response.status}` };
+      }
+
+      if (attempt % 10 === 0) {
+        setStatus('Parsing PDF on server... still working.', '');
+      }
+
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    return { ok: false, reason: 'import-timeout' };
+  }
+
+  refreshBtn.addEventListener('click', loadCharacters);
+
+  pdfUploadBtn.addEventListener('click', async () => {
+    const file = pdfFileEl && pdfFileEl.files && pdfFileEl.files[0];
+    if (!file) {
+      setStatus('Choose a PDF file first.', 'error');
+      return;
+    }
+    setStatus('Uploading PDF...', '');
+    const fd = new FormData();
+    fd.append('pdf', file);
+    let response;
+    try {
+      response = await fetch('/api/import-pdf', {
+        method: 'POST',
+        body: fd,
+        credentials: 'same-origin',
+      });
+    } catch (_networkErr) {
+      setStatus('PDF upload failed: network error contacting server.', 'error');
+      return;
+    }
+
+    const contentType = String(response.headers.get('content-type') || '').toLowerCase();
+    let payload = contentType.includes('application/json')
+      ? await response.json().catch(() => ({ ok: false, error: 'invalid-server-response' }))
+      : { ok: false, error: response.status === 504 ? 'gateway-timeout' : 'invalid-server-response' };
+
+    if (!response.ok || payload.ok === false) {
+      const reason = payload.error || response.statusText || `http-${response.status}`;
+      setStatus(`PDF upload failed: ${reason}`, 'error');
+      return;
+    }
+
+    if (payload.async_job && payload.job_id) {
+      setStatus('PDF uploaded. Parsing in background...', '');
+      const jobResult = await waitForPdfImportJob(payload.job_id);
+      if (!jobResult.ok) {
+        setStatus(`PDF upload failed: ${jobResult.reason}`, 'error');
+        return;
+      }
+      payload = jobResult.result || {};
+    }
+
+    const persistResult = await persistParsedCharacter(payload, file.name);
+    if (!persistResult.ok) {
+      setStatus(`PDF parsed, but could not save character row: ${persistResult.reason}`, 'error');
+    } else {
+      setStatus('PDF uploaded, parsed, and saved to Supabase characters.', 'ok');
+    }
+
+    if (pdfFileEl) {
+      pdfFileEl.value = '';
+    }
+    await loadCharacters();
+  });
+
+  signOutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    await fetch('/api/auth/logout', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    window.location.replace('/');
+  });
+
+  // Avoid redirect loops: the backend /api/auth/me gate above is authoritative.
+  // Some browsers/ad blockers may report transient null Supabase sessions.
+  supabase.auth.onAuthStateChange((_event, _session) => {
+    // Intentionally no redirect here.
+  });
+
+  await loadCharacters();
+}
+
+boot().catch((err) => {
+  setStatus(`Hub init failed: ${err && err.message ? err.message : String(err)}`, 'error');
+});
+</script>
+<script type="module">
+  import { writeNavContext } from '/static/utils/navigationContext.js';
+  writeNavContext({ lastPage: 'hub' });
+</script>
+<script src="/static/transition.js"></script>
+</body>
+</html>

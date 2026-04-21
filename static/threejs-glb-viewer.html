@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Three.js GLB Viewer</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #info { position: absolute; top: 10px; left: 10px; color: #fff; background: rgba(0,0,0,0.5); padding: 8px; z-index: 10; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="info">Drag to orbit, scroll to zoom. Loads <b>/static/scene.glb</b></div>
+    <script src="three.js"></script>
+    <script src="GLTFLoader.js"></script>
+    <script src="OrbitControls.js"></script>
+    <script>
+    // Basic Three.js scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x181030);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 5000);
+    camera.position.set(0, 2, 6);
+
+    const renderer = new THREE.WebGLRenderer({antialias: true});
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    // Controls
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target.set(0, 1, 0);
+    controls.update();
+
+    // Lighting
+    const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1.0);
+    hemi.position.set(0, 20, 0);
+    scene.add(hemi);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+    dir.position.set(5, 10, 7);
+    scene.add(dir);
+
+    // Load GLB
+    const loader = new THREE.GLTFLoader();
+    loader.load('/static/scene.glb', (gltf) => {
+        scene.add(gltf.scene);
+        // Optionally fit camera to scene
+        const box = new THREE.Box3().setFromObject(gltf.scene);
+        const size = box.getSize(new THREE.Vector3()).length();
+        const center = box.getCenter(new THREE.Vector3());
+        controls.target.copy(center);
+        camera.position.copy(center).add(new THREE.Vector3(0, size/3, size));
+        camera.near = size/100;
+        camera.far = size*10;
+        camera.updateProjectionMatrix();
+        controls.update();
+    }, undefined, (err) => {
+        document.getElementById('info').innerHTML += '<br><b style="color:red">Failed to load /static/scene.glb</b>';
+        console.error('GLB load error:', err);
+    });
+
+    // Render loop
+    function animate() {
+        requestAnimationFrame(animate);
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    </script>
+</body>
+</html>

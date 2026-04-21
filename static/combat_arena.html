@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Combat Arena</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #07101a;
+    }
+
+    body {
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+
+    #combat-ui-root {
+      display: none;
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 800;
+    }
+  </style>
+</head>
+<body>
+  <script>window.__COMBAT_ARENA_MODE__ = true;</script>
+  <div id="combat-ui-root"></div>
+  <script src="/runtime-asset-version.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+  <script type="module">
+    import(window.__assetUrl('/static/fireplace_scene.js'));
+  </script>
+</body>
+</html>

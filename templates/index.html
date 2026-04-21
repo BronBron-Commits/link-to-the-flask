@@ -1,100 +1,1060 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Engine View</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Paraval</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-<style>
-body{background:#111;color:white;text-align:center;font-family:sans-serif;margin:0}
-canvas{background:#222;margin-top:10px}
+    html, body {
+      height: 100%;
+      background: #06090f;
+      color: #e8e0d0;
+      font-family: Georgia, 'Times New Roman', serif;
+      -webkit-text-size-adjust: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+    }
 
-#controls{
-position:fixed;
-bottom:20px;
-left:0; right:0;
-display:flex;
-justify-content:space-between;
-padding:0 20px;
-}
+    /* ── Particle canvas ── */
+    #bg-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
 
-#stick{
-width:140px;height:140px;
-background:#333;border-radius:50%;
-position:relative;
-touch-action:none;
-}
-#knob{
-width:60px;height:60px;
-background:#888;border-radius:50%;
-position:absolute;
-left:40px;top:40px;
-}
+    /* ── Layout shell ── */
+    .shell {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      min-height: 100svh;
+      min-height: 100dvh;
+      padding: 24px;
+      gap: 0;
+    }
 
-.buttons{
-display:flex;
-flex-direction:column;
-gap:14px;
-align-items:flex-end;
-}
+    body.is-opera #bg-canvas {
+      display: none;
+    }
 
-button{
-font-size:18px;
-padding:18px 24px;
-border:none;
-border-radius:12px;
-background:#555;color:white;
-touch-action:none;
-}
+    @media (prefers-reduced-motion: reduce) {
+      #bg-canvas {
+        display: none;
+      }
 
-#btnA{
-width:86px;
-height:86px;
-border-radius:50%;
-font-weight:bold;
-position:relative;
-}
+      .crest svg {
+        animation: none;
+      }
+    }
 
-#btnA .ring{
-position:absolute;
-inset:-6px;
-border-radius:50%;
-border:4px solid rgba(180,80,255,0.25);
-pointer-events:none;
-}
+    body.is-opera .crest svg {
+      animation: none;
+      filter: none;
+    }
 
-#btnA .fill{
-position:absolute;
-inset:-6px;
-border-radius:50%;
-background:conic-gradient(rgba(180,80,255,0.9) 0deg, rgba(180,80,255,0.0) 0deg);
-mask:radial-gradient(transparent 58%, black 60%);
--webkit-mask:radial-gradient(transparent 58%, black 60%);
-pointer-events:none;
-}
-</style>
+    /* ── Crest / logo area ── */
+    .crest {
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .crest svg {
+      width: 72px;
+      height: 72px;
+      filter: drop-shadow(0 0 18px rgba(180,140,60,0.55));
+      animation: float 4.8s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0px); }
+      50%       { transform: translateY(-8px); }
+    }
+
+    /* ── Title ── */
+    .title {
+      font-size: clamp(2rem, 5vw, 3.4rem);
+      font-weight: 400;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: #f0dfa0;
+      text-shadow: 0 0 40px rgba(210,175,70,0.4), 0 2px 16px rgba(0,0,0,0.7);
+      margin-bottom: 6px;
+    }
+    .subtitle {
+      font-size: clamp(0.8rem, 1.6vw, 1rem);
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: #8a7f6a;
+      margin-bottom: 48px;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      width: 240px;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, rgba(210,175,70,0.45), transparent);
+      margin-bottom: 26px;
+    }
+
+    .auth-panel {
+      width: min(520px, calc(100vw - 40px));
+      padding: 22px;
+      border-radius: 18px;
+      border: 1px solid rgba(210,175,70,0.18);
+      background: linear-gradient(155deg, rgba(18,22,36,0.94), rgba(12,15,26,0.98));
+      box-shadow: 0 18px 48px rgba(0,0,0,0.55);
+      margin-bottom: 0;
+    }
+
+    .guest-access {
+      width: min(520px, calc(100vw - 40px));
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(210,175,70,0.14);
+      background: rgba(255,255,255,0.03);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: #b8ad95;
+      font-size: 0.78rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .guest-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 34px;
+      padding: 8px 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(210,175,70,0.3);
+      background: rgba(14, 18, 29, 0.95);
+      color: #f0dfa0;
+      text-decoration: none;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.68rem;
+      transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+
+    .guest-link:hover {
+      border-color: rgba(210,175,70,0.62);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(0,0,0,0.28);
+    }
+
+    .guest-links {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    @media (max-width: 760px) {
+      .shell {
+        height: auto;
+        min-height: 100vh;
+        min-height: 100svh;
+        min-height: 100dvh;
+        justify-content: flex-start;
+        overflow-y: auto;
+        padding-top: 20px;
+        padding-bottom: calc(132px + env(safe-area-inset-bottom));
+      }
+
+      .guest-access {
+        flex-direction: column;
+        align-items: stretch;
+        margin-top: 22px;
+        margin-bottom: calc(26px + env(safe-area-inset-bottom));
+        gap: 14px;
+        padding: 18px;
+      }
+
+      .guest-link {
+        width: 100%;
+        min-height: 64px;
+        padding: 14px 16px;
+        font-size: 0.82rem;
+      }
+
+      .guest-links {
+        justify-content: stretch;
+      }
+
+      .footer {
+        bottom: calc(10px + env(safe-area-inset-bottom));
+      }
+    }
+
+    .auth-title {
+      font-size: 0.76rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: #b9a677;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .auth-subtitle {
+      color: #8f8778;
+      font-size: 0.85rem;
+      line-height: 1.5;
+      text-align: center;
+      margin-bottom: 18px;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .auth-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .auth-tab {
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.16);
+      background: rgba(255,255,255,0.03);
+      color: #a99d84;
+      padding: 10px 12px;
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+    }
+
+    .auth-tab.is-active {
+      color: #f0dfa0;
+      border-color: rgba(210,175,70,0.42);
+      background: rgba(180, 140, 40, 0.08);
+    }
+
+    .auth-fields {
+      display: grid;
+      gap: 10px;
+    }
+
+    .field-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .field-wrap {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field-label {
+      color: #8f8778;
+      font-size: 0.7rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .auth-input {
+      width: 100%;
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.18);
+      background: rgba(7, 10, 17, 0.92);
+      color: #efe3bd;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-family: Consolas, 'Courier New', monospace;
+      outline: none;
+    }
+    .auth-input:focus {
+      border-color: rgba(210,175,70,0.5);
+      box-shadow: 0 0 0 2px rgba(210,175,70,0.12);
+    }
+
+    .auth-input[readonly] {
+      opacity: 0.78;
+    }
+
+    .auth-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 14px;
+      flex-wrap: wrap;
+    }
+
+    .auth-btn {
+      flex: 1 1 0;
+      min-width: 110px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(210,175,70,0.24);
+      background: rgba(15, 19, 31, 0.96);
+      color: #f0dfa0;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.72rem;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.2s, box-shadow 0.2s;
+    }
+    .auth-btn:hover {
+      border-color: rgba(210,175,70,0.55);
+      transform: translateY(-2px);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.32);
+    }
+    .auth-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .auth-btn.primary {
+      background: linear-gradient(155deg, rgba(80,61,20,0.98), rgba(39,31,14,0.98));
+    }
+
+    .auth-btn.google {
+      border-color: rgba(133, 197, 255, 0.6);
+      background: linear-gradient(155deg, rgba(24, 57, 100, 0.98), rgba(17, 41, 75, 0.98));
+      color: #e8f3ff;
+    }
+
+    .auth-btn.google:hover {
+      border-color: rgba(163, 216, 255, 0.88);
+      box-shadow: 0 10px 24px rgba(0,0,0,0.32), 0 0 0 1px rgba(133, 197, 255, 0.32) inset;
+    }
+
+    .auth-status {
+      min-height: 20px;
+      margin-top: 14px;
+      color: #8f8778;
+      font-size: 0.8rem;
+      line-height: 1.45;
+      text-align: center;
+    }
+
+    .auth-status.is-error {
+      color: #d58f83;
+    }
+
+    .auth-status.is-success {
+      color: #a8c78a;
+    }
+
+    .account-chip {
+      display: none;
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(210,175,70,0.16);
+      background: rgba(255,255,255,0.04);
+      color: #d9cfae;
+      font-size: 0.78rem;
+      font-family: Consolas, 'Courier New', monospace;
+      text-align: center;
+      word-break: break-word;
+    }
+
+    .account-chip.show {
+      display: block;
+    }
+
+    .account-summary {
+      display: none;
+      margin-top: 14px;
+      border: 1px solid rgba(210,175,70,0.12);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.025);
+      padding: 14px;
+      gap: 10px;
+    }
+
+    .account-summary.show {
+      display: grid;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      color: #d9cfae;
+      font-size: 0.82rem;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+
+    .summary-label {
+      color: #8f8778;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+
+    .summary-value {
+      text-align: right;
+      word-break: break-word;
+    }
+
+    .is-hidden {
+      display: none !important;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      position: fixed;
+      bottom: 18px;
+      left: 0; right: 0;
+      text-align: center;
+      font-size: 0.7rem;
+      letter-spacing: 0.12em;
+      color: #3a3830;
+      text-transform: uppercase;
+    }
+  </style>
 </head>
-<body>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
 
-<canvas id="game" width="400" height="400"></canvas>
+<canvas id="bg-canvas"></canvas>
 
-<div id="controls">
-  <div id="stick"><div id="knob"></div></div>
+<div class="shell">
+  <div class="crest">
+    <!-- Flame / flask crest SVG -->
+    <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <ellipse cx="36" cy="54" rx="18" ry="7" fill="rgba(180,120,20,0.18)"/>
+      <path d="M28 44 C24 34 18 28 22 18 C25 10 34 8 36 14 C38 8 47 10 50 18 C54 28 48 34 44 44 Z"
+            fill="url(#flameGrad)" opacity="0.9"/>
+      <path d="M31 44 C29 37 26 32 29 24 C31 18 36 18 36 22 C36 18 41 18 43 24 C46 32 43 37 41 44 Z"
+            fill="url(#innerFlame)" opacity="0.85"/>
+      <circle cx="36" cy="46" r="4.5" fill="url(#orbGrad)" opacity="0.95"/>
+      <defs>
+        <linearGradient id="flameGrad" x1="36" y1="8" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#f9d46a"/>
+          <stop offset="60%" stop-color="#e07820"/>
+          <stop offset="100%" stop-color="#8b2a00"/>
+        </linearGradient>
+        <linearGradient id="innerFlame" x1="36" y1="18" x2="36" y2="44" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#ffffff" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#f9c048" stop-opacity="0.4"/>
+        </linearGradient>
+        <radialGradient id="orbGrad" cx="50%" cy="40%" r="50%">
+          <stop offset="0%" stop-color="#ffe97a"/>
+          <stop offset="100%" stop-color="#c06010"/>
+        </radialGradient>
+      </defs>
+    </svg>
+  </div>
 
-  <div class="buttons">
-    <button id="btnA">
-      A
-      <div class="ring"></div>
-      <div class="fill" id="chargeFill"></div>
-    </button>
-    <button id="btnB">B</button>
+  <h1 class="title">Paraval</h1>
+  <p class="subtitle">A Tabletop Game Engine</p>
+  <div class="divider"></div>
+
+  <section class="auth-panel" aria-label="Player account login">
+    <div class="auth-title">Player Account Management</div>
+    <p class="auth-subtitle">Create an account, sign in, manage your profile, and handle password reset directly from the main screen.</p>
+
+    <div class="auth-tabs" role="tablist" aria-label="Account mode tabs">
+      <button id="tab-sign-in" class="auth-tab is-active" type="button">Sign In</button>
+      <button id="tab-create" class="auth-tab" type="button">Create</button>
+      <button id="tab-manage" class="auth-tab" type="button">Manage</button>
+    </div>
+
+    <div class="auth-fields">
+      <div class="field-wrap">
+        <label class="field-label" for="auth-display-name">Display Name</label>
+        <input id="auth-display-name" class="auth-input" type="text" autocomplete="nickname" placeholder="Paraval Wanderer" />
+      </div>
+      <div class="field-row">
+        <div class="field-wrap">
+          <label class="field-label" for="auth-email">Email</label>
+          <input id="auth-email" class="auth-input" type="email" autocomplete="email" placeholder="Email" />
+        </div>
+        <div class="field-wrap">
+          <label class="field-label" for="auth-password">Password</label>
+          <input id="auth-password" class="auth-input" type="password" autocomplete="current-password" placeholder="Password" />
+        </div>
+      </div>
+      <div id="confirm-wrap" class="field-wrap is-hidden">
+        <label class="field-label" for="auth-password-confirm">Confirm Password</label>
+        <input id="auth-password-confirm" class="auth-input" type="password" autocomplete="new-password" placeholder="Confirm password" />
+      </div>
+    </div>
+    <div class="auth-actions">
+      <button id="auth-sign-in" class="auth-btn primary" type="button">Sign In</button>
+      <button id="auth-sign-in-google" class="auth-btn google" type="button">Sign In With Google</button>
+      <button id="auth-sign-up" class="auth-btn" type="button">Create Account</button>
+      <button id="auth-save-profile" class="auth-btn is-hidden" type="button">Save Profile</button>
+      <button id="auth-reset-password" class="auth-btn is-hidden" type="button">Reset Password</button>
+      <button id="auth-sign-out" class="auth-btn" type="button" disabled>Sign Out</button>
+    </div>
+    <div id="auth-status" class="auth-status">Checking auth backend...</div>
+    <div id="auth-account" class="account-chip"></div>
+    <div id="auth-summary" class="account-summary">
+      <div class="summary-row"><span class="summary-label">Display</span><span id="summary-display-name" class="summary-value">-</span></div>
+      <div class="summary-row"><span class="summary-label">Email</span><span id="summary-email" class="summary-value">-</span></div>
+      <div class="summary-row"><span class="summary-label">Status</span><span id="summary-status" class="summary-value">Signed out</span></div>
+      <div class="summary-row"><span class="summary-label">User ID</span><span id="summary-id" class="summary-value">-</span></div>
+    </div>
+  </section>
+
+  <div class="guest-access" aria-label="Guest shortcuts">
+    <span>Skip account login and jump straight in</span>
+    <div class="guest-links">
+      <a class="guest-link" href="/paraval-library">Enter Library</a>
+      <a class="guest-link" href="/world-select">Enter Open World</a>
+      <a class="guest-link" href="/static/dev_playground.html">Dev Playground</a>
+    </div>
   </div>
 </div>
 
-<!-- AUDIO ENGINE -->
-<script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+<p class="footer">Paraval &nbsp;·&nbsp; Tabletop Game Engine</p>
 
-<!-- GAME -->
-<script type="module" src="/static/game.js?v=400"></script>
+<script>
+(function () {
+  const isOpera = /OPR\//i.test(navigator.userAgent || '');
+  if (isOpera) {
+    document.body.classList.add('is-opera');
+  }
 
+  const canvas = document.getElementById('bg-canvas');
+  if (!canvas || isOpera) {
+    return;
+  }
+
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    return;
+  }
+
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function rand(a, b) { return a + Math.random() * (b - a); }
+
+  for (let i = 0; i < 90; i++) {
+    particles.push({
+      x: rand(0, W), y: rand(0, H),
+      r: rand(0.4, 1.6),
+      vx: rand(-0.06, 0.06), vy: rand(-0.14, -0.04),
+      alpha: rand(0.08, 0.45),
+      hue: rand(32, 52),
+    });
+  }
+
+  function frame() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.y < -4) { p.y = H + 4; p.x = rand(0, W); }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${p.hue}, 80%, 68%, ${p.alpha})`;
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+</script>
+
+<script type="module">
+const emailEl = document.getElementById('auth-email');
+const passwordEl = document.getElementById('auth-password');
+const passwordConfirmEl = document.getElementById('auth-password-confirm');
+const displayNameEl = document.getElementById('auth-display-name');
+const signInBtn = document.getElementById('auth-sign-in');
+const signInGoogleBtn = document.getElementById('auth-sign-in-google');
+const signUpBtn = document.getElementById('auth-sign-up');
+const saveProfileBtn = document.getElementById('auth-save-profile');
+const resetPasswordBtn = document.getElementById('auth-reset-password');
+const signOutBtn = document.getElementById('auth-sign-out');
+const statusEl = document.getElementById('auth-status');
+const accountEl = document.getElementById('auth-account');
+const summaryEl = document.getElementById('auth-summary');
+const summaryDisplayNameEl = document.getElementById('summary-display-name');
+const summaryEmailEl = document.getElementById('summary-email');
+const summaryStatusEl = document.getElementById('summary-status');
+const summaryIdEl = document.getElementById('summary-id');
+
+// Log button availability for debugging
+console.log('[BOOT] Auth elements:', {
+  signInBtn: !!signInBtn,
+  signUpBtn: !!signUpBtn,
+  signOutBtn: !!signOutBtn,
+  emailEl: !!emailEl,
+  passwordEl: !!passwordEl,
+});
+const confirmWrapEl = document.getElementById('confirm-wrap');
+const tabSignInEl = document.getElementById('tab-sign-in');
+const tabCreateEl = document.getElementById('tab-create');
+const tabManageEl = document.getElementById('tab-manage');
+
+const supabaseUrl = String(document.body.dataset.supabaseUrl || '').trim();
+const supabaseAnonKey = String(document.body.dataset.supabaseAnonKey || '').trim();
+const queryParams = new URLSearchParams(window.location.search);
+const justSignedOut = queryParams.get('signedOut') === '1';
+const authErrorCode = String(queryParams.get('authError') || '').trim();
+let currentMode = 'sign-in';
+let currentUser = null;
+let signInInFlight = false;
+let suppressHubRedirect = justSignedOut;
+
+function setStatus(message, tone = '') {
+  statusEl.textContent = message;
+  statusEl.className = `auth-status${tone ? ` is-${tone}` : ''}`;
+}
+
+function setInputsDisabled(disabled) {
+  displayNameEl.disabled = disabled;
+  emailEl.disabled = disabled;
+  passwordEl.disabled = disabled;
+  passwordConfirmEl.disabled = disabled;
+  signInBtn.disabled = disabled;
+
+  if (signInGoogleBtn) signInGoogleBtn.disabled = disabled;
+  signUpBtn.disabled = disabled;
+  saveProfileBtn.disabled = disabled;
+  resetPasswordBtn.disabled = disabled;
+}
+
+function normalizeSupabaseUser(user) {
+  const safe = (user && typeof user === 'object') ? user : {};
+  const metadata = (safe.user_metadata && typeof safe.user_metadata === 'object') ? safe.user_metadata : {};
+  const displayName = String(metadata.display_name || metadata.full_name || metadata.name || '').trim();
+  return {
+    id: String(safe.id || '').trim(),
+    email: String(safe.email || '').trim(),
+    displayName,
+    emailConfirmed: Boolean(safe.email_confirmed_at || safe.confirmed_at),
+  };
+}
+
+function withTimeout(promise, timeoutMs, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      setTimeout(() => reject(new Error(`${label}-timeout-${timeoutMs}ms`)), timeoutMs);
+    }),
+  ]);
+}
+
+async function signInViaSupabaseRest(email, password, timeoutMs = 10000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const url = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/token?grant_type=password`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        apikey: supabaseAnonKey,
+      },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+      credentials: 'omit',
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const msg = String(payload.error_description || payload.msg || payload.error || response.statusText || 'supabase-rest-signin-failed');
+      throw new Error(msg);
+    }
+    const accessToken = String(payload.access_token || '').trim();
+    if (!accessToken) {
+      throw new Error('supabase-rest-missing-access-token');
+    }
+    return {
+      access_token: accessToken,
+      refresh_token: String(payload.refresh_token || ''),
+      expires_in: Number(payload.expires_in || 0),
+      token_type: String(payload.token_type || 'bearer'),
+      user: payload.user || null,
+    };
+  } catch (error) {
+    if (error && error.name === 'AbortError') {
+      throw new Error(`supabase-rest-timeout-${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function renderAccount(user) {
+  currentUser = user || null;
+  if (user && (user.email || user.id)) {
+    accountEl.textContent = `Signed in as ${user.displayName || user.email || user.id}`;
+    accountEl.classList.add('show');
+    signOutBtn.disabled = false;
+    summaryEl.classList.add('show');
+    summaryDisplayNameEl.textContent = user.displayName || 'Not set';
+    summaryEmailEl.textContent = user.email || '-';
+    summaryStatusEl.textContent = user.emailConfirmed ? 'Email confirmed' : 'Pending email confirmation';
+    summaryIdEl.textContent = user.id || '-';
+    displayNameEl.value = user.displayName || '';
+    if (!emailEl.value) emailEl.value = user.email || '';
+  } else {
+    accountEl.textContent = '';
+    accountEl.classList.remove('show');
+    signOutBtn.disabled = true;
+    summaryEl.classList.remove('show');
+    summaryDisplayNameEl.textContent = '-';
+    summaryEmailEl.textContent = '-';
+    summaryStatusEl.textContent = 'Signed out';
+    summaryIdEl.textContent = '-';
+  }
+}
+
+function applyMode(mode) {
+  currentMode = mode;
+  const isCreate = mode === 'create';
+  const isManage = mode === 'manage';
+  tabSignInEl.classList.toggle('is-active', mode === 'sign-in');
+  tabCreateEl.classList.toggle('is-active', isCreate);
+  tabManageEl.classList.toggle('is-active', isManage);
+  confirmWrapEl.classList.toggle('is-hidden', !isCreate);
+  signInBtn.classList.toggle('is-hidden', mode !== 'sign-in');
+
+  if (signInGoogleBtn) signInGoogleBtn.classList.toggle('is-hidden', mode !== 'sign-in');
+  signUpBtn.classList.toggle('is-hidden', !isCreate);
+  saveProfileBtn.classList.toggle('is-hidden', !isManage);
+  resetPasswordBtn.classList.toggle('is-hidden', !isManage);
+  passwordEl.placeholder = isManage ? 'New password optional' : 'Password';
+  passwordEl.autocomplete = isManage ? 'new-password' : (isCreate ? 'new-password' : 'current-password');
+  if (!isCreate) {
+    passwordConfirmEl.value = '';
+  }
+}
+
+async function readBackendSession() {
+  const configured = Boolean(supabaseUrl && supabaseAnonKey);
+  renderAccount(null);
+  if (!configured) {
+    setStatus('Supabase auth is not configured on this server yet.', 'error');
+    setInputsDisabled(true);
+    return { configured: false, authenticated: false, user: null };
+  }
+  setStatus('Create an account or sign in to manage your player profile.', '');
+  return { configured: true, authenticated: false, user: null };
+}
+
+if (!window.__paravalAuth || typeof window.__paravalAuth !== 'object') {
+  window.__paravalAuth = {
+    page: 'index',
+    moduleLoaded: false,
+    clientReady: false,
+    lastError: null,
+    lastSessionExchange: null,
+  };
+} else if (!('lastSessionExchange' in window.__paravalAuth)) {
+  window.__paravalAuth.lastSessionExchange = null;
+}
+
+const backendState = await readBackendSession();
+if (!backendState.configured || !supabaseUrl || !supabaseAnonKey) {
+  setStatus('Set SUPABASE_URL and SUPABASE_ANON_KEY on the server to enable player login.', 'error');
+} else {
+  if (authErrorCode) {
+    setStatus(authErrorCode, 'error');
+  }
+  window.__paravalAuth.page = 'index';
+  window.__paravalAuth.moduleLoaded = false;
+  window.__paravalAuth.clientReady = false;
+  window.__paravalAuth.lastError = null;
+  let createClient = null;
+  try {
+    ({ createClient } = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm'));
+    window.__paravalAuth.moduleLoaded = true;
+  } catch (_primaryImportError) {
+    try {
+      ({ createClient } = await import('https://esm.sh/@supabase/supabase-js@2'));
+      window.__paravalAuth.moduleLoaded = true;
+    } catch (_fallbackImportError) {
+      window.__paravalAuth.lastError = 'supabase-module-load-failed';
+      setStatus('Could not load auth module in this browser. Disable content blocking or use the guest library entry.', 'error');
+      setInputsDisabled(true);
+    }
+  }
+
+  if (!createClient) {
+    window.__paravalAuth.lastError = window.__paravalAuth.lastError || 'missing-create-client';
+    signOutBtn.disabled = true;
+  } else {
+  const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+  window.supabase = supabase;
+  window.__paravalAuth.clientReady = true;
+
+  if (justSignedOut) {
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch (_err) {
+      // Keep sign-out UX stable even if local SDK cleanup throws.
+    }
+    try {
+      const cleanedUrl = `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState({}, '', cleanedUrl);
+    } catch (_err) {}
+    renderAccount(null);
+    applyMode('sign-in');
+    setStatus('Signed out.', 'success');
+  }
+
+  tabSignInEl.addEventListener('click', () => applyMode('sign-in'));
+  tabCreateEl.addEventListener('click', () => applyMode('create'));
+  tabManageEl.addEventListener('click', () => applyMode('manage'));
+
+  console.log('[BOOT] Attaching sign-in event listener...', !!signInBtn);
+  if (signInBtn) {
+    signInBtn.addEventListener('click', async () => {
+      if (signInInFlight) {
+        console.log('[SIGN IN] ignored duplicate click while request is in flight');
+        return;
+      }
+      console.log('[SIGN IN] button clicked');
+      const email = String(emailEl.value || '').trim();
+      const password = String(passwordEl.value || '');
+      console.log('[SIGN IN] form values:', { emailLength: email.length, passwordLength: password.length });
+    if (!email || !password) {
+      setStatus('Enter both email and password.', 'error');
+      console.log('[SIGN IN] missing credentials');
+      return;
+    }
+    setStatus('Signing in...', '');
+    console.log('[SIGN IN] calling supabase.auth.signInWithPassword...');
+    try {
+      signInInFlight = true;
+      signInBtn.disabled = true;
+      let session = null;
+      try {
+        const result = await withTimeout(
+          supabase.auth.signInWithPassword({ email, password }),
+          15000,
+          'supabase-sign-in'
+        );
+        console.log('[SIGN IN] supabase returned:', { hasError: !!result.error, hasSession: !!result.data?.session });
+        if (result.error) {
+          setStatus(result.error.message, 'error');
+          console.log('[SIGN IN] error:', result.error.message);
+          return;
+        }
+        session = result.data && result.data.session ? result.data.session : null;
+      } catch (sdkError) {
+        const sdkMessage = String(sdkError && sdkError.message ? sdkError.message : sdkError);
+        if (!sdkMessage.includes('supabase-sign-in-timeout-')) {
+          throw sdkError;
+        }
+        console.log('[SIGN IN] supabase-js timed out, trying direct REST fallback...');
+        const restSession = await signInViaSupabaseRest(email, password, 10000);
+        session = restSession;
+      }
+
+      if (!session) {
+        setStatus('Sign-in succeeded but no session was returned.', 'error');
+        console.log('[SIGN IN] missing session after sdk/rest sign-in');
+        return;
+      }
+
+      console.log('[SIGN IN] sign-in succeeded, redirecting to /account-hub');
+      renderAccount(normalizeSupabaseUser(session.user));
+      setStatus('Signed in successfully.', 'success');
+      window.location.replace('/account-hub');
+    } catch (error) {
+      console.log('[SIGN IN] exchange failed:', error.message);
+      const msg = String(error && error.message ? error.message : error);
+      if (msg.includes('supabase-sign-in-timeout-')) {
+        setStatus('Supabase sign-in timed out. Check browser network/ad-blocking and try again.', 'error');
+      } else if (msg.includes('supabase-rest-timeout-')) {
+        setStatus('Supabase REST sign-in also timed out. This browser/network cannot reach Supabase auth.', 'error');
+      } else {
+        setStatus(`Sign-in failed: ${msg}`, 'error');
+      }
+    } finally {
+      signInInFlight = false;
+      signInBtn.disabled = false;
+    }
+  });
+  } else {
+    console.error('[BOOT] ERROR: signInBtn not found! Sign-in button will not work.');
+  }
+
+  if (signInGoogleBtn) {
+    signInGoogleBtn.addEventListener('click', async () => {
+      setStatus('Redirecting to Google sign-in...', '');
+      try {
+        const result = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: `${window.location.origin}/account-hub`,
+          },
+        });
+        if (result.error) {
+          setStatus(result.error.message, 'error');
+        }
+      } catch (error) {
+        const msg = String(error && error.message ? error.message : error);
+        setStatus(`Google sign-in failed: ${msg}`, 'error');
+      }
+    });
+  }
+
+  signUpBtn.addEventListener('click', async () => {
+    const email = String(emailEl.value || '').trim();
+    const password = String(passwordEl.value || '');
+    const passwordConfirm = String(passwordConfirmEl.value || '');
+    const displayName = String(displayNameEl.value || '').trim();
+    if (!email || !password || !passwordConfirm) {
+      setStatus('Fill in email, password, and password confirmation.', 'error');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setStatus('Password confirmation does not match.', 'error');
+      return;
+    }
+    if (password.length < 8) {
+      setStatus('Use a password with at least 8 characters.', 'error');
+      return;
+    }
+    setStatus('Creating account...', '');
+    const result = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          display_name: displayName,
+        },
+      },
+    });
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    if (result.data.session) {
+      try {
+        renderAccount(normalizeSupabaseUser(result.data.session.user));
+        window.location.replace('/account-hub');
+      } catch (error) {
+        setStatus(`Sign-up flow failed: ${error.message}`, 'error');
+      }
+      return;
+    }
+    setStatus('Account created. Check your email if confirmation is required by Supabase.', 'success');
+  });
+
+  saveProfileBtn.addEventListener('click', async () => {
+    const sessionResult = await supabase.auth.getSession();
+    if (!sessionResult.data.session) {
+      setStatus('Sign in before updating your profile.', 'error');
+      return;
+    }
+    const displayName = String(displayNameEl.value || '').trim();
+    const nextPassword = String(passwordEl.value || '');
+    setStatus('Saving profile...', '');
+    const updatePayload = { data: { display_name: displayName } };
+    if (nextPassword) {
+      if (nextPassword.length < 8) {
+        setStatus('Use a password with at least 8 characters.', 'error');
+        return;
+      }
+      updatePayload.password = nextPassword;
+    }
+    const result = await supabase.auth.updateUser(updatePayload);
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    const refreshed = await supabase.auth.getSession();
+    if (refreshed.data.session) {
+      renderAccount(normalizeSupabaseUser(refreshed.data.session.user));
+    }
+    passwordEl.value = '';
+    passwordConfirmEl.value = '';
+    setStatus('Profile updated.', 'success');
+  });
+
+  resetPasswordBtn.addEventListener('click', async () => {
+    const email = String((currentUser && currentUser.email) || emailEl.value || '').trim();
+    if (!email) {
+      setStatus('An email address is required to send a reset link.', 'error');
+      return;
+    }
+    setStatus('Sending password reset email...', '');
+    const result = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin,
+    });
+    if (result.error) {
+      setStatus(result.error.message, 'error');
+      return;
+    }
+    setStatus('Password reset email sent.', 'success');
+  });
+
+  signOutBtn.addEventListener('click', async () => {
+    await supabase.auth.signOut();
+    renderAccount(null);
+    displayNameEl.value = '';
+    passwordEl.value = '';
+    passwordConfirmEl.value = '';
+    applyMode('sign-in');
+    setStatus('Signed out.', '');
+  });
+
+  supabase.auth.onAuthStateChange(async (event, session) => {
+    if (suppressHubRedirect) {
+      if (!session) {
+        renderAccount(null);
+        applyMode('sign-in');
+      }
+      return;
+    }
+    if (event === 'INITIAL_SESSION') {
+      console.log('[AUTH SYNC] onAuthStateChange INITIAL_SESSION');
+    }
+    if (!session) {
+      renderAccount(null);
+      applyMode('sign-in');
+      return;
+    }
+    renderAccount(normalizeSupabaseUser(session.user));
+    window.location.replace('/account-hub');
+  });
+
+  const current = await supabase.auth.getSession();
+  if (!suppressHubRedirect && current.data.session) {
+    renderAccount(normalizeSupabaseUser(current.data.session.user));
+    window.location.replace('/account-hub');
+  }
+  }
+}
+
+if (!currentUser) {
+  applyMode('sign-in');
+}
+</script>
+<script type="module">
+import { writeNavContext } from '/static/utils/navigationContext.js';
+writeNavContext({ lastPage: 'index' });
+</script>
+<script src="/static/transition.js"></script>
 </body>
 </html>

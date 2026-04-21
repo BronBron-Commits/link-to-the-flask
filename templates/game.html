@@ -1,78 +1,40 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<style>
-body{
-  margin:0;
-  background:#000;
-  overflow:hidden;
-  touch-action:none;
-  font-family:sans-serif;
-}
-
-#game{
-  position:absolute;
-  left:0;top:0;
-}
-
-/* joystick */
-#stick{
-  position:absolute;
-  left:30px;
-  bottom:30px;
-  width:140px;
-  height:140px;
-  border-radius:50%;
-  background:rgba(255,255,255,0.08);
-}
-#knob{
-  position:absolute;
-  left:40px;
-  top:40px;
-  width:60px;
-  height:60px;
-  border-radius:50%;
-  background:rgba(255,255,255,0.35);
-}
-
-/* buttons */
-.gameBtn{
-  position:absolute;
-  width:95px;
-  height:95px;
-  border-radius:50%;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  font-weight:bold;
-  color:white;
-  user-select:none;
-}
-
-#btnA{ right:40px; bottom:70px; background:#7a3cff; }
-#btnB{ right:150px; bottom:150px; background:#a94cff; }
-#btnC{ right:260px; bottom:110px; background:#ff3c7a; } /* NEW BUTTON */
-
-#chargeFill{
-  position:absolute;
-  inset:0;
-  border-radius:50%;
-  pointer-events:none;
-}
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Map — Link to the Flask</title>
+  <style>
+    body { background: #111; color: white; text-align: center; font-family: sans-serif; margin: 0; }
+    canvas { background: #222; display: block; position: fixed; top: 0; left: 0; margin: 0; padding: 0; z-index: 0; }
+    #back-link {
+      position: fixed; top: 14px; left: 14px; z-index: 10;
+      text-decoration: none; border: 1px solid rgba(255,255,255,0.2);
+      background: rgba(0,0,0,0.6); color: #ccc; border-radius: 8px;
+      padding: 7px 12px; font-size: 12px; letter-spacing: 0.04em;
+      font-family: Consolas, monospace; backdrop-filter: blur(4px);
+    }
+    #back-link:hover { background: rgba(30,30,30,0.85); color: #fff; }
+  </style>
 </head>
 <body>
-
-<canvas id="game" width="800" height="600"></canvas>
-
-<div id="stick"><div id="knob"></div></div>
-
-<div id="btnA" class="gameBtn">A<div id="chargeFill"></div></div>
-<div id="btnB" class="gameBtn">B</div>
-<div id="btnC" class="gameBtn">C</div>
-<div id="btnC" class="gameBtn">C</div>
-
-<script type="module" src="/static/game.js?v=600"></script>
+  <a id="back-link" href="/account-hub">&#8592; Account Hub</a>
+  <canvas id="game" width="400" height="400"></canvas>
+  <script>
+    function resizeCanvas() {
+      const canvas = document.getElementById('game');
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('DOMContentLoaded', resizeCanvas);
+  </script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+  <script type="module">
+    import { writeNavContext } from '/static/utils/navigationContext.js';
+    writeNavContext({ lastPage: 'game' });
+  </script>
+  <script type="module" src="{{ asset_url('game.js') }}"></script>
 </body>
 </html>

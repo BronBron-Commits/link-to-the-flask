@@ -1,0 +1,4 @@
+moderngl
+PyQt5
+pygltflib
+numpy

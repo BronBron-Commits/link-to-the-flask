@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Combat UI Playground</title>
+    <style>
+        html, body {
+            margin: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #07101a;
+        }
+
+        body {
+            font-family: Georgia, 'Times New Roman', serif;
+        }
+
+        #combat-ui-root {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div id="combat-ui-root"></div>
+    <script src="/runtime-asset-version.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script type="module">
+        import(window.__assetUrl('/static/combat-ui.js'));
+    </script>
+</body>
+</html>

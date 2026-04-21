@@ -1,0 +1,3549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Paraval VR Hub</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #06090f;
+      font-family: Georgia, serif;
+    }
+    #c {
+      display: block;
+      width: 100%; height: 100%;
+    }
+    #vr-btn-wrap {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+    #back-link {
+      position: fixed;
+      top: 14px;
+      left: 14px;
+      z-index: 10;
+      text-decoration: none;
+      color: rgba(200,185,140,0.72);
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      border: 1px solid rgba(200,185,140,0.22);
+      border-radius: 8px;
+      padding: 7px 11px;
+      background: rgba(6,9,15,0.7);
+      backdrop-filter: blur(4px);
+    }
+    #back-link:hover { color: #e8d89a; border-color: rgba(200,185,140,0.55); }
+    #hint {
+      position: fixed;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      color: rgba(200,185,140,0.5);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #desktop-crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 20px;
+      height: 20px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 11;
+      opacity: 0;
+      transition: opacity 120ms ease;
+    }
+    #desktop-crosshair.show { opacity: 0.9; }
+    #desktop-crosshair::before,
+    #desktop-crosshair::after {
+      content: '';
+      position: absolute;
+      background: rgba(232, 216, 154, 0.88);
+      box-shadow: 0 0 8px rgba(200, 185, 140, 0.4);
+    }
+    #desktop-crosshair::before {
+      left: 9px;
+      top: 2px;
+      width: 2px;
+      height: 16px;
+    }
+    #desktop-crosshair::after {
+      left: 2px;
+      top: 9px;
+      width: 16px;
+      height: 2px;
+    }
+    #draw-ui {
+      display: none;
+      position: fixed;
+      bottom: 80px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      background: rgba(6, 12, 24, 0.88);
+      border: 1px solid rgba(80, 200, 255, 0.55);
+      border-radius: 10px;
+      padding: 9px 18px;
+      color: #aaeeff;
+      font-size: 13px;
+      letter-spacing: 0.07em;
+      text-align: center;
+      line-height: 1.6;
+      pointer-events: none;
+      backdrop-filter: blur(4px);
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<a id="back-link" href="/">← Home</a>
+<div id="hint"></div>
+<div id="desktop-crosshair" aria-hidden="true"></div>
+<div id="draw-ui" aria-live="polite"></div>
+<div id="vr-btn-wrap"></div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ─── Inline minimal VRButton ─────────────────────────────────────────────────
+function createVRButton(renderer) {
+  const btn = document.createElement('button');
+  btn.style.cssText = [
+    'padding:12px 22px',
+    'border:1px solid rgba(200,185,140,0.55)',
+    'border-radius:10px',
+    'background:rgba(15,19,31,0.94)',
+    'color:#e8d89a',
+    'font-size:13px',
+    'letter-spacing:0.12em',
+    'text-transform:uppercase',
+    'cursor:pointer',
+    'backdrop-filter:blur(4px)',
+  ].join(';');
+
+  if (!('xr' in navigator)) {
+    return null;
+  }
+
+  let session = null;
+
+  async function onStart(s) {
+    s.addEventListener('end', onEnd);
+    await renderer.xr.setSession(s);
+    btn.textContent = 'Exit VR';
+    session = s;
+  }
+
+  function onEnd() {
+    session.removeEventListener('end', onEnd);
+    btn.textContent = 'Enter VR';
+    session = null;
+  }
+
+  navigator.xr.isSessionSupported('immersive-vr').then(supported => {
+    if (!supported) {
+      btn.textContent = 'VR Not Supported';
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      btn.style.cursor = 'not-allowed';
+    } else {
+      btn.textContent = 'Enter VR';
+      btn.onclick = () => {
+        if (!session) {
+          navigator.xr.requestSession('immersive-vr', {
+            optionalFeatures: ['local-floor', 'bounded-floor', 'layers'],
+          }).then(onStart);
+        } else {
+          session.end();
+        }
+      };
+      // Auto-start if arriving from account hub Enter VR button
+      let autostart = false;
+      try { autostart = sessionStorage.getItem('vr-autostart') === '1'; sessionStorage.removeItem('vr-autostart'); } catch(_) {}
+      if (autostart) btn.onclick();
+    }
+  }).catch(() => {
+    btn.textContent = 'VR Unavailable';
+    btn.disabled = true;
+    btn.style.opacity = '0.4';
+    btn.style.cursor = 'not-allowed';
+  });
+
+  return btn;
+}
+
+// ─── Scene setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.xr.enabled = true;
+renderer.setClearColor(0x06090f, 1);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+
+window.addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x06090f, 0.045);
+
+// ─── Procedural skybox — colour-switchable via uniforms ──────────────────────
+const SKY_PRESETS = {
+  blue: {
+    label: 'Blue',
+    accentHex: '#4488ff',
+    zenith:  new THREE.Color(0.010, 0.018, 0.060),   // deep space indigo
+    upper:   new THREE.Color(0.025, 0.048, 0.130),   // rich midnight blue
+    mid:     new THREE.Color(0.055, 0.090, 0.220),   // horizon glow band
+    horizon: new THREE.Color(0.090, 0.130, 0.310),   // bright horizon edge
+    nadir:   new THREE.Color(0.005, 0.008, 0.022),   // ground undersky
+    glow:    new THREE.Color(0.10,  0.18,  0.55),    // horizon bloom tint
+    fogColor: 0x060a18,
+    ambientColor: 0x1a2050, ambientIntensity: 4.0,
+    sunColor: 0x6699ff,     sunIntensity: 1.6,
+    rimColor: 0x2244cc,     rimIntensity: 0.9,
+  },
+  green: {
+    label: 'Green',
+    accentHex: '#44ffaa',
+    zenith:  new THREE.Color(0.005, 0.028, 0.012),
+    upper:   new THREE.Color(0.012, 0.065, 0.028),
+    mid:     new THREE.Color(0.025, 0.120, 0.052),
+    horizon: new THREE.Color(0.040, 0.180, 0.075),
+    nadir:   new THREE.Color(0.003, 0.012, 0.005),
+    glow:    new THREE.Color(0.08,  0.40,  0.18),
+    fogColor: 0x030d06,
+    ambientColor: 0x0d2e14, ambientIntensity: 4.2,
+    sunColor: 0x44ffaa,     sunIntensity: 1.4,
+    rimColor: 0x22cc66,     rimIntensity: 0.8,
+  },
+  red: {
+    label: 'Red',
+    accentHex: '#ff6644',
+    zenith:  new THREE.Color(0.030, 0.006, 0.005),
+    upper:   new THREE.Color(0.075, 0.014, 0.010),
+    mid:     new THREE.Color(0.160, 0.035, 0.020),
+    horizon: new THREE.Color(0.280, 0.075, 0.030),
+    nadir:   new THREE.Color(0.012, 0.003, 0.002),
+    glow:    new THREE.Color(0.55,  0.14,  0.06),
+    fogColor: 0x0e0403,
+    ambientColor: 0x2e0c06, ambientIntensity: 4.0,
+    sunColor: 0xff7744,     sunIntensity: 2.0,
+    rimColor: 0xcc2200,     rimIntensity: 1.0,
+  },
+};
+
+let _skyMat;
+(function _buildSkybox() {
+  const p = SKY_PRESETS.blue;
+  const skyGeo = new THREE.SphereGeometry(60, 48, 24);
+  _skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: {
+      uZenith:  { value: p.zenith.clone() },
+      uUpper:   { value: p.upper.clone() },
+      uMid:     { value: p.mid.clone() },
+      uHorizon: { value: p.horizon.clone() },
+      uNadir:   { value: p.nadir.clone() },
+      uGlow:    { value: p.glow.clone() },
+    },
+    vertexShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uZenith;
+      uniform vec3 uUpper;
+      uniform vec3 uMid;
+      uniform vec3 uHorizon;
+      uniform vec3 uNadir;
+      uniform vec3 uGlow;
+      varying vec3 vWorldPos;
+
+      // 5-stop smooth gradient
+      vec3 skyGradient(float t) {
+        if (t > 0.75) return mix(uUpper,   uZenith,  (t - 0.75) * 4.0);
+        if (t > 0.50) return mix(uMid,     uUpper,   (t - 0.50) * 4.0);
+        if (t > 0.30) return mix(uHorizon, uMid,     (t - 0.30) * 5.0);
+        if (t > 0.10) return mix(uNadir,   uHorizon, (t - 0.10) * 5.0);
+        return uNadir;
+      }
+
+      void main() {
+        vec3 dir = normalize(vWorldPos);
+        float t = clamp(dir.y * 0.5 + 0.5, 0.0, 1.0);
+        vec3 sky = skyGradient(t);
+
+        // Soft horizon glow band — peaks at t≈0.5, fades above and below
+        float glowBand = exp(-pow((t - 0.48) / 0.09, 2.0));
+        sky += uGlow * glowBand * 0.28;
+
+        // Subtle lateral nebula sweep using world-space XZ angle
+        float angle = atan(dir.z, dir.x);
+        float nebula = sin(angle * 2.0 + 1.3) * 0.5 + 0.5;
+        float nebulaHeight = smoothstep(0.55, 0.80, t) * (1.0 - smoothstep(0.80, 1.0, t));
+        sky += uGlow * nebula * nebulaHeight * 0.10;
+
+        // Sparse dim stars
+        vec3 sp = floor(vWorldPos * 90.0);
+        float h = fract(sin(dot(sp, vec3(127.1, 311.7, 74.3))) * 43758.5453);
+        // vary star brightness slightly by a second hash
+        float h2 = fract(sin(dot(sp, vec3(269.5, 183.3, 52.1))) * 43758.5453);
+        float brightness = mix(0.15, 0.45, h2);
+        float star = step(0.9985, h) * smoothstep(0.0, 0.35, dir.y) * brightness;
+
+        gl_FragColor = vec4(sky + star, 1.0);
+      }
+    `
+  });
+  const skyMesh = new THREE.Mesh(skyGeo, _skyMat);
+  skyMesh.renderOrder = -1;
+  scene.add(skyMesh);
+})();
+
+function _applySkyPreset(name) {
+  const p = SKY_PRESETS[name];
+  if (!p || !_skyMat) return;
+  _skyMat.uniforms.uZenith.value.copy(p.zenith);
+  _skyMat.uniforms.uUpper.value.copy(p.upper);
+  _skyMat.uniforms.uMid.value.copy(p.mid);
+  _skyMat.uniforms.uHorizon.value.copy(p.horizon);
+  _skyMat.uniforms.uNadir.value.copy(p.nadir);
+  _skyMat.uniforms.uGlow.value.copy(p.glow);
+  scene.fog.color.setHex(p.fogColor);
+  renderer.setClearColor(p.fogColor, 1);
+  // Update scene lighting to match preset
+  _sceneAmbient.color.setHex(p.ambientColor);
+  _sceneAmbient.intensity = p.ambientIntensity;
+  _sceneSun.color.setHex(p.sunColor);
+  _sceneSun.intensity = p.sunIntensity;
+  _sceneRim.color.setHex(p.rimColor);
+  _sceneRim.intensity = p.rimIntensity;
+  _currentSky = name;
+  if (_controlTablet) _refreshSkyBtns();
+}
+
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.01, 80);
+const playerRig = new THREE.Group();
+const playerPitch = new THREE.Group();
+playerRig.position.set(0, 0, 0);
+playerPitch.add(camera);
+playerRig.add(playerPitch);
+camera.position.set(0, 1.6, 0);
+scene.add(playerRig);
+
+const LOOK_LIMIT = Math.PI * 0.32;
+const MOVE_SPEED = 2.3;
+const TURN_SPEED = 2.2;
+const LOOK_SPEED = 1.8;
+const STICK_DEADZONE = 0.14;
+const _clock = new THREE.Clock();
+const _tmpForward = new THREE.Vector3();
+const _tmpRight = new THREE.Vector3();
+const _tmpUp = new THREE.Vector3(0, 1, 0);
+const _controllersByHand = { left: null, right: null };
+const PANEL_GRAB_DISTANCE = 0.22;
+const _grabPressedPrev = { left: false, right: false };
+const _tmpCtrlPos = new THREE.Vector3();
+const _tmpPanelPos = new THREE.Vector3();
+const _tmpCompassPos = new THREE.Vector3();
+const _tmpCompassAxisPos = new THREE.Vector3();
+const _tmpVertGrabPos = new THREE.Vector3();
+const DISPLAY_NAME_STORAGE_KEY = 'paraval_social_display_name';
+const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+
+const _presenceState = {
+  socket: null,
+  localSid: '',
+  connected: false,
+  roster: {},
+  lastPublishTime: 0,
+  pollTimer: null,
+  lastPollSuccessAt: 0,
+  usingSocket: false,
+};
+const _hintEl = document.getElementById('hint');
+const _crosshairEl = document.getElementById('desktop-crosshair');
+const _desktopState = {
+  active: true,
+  pointerLocked: false,
+  keys: Object.create(null),
+  yaw: 0,
+  pitch: 0,
+  mouseSensitivity: 0.0022,
+  raycaster: new THREE.Raycaster(),
+  mouseNdc: new THREE.Vector2(),
+};
+
+// ─── Laser light show (beams) ────────────────────────────────────────────────
+let _laserActive = false;
+const _laserGroup = new THREE.Group();
+const _laserPivots = [];
+
+function _buildLasers() {
+  const DEFS = [
+    { col: 0xff0033, sx: 0,    sy: 1.4,  sz: 0.3  },
+    { col: 0x00ff66, sx: 0.4,  sy: -1.1, sz: 0    },
+    { col: 0x3388ff, sx: 0,    sy: 0.8,  sz: -0.9 },
+    { col: 0xff00ff, sx: -0.5, sy: 1.9,  sz: 0    },
+    { col: 0x00ffff, sx: 0.7,  sy: -0.6, sz: 0.5  },
+    { col: 0xffff00, sx: -0.3, sy: 0.5,  sz: -1.3 },
+  ];
+  DEFS.forEach(({ col, sx, sy, sz }) => {
+    const outerPivot = new THREE.Group();
+    outerPivot.position.set(0, 4.0, 0);
+    const innerPivot = new THREE.Group();
+    outerPivot.add(innerPivot);
+    const beam = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.006, 0.012, 10, 5),
+      new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.65 })
+    );
+    beam.position.y = -5;
+    innerPivot.add(beam);
+    const dot = new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 8, 6),
+      new THREE.MeshBasicMaterial({ color: col })
+    );
+    innerPivot.add(dot);
+    const light = new THREE.PointLight(col, 0, 14, 2);
+    innerPivot.add(light);
+    _laserGroup.add(outerPivot);
+    _laserPivots.push({ outerPivot, innerPivot, speedX: sx, speedY: sy, speedZ: sz, light });
+  });
+  _laserGroup.visible = false;
+  scene.add(_laserGroup);
+}
+_buildLasers();
+
+// ─── Disco ball ───────────────────────────────────────────────────────────────
+let _discoActive = false;
+const _discoGroup = new THREE.Group();
+_discoGroup.position.set(0, 3.2, -1.5);
+_discoGroup.visible = false;
+scene.add(_discoGroup);
+
+const _discoBall = new THREE.Mesh(
+  new THREE.SphereGeometry(0.22, 28, 20),
+  new THREE.MeshStandardMaterial({ color: 0xffffff, metalness: 1.0, roughness: 0.04 })
+);
+_discoGroup.add(_discoBall);
+
+const _discoLights = [];
+[0xff1133, 0x11ff66, 0x2266ff, 0xff9900].forEach((col, i) => {
+  const spot = new THREE.SpotLight(col, 0, 18, Math.PI / 8, 0.4, 1.5);
+  const angle = (i / 4) * Math.PI * 2;
+  spot.position.set(Math.cos(angle) * 0.5, 0, Math.sin(angle) * 0.5);
+  spot.target.position.set(Math.cos(angle + Math.PI) * 4, -3, Math.sin(angle + Math.PI) * 4);
+  _discoGroup.add(spot);
+  _discoGroup.add(spot.target);
+  _discoLights.push(spot);
+});
+
+// ─── Brightness constants ────────────────────────────────────────────────────
+const BRIGHTNESS_MIN = 0.2;
+const BRIGHTNESS_MAX = 3.0;
+const BRIGHTNESS_HEIGHT = 0.26;
+let _brightness = 1.0;
+const _sliderState = { holder: null, grabLocalY: 0, grabBrightness: 0 };
+const _tmpSliderPos = new THREE.Vector3();
+const _tmpSliderCtrl = new THREE.Vector3();
+const _tmpTabletPos = new THREE.Vector3();
+const _tmpPlayersPos = new THREE.Vector3();
+const _tmpDrawPanelPos = new THREE.Vector3();
+const _tmpDrawHit   = new THREE.Vector3();
+const _tmpDrawQuat  = new THREE.Quaternion();
+const _tmpDrawDir   = new THREE.Vector3();
+const _drawRay      = new THREE.Ray();
+const _groundPlane  = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+let   _drawMode     = false;
+let   _drawModeType = 'draw'; // 'draw' | 'select'
+let   _drawPlaneY   = 0.0;
+let   _drawSelectMode = 'vertex'; // 'vertex' | 'edge' | 'face'
+const _toolSystem = {
+  mode: 'off', // 'off' | 'draw' | 'select'
+  selectionKind: 'vertex',
+  activeTool: 'idle', // 'idle' | 'grab-vertex' | 'drag-selection' | 'move-gizmo'
+};
+const _drawVerts    = [];
+const _drawVertMeshes = [];
+const _drawEdges    = [];
+const _drawFaces    = [];
+const _drawSelection = [];
+let   _drawPreviewLine = null;
+let   _drawPreviewFace = null;
+const _tmpDrawPivot = new THREE.Vector3();
+const _tmpDrawWork = new THREE.Vector3();
+const _tmpSelectionCenter = new THREE.Vector3();
+const _drawTransform = {
+  active: false,
+  op: null,
+  axis: null,
+  amount: 0,
+  selectedVerts: [],
+  startVerts: [],
+  pivot: new THREE.Vector3(),
+};
+let _currentSky = 'blue';
+
+function _brightnessToY(b) {
+  const t = (b - BRIGHTNESS_MIN) / (BRIGHTNESS_MAX - BRIGHTNESS_MIN);
+  return (t - 0.5) * BRIGHTNESS_HEIGHT;
+}
+function _yToBrightness(y) {
+  const t = y / BRIGHTNESS_HEIGHT + 0.5;
+  return THREE.MathUtils.clamp(
+    BRIGHTNESS_MIN + t * (BRIGHTNESS_MAX - BRIGHTNESS_MIN),
+    BRIGHTNESS_MIN, BRIGHTNESS_MAX
+  );
+}
+
+// ─── Control Tablet ───────────────────────────────────────────────────────────
+// One grabbable, movable panel: brightness slider + laser toggle + disco toggle.
+const _tabletGrabState = { holder: null };
+let _controlTablet = null;
+
+function _drawTabletBtn(c, tex, icon, label, active) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  if (active) { bg.addColorStop(0, '#3a0a18'); bg.addColorStop(1, '#1a0208'); }
+  else        { bg.addColorStop(0, '#0d1828'); bg.addColorStop(1, '#080e18'); }
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) { ctx.roundRect(0, 0, c.width, c.height, 12); } else { ctx.rect(0, 0, c.width, c.height); }
+  ctx.fill();
+  ctx.strokeStyle = active ? '#ff4466' : '#3366aa';
+  ctx.lineWidth = 3;
+  if (ctx.roundRect) { ctx.roundRect(2, 2, c.width - 4, c.height - 4, 10); } else { ctx.rect(2, 2, c.width - 4, c.height - 4); }
+  ctx.stroke();
+  ctx.fillStyle = active ? '#ff6688' : '#88aadd';
+  ctx.font = 'bold 30px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(icon + ' ' + label, c.width / 2, 46);
+  ctx.font = 'bold 22px Georgia';
+  ctx.fillStyle = active ? '#ffaabb' : '#557799';
+  ctx.fillText(active ? '● ON' : '○ OFF', c.width / 2, 84);
+  tex.needsUpdate = true;
+}
+
+function _drawBrightnessValue(c, tex, b) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  ctx.fillStyle = 'rgba(8,14,28,0.9)';
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#2255aa';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(1, 1, c.width - 2, c.height - 2);
+  ctx.fillStyle = '#99bbff';
+  ctx.font = 'bold 24px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(b.toFixed(2), c.width / 2, c.height / 2 + 8);
+  tex.needsUpdate = true;
+}
+
+function _drawSkyBtn(c, tex, presetName, active) {
+  const p = SKY_PRESETS[presetName];
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const hz = p.horizon, zn = p.zenith;
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, `rgb(${Math.round(zn.r*255)},${Math.round(zn.g*255)},${Math.round(zn.b*255)})`);
+  bg.addColorStop(1, `rgb(${Math.round(hz.r*255)},${Math.round(hz.g*255)},${Math.round(hz.b*255)})`);
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, c.width, c.height);
+  if (active) { ctx.fillStyle = 'rgba(255,255,255,0.20)'; ctx.fillRect(0, 0, c.width, c.height); }
+  ctx.strokeStyle = active ? '#ffffff' : p.accentHex;
+  ctx.lineWidth = active ? 5 : 2;
+  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
+  ctx.fillStyle = active ? '#ffffff' : p.accentHex;
+  ctx.font = `bold ${active ? 26 : 22}px Georgia`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(p.label, c.width / 2, c.height / 2);
+  tex.needsUpdate = true;
+}
+
+function _refreshSkyBtns() {
+  if (!_controlTablet) return;
+  for (const btn of (_controlTablet.userData.skyBtnMeshes || [])) {
+    _drawSkyBtn(btn.userData.canvas, btn.userData.tex, btn.userData.skyPreset, btn.userData.skyPreset === _currentSky);
+  }
+}
+
+function _buildControlTablet() {
+  const root = new THREE.Group();
+  const Z = 0.016; // local Z offset for face elements
+
+  // Tablet body
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(0.40, 0.70, 0.018),
+    new THREE.MeshStandardMaterial({ color: 0x0a1020, roughness: 0.55, metalness: 0.45 })
+  );
+  root.add(body);
+
+  // Header stripe
+  const hdrC = document.createElement('canvas'); hdrC.width = 512; hdrC.height = 80;
+  const hdrCtx = hdrC.getContext('2d');
+  const hdrG = hdrCtx.createLinearGradient(0, 0, 512, 0);
+  hdrG.addColorStop(0, '#0d1e3a'); hdrG.addColorStop(0.5, '#1a3060'); hdrG.addColorStop(1, '#0d1e3a');
+  hdrCtx.fillStyle = hdrG; hdrCtx.fillRect(0, 0, 512, 80);
+  hdrCtx.strokeStyle = '#4488cc'; hdrCtx.lineWidth = 3; hdrCtx.strokeRect(2, 2, 508, 76);
+  hdrCtx.fillStyle = '#88ccff'; hdrCtx.font = 'bold 36px Georgia'; hdrCtx.textAlign = 'center';
+  hdrCtx.fillText('⚙  CONTROL PANEL', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.37, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hdrC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.221, Z);
+  root.add(hdr);
+
+  // Vertical divider between left/right sections
+  const div = new THREE.Mesh(
+    new THREE.BoxGeometry(0.002, 0.37, 0.002),
+    new THREE.MeshBasicMaterial({ color: 0x223355 })
+  );
+  div.position.set(0, -0.02, Z);
+  root.add(div);
+
+  // ── Left: Brightness slider ─────────────────────────────────────────────────
+  const bLblC = document.createElement('canvas'); bLblC.width = 192; bLblC.height = 48;
+  const bLblCtx = bLblC.getContext('2d');
+  bLblCtx.fillStyle = '#5577aa'; bLblCtx.font = '22px Georgia'; bLblCtx.textAlign = 'center';
+  bLblCtx.fillText('BRIGHTNESS', 96, 34);
+  const bLbl = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.135, 0.034),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(bLblC), transparent: true, side: THREE.DoubleSide })
+  );
+  bLbl.position.set(-0.10, 0.157, Z);
+  root.add(bLbl);
+
+  // ☀ top / 🌑 bottom icons
+  ['☀', '🌑'].forEach((sym, i) => {
+    const ic = document.createElement('canvas'); ic.width = 64; ic.height = 64;
+    const iCtx = ic.getContext('2d');
+    iCtx.font = '44px sans-serif'; iCtx.textAlign = 'center'; iCtx.textBaseline = 'middle';
+    iCtx.fillText(sym, 32, 32);
+    const im = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.038, 0.038),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ic), transparent: true, side: THREE.DoubleSide })
+    );
+    im.position.set(-0.10, i === 0 ? BRIGHTNESS_HEIGHT / 2 + 0.028 : -(BRIGHTNESS_HEIGHT / 2 + 0.028), Z);
+    root.add(im);
+  });
+
+  // Track
+  const track = new THREE.Mesh(
+    new THREE.BoxGeometry(0.010, BRIGHTNESS_HEIGHT, 0.010),
+    new THREE.MeshBasicMaterial({ color: 0x224466 })
+  );
+  track.position.set(-0.10, 0, Z);
+  root.add(track);
+
+  // Handle
+  const handle = new THREE.Mesh(
+    new THREE.SphereGeometry(0.020, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0x66aaff })
+  );
+  handle.position.set(-0.10, 0, Z + 0.006);
+  root.add(handle);
+  root.userData.handle = handle;
+
+  // Value readout
+  const valC = document.createElement('canvas'); valC.width = 128; valC.height = 56;
+  const valTex = new THREE.CanvasTexture(valC);
+  const valMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.096, 0.042),
+    new THREE.MeshBasicMaterial({ map: valTex, transparent: true, side: THREE.DoubleSide })
+  );
+  valMesh.position.set(-0.10, -(BRIGHTNESS_HEIGHT / 2 + 0.066), Z);
+  root.add(valMesh);
+  root.userData.labelCanvas = valC;
+  root.userData.labelTex = valTex;
+
+  // ── Right: LASER button ─────────────────────────────────────────────────────
+  const laserC = document.createElement('canvas'); laserC.width = 256; laserC.height = 128;
+  const laserTex = new THREE.CanvasTexture(laserC);
+  const laserBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.155, 0.078),
+    new THREE.MeshBasicMaterial({ map: laserTex, transparent: true, side: THREE.DoubleSide })
+  );
+  laserBtn.position.set(0.105, 0.078, Z);
+  root.add(laserBtn);
+  root.userData.laserBtnCanvas = laserC;
+  root.userData.laserBtnTex = laserTex;
+  root.userData.laserBtnMesh = laserBtn;
+  _drawTabletBtn(laserC, laserTex, '✦', 'LASER', false);
+
+  // ── Right: DISCO button ─────────────────────────────────────────────────────
+  const discoC = document.createElement('canvas'); discoC.width = 256; discoC.height = 128;
+  const discoTex = new THREE.CanvasTexture(discoC);
+  const discoBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.155, 0.078),
+    new THREE.MeshBasicMaterial({ map: discoTex, transparent: true, side: THREE.DoubleSide })
+  );
+  discoBtn.position.set(0.105, -0.065, Z);
+  root.add(discoBtn);
+  root.userData.discoBtnCanvas = discoC;
+  root.userData.discoBtnTex = discoTex;
+  root.userData.discoBtnMesh = discoBtn;
+  _drawTabletBtn(discoC, discoTex, '🪩', 'DISCO', false);
+
+  // Footer hint
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#334455'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.285, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.316, Z);
+  root.add(ft);
+
+  // ── Bottom: SKY colour buttons ──────────────────────────────────────────────
+  const skyLblC = document.createElement('canvas'); skyLblC.width = 320; skyLblC.height = 44;
+  const skyLblCtx = skyLblC.getContext('2d');
+  skyLblCtx.fillStyle = '#445566'; skyLblCtx.font = '20px Georgia'; skyLblCtx.textAlign = 'center';
+  skyLblCtx.fillText('SKY', 160, 30);
+  const skyLbl = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.030),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(skyLblC), transparent: true, side: THREE.DoubleSide })
+  );
+  skyLbl.position.set(0, -0.228, Z);
+  root.add(skyLbl);
+
+  const skyBtnMeshes = [];
+  ['blue', 'green', 'red'].forEach((preset, i) => {
+    const bc = document.createElement('canvas'); bc.width = 192; bc.height = 80;
+    const bTex = new THREE.CanvasTexture(bc);
+    const bMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.108, 0.048),
+      new THREE.MeshBasicMaterial({ map: bTex, transparent: true, side: THREE.DoubleSide })
+    );
+    bMesh.position.set((i - 1) * 0.120, -0.272, Z);
+    bMesh.userData.canvas = bc;
+    bMesh.userData.tex = bTex;
+    bMesh.userData.skyPreset = preset;
+    root.add(bMesh);
+    skyBtnMeshes.push(bMesh);
+  });
+  root.userData.skyBtnMeshes = skyBtnMeshes;
+
+  // ── Side handles ─────────────────────────────────────────────────────────────
+  const handleMat = new THREE.MeshStandardMaterial({ color: 0x2a3a50, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    // Outer bar (vertical rod along the edge)
+    const bar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.013, 0.013, 0.26, 12),
+      handleMat
+    );
+    bar.position.set(side * 0.275, 0.02, 0.012);
+    root.add(bar);
+    root.userData.sideHandles.push(bar);
+    // Top cap
+    const capTop = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
+    capTop.position.set(side * 0.275, 0.02 + 0.13, 0.012);
+    root.add(capTop);
+    // Bottom cap
+    const capBot = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), handleMat);
+    capBot.position.set(side * 0.275, 0.02 - 0.13, 0.012);
+    root.add(capBot);
+    // Horizontal brace connecting bar to body (top)
+    const braceTop = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.009, 0.009, 0.080, 8),
+      handleMat
+    );
+    braceTop.rotation.z = Math.PI / 2;
+    braceTop.position.set(side * 0.238, 0.02 + 0.09, 0.012);
+    root.add(braceTop);
+    // Horizontal brace connecting bar to body (bottom)
+    const braceBot = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.009, 0.009, 0.080, 8),
+      handleMat
+    );
+    braceBot.rotation.z = Math.PI / 2;
+    braceBot.position.set(side * 0.238, 0.02 - 0.09, 0.012);
+    root.add(braceBot);
+  });
+
+  root.position.set(0.85, 1.12, -0.9);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+_controlTablet = _buildControlTablet();
+scene.add(_controlTablet);
+
+// ─── Spell Panel ─────────────────────────────────────────────────────────────
+const _spellGrabState = { holder: null };
+let _spellPanel = null;
+const _fireballs = [];
+const _arcaneShots = [];
+const _lightningBolts = [];
+
+function _drawSpellBtn(c, tex, icon, label, flavor, theme = {}) {
+  const topBg = theme.topBg || '#2a0a00';
+  const bottomBg = theme.bottomBg || '#100400';
+  const border = theme.border || '#ff6600';
+  const innerGlow = theme.innerGlow || 'rgba(255,120,0,0.35)';
+  const iconColor = theme.iconColor || '#ffaa44';
+  const labelColor = theme.labelColor || '#ff8822';
+  const flavorColor = theme.flavorColor || '#aa5522';
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, topBg); bg.addColorStop(1, bottomBg);
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) ctx.roundRect(0, 0, c.width, c.height, 14); else ctx.rect(0, 0, c.width, c.height);
+  ctx.fill();
+  ctx.strokeStyle = border; ctx.lineWidth = 3;
+  if (ctx.roundRect) ctx.roundRect(2, 2, c.width-4, c.height-4, 12); else ctx.rect(2, 2, c.width-4, c.height-4);
+  ctx.stroke();
+  // inner glow line
+  ctx.strokeStyle = innerGlow; ctx.lineWidth = 1;
+  if (ctx.roundRect) ctx.roundRect(5, 5, c.width-10, c.height-10, 9); else ctx.rect(5, 5, c.width-10, c.height-10);
+  ctx.stroke();
+  ctx.fillStyle = iconColor; ctx.font = 'bold 52px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(icon, c.width/2, 70);
+  ctx.fillStyle = labelColor; ctx.font = 'bold 26px Georgia'; ctx.textBaseline = 'alphabetic';
+  ctx.fillText(label, c.width/2, 108);
+  ctx.fillStyle = flavorColor; ctx.font = '18px Georgia';
+  ctx.fillText(flavor, c.width/2, 132);
+  tex.needsUpdate = true;
+}
+
+function _drawAxisMiniBtn(c, tex, label, accent) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, '#110a19');
+  bg.addColorStop(1, '#09050f');
+  ctx.fillStyle = bg;
+  if (ctx.roundRect) ctx.roundRect(0, 0, c.width, c.height, 10); else ctx.rect(0, 0, c.width, c.height);
+  ctx.fill();
+  ctx.strokeStyle = accent;
+  ctx.lineWidth = 3;
+  if (ctx.roundRect) ctx.roundRect(2, 2, c.width - 4, c.height - 4, 8); else ctx.rect(2, 2, c.width - 4, c.height - 4);
+  ctx.stroke();
+  ctx.fillStyle = accent;
+  ctx.font = 'bold 34px Georgia';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, c.width / 2, c.height / 2 + 1);
+  tex.needsUpdate = true;
+}
+
+function _buildSpellPanel() {
+  const root = new THREE.Group();
+  const Z = 0.012;
+
+  // Body
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.36, 0.66, 0.016),
+    new THREE.MeshStandardMaterial({ color: 0x180800, roughness: 0.50, metalness: 0.55 })
+  ));
+
+  // Header
+  const hC = document.createElement('canvas'); hC.width = 512; hC.height = 80;
+  const hCtx = hC.getContext('2d');
+  const hG = hCtx.createLinearGradient(0, 0, 512, 0);
+  hG.addColorStop(0, '#1a0800'); hG.addColorStop(0.5, '#3a1200'); hG.addColorStop(1, '#1a0800');
+  hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
+  hCtx.strokeStyle = '#cc4400'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
+  hCtx.fillStyle = '#ffaa44'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
+  hCtx.fillText('🔮  SPELLBOOK', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.33, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.196, Z);
+  root.add(hdr);
+
+  // Fireball button
+  const fbC = document.createElement('canvas'); fbC.width = 280; fbC.height = 148;
+  const fbTex = new THREE.CanvasTexture(fbC);
+  _drawSpellBtn(fbC, fbTex, '🔥', 'FIREBALL', 'Cast forward');
+  const fbBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: fbTex, transparent: true, side: THREE.DoubleSide })
+  );
+  fbBtn.position.set(0, 0.048, Z);
+  root.add(fbBtn);
+  root.userData.fireballBtnCanvas = fbC;
+  root.userData.fireballBtnTex = fbTex;
+  root.userData.fireballBtnMesh = fbBtn;
+
+  // Arcane Shot button
+  const arcC = document.createElement('canvas'); arcC.width = 280; arcC.height = 148;
+  const arcTex = new THREE.CanvasTexture(arcC);
+  _drawSpellBtn(arcC, arcTex, '🟣', 'ARCANE SHOT', 'Slow orb', {
+    topBg: '#160720',
+    bottomBg: '#09030f',
+    border: '#b070ff',
+    innerGlow: 'rgba(180,120,255,0.35)',
+    iconColor: '#d7b3ff',
+    labelColor: '#b887ff',
+    flavorColor: '#8e66bb',
+  });
+  const arcBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: arcTex, transparent: true, side: THREE.DoubleSide })
+  );
+  arcBtn.position.set(0, -0.096, Z);
+  root.add(arcBtn);
+  root.userData.arcaneBtnCanvas = arcC;
+  root.userData.arcaneBtnTex = arcTex;
+  root.userData.arcaneBtnMesh = arcBtn;
+
+  // Lightning Strike button
+  const ltC = document.createElement('canvas'); ltC.width = 280; ltC.height = 148;
+  const ltTex = new THREE.CanvasTexture(ltC);
+  _drawSpellBtn(ltC, ltTex, '⚡', 'LIGHTNING', 'Chain bolt', {
+    topBg: '#060d1a',
+    bottomBg: '#020509',
+    border: '#aaefff',
+    innerGlow: 'rgba(160,230,255,0.35)',
+    iconColor: '#fff7aa',
+    labelColor: '#aaeeff',
+    flavorColor: '#6ab8cc',
+  });
+  const ltBtn = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: ltTex, transparent: true, side: THREE.DoubleSide })
+  );
+  ltBtn.position.set(0, -0.240, Z);
+  root.add(ltBtn);
+  root.userData.lightningBtnCanvas = ltC;
+  root.userData.lightningBtnTex = ltTex;
+  root.userData.lightningBtnMesh = ltBtn;
+
+  // Footer
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#442211'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.28, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.316, Z);
+  root.add(ft);
+
+  // Side handles (taller to match expanded panel)
+  const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1500, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.30, 12), hMat);
+    bar.position.set(side * 0.248, 0, Z);
+    root.add(bar); root.userData.sideHandles.push(bar);
+    const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cT.position.set(side * 0.248, 0.15, Z); root.add(cT);
+    const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cB.position.set(side * 0.248, -0.15, Z); root.add(cB);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
+    br.rotation.z = Math.PI / 2;
+    br.position.set(side * 0.214, 0, Z); root.add(br);
+  });
+
+  root.position.set(-0.85, 1.12, -0.9);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+_spellPanel = _buildSpellPanel();
+scene.add(_spellPanel);
+
+// ─── Presence Tablet ────────────────────────────────────────────────────────
+const _playersGrabState = { holder: null };
+let _playersTablet = null;
+
+function _resolveVrHubDisplayName() {
+  const fromStorage = String(localStorage.getItem(DISPLAY_NAME_STORAGE_KEY) || '').trim();
+  if (fromStorage) return fromStorage.slice(0, 32);
+  try {
+    const rawCharacter = String(localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY) || '').trim();
+    if (rawCharacter) {
+      const parsed = JSON.parse(rawCharacter);
+      const candidate = String(parsed?.name || parsed?.id || '').trim();
+      if (candidate) return candidate.slice(0, 32);
+    }
+  } catch (_) {}
+  return 'Traveler';
+}
+
+function _drawPresenceRows(c, tex) {
+  const ctx = c.getContext('2d');
+  ctx.clearRect(0, 0, c.width, c.height);
+
+  const bg = ctx.createLinearGradient(0, 0, 0, c.height);
+  bg.addColorStop(0, '#0a1120');
+  bg.addColorStop(1, '#060b14');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, c.width, c.height);
+  ctx.strokeStyle = '#2f4f82';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
+
+  const roster = (_presenceState.roster && typeof _presenceState.roster === 'object') ? _presenceState.roster : {};
+  const rows = Object.entries(roster)
+    .filter(([sid]) => Boolean(String(sid || '').trim()))
+    .sort((a, b) => {
+      const aIsLocal = a[0] === _presenceState.localSid;
+      const bIsLocal = b[0] === _presenceState.localSid;
+      if (aIsLocal && !bIsLocal) return -1;
+      if (!aIsLocal && bIsLocal) return 1;
+      const aName = String(a[1]?.name || a[0]).toLowerCase();
+      const bName = String(b[1]?.name || b[0]).toLowerCase();
+      return aName.localeCompare(bName);
+    });
+
+  ctx.fillStyle = '#7ea4dc';
+  ctx.font = 'bold 26px Georgia';
+  ctx.textAlign = 'left';
+  const countLabel = `${rows.length} present${_presenceState.connected ? '' : ' (offline)'}`;
+  ctx.fillText(countLabel, 26, 44);
+
+  const rowStart = 84;
+  const rowHeight = 42;
+  const maxRows = 10;
+  if (!rows.length) {
+    ctx.fillStyle = '#88a0bd';
+    ctx.font = '24px Georgia';
+    ctx.fillText(_presenceState.connected ? 'Waiting for players...' : 'Connecting to instance...', 26, rowStart + 8);
+    tex.needsUpdate = true;
+    return;
+  }
+
+  rows.slice(0, maxRows).forEach(([sid, entry], index) => {
+    const y = rowStart + index * rowHeight;
+    const isLocal = sid === _presenceState.localSid;
+    const baseName = String(entry?.name || sid || 'Unknown').trim();
+    const role = String(entry?.role || 'player').toUpperCase();
+    const label = isLocal ? `${baseName} (YOU)` : baseName;
+
+    ctx.fillStyle = index % 2 ? 'rgba(24,34,56,0.65)' : 'rgba(18,26,44,0.65)';
+    ctx.fillRect(18, y - 24, c.width - 36, 32);
+    ctx.strokeStyle = isLocal ? '#89d3ff' : '#304f78';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(18.5, y - 23.5, c.width - 37, 31);
+
+    ctx.fillStyle = isLocal ? '#e8f8ff' : '#c8d9f2';
+    ctx.font = `bold ${isLocal ? 21 : 20}px Georgia`;
+    ctx.fillText(label.slice(0, 30), 28, y - 2);
+
+    ctx.fillStyle = '#8aa8ce';
+    ctx.font = '16px Georgia';
+    ctx.textAlign = 'right';
+    ctx.fillText(role.slice(0, 10), c.width - 30, y - 2);
+    ctx.textAlign = 'left';
+  });
+
+  if (rows.length > maxRows) {
+    ctx.fillStyle = '#6f86a8';
+    ctx.font = '18px Georgia';
+    ctx.fillText(`+${rows.length - maxRows} more`, 26, rowStart + maxRows * rowHeight + 6);
+  }
+
+  tex.needsUpdate = true;
+}
+
+function _buildPlayersTablet() {
+  const root = new THREE.Group();
+  const Z = 0.012;
+
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.38, 0.56, 0.016),
+    new THREE.MeshStandardMaterial({ color: 0x071020, roughness: 0.52, metalness: 0.52 })
+  ));
+
+  const hC = document.createElement('canvas'); hC.width = 512; hC.height = 80;
+  const hCtx = hC.getContext('2d');
+  const hG = hCtx.createLinearGradient(0, 0, 512, 0);
+  hG.addColorStop(0, '#0e1d3a'); hG.addColorStop(0.5, '#21457a'); hG.addColorStop(1, '#0e1d3a');
+  hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
+  hCtx.strokeStyle = '#6cb5ff'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
+  hCtx.fillStyle = '#b9ddff'; hCtx.font = 'bold 34px Georgia'; hCtx.textAlign = 'center';
+  hCtx.fillText('👥  INSTANCE ROSTER', 256, 52);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.34, 0.058),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hC), transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.214, Z);
+  root.add(hdr);
+
+  const rosterCanvas = document.createElement('canvas'); rosterCanvas.width = 512; rosterCanvas.height = 620;
+  const rosterTex = new THREE.CanvasTexture(rosterCanvas);
+  const rosterMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.332, 0.402),
+    new THREE.MeshBasicMaterial({ map: rosterTex, transparent: true, side: THREE.DoubleSide })
+  );
+  rosterMesh.position.set(0, -0.01, Z);
+  root.add(rosterMesh);
+  root.userData.rosterCanvas = rosterCanvas;
+  root.userData.rosterTex = rosterTex;
+
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#3d5578'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Grip panel to move', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.28, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.25, Z);
+  root.add(ft);
+
+  const hMat = new THREE.MeshStandardMaterial({ color: 0x244060, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.22, 12), hMat);
+    bar.position.set(side * 0.262, 0.0, Z);
+    root.add(bar); root.userData.sideHandles.push(bar);
+    const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cT.position.set(side * 0.262, 0.11, Z); root.add(cT);
+    const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cB.position.set(side * 0.262, -0.11, Z); root.add(cB);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.068, 8), hMat);
+    br.rotation.z = Math.PI / 2;
+    br.position.set(side * 0.228, 0.0, Z); root.add(br);
+  });
+
+  root.position.set(0, 1.12, -1.05);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+function _refreshPlayersTablet() {
+  if (!_playersTablet) return;
+  _drawPresenceRows(_playersTablet.userData.rosterCanvas, _playersTablet.userData.rosterTex);
+}
+
+async function _pollPresenceState() {
+  try {
+    const res = await fetch('/state', { cache: 'no-store' });
+    if (!res.ok) return;
+    const payload = await res.json();
+    const players = (payload && typeof payload.players === 'object') ? payload.players : {};
+    _presenceState.roster = players;
+    _presenceState.lastPollSuccessAt = performance.now() * 0.001;
+    if (!_presenceState.usingSocket) _presenceState.connected = true;
+    _refreshPlayersTablet();
+  } catch (_) {
+    if (!_presenceState.usingSocket) {
+      const now = performance.now() * 0.001;
+      // Keep a brief grace window so transient fetch failures don't flap UI state.
+      if ((now - _presenceState.lastPollSuccessAt) > 6) {
+        _presenceState.connected = false;
+        _refreshPlayersTablet();
+      }
+    }
+  }
+}
+
+function _startPresencePolling() {
+  if (_presenceState.pollTimer) return;
+  _pollPresenceState();
+  _presenceState.pollTimer = setInterval(_pollPresenceState, 2000);
+}
+
+function _publishLocalPresence(force = false) {
+  const socket = _presenceState.socket;
+  if (!socket || !_presenceState.connected) return;
+  const now = performance.now() * 0.001;
+  if (!force && (now - _presenceState.lastPublishTime) < 0.75) return;
+  _presenceState.lastPublishTime = now;
+
+  const payload = {
+    name: _resolveVrHubDisplayName(),
+    role: 'player',
+    side: 'heroes',
+    position: {
+      x: Number(playerRig.position.x.toFixed(3)),
+      y: Number(playerRig.position.y.toFixed(3)),
+      z: Number(playerRig.position.z.toFixed(3)),
+    },
+    rotation: {
+      x: 0,
+      y: Number(playerRig.rotation.y.toFixed(4)),
+      z: 0,
+    },
+  };
+  socket.emit('player-update', payload);
+}
+
+function _connectPresenceSocket() {
+  if (_presenceState.socket) return;
+  if (typeof window.io !== 'function') {
+    _presenceState.connected = false;
+    _refreshPlayersTablet();
+    return;
+  }
+  const socket = window.io();
+  _presenceState.socket = socket;
+
+  socket.on('connect', () => {
+    _presenceState.usingSocket = true;
+    _presenceState.connected = true;
+    _presenceState.localSid = String(socket.id || _presenceState.localSid || '').trim();
+    socket.emit('register-role', { role: 'player' });
+    _publishLocalPresence(true);
+    _refreshPlayersTablet();
+  });
+
+  socket.on('connect_error', () => {
+    _presenceState.usingSocket = false;
+    _presenceState.connected = false;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('disconnect', () => {
+    _presenceState.usingSocket = false;
+    _presenceState.connected = false;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-id', (payload) => {
+    const sid = String(payload?.id || '').trim();
+    if (sid) _presenceState.localSid = sid;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('players-state', (players) => {
+    _presenceState.roster = (players && typeof players === 'object') ? players : {};
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-update', (entry) => {
+    if (!entry || !entry.id) return;
+    _presenceState.roster[entry.id] = entry;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-joined', (entry) => {
+    if (!entry || !entry.id) return;
+    _presenceState.roster[entry.id] = entry;
+    _refreshPlayersTablet();
+  });
+
+  socket.on('player-left', (payload) => {
+    const sid = String(payload?.id || '').trim();
+    if (!sid) return;
+    delete _presenceState.roster[sid];
+    _refreshPlayersTablet();
+  });
+}
+
+_playersTablet = _buildPlayersTablet();
+scene.add(_playersTablet);
+_refreshPlayersTablet();
+_startPresencePolling();
+// ─── Draw Panel ───────────────────────────────────────────────────────────────
+const _drawPanelGrabState = { holder: null };
+let _drawPanel = null;
+let _compassRoot = null;
+let _compassCenter = null;
+const _compassAxisHandles = [];
+const _compassGrabState = {
+  holder: null,
+  mode: null,
+  offset: new THREE.Vector3(),
+  axis: new THREE.Vector3(),
+  startCtrl: new THREE.Vector3(),
+  selectedVerts: [],
+  startVerts: [],
+};
+const _handGrab = {
+  left:  { active: false, vertIndex: -1, offset: new THREE.Vector3() },
+  right: { active: false, vertIndex: -1, offset: new THREE.Vector3() },
+};
+const _hapticsState = {
+  left:  { hovering: false, grabbing: false, lastPulse: 0 },
+  right: { hovering: false, grabbing: false, lastPulse: 0 },
+};
+
+function _pulseHaptics(ctrl, intensity = 0.5, duration = 40) {
+  const session = renderer.xr.getSession();
+  if (!session) return;
+  const handedness = ctrl?.userData?.inputSource?.handedness;
+  if (!handedness) return;
+  const src = [...session.inputSources].find(s => s.handedness === handedness);
+  if (!src?.gamepad?.hapticActuators?.length) return;
+  try { src.gamepad.hapticActuators[0].pulse(intensity, duration); } catch (_) {}
+}
+
+function _hapticHover(hand, ctrl)   { _pulseHaptics(ctrl, 0.2, 20); }
+function _hapticGrab(hand, ctrl)    { _pulseHaptics(ctrl, 0.9, 35); }
+function _hapticDrag(hand, ctrl)    { _pulseHaptics(ctrl, 0.08, 30); }
+function _hapticRelease(hand, ctrl) { _pulseHaptics(ctrl, 0.3, 25); }
+function _hapticAxis(hand, ctrl)    { _pulseHaptics(ctrl, 0.5, 30); }
+
+function _buildDrawPanel() {
+  const root = new THREE.Group();
+  const Z = 0.012;
+
+  // Body — deep purple
+  root.add(new THREE.Mesh(
+    new THREE.BoxGeometry(0.62, 0.94, 0.016),
+    new THREE.MeshStandardMaterial({ color: 0x120818, roughness: 0.50, metalness: 0.55 })
+  ));
+
+  // Header
+  const hC = document.createElement('canvas'); hC.width = 512; hC.height = 80;
+  const hCtx = hC.getContext('2d');
+  const hG = hCtx.createLinearGradient(0, 0, 512, 0);
+  hG.addColorStop(0, '#1a0830'); hG.addColorStop(0.5, '#320a5a'); hG.addColorStop(1, '#1a0830');
+  hCtx.fillStyle = hG; hCtx.fillRect(0, 0, 512, 80);
+  hCtx.strokeStyle = '#9944dd'; hCtx.lineWidth = 3; hCtx.strokeRect(2, 2, 508, 76);
+  hCtx.fillStyle = '#dd99ff'; hCtx.font = 'bold 36px Georgia'; hCtx.textAlign = 'center';
+  hCtx.fillText('DRAW MODE', 256, 52);
+  const hTex = new THREE.CanvasTexture(hC);
+  const hdr = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.55, 0.058),
+    new THREE.MeshBasicMaterial({ map: hTex, transparent: true, side: THREE.DoubleSide })
+  );
+  hdr.position.set(0, 0.346, Z);
+  root.add(hdr);
+  root.userData.drawHeaderCanvas = hC;
+  root.userData.drawHeaderTex = hTex;
+  root.userData.drawModeBtnMesh = hdr;
+
+  // Center divider between edit tools and gizmo controls
+  const colDiv = new THREE.Mesh(
+    new THREE.BoxGeometry(0.002, 0.74, 0.002),
+    new THREE.MeshBasicMaterial({ color: 0x442266 })
+  );
+  colDiv.position.set(0, -0.02, Z);
+  root.add(colDiv);
+
+  // Vertex mode button
+  const drawBtnC = document.createElement('canvas'); drawBtnC.width = 280; drawBtnC.height = 148;
+  const drawBtnTex = new THREE.CanvasTexture(drawBtnC);
+  _drawSpellBtn(drawBtnC, drawBtnTex, '✶', 'VERTEX', 'Place/select', {
+    topBg: '#160720',
+    bottomBg: '#0a0416',
+    border: '#cc55ff',
+    innerGlow: 'rgba(180,80,255,0.35)',
+    iconColor: '#eeaaff',
+    labelColor: '#cc66ff',
+    flavorColor: '#8844aa',
+  });
+  const drawBtnMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: drawBtnTex, transparent: true, side: THREE.DoubleSide })
+  );
+  drawBtnMesh.position.set(-0.155, 0.190, Z);
+  root.add(drawBtnMesh);
+  root.userData.drawToggleBtnCanvas = drawBtnC;
+  root.userData.drawToggleBtnTex = drawBtnTex;
+  root.userData.drawToggleBtnMesh = drawBtnMesh;
+
+  // Edge button
+  const edgeC = document.createElement('canvas'); edgeC.width = 280; edgeC.height = 148;
+  const edgeTex = new THREE.CanvasTexture(edgeC);
+  _drawSpellBtn(edgeC, edgeTex, '⟍', 'EDGE', 'Connect 2 verts', {
+    topBg: '#0a1b28',
+    bottomBg: '#051018',
+    border: '#66d9ff',
+    innerGlow: 'rgba(120,220,255,0.30)',
+    iconColor: '#c4efff',
+    labelColor: '#77ddff',
+    flavorColor: '#4b9bbb',
+  });
+  const edgeMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: edgeTex, transparent: true, side: THREE.DoubleSide })
+  );
+  edgeMesh.position.set(-0.155, 0.042, Z);
+  root.add(edgeMesh);
+  root.userData.drawEdgeBtnCanvas = edgeC;
+  root.userData.drawEdgeBtnTex = edgeTex;
+  root.userData.drawEdgeBtnMesh = edgeMesh;
+
+  // Face button
+  const faceC = document.createElement('canvas'); faceC.width = 280; faceC.height = 148;
+  const faceTex = new THREE.CanvasTexture(faceC);
+  _drawSpellBtn(faceC, faceTex, '△', 'FACE', 'Build triangle', {
+    topBg: '#1a1508',
+    bottomBg: '#100a04',
+    border: '#f3c05f',
+    innerGlow: 'rgba(245,200,120,0.30)',
+    iconColor: '#ffe3aa',
+    labelColor: '#f8ca72',
+    flavorColor: '#c49348',
+  });
+  const faceMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.116),
+    new THREE.MeshBasicMaterial({ map: faceTex, transparent: true, side: THREE.DoubleSide })
+  );
+  faceMesh.position.set(-0.155, -0.106, Z);
+  root.add(faceMesh);
+  root.userData.drawFaceBtnCanvas = faceC;
+  root.userData.drawFaceBtnTex = faceTex;
+  root.userData.drawFaceBtnMesh = faceMesh;
+
+  // Undo button
+  const undoC = document.createElement('canvas'); undoC.width = 280; undoC.height = 148;
+  const undoTex = new THREE.CanvasTexture(undoC);
+  _drawSpellBtn(undoC, undoTex, '↶', 'UNDO', 'Step back', {
+    topBg: '#1a0a0a',
+    bottomBg: '#0c0505',
+    border: '#dd7777',
+    innerGlow: 'rgba(240,140,140,0.28)',
+    iconColor: '#ffcccc',
+    labelColor: '#ff9999',
+    flavorColor: '#bb6666',
+  });
+  const undoMesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.22, 0.096),
+    new THREE.MeshBasicMaterial({ map: undoTex, transparent: true, side: THREE.DoubleSide })
+  );
+  undoMesh.position.set(-0.155, -0.254, Z);
+  root.add(undoMesh);
+  root.userData.drawUndoBtnCanvas = undoC;
+  root.userData.drawUndoBtnTex = undoTex;
+  root.userData.drawUndoBtnMesh = undoMesh;
+
+  // Panel-side nudge buttons removed — world gizmo is the only transform tool.
+  root.userData.gizmoButtons = [];
+  const gizmoBaseX = 0.155;
+  const gizmoBaseY = -0.130;
+
+  // Visible mini axis gizmo at the center of control cluster.
+  const gizmoRoot = new THREE.Group();
+  gizmoRoot.position.set(gizmoBaseX, gizmoBaseY - 0.004, Z + 0.001);
+  const xLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.032, 0, 0), new THREE.Vector3(0.032, 0, 0)]),
+    new THREE.LineBasicMaterial({ color: 0xff5555 })
+  );
+  const yLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -0.028, 0), new THREE.Vector3(0, 0.028, 0)]),
+    new THREE.LineBasicMaterial({ color: 0x55ff88 })
+  );
+  const zLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(-0.022, -0.022, 0), new THREE.Vector3(0.022, 0.022, 0)]),
+    new THREE.LineBasicMaterial({ color: 0x55aaff })
+  );
+  gizmoRoot.add(xLine);
+  gizmoRoot.add(yLine);
+  gizmoRoot.add(zLine);
+  root.add(gizmoRoot);
+
+  const gizmoLblC = document.createElement('canvas'); gizmoLblC.width = 280; gizmoLblC.height = 56;
+  const gizmoLblCtx = gizmoLblC.getContext('2d');
+  gizmoLblCtx.fillStyle = '#88ccff';
+  gizmoLblCtx.font = '22px Georgia';
+  gizmoLblCtx.textAlign = 'center';
+  gizmoLblCtx.fillText('MOVE GIZMO', 140, 36);
+  const gizmoLbl = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.19, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(gizmoLblC), transparent: true, side: THREE.DoubleSide })
+  );
+  gizmoLbl.position.set(gizmoBaseX, 0.035, Z);
+  root.add(gizmoLbl);
+
+  // Footer
+  const ftC = document.createElement('canvas'); ftC.width = 384; ftC.height = 48;
+  const ftCtx = ftC.getContext('2d');
+  ftCtx.fillStyle = '#553366'; ftCtx.font = '20px Georgia'; ftCtx.textAlign = 'center';
+  ftCtx.fillText('◈  Left: edit tools  |  Right: XYZ move gizmo', 192, 32);
+  const ft = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.52, 0.036),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(ftC), transparent: true, side: THREE.DoubleSide })
+  );
+  ft.position.set(0, -0.434, Z);
+  root.add(ft);
+
+  // Side handles — purple tint
+  const hMat = new THREE.MeshStandardMaterial({ color: 0x3a1060, roughness: 0.35, metalness: 0.75 });
+  root.userData.sideHandles = [];
+  [-1, 1].forEach(side => {
+    const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.013, 0.013, 0.44, 12), hMat);
+    bar.position.set(side * 0.366, 0, Z);
+    root.add(bar); root.userData.sideHandles.push(bar);
+    const cT = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cT.position.set(side * 0.366, 0.22, Z); root.add(cT);
+    const cB = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), hMat);
+    cB.position.set(side * 0.366, -0.22, Z); root.add(cB);
+    const br = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.064, 8), hMat);
+    br.rotation.z = Math.PI / 2;
+    br.position.set(side * 0.332, 0, Z); root.add(br);
+  });
+
+  root.position.set(1.7, 1.12, -0.9);
+  root.rotation.set(-0.12, 0, 0);
+  return root;
+}
+
+_drawPanel = _buildDrawPanel();
+scene.add(_drawPanel);
+
+function _refreshDrawModeHeader() {
+  if (!_drawPanel?.userData?.drawHeaderCanvas || !_drawPanel?.userData?.drawHeaderTex) return;
+  const c = _drawPanel.userData.drawHeaderCanvas;
+  const tex = _drawPanel.userData.drawHeaderTex;
+  const ctx = c.getContext('2d');
+  const g = ctx.createLinearGradient(0, 0, 512, 0);
+  let title = 'OFF MODE';
+  let stroke = '#777777';
+  let fill = '#d0d0d0';
+  if (_drawMode && _drawModeType === 'draw') {
+    title = 'DRAW MODE';
+    g.addColorStop(0, '#1a0830'); g.addColorStop(0.5, '#320a5a'); g.addColorStop(1, '#1a0830');
+    stroke = '#9944dd';
+    fill = '#dd99ff';
+  } else if (_drawMode && _drawModeType === 'select') {
+    title = 'SELECT MODE';
+    g.addColorStop(0, '#081a2e'); g.addColorStop(0.5, '#0f355e'); g.addColorStop(1, '#081a2e');
+    stroke = '#55b4ff';
+    fill = '#a9ddff';
+  } else {
+    g.addColorStop(0, '#181818'); g.addColorStop(0.5, '#2a2a2a'); g.addColorStop(1, '#181818');
+  }
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 512, 80);
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 3;
+  ctx.strokeRect(2, 2, 508, 76);
+  ctx.fillStyle = fill;
+  ctx.font = 'bold 36px Georgia';
+  ctx.textAlign = 'center';
+  ctx.fillText(title, 256, 52);
+  tex.needsUpdate = true;
+}
+_refreshDrawModeHeader();
+
+function _castFireball() {
+  // Spawn a fireball from the player's eye position, shoot it forward
+  const origin = new THREE.Vector3();
+  renderer.xr.getCamera().getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderer.xr.getCamera().quaternion).normalize();
+
+  const fb = new THREE.Group();
+  // Core sphere
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.10, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xff4400 })
+  );
+  fb.add(core);
+  // Outer glow shell
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.17, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xff8800, transparent: true, opacity: 0.35, side: THREE.BackSide })
+  );
+  fb.add(glow);
+  // Point light
+  const light = new THREE.PointLight(0xff5500, 6, 8, 2);
+  fb.add(light);
+
+  fb.position.copy(origin).addScaledVector(dir, 0.5);
+  fb.userData.velocity = dir.clone().multiplyScalar(8);
+  fb.userData.life = 4.0;
+  scene.add(fb);
+  _fireballs.push(fb);
+}
+
+function _castArcaneShot() {
+  // Spawn an arcane orb from the player's eye position and shoot forward slower than fireball
+  const origin = new THREE.Vector3();
+  renderer.xr.getCamera().getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(renderer.xr.getCamera().quaternion).normalize();
+
+  const orb = new THREE.Group();
+  // Core sphere
+  const core = new THREE.Mesh(
+    new THREE.SphereGeometry(0.095, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0xb06aff })
+  );
+  orb.add(core);
+  // Outer glow shell
+  const glow = new THREE.Mesh(
+    new THREE.SphereGeometry(0.165, 14, 10),
+    new THREE.MeshBasicMaterial({ color: 0x7a36ff, transparent: true, opacity: 0.38, side: THREE.BackSide })
+  );
+  orb.add(glow);
+  // Point light
+  const light = new THREE.PointLight(0x9a5cff, 5.2, 8, 2);
+  orb.add(light);
+
+  orb.position.copy(origin).addScaledVector(dir, 0.5);
+  orb.userData.velocity = dir.clone().multiplyScalar(5.2);
+  orb.userData.life = 4.8;
+  scene.add(orb);
+  _arcaneShots.push(orb);
+}
+
+function _updateFireballs(dt) {
+  for (let i = _fireballs.length - 1; i >= 0; i--) {
+    const fb = _fireballs[i];
+    fb.userData.life -= dt;
+    if (fb.userData.life <= 0) {
+      scene.remove(fb); _fireballs.splice(i, 1); continue;
+    }
+    fb.position.addScaledVector(fb.userData.velocity, dt);
+    // Slight wobble
+    fb.children[0].scale.setScalar(0.9 + 0.1 * Math.sin(fb.userData.life * 18));
+  }
+}
+
+function _updateArcaneShots(dt) {
+  for (let i = _arcaneShots.length - 1; i >= 0; i--) {
+    const orb = _arcaneShots[i];
+    orb.userData.life -= dt;
+    if (orb.userData.life <= 0) {
+      scene.remove(orb); _arcaneShots.splice(i, 1); continue;
+    }
+    orb.position.addScaledVector(orb.userData.velocity, dt);
+    // Slightly slower pulse than fireball for a heavier magical feel
+    orb.children[0].scale.setScalar(0.92 + 0.08 * Math.sin(orb.userData.life * 14));
+  }
+}
+
+function _castLightningStrike() {
+  const cam = renderer.xr.getCamera();
+  const origin = new THREE.Vector3();
+  cam.getWorldPosition(origin);
+  const dir = new THREE.Vector3(0, 0, -1).applyQuaternion(cam.quaternion).normalize();
+
+  // Project look direction onto the ground plane (y=0) to find strike point.
+  // If looking up or level, fall back to 10 units ahead on the XZ plane.
+  let strikeX, strikeZ;
+  if (dir.y < -0.01) {
+    const t = Math.min(-origin.y / dir.y, 22);
+    strikeX = origin.x + dir.x * t;
+    strikeZ = origin.z + dir.z * t;
+  } else {
+    strikeX = origin.x + dir.x * 10;
+    strikeZ = origin.z + dir.z * 10;
+  }
+
+  const BOLT_HEIGHT = 7;
+  const bolt = new THREE.Group();
+  bolt.position.set(strikeX, 0, strikeZ);
+
+  // Outer shaft — wide electric column
+  const shaft = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.055, BOLT_HEIGHT, 4, 8),
+    new THREE.MeshBasicMaterial({ color: 0x88ddff, transparent: true, opacity: 0.55 })
+  );
+  shaft.position.y = BOLT_HEIGHT / 2;
+  bolt.add(shaft); // children[0]
+
+  // Inner bright core
+  const core = new THREE.Mesh(
+    new THREE.CapsuleGeometry(0.018, BOLT_HEIGHT, 4, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.90 })
+  );
+  core.position.y = BOLT_HEIGHT / 2;
+  bolt.add(core); // children[1]
+
+  // Ground impact splash
+  const impact = new THREE.Mesh(
+    new THREE.SphereGeometry(0.9, 10, 6),
+    new THREE.MeshBasicMaterial({ color: 0x99eeff, transparent: true, opacity: 0.45, side: THREE.BackSide })
+  );
+  impact.position.y = 0.1;
+  bolt.add(impact); // children[2]
+
+  // Intense point light at ground strike
+  const light = new THREE.PointLight(0xaaffff, 14.0, 18, 2);
+  light.position.y = 0.5;
+  bolt.add(light); // children[3]
+
+  bolt.userData.life = 0.65;
+  bolt.userData.maxLife = 0.65;
+  scene.add(bolt);
+  _lightningBolts.push(bolt);
+}
+
+function _updateLightningBolts(dt) {
+  for (let i = _lightningBolts.length - 1; i >= 0; i--) {
+    const bolt = _lightningBolts[i];
+    bolt.userData.life -= dt;
+    if (bolt.userData.life <= 0) {
+      scene.remove(bolt); _lightningBolts.splice(i, 1); continue;
+    }
+    const t = bolt.userData.life / bolt.userData.maxLife; // 1 → 0
+    const flicker = 0.35 + 0.65 * Math.abs(Math.sin(bolt.userData.life * 58));
+    bolt.children[0].material.opacity = t * 0.55 * flicker;
+    bolt.children[1].material.opacity = t * 0.90 * flicker;
+    bolt.children[2].material.opacity = t * 0.45 * flicker;
+    bolt.children[3].intensity = 14.0 * t * flicker;
+  }
+}
+
+// ─── Draw Mode ───────────────────────────────────────────────────────────────
+function _syncLegacyEditStateFromToolSystem() {
+  _drawMode = _toolSystem.mode !== 'off';
+  _drawModeType = _toolSystem.mode === 'draw' ? 'draw' : 'select';
+  _drawSelectMode = _toolSystem.selectionKind;
+}
+
+function _setToolSystemMode(mode) {
+  if (!['off', 'draw', 'select'].includes(mode)) return;
+  _toolSystem.mode = mode;
+  _toolSystem.activeTool = 'idle';
+  _syncLegacyEditStateFromToolSystem();
+}
+
+function _setToolSystemSelectionKind(kind) {
+  if (!['vertex', 'edge', 'face'].includes(kind)) return;
+  _toolSystem.selectionKind = kind;
+  _syncLegacyEditStateFromToolSystem();
+}
+
+_syncLegacyEditStateFromToolSystem();
+
+function _setDrawActive(next) {
+  _setToolSystemMode(next ? (_drawModeType === 'select' ? 'select' : 'draw') : 'off');
+  if (!_drawMode) {
+    _cancelDraw(true);
+    _handGrab.left.active = false;  _handGrab.left.vertIndex = -1;
+    _handGrab.right.active = false; _handGrab.right.vertIndex = -1;
+  }
+  if (_drawMode && _drawModeType !== 'draw' && _drawModeType !== 'select') {
+    _drawModeType = 'draw';
+  }
+  _refreshDrawModeHeader();
+  if (_drawPanel) {
+    _drawSpellBtn(
+      _drawPanel.userData.drawToggleBtnCanvas,
+      _drawPanel.userData.drawToggleBtnTex,
+      '✶', _drawSelectMode.toUpperCase(), 'Select mode',
+      _drawMode ? {
+        topBg: '#2a0a40', bottomBg: '#1a0630', border: '#ff88ff',
+        innerGlow: 'rgba(255,140,255,0.45)', iconColor: '#ffffff',
+        labelColor: '#ff99ff', flavorColor: '#cc66ee',
+      } : {
+        topBg: '#160720', bottomBg: '#0a0416', border: '#cc55ff',
+        innerGlow: 'rgba(180,80,255,0.35)', iconColor: '#eeaaff',
+        labelColor: '#cc66ff', flavorColor: '#8844aa',
+      }
+    );
+  }
+  _updateDrawUi();
+  _updateDesktopHint();
+}
+
+function _toggleDrawMode() { _setDrawActive(!_drawMode); }
+
+function _setDrawModeType(nextType) {
+  if (nextType !== 'draw' && nextType !== 'select') return;
+  _setToolSystemMode(nextType);
+  _refreshDrawModeHeader();
+  _updateDrawUi();
+  _updateDesktopHint();
+}
+
+function _cycleEditMode() {
+  if (!_drawMode) {
+    _setDrawModeType('draw');
+    return;
+  }
+  if (_drawModeType === 'draw') {
+    _setDrawModeType('select');
+    return;
+  }
+  _setDrawActive(false);
+}
+
+function _setDrawSelectMode(mode) {
+  if (!['vertex', 'edge', 'face'].includes(mode)) return;
+  _setToolSystemSelectionKind(mode);
+  _drawSelection.length = 0;
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+  _updateDesktopHint();
+  if (_drawPanel) {
+    _drawSpellBtn(
+      _drawPanel.userData.drawToggleBtnCanvas,
+      _drawPanel.userData.drawToggleBtnTex,
+      '✶', _drawSelectMode.toUpperCase(), 'Select mode',
+      _drawMode ? {
+        topBg: '#2a0a40', bottomBg: '#1a0630', border: '#ff88ff',
+        innerGlow: 'rgba(255,140,255,0.45)', iconColor: '#ffffff',
+        labelColor: '#ff99ff', flavorColor: '#cc66ee',
+      } : {
+        topBg: '#160720', bottomBg: '#0a0416', border: '#cc55ff',
+        innerGlow: 'rgba(180,80,255,0.35)', iconColor: '#eeaaff',
+        labelColor: '#cc66ff', flavorColor: '#8844aa',
+      }
+    );
+  }
+}
+
+function _selectDrawElement(idx, additive = false) {
+  let max = 0;
+  if (_drawSelectMode === 'vertex') max = _drawVerts.length;
+  else if (_drawSelectMode === 'edge') max = _drawEdges.length;
+  else max = _drawFaces.length;
+  if (idx < 0 || idx >= max) return false;
+  if (!additive) {
+    _drawSelection.length = 0;
+    _drawSelection.push(idx);
+  } else {
+    const at = _drawSelection.indexOf(idx);
+    if (at >= 0) _drawSelection.splice(at, 1);
+    else _drawSelection.push(idx);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+  return true;
+}
+
+function _selectedVertexIndices() {
+  if (_drawSelectMode === 'vertex') {
+    return [...new Set(_drawSelection)].filter(i => i >= 0 && i < _drawVerts.length);
+  }
+  if (_drawSelectMode === 'edge') {
+    const out = [];
+    for (const si of _drawSelection) {
+      const e = _drawEdges[si];
+      if (!e) continue;
+      out.push(e.a, e.b);
+    }
+    return [...new Set(out)];
+  }
+  const out = [];
+  for (const si of _drawSelection) {
+    const f = _drawFaces[si];
+    if (!f) continue;
+    out.push(f.a, f.b, f.c);
+  }
+  return [...new Set(out)];
+}
+
+function _updateWorldGizmoFromSelection() {
+  if (!_compassRoot || _compassGrabState.holder || !_drawMode) return;
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  _tmpSelectionCenter.set(0, 0, 0);
+  for (const idx of verts) {
+    if (_drawVerts[idx]) _tmpSelectionCenter.add(_drawVerts[idx]);
+  }
+  _tmpSelectionCenter.multiplyScalar(1 / verts.length);
+  _compassRoot.position.copy(_tmpSelectionCenter);
+}
+
+function _updateDrawSelectionVisuals() {
+  for (let i = 0; i < _drawVertMeshes.length; i++) {
+    const selected = _selectedVertexIndices().includes(i);
+    _drawVertMeshes[i].material.color.setHex(selected ? 0x66ffee : 0xffee00);
+  }
+  for (let i = 0; i < _drawEdges.length; i++) {
+    const edge = _drawEdges[i];
+    edge.line.material.color.setHex(_drawSelectMode === 'edge' && _drawSelection.includes(i) ? 0x99ffff : 0x66d1ff);
+  }
+  for (let i = 0; i < _drawFaces.length; i++) {
+    const face = _drawFaces[i];
+    face.mesh.material.color.setHex(_drawSelectMode === 'face' && _drawSelection.includes(i) ? 0xffdd99 : 0xb587ff);
+  }
+}
+
+function _placeDrawVertex(worldPos) {
+  const v = worldPos.clone();
+  _drawVerts.push(v);
+  const marker = new THREE.Mesh(
+    new THREE.SphereGeometry(0.05, 9, 7),
+    new THREE.MeshBasicMaterial({ color: 0xffee00 })
+  );
+  marker.position.copy(v);
+  scene.add(marker);
+  _drawVertMeshes.push(marker);
+  if (_drawSelectMode === 'vertex') {
+    _drawSelection.length = 0;
+    _drawSelection.push(_drawVerts.length - 1);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _findNearestDrawVertex(point, radius = 0.16) {
+  let best = -1;
+  let bestSq = radius * radius;
+  for (let i = 0; i < _drawVerts.length; i++) {
+    const dSq = _drawVerts[i].distanceToSquared(point);
+    if (dSq <= bestSq) { bestSq = dSq; best = i; }
+  }
+  return best;
+}
+
+function _ensureDrawEdge(a, b) {
+  if (a === b) return false;
+  const lo = Math.min(a, b);
+  const hi = Math.max(a, b);
+  if (_drawEdges.some(e => e.a === lo && e.b === hi)) return false;
+  const geo = new THREE.BufferGeometry().setFromPoints([
+    _drawVerts[lo].clone(),
+    _drawVerts[hi].clone(),
+  ]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0x66d1ff }));
+  scene.add(line);
+  _drawEdges.push({ a: lo, b: hi, line });
+  return true;
+}
+
+function _createEdgeFromSelection() {
+  const verts = _selectedVertexIndices();
+  if (verts.length < 2) return;
+  const a = verts[verts.length - 2];
+  const b = verts[verts.length - 1];
+  _ensureDrawEdge(a, b);
+  _updateDrawSelectionVisuals();
+  _updateDrawUi();
+}
+
+function _createFaceFromSelection() {
+  const verts = _selectedVertexIndices();
+  if (verts.length < 3) return;
+  const a = verts[verts.length - 3];
+  const b = verts[verts.length - 2];
+  const c = verts[verts.length - 1];
+  if (a === b || b === c || a === c) return;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(9);
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const mesh = new THREE.Mesh(
+    geo,
+    new THREE.MeshStandardMaterial({ color: 0xb587ff, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+  );
+  scene.add(mesh);
+  _drawFaces.push({ a, b, c, mesh });
+  _ensureDrawEdge(a, b);
+  _ensureDrawEdge(b, c);
+  _ensureDrawEdge(c, a);
+  _updateDrawMeshGeometry();
+  _updateDrawSelectionVisuals();
+  _updateDrawUi();
+}
+
+function _fillFromSelection() {
+  _createFaceFromSelection();
+}
+
+function _extrudeSelection() {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  const map = new Map();
+  const newIndices = [];
+  for (const vi of verts) {
+    const v = _drawVerts[vi].clone();
+    v.y += 0.20;
+    _drawVerts.push(v);
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 9, 7),
+      new THREE.MeshBasicMaterial({ color: 0xffee00 })
+    );
+    marker.position.copy(v);
+    scene.add(marker);
+    _drawVertMeshes.push(marker);
+    const ni = _drawVerts.length - 1;
+    map.set(vi, ni);
+    newIndices.push(ni);
+    _ensureDrawEdge(vi, ni);
+  }
+  for (const edge of _drawEdges.slice()) {
+    if (map.has(edge.a) && map.has(edge.b)) {
+      _ensureDrawEdge(map.get(edge.a), map.get(edge.b));
+    }
+  }
+  if (_drawSelectMode === 'vertex') {
+    _drawSelection.length = 0;
+    _drawSelection.push(...newIndices);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawMeshGeometry();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _duplicateSelection() {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  const map = new Map();
+  const newIndices = [];
+  for (const vi of verts) {
+    const v = _drawVerts[vi].clone().add(new THREE.Vector3(0.15, 0, 0.15));
+    _drawVerts.push(v);
+    const marker = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 9, 7),
+      new THREE.MeshBasicMaterial({ color: 0xffee00 })
+    );
+    marker.position.copy(v);
+    scene.add(marker);
+    _drawVertMeshes.push(marker);
+    const ni = _drawVerts.length - 1;
+    map.set(vi, ni);
+    newIndices.push(ni);
+  }
+  for (const edge of _drawEdges) {
+    if (map.has(edge.a) && map.has(edge.b)) _ensureDrawEdge(map.get(edge.a), map.get(edge.b));
+  }
+  for (const face of _drawFaces) {
+    if (map.has(face.a) && map.has(face.b) && map.has(face.c)) {
+      const geo = new THREE.BufferGeometry();
+      const pos = new Float32Array(9);
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({ color: 0xb587ff, roughness: 0.55, metalness: 0.15, side: THREE.DoubleSide, transparent: true, opacity: 0.72 })
+      );
+      scene.add(mesh);
+      _drawFaces.push({ a: map.get(face.a), b: map.get(face.b), c: map.get(face.c), mesh });
+    }
+  }
+  if (_drawSelectMode === 'vertex') {
+    _drawSelection.length = 0;
+    _drawSelection.push(...newIndices);
+  }
+  _updateDrawMeshGeometry();
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _deleteSelection() {
+  if (_drawSelectMode === 'face' && _drawSelection.length) {
+    const toDelete = [...new Set(_drawSelection)].sort((a, b) => b - a);
+    for (const idx of toDelete) {
+      const face = _drawFaces[idx];
+      if (!face) continue;
+      scene.remove(face.mesh);
+      _drawFaces.splice(idx, 1);
+    }
+    _drawSelection.length = 0;
+    _updateDrawSelectionVisuals();
+    _updateDrawPreview();
+    _updateDrawUi();
+    return;
+  }
+  if (_drawSelectMode === 'edge' && _drawSelection.length) {
+    const toDelete = [...new Set(_drawSelection)].sort((a, b) => b - a);
+    for (const idx of toDelete) {
+      const edge = _drawEdges[idx];
+      if (!edge) continue;
+      scene.remove(edge.line);
+      _drawEdges.splice(idx, 1);
+    }
+    _drawFaces.forEach((f, i) => {
+      const hasAB = _drawEdges.some(e => (e.a === f.a && e.b === f.b) || (e.a === f.b && e.b === f.a));
+      const hasBC = _drawEdges.some(e => (e.a === f.b && e.b === f.c) || (e.a === f.c && e.b === f.b));
+      const hasCA = _drawEdges.some(e => (e.a === f.c && e.b === f.a) || (e.a === f.a && e.b === f.c));
+      if (!(hasAB && hasBC && hasCA)) {
+        scene.remove(f.mesh);
+        _drawFaces[i] = null;
+      }
+    });
+    for (let i = _drawFaces.length - 1; i >= 0; i--) if (_drawFaces[i] === null) _drawFaces.splice(i, 1);
+    _drawSelection.length = 0;
+    _updateDrawSelectionVisuals();
+    _updateDrawPreview();
+    _updateDrawUi();
+    return;
+  }
+}
+
+function _mergeSelection() {
+  const verts = _selectedVertexIndices();
+  if (verts.length < 2) return;
+  const keep = verts[0];
+  _tmpDrawPivot.set(0, 0, 0);
+  for (const vi of verts) _tmpDrawPivot.add(_drawVerts[vi]);
+  _tmpDrawPivot.multiplyScalar(1 / verts.length);
+  _drawVerts[keep].copy(_tmpDrawPivot);
+  _drawVertMeshes[keep].position.copy(_tmpDrawPivot);
+  for (let i = 1; i < verts.length; i++) {
+    const old = verts[i];
+    for (const edge of _drawEdges) {
+      if (edge.a === old) edge.a = keep;
+      if (edge.b === old) edge.b = keep;
+    }
+    for (const face of _drawFaces) {
+      if (face.a === old) face.a = keep;
+      if (face.b === old) face.b = keep;
+      if (face.c === old) face.c = keep;
+    }
+  }
+  _drawSelection.length = 0;
+  _drawSelection.push(keep);
+  _updateDrawMeshGeometry();
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _updateDrawMeshGeometry() {
+  for (const edge of _drawEdges) {
+    edge.line.geometry.setFromPoints([_drawVerts[edge.a], _drawVerts[edge.b]]);
+  }
+  for (const face of _drawFaces) {
+    const attr = face.mesh.geometry.getAttribute('position');
+    attr.setXYZ(0, _drawVerts[face.a].x, _drawVerts[face.a].y, _drawVerts[face.a].z);
+    attr.setXYZ(1, _drawVerts[face.b].x, _drawVerts[face.b].y, _drawVerts[face.b].z);
+    attr.setXYZ(2, _drawVerts[face.c].x, _drawVerts[face.c].y, _drawVerts[face.c].z);
+    attr.needsUpdate = true;
+    face.mesh.geometry.computeVertexNormals();
+  }
+}
+
+function _nudgeDrawSelection(dx, dy, dz) {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  for (const idx of verts) {
+    _drawVerts[idx].x += dx;
+    _drawVerts[idx].y += dy;
+    _drawVerts[idx].z += dz;
+    _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+  }
+  _updateDrawMeshGeometry();
+  _updateDrawPreview();
+}
+
+function _undoDrawStep() {
+  if (_drawFaces.length) {
+    const lastFace = _drawFaces.pop();
+    scene.remove(lastFace.mesh);
+    _updateDrawUi();
+    return;
+  }
+  if (_drawEdges.length) {
+    const lastEdge = _drawEdges.pop();
+    scene.remove(lastEdge.line);
+    _updateDrawUi();
+    return;
+  }
+  if (_drawVerts.length) {
+    const lastIdx = _drawVerts.length - 1;
+    const inUse = _drawEdges.some(e => e.a === lastIdx || e.b === lastIdx) || _drawFaces.some(f => f.a === lastIdx || f.b === lastIdx || f.c === lastIdx);
+    if (inUse) return;
+    _drawVerts.pop();
+    const marker = _drawVertMeshes.pop();
+    if (marker) scene.remove(marker);
+    for (let i = _drawSelection.length - 1; i >= 0; i--) {
+      if (_drawSelection[i] >= _drawVerts.length) _drawSelection.splice(i, 1);
+    }
+    _updateDrawSelectionVisuals();
+    _updateDrawPreview();
+    _updateDrawUi();
+  }
+}
+
+function _startDrawTransform(op) {
+  const verts = _selectedVertexIndices();
+  if (!verts.length) return;
+  _drawTransform.active = true;
+  _drawTransform.op = op;
+  _drawTransform.axis = null;
+  _drawTransform.amount = 0;
+  _drawTransform.selectedVerts = verts;
+  _drawTransform.startVerts = verts.map(i => _drawVerts[i].clone());
+  _drawTransform.pivot.set(0, 0, 0);
+  for (const v of _drawTransform.startVerts) _drawTransform.pivot.add(v);
+  _drawTransform.pivot.multiplyScalar(1 / _drawTransform.startVerts.length);
+  _updateDrawUi();
+}
+
+function _setDrawTransformAxis(axis, exclude = false) {
+  if (!_drawTransform.active) return;
+  _drawTransform.axis = exclude ? `not-${axis}` : axis;
+  _applyDrawTransform();
+}
+
+function _accumulateDrawTransform(delta) {
+  if (!_drawTransform.active) return;
+  _drawTransform.amount += delta;
+  _applyDrawTransform();
+}
+
+function _applyDrawTransform() {
+  if (!_drawTransform.active) return;
+  const axis = _drawTransform.axis;
+  const op = _drawTransform.op;
+  const amount = _drawTransform.amount;
+  for (let i = 0; i < _drawTransform.selectedVerts.length; i++) {
+    const idx = _drawTransform.selectedVerts[i];
+    const start = _drawTransform.startVerts[i];
+    const out = _drawVerts[idx];
+    out.copy(start);
+    if (op === 'grab') {
+      if (axis === 'x') out.x = start.x + amount;
+      else if (axis === 'y') out.y = start.y + amount;
+      else if (axis === 'z') out.z = start.z + amount;
+      else if (axis === 'not-x') { out.y = start.y + amount * 0.6; out.z = start.z + amount; }
+      else if (axis === 'not-y') { out.x = start.x + amount; out.z = start.z + amount * 0.6; }
+      else if (axis === 'not-z') { out.x = start.x + amount; out.y = start.y + amount * 0.6; }
+      else { out.x = start.x + amount; out.z = start.z + amount * 0.8; }
+    }
+    if (op === 'scale') {
+      const base = 1 + amount * 0.45;
+      const sx = axis === 'y' || axis === 'z' || axis === 'not-x' ? 1 : base;
+      const sy = axis === 'x' || axis === 'z' || axis === 'not-y' ? 1 : base;
+      const sz = axis === 'x' || axis === 'y' || axis === 'not-z' ? 1 : base;
+      out.x = _drawTransform.pivot.x + (start.x - _drawTransform.pivot.x) * sx;
+      out.y = _drawTransform.pivot.y + (start.y - _drawTransform.pivot.y) * sy;
+      out.z = _drawTransform.pivot.z + (start.z - _drawTransform.pivot.z) * sz;
+    }
+    if (op === 'rotate') {
+      const ang = amount * 0.9;
+      const rel = _tmpDrawWork.copy(start).sub(_drawTransform.pivot);
+      if (axis === 'x') rel.applyAxisAngle(new THREE.Vector3(1, 0, 0), ang);
+      else if (axis === 'z') rel.applyAxisAngle(new THREE.Vector3(0, 0, 1), ang);
+      else rel.applyAxisAngle(new THREE.Vector3(0, 1, 0), ang);
+      out.copy(_drawTransform.pivot).add(rel);
+    }
+    _drawVertMeshes[idx].position.copy(out);
+  }
+  _updateDrawMeshGeometry();
+  _updateDrawPreview();
+}
+
+function _confirmDrawTransform() {
+  if (!_drawTransform.active) return;
+  _drawTransform.active = false;
+  _drawTransform.op = null;
+  _drawTransform.axis = null;
+  _drawTransform.selectedVerts = [];
+  _drawTransform.startVerts = [];
+  _updateDrawUi();
+}
+
+function _cancelDrawTransform() {
+  if (!_drawTransform.active) return;
+  for (let i = 0; i < _drawTransform.selectedVerts.length; i++) {
+    const idx = _drawTransform.selectedVerts[i];
+    _drawVerts[idx].copy(_drawTransform.startVerts[i]);
+    _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+  }
+  _updateDrawMeshGeometry();
+  _drawTransform.active = false;
+  _drawTransform.op = null;
+  _drawTransform.axis = null;
+  _drawTransform.selectedVerts = [];
+  _drawTransform.startVerts = [];
+  _updateDrawUi();
+}
+
+function _toggleSelectAllDraw() {
+  let max = 0;
+  if (_drawSelectMode === 'vertex') max = _drawVerts.length;
+  else if (_drawSelectMode === 'edge') max = _drawEdges.length;
+  else max = _drawFaces.length;
+  if (_drawSelection.length === max) _drawSelection.length = 0;
+  else {
+    _drawSelection.length = 0;
+    for (let i = 0; i < max; i++) _drawSelection.push(i);
+  }
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  _updateDrawUi();
+}
+
+function _updateDrawPreview() {
+  if (_drawPreviewLine) { scene.remove(_drawPreviewLine); _drawPreviewLine = null; }
+  if (_drawPreviewFace) { scene.remove(_drawPreviewFace); _drawPreviewFace = null; }
+  const verts = _selectedVertexIndices();
+  if (verts.length >= 2) {
+    const pts = verts.map(i => _drawVerts[i].clone());
+    const geo = new THREE.BufferGeometry().setFromPoints(pts);
+    _drawPreviewLine = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffee00 }));
+    scene.add(_drawPreviewLine);
+  }
+  if (verts.length >= 3) {
+    const i0 = verts[verts.length - 3];
+    const i1 = verts[verts.length - 2];
+    const i2 = verts[verts.length - 1];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute([
+      _drawVerts[i0].x, _drawVerts[i0].y, _drawVerts[i0].z,
+      _drawVerts[i1].x, _drawVerts[i1].y, _drawVerts[i1].z,
+      _drawVerts[i2].x, _drawVerts[i2].y, _drawVerts[i2].z,
+    ], 3));
+    geo.computeVertexNormals();
+    _drawPreviewFace = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.25, side: THREE.DoubleSide })
+    );
+    scene.add(_drawPreviewFace);
+  }
+}
+
+function _drawPointFromRay(ray, additiveSelect = false, raycaster = null) {
+  if (raycaster && _drawSelectMode === 'vertex') {
+    const markerHits = raycaster.intersectObjects(_drawVertMeshes, false);
+    if (markerHits.length) {
+      const idx = _drawVertMeshes.indexOf(markerHits[0].object);
+      if (idx >= 0) return _selectDrawElement(idx, additiveSelect);
+    }
+  }
+  if (raycaster && _drawSelectMode === 'edge') {
+    raycaster.params.Line.threshold = 0.09;
+    const edgeHits = raycaster.intersectObjects(_drawEdges.map(e => e.line), false);
+    if (edgeHits.length) {
+      const idx = _drawEdges.findIndex(e => e.line === edgeHits[0].object);
+      if (idx >= 0) return _selectDrawElement(idx, additiveSelect);
+    }
+  }
+  if (raycaster && _drawSelectMode === 'face') {
+    const faceHits = raycaster.intersectObjects(_drawFaces.map(f => f.mesh), false);
+    if (faceHits.length) {
+      const idx = _drawFaces.findIndex(f => f.mesh === faceHits[0].object);
+      if (idx >= 0) return _selectDrawElement(idx, additiveSelect);
+    }
+  }
+  _groundPlane.constant = -_drawPlaneY;
+  if (ray.intersectPlane(_groundPlane, _tmpDrawHit)) {
+    if (_drawSelectMode !== 'vertex') return false;
+    const nearIdx = _findNearestDrawVertex(_tmpDrawHit, 0.12);
+    if (nearIdx >= 0) _selectDrawElement(nearIdx, additiveSelect);
+    else if (_drawMode && _drawModeType === 'draw') _placeDrawVertex(_tmpDrawHit);
+    else return false;
+    return true;
+  }
+  return false;
+}
+
+function _cancelDraw(full = false) {
+  _cancelDrawTransform();
+  _drawSelection.length = 0;
+  _updateDrawSelectionVisuals();
+  _updateDrawPreview();
+  if (full) {
+    _drawSelectMode = 'vertex';
+  }
+  _updateDrawUi();
+}
+
+function _updateDrawUi() {
+  const el = document.getElementById('draw-ui');
+  if (!el) return;
+  if (_drawMode) {
+    const n = _drawVerts.length;
+    const e = _drawEdges.length;
+    const f = _drawFaces.length;
+    const s = _drawSelection.length;
+    const editMode = _drawModeType.toUpperCase();
+    const mode = _drawSelectMode.toUpperCase();
+    const tx = _drawTransform.active ? ` | ${_drawTransform.op.toUpperCase()}${_drawTransform.axis ? ` ${_drawTransform.axis.toUpperCase()}` : ''}` : '';
+    el.style.display = 'block';
+    el.innerHTML =
+      `✏️ ${editMode} (${mode}) — V:${n} E:${e} F:${f} | Sel:${s} | Plane Y:${_drawPlaneY.toFixed(2)}${tx}` +
+      `<br><small>Tab / header: cycle OFF→DRAW→SELECT • 1/2/3: select type • A: select all • G/R/S then X/Y/Z • Shift+X/Y/Z exclude axis • E: extrude • F: fill • Shift+D: duplicate • X/Delete: delete • M: merge • Enter/Click confirm • Esc/RightClick cancel</small>`;
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function _applyBrightness(b) {
+  _brightness = b;
+  renderer.toneMappingExposure = b;
+  _controlTablet.userData.handle.position.y = _brightnessToY(b);
+  _drawBrightnessValue(_controlTablet.userData.labelCanvas, _controlTablet.userData.labelTex, b);
+}
+
+function _setLaserActive(next) {
+  _laserActive = !!next;
+  _laserGroup.visible = _laserActive;
+  _laserPivots.forEach(({ light }) => { light.intensity = _laserActive ? 3.5 : 0; });
+  _drawTabletBtn(_controlTablet.userData.laserBtnCanvas, _controlTablet.userData.laserBtnTex, '✦', 'LASER', _laserActive);
+}
+
+function _setDiscoActive(next) {
+  _discoActive = !!next;
+  _discoGroup.visible = _discoActive;
+  _discoLights.forEach(l => { l.intensity = _discoActive ? 8 : 0; });
+  _drawTabletBtn(_controlTablet.userData.discoBtnCanvas, _controlTablet.userData.discoBtnTex, '🪩', 'DISCO', _discoActive);
+}
+
+_applyBrightness(1.0);
+_refreshSkyBtns();
+
+function _updateLasers(dt) {
+  if (_laserActive) {
+    _laserPivots.forEach(({ outerPivot, innerPivot, speedX, speedY, speedZ }) => {
+      outerPivot.rotation.y += speedY * dt;
+      innerPivot.rotation.x += speedX * dt;
+      innerPivot.rotation.z += speedZ * dt;
+    });
+  }
+  if (_discoActive) {
+    _discoBall.rotation.y += 0.8 * dt;
+    _discoGroup.rotation.y += 0.3 * dt;
+  }
+}
+
+// Sky buttons live on the control tablet (see _buildControlTablet)
+
+function _deadzone(v) {
+  return Math.abs(v) < STICK_DEADZONE ? 0 : v;
+}
+
+function _readStick(gamepad) {
+  if (!gamepad || !gamepad.axes || gamepad.axes.length < 2) return { x: 0, y: 0 };
+
+  // XR gamepad layouts vary by browser/runtime: some expose the stick on
+  // axes[0,1], others on axes[2,3]. Pick whichever pair is most active.
+  const candidates = [
+    { x: _deadzone(gamepad.axes[0] || 0), y: _deadzone(gamepad.axes[1] || 0) },
+    { x: _deadzone(gamepad.axes[2] || 0), y: _deadzone(gamepad.axes[3] || 0) },
+  ];
+  let best = candidates[0];
+  let bestMag = Math.abs(best.x) + Math.abs(best.y);
+  for (let i = 1; i < candidates.length; i++) {
+    const c = candidates[i];
+    const mag = Math.abs(c.x) + Math.abs(c.y);
+    if (mag > bestMag) { best = c; bestMag = mag; }
+  }
+  return best;
+}
+
+function _gamepadFromHandedness(handedness) {
+  const session = renderer.xr.getSession();
+  if (!session) return null;
+  for (const source of session.inputSources) {
+    if (source && source.handedness === handedness && source.gamepad) return source.gamepad;
+  }
+  return null;
+}
+
+function _isGrabPressed(gp) {
+  if (!gp || !gp.buttons) return false;
+  // Quest usually maps trigger to [0] and squeeze/grip to [1].
+  const trigger = gp.buttons[0];
+  const grip = gp.buttons[1];
+  const pressed = (b) => !!(b && (b.pressed || (b.value || 0) > 0.7));
+  return pressed(trigger) || pressed(grip);
+}
+
+function _updatePanelInteraction(leftGp, rightGp) {
+  const leftCtrl = _controllersByHand.left;
+  const rightCtrl = _controllersByHand.right;
+  const leftPressed = _isGrabPressed(leftGp);
+  const rightPressed = _isGrabPressed(rightGp);
+
+  // World compass interactions:
+  // - center sphere: move the compass itself (translation only)
+  // - axis pull in draw mode: move selected draw elements along that axis
+  if (_compassGrabState.holder) {
+    const holdCtrl = _controllersByHand[_compassGrabState.holder];
+    const holdPressed = _compassGrabState.holder === 'left' ? leftPressed : rightPressed;
+    if (!holdCtrl || !holdPressed || !_compassRoot) {
+      _compassGrabState.holder = null;
+      _compassGrabState.mode = null;
+      _compassGrabState.selectedVerts = [];
+      _compassGrabState.startVerts = [];
+      _toolSystem.activeTool = 'idle';
+    } else {
+      holdCtrl.getWorldPosition(_tmpCtrlPos);
+      if (_compassGrabState.mode === 'drag-selection' && _drawMode && _compassGrabState.selectedVerts.length) {
+        if (_toolSystem.activeTool !== 'drag-selection') console.log('GRAB vs TOOL', _toolSystem.activeTool, '-> drag-selection');
+      _toolSystem.activeTool = 'drag-selection';
+        const amount = _tmpDrawWork
+          .copy(_tmpCtrlPos)
+          .sub(_compassGrabState.startCtrl)
+          .dot(_compassGrabState.axis);
+        for (let i = 0; i < _compassGrabState.selectedVerts.length; i++) {
+          const idx = _compassGrabState.selectedVerts[i];
+          const start = _compassGrabState.startVerts[i];
+          if (!start || !_drawVerts[idx] || !_drawVertMeshes[idx]) continue;
+          _drawVerts[idx].copy(start).addScaledVector(_compassGrabState.axis, amount);
+          _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+        }
+        _updateDrawMeshGeometry();
+        _updateDrawPreview();
+      } else {
+        if (_toolSystem.activeTool !== 'move-gizmo') console.log('GRAB vs TOOL', _toolSystem.activeTool, '-> move-gizmo');
+        _toolSystem.activeTool = 'move-gizmo';
+        _compassRoot.position.copy(_tmpCtrlPos).add(_compassGrabState.offset);
+        _compassRoot.quaternion.identity();
+      }
+    }
+  }
+
+  // Direct vertex grab — both hands can independently hold a vertex.
+  for (const hand of ['left', 'right']) {
+    const hg = _handGrab[hand];
+    const holdCtrl = _controllersByHand[hand];
+    const holdPressed = hand === 'left' ? leftPressed : rightPressed;
+    if (!hg.active) {
+      // Hover detection — light pulse when within grab radius of a vertex.
+      if (_drawMode && _drawVerts.length && holdCtrl) {
+        holdCtrl.getWorldPosition(_tmpCtrlPos);
+        const hoverIdx = _findNearestDrawVertex(_tmpCtrlPos, 0.08);
+        if (hoverIdx >= 0) {
+          if (!_hapticsState[hand].hovering) {
+            _hapticHover(hand, holdCtrl);
+            _hapticsState[hand].hovering = true;
+          }
+        } else {
+          _hapticsState[hand].hovering = false;
+        }
+      }
+      continue;
+    }
+    _hapticsState[hand].hovering = false;
+    const idx = hg.vertIndex;
+    if (!holdCtrl || !holdPressed || !_drawMode || idx < 0 || idx >= _drawVerts.length || !_drawVertMeshes[idx]) {
+      // Release feedback.
+      if (_hapticsState[hand].grabbing) {
+        _hapticRelease(hand, holdCtrl);
+        _hapticsState[hand].grabbing = false;
+      }
+      hg.active = false;
+      hg.vertIndex = -1;
+    } else {
+      _toolSystem.activeTool = 'grab-vertex';
+      holdCtrl.getWorldPosition(_tmpCtrlPos);
+      _drawVerts[idx].copy(_tmpCtrlPos).add(hg.offset);
+      _drawVertMeshes[idx].position.copy(_drawVerts[idx]);
+      _updateDrawMeshGeometry();
+      _updateDrawPreview();
+      // Subtle drag tension pulse (throttled to every 60 ms).
+      const now = performance.now();
+      if (now - _hapticsState[hand].lastPulse > 60) {
+        _hapticDrag(hand, holdCtrl);
+        _hapticsState[hand].lastPulse = now;
+      }
+    }
+  }
+
+  // ── Control tablet: slider drag (continuous hold) ─────────────────────────
+  if (_sliderState.holder) {
+    const holdCtrl = _controllersByHand[_sliderState.holder];
+    const holdPressed = _sliderState.holder === 'left' ? leftPressed : rightPressed;
+    if (!holdCtrl || !holdPressed) {
+      _sliderState.holder = null;
+    } else {
+      holdCtrl.getWorldPosition(_tmpSliderCtrl);
+      const localY = _controlTablet.worldToLocal(_tmpSliderCtrl.clone()).y;
+      const newB = _yToBrightness(localY - _sliderState.grabLocalY + _brightnessToY(_sliderState.grabBrightness));
+      _applyBrightness(newB);
+    }
+  } else {
+    // Try to grab slider handle
+    const trySliderGrab = (hand, ctrl, pressed, wasPressed) => {
+      if (!ctrl || !pressed || wasPressed) return false;
+      ctrl.getWorldPosition(_tmpSliderCtrl);
+      _controlTablet.userData.handle.getWorldPosition(_tmpSliderPos);
+      if (_tmpSliderCtrl.distanceTo(_tmpSliderPos) > 0.12) return false;
+      const localY = _controlTablet.worldToLocal(_tmpSliderCtrl.clone()).y;
+      _sliderState.holder = hand;
+      _sliderState.grabLocalY = localY;
+      _sliderState.grabBrightness = _brightness;
+      return true;
+    };
+    trySliderGrab('left',  leftCtrl,  leftPressed,  _grabPressedPrev.left) ||
+    trySliderGrab('right', rightCtrl, rightPressed, _grabPressedPrev.right);
+  }
+
+  // ── Release tablet grab ───────────────────────────────────────────────────
+  if (_tabletGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_controlTablet); _tabletGrabState.holder = null;
+  }
+  if (_tabletGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_controlTablet); _tabletGrabState.holder = null;
+  }
+  if (_playersGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_playersTablet); _playersGrabState.holder = null;
+  }
+  if (_playersGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_playersTablet); _playersGrabState.holder = null;
+  }
+  if (_drawPanelGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_drawPanel); _drawPanelGrabState.holder = null;
+  }
+  if (_drawPanelGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_drawPanel); _drawPanelGrabState.holder = null;
+  }
+
+  // ── Fresh-press actions (buttons + tablet grab + sky pickers) ─────────────
+  const anyFreshPress =
+    (leftPressed  && !_grabPressedPrev.left) ||
+    (rightPressed && !_grabPressedPrev.right);
+
+  if (anyFreshPress && !_sliderState.holder) {
+    const ctrls = [
+      leftPressed  && !_grabPressedPrev.left  ? { ctrl: leftCtrl,  hand: 'left'  } : null,
+      rightPressed && !_grabPressedPrev.right ? { ctrl: rightCtrl, hand: 'right' } : null,
+    ].filter(Boolean);
+
+    for (const { ctrl, hand } of ctrls) {
+      if (!ctrl) continue;
+      ctrl.getWorldPosition(_tmpCtrlPos);
+
+      // Grab an existing vertex directly with the hand/controller.
+      if (!_handGrab[hand].active && _drawMode && _drawVerts.length) {
+        const nearIdx = _findNearestDrawVertex(_tmpCtrlPos, 0.11);
+        if (nearIdx >= 0) {
+          if (_drawSelectMode !== 'vertex') _setDrawSelectMode('vertex');
+          _selectDrawElement(nearIdx, false);
+          _handGrab[hand].active = true;
+          _handGrab[hand].vertIndex = nearIdx;
+          _handGrab[hand].offset.copy(_drawVerts[nearIdx]).sub(_tmpCtrlPos);
+          if (_toolSystem.activeTool !== 'idle') console.log('GRAB vs TOOL', _toolSystem.activeTool, hand);
+          _toolSystem.activeTool = 'grab-vertex';
+          // Grab-start haptic click.
+          _hapticGrab(hand, ctrl);
+          _hapticsState[hand].grabbing = true;
+          _hapticsState[hand].hovering = false;
+          continue;
+        }
+      }
+
+      // Pull a compass axis to move current draw selection along that axis.
+      if (
+        !_compassGrabState.holder &&
+        _drawMode &&
+        _compassRoot &&
+        _compassAxisHandles.length
+      ) {
+        const selVerts = _selectedVertexIndices();
+        if (selVerts.length) {
+          let hitAxis = null;
+          for (const axisHandle of _compassAxisHandles) {
+            axisHandle.node.getWorldPosition(_tmpCompassAxisPos);
+            if (_tmpCtrlPos.distanceTo(_tmpCompassAxisPos) <= 0.13) {
+              hitAxis = axisHandle;
+              break;
+            }
+          }
+          if (hitAxis) {
+            if (_drawTransform.active) _cancelDrawTransform();
+            _compassGrabState.holder = hand;
+            _compassGrabState.mode = 'drag-selection';
+            _compassGrabState.axis.copy(hitAxis.dir).normalize();
+            _compassGrabState.startCtrl.copy(_tmpCtrlPos);
+            _compassGrabState.selectedVerts = selVerts;
+            _compassGrabState.startVerts = selVerts.map(i => _drawVerts[i].clone());
+            // Axis-lock haptic feedback.
+            _hapticAxis(hand, ctrl);
+            continue;
+          }
+        }
+      }
+
+      // Grab/move world compass by center sphere only.
+      if (!_compassGrabState.holder && _compassCenter && _compassRoot) {
+        _compassCenter.getWorldPosition(_tmpCompassPos);
+        if (_tmpCtrlPos.distanceTo(_tmpCompassPos) <= 0.12) {
+          _compassGrabState.holder = hand;
+          _compassGrabState.mode = 'move-compass';
+          _compassGrabState.offset.copy(_compassRoot.position).sub(_tmpCtrlPos);
+          _compassRoot.quaternion.identity();
+          continue;
+        }
+      }
+
+      // Sky buttons on control tablet
+      let hitSky = false;
+      for (const skyBtn of (_controlTablet.userData.skyBtnMeshes || [])) {
+        skyBtn.getWorldPosition(_tmpPanelPos);
+        if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.12) {
+          _applySkyPreset(skyBtn.userData.skyPreset);
+          hitSky = true; break;
+        }
+      }
+      if (hitSky) continue;
+
+      // Spell panel — fireball button
+      _spellPanel.userData.fireballBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
+        _castFireball();
+        continue;
+      }
+
+      // Spell panel — arcane shot button
+      _spellPanel.userData.arcaneBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
+        _castArcaneShot();
+        continue;
+      }
+
+      // Spell panel — lightning strike button
+      _spellPanel.userData.lightningBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.15) {
+        _castLightningStrike();
+        continue;
+      }
+
+      // Spell panel — grab to move
+      if (!_spellGrabState.holder) {
+        let spellInRange = false;
+        for (const sh of (_spellPanel.userData.sideHandles || [])) {
+          sh.getWorldPosition(_tmpPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) { spellInRange = true; break; }
+        }
+        if (!spellInRange) {
+          _spellPanel.getWorldPosition(_tmpPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= PANEL_GRAB_DISTANCE) spellInRange = true;
+        }
+        if (spellInRange) {
+          ctrl.attach(_spellPanel);
+          _spellGrabState.holder = hand;
+          continue;
+        }
+      }
+
+      // LASER button
+      _controlTablet.userData.laserBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
+        _setLaserActive(!_laserActive);
+        continue;
+      }
+
+      // DISCO button
+      _controlTablet.userData.discoBtnMesh.getWorldPosition(_tmpPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
+        _setDiscoActive(!_discoActive);
+        continue;
+      }
+
+      // Draw panel — toggle draw mode button
+      _drawPanel.userData.drawModeBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        _cycleEditMode();
+        continue;
+      }
+
+      // Draw panel — vertex button
+      _drawPanel.userData.drawToggleBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (_drawMode) _setDrawSelectMode('vertex');
+        continue;
+      }
+
+      // Draw panel — edge button
+      _drawPanel.userData.drawEdgeBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (!_drawMode) _setDrawActive(true);
+        _setDrawSelectMode('edge');
+        continue;
+      }
+
+      // Draw panel — face button
+      _drawPanel.userData.drawFaceBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (!_drawMode) _setDrawActive(true);
+        _setDrawSelectMode('face');
+        continue;
+      }
+
+      // Draw panel — undo button
+      _drawPanel.userData.drawUndoBtnMesh.getWorldPosition(_tmpDrawPanelPos);
+      if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.15) {
+        if (_drawMode) {
+          if (_drawTransform.active) _cancelDrawTransform();
+          else _undoDrawStep();
+        }
+        continue;
+      }
+
+      // Draw panel — XYZ gizmo nudge buttons
+      // Panel nudge buttons are intentionally inactive; use hand+gizmo interactions.
+
+      // Draw mode only — place vertex on ground via controller ray
+      if (_drawMode && _drawModeType === 'draw') {
+        ctrl.getWorldQuaternion(_tmpDrawQuat);
+        _tmpDrawDir.set(0, 0, -1).applyQuaternion(_tmpDrawQuat);
+        _drawRay.set(_tmpCtrlPos, _tmpDrawDir);
+        _drawPointFromRay(_drawRay, false, null);
+        continue;
+      }
+
+      // Grab whole tablet to move it (check handles first, then center)
+      if (!_tabletGrabState.holder) {
+        let tabletInRange = false;
+        for (const handleBar of (_controlTablet.userData.sideHandles || [])) {
+          handleBar.getWorldPosition(_tmpTabletPos);
+          if (_tmpCtrlPos.distanceTo(_tmpTabletPos) <= 0.14) { tabletInRange = true; break; }
+        }
+        if (!tabletInRange) {
+          _controlTablet.getWorldPosition(_tmpTabletPos);
+          if (_tmpCtrlPos.distanceTo(_tmpTabletPos) <= PANEL_GRAB_DISTANCE) tabletInRange = true;
+        }
+        if (tabletInRange) {
+          ctrl.attach(_controlTablet);
+          _tabletGrabState.holder = hand;
+          continue;
+        }
+      }
+
+      // Players panel grab
+      if (!_playersGrabState.holder) {
+        let playersInRange = false;
+        for (const handleBar of (_playersTablet.userData.sideHandles || [])) {
+          handleBar.getWorldPosition(_tmpPlayersPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPlayersPos) <= 0.14) { playersInRange = true; break; }
+        }
+        if (!playersInRange) {
+          _playersTablet.getWorldPosition(_tmpPlayersPos);
+          if (_tmpCtrlPos.distanceTo(_tmpPlayersPos) <= PANEL_GRAB_DISTANCE) playersInRange = true;
+        }
+        if (playersInRange) {
+          ctrl.attach(_playersTablet);
+          _playersGrabState.holder = hand;
+          continue;
+        }
+      }
+
+      // Draw panel grab
+      if (!_drawPanelGrabState.holder) {
+        let drawInRange = false;
+        for (const sh of (_drawPanel.userData.sideHandles || [])) {
+          sh.getWorldPosition(_tmpDrawPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= 0.14) { drawInRange = true; break; }
+        }
+        if (!drawInRange) {
+          _drawPanel.getWorldPosition(_tmpDrawPanelPos);
+          if (_tmpCtrlPos.distanceTo(_tmpDrawPanelPos) <= PANEL_GRAB_DISTANCE) drawInRange = true;
+        }
+        if (drawInRange) {
+          ctrl.attach(_drawPanel);
+          _drawPanelGrabState.holder = hand;
+          continue;
+        }
+      }
+
+    }
+  }
+  if (_spellGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    scene.attach(_spellPanel); _spellGrabState.holder = null;
+  }
+  if (_spellGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    scene.attach(_spellPanel); _spellGrabState.holder = null;
+  }
+  if (_compassGrabState.holder === 'left' && (!leftCtrl || !leftPressed)) {
+    _compassGrabState.holder = null;
+    _compassGrabState.mode = null;
+    _compassGrabState.selectedVerts = [];
+    _compassGrabState.startVerts = [];
+    _toolSystem.activeTool = 'idle';
+    if (_compassRoot) _compassRoot.quaternion.identity();
+  }
+  if (_compassGrabState.holder === 'right' && (!rightCtrl || !rightPressed)) {
+    _compassGrabState.holder = null;
+    _compassGrabState.mode = null;
+    _compassGrabState.selectedVerts = [];
+    _compassGrabState.startVerts = [];
+    _toolSystem.activeTool = 'idle';
+    if (_compassRoot) _compassRoot.quaternion.identity();
+  }
+  if (_handGrab.left.active && (!leftCtrl || !leftPressed)) {
+    _handGrab.left.active = false; _handGrab.left.vertIndex = -1;
+  }
+  if (_handGrab.right.active && (!rightCtrl || !rightPressed)) {
+    _handGrab.right.active = false; _handGrab.right.vertIndex = -1;
+  }
+  if (!_handGrab.left.active && !_handGrab.right.active) {
+    if (_toolSystem.activeTool === 'grab-vertex') _toolSystem.activeTool = 'idle';
+  }
+
+  _grabPressedPrev.left = leftPressed;
+  _grabPressedPrev.right = rightPressed;
+}
+
+
+function _updateQuestLocomotion(dt) {
+  if (!renderer.xr.isPresenting) {
+    _grabPressedPrev.left = false;
+    _grabPressedPrev.right = false;
+    if (_tabletGrabState.holder) {
+      scene.attach(_controlTablet);
+      _tabletGrabState.holder = null;
+    }
+    if (_spellGrabState.holder) {
+      scene.attach(_spellPanel);
+      _spellGrabState.holder = null;
+    }
+    if (_playersGrabState.holder) {
+      scene.attach(_playersTablet);
+      _playersGrabState.holder = null;
+    }
+    if (_drawPanelGrabState.holder) {
+      scene.attach(_drawPanel);
+      _drawPanelGrabState.holder = null;
+    }
+    if (_compassGrabState.holder) {
+      _compassGrabState.holder = null;
+      _compassGrabState.mode = null;
+      _compassGrabState.selectedVerts = [];
+      _compassGrabState.startVerts = [];
+      if (_compassRoot) _compassRoot.quaternion.identity();
+    }
+    _handGrab.left.active = false;  _handGrab.left.vertIndex = -1;
+    _handGrab.right.active = false; _handGrab.right.vertIndex = -1;
+    _toolSystem.activeTool = 'idle';
+    return;
+  }
+
+  const leftGp = _gamepadFromHandedness('left') || _controllersByHand.left?.userData?.inputSource?.gamepad;
+  const rightGp = _gamepadFromHandedness('right') || _controllersByHand.right?.userData?.inputSource?.gamepad;
+  _updatePanelInteraction(leftGp, rightGp);
+  const left = _readStick(leftGp);
+  const right = _readStick(rightGp);
+
+  const xrCam = renderer.xr.getCamera(camera);
+  xrCam.getWorldDirection(_tmpForward);
+  _tmpForward.y = 0;
+  if (_tmpForward.lengthSq() < 1e-6) _tmpForward.set(0, 0, -1);
+  else _tmpForward.normalize();
+  _tmpRight.crossVectors(_tmpForward, _tmpUp).normalize();
+
+  const moveStep = MOVE_SPEED * dt;
+  if (left.y !== 0) playerRig.position.addScaledVector(_tmpForward, -left.y * moveStep);
+  if (left.x !== 0) playerRig.position.addScaledVector(_tmpRight, left.x * moveStep);
+
+  if (right.x !== 0) playerRig.rotation.y -= right.x * TURN_SPEED * dt;
+  playerPitch.rotation.x = 0;
+
+  // Keep artificial locomotion look upright: yaw on rig + pitch on pivot only.
+  playerRig.rotation.x = 0;
+  playerRig.rotation.z = 0;
+  playerPitch.rotation.y = 0;
+  playerPitch.rotation.z = 0;
+}
+
+function _updateDesktopHint() {
+  if (!_hintEl) return;
+  if (renderer.xr.isPresenting) {
+    _hintEl.textContent = 'VR active';
+    if (_crosshairEl) _crosshairEl.classList.remove('show');
+    return;
+  }
+  if (_crosshairEl) _crosshairEl.classList.add('show');
+  const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
+  const drawHint = _drawMode
+    ? ` | ${_drawModeType.toUpperCase()}(${_drawSelectMode}): 1/2/3 select, G/R/S transform, X/Y/Z axis, E extrude, F fill`
+    : '';
+  _hintEl.textContent = `Desktop: WASD move, mouse look, sky 1/2/3, spells F/G/H, Tab cycles off/draw/select${drawHint} • ${lockHint}`;
+}
+
+function _desktopInteractTargets() {
+  return [
+    ...(_controlTablet?.userData?.skyBtnMeshes || []),
+    _controlTablet?.userData?.laserBtnMesh,
+    _controlTablet?.userData?.discoBtnMesh,
+    _spellPanel?.userData?.fireballBtnMesh,
+    _spellPanel?.userData?.arcaneBtnMesh,
+    _spellPanel?.userData?.lightningBtnMesh,
+    _drawPanel?.userData?.drawModeBtnMesh,
+    _drawPanel?.userData?.drawToggleBtnMesh,
+    _drawPanel?.userData?.drawEdgeBtnMesh,
+    _drawPanel?.userData?.drawFaceBtnMesh,
+    _drawPanel?.userData?.drawUndoBtnMesh,
+  ].filter(Boolean);
+}
+
+function _desktopTriggerInteraction(target) {
+  if (!target) return false;
+  if (target.userData?.skyPreset) {
+    _applySkyPreset(target.userData.skyPreset);
+    return true;
+  }
+  if (target === _controlTablet?.userData?.laserBtnMesh) {
+    _setLaserActive(!_laserActive);
+    return true;
+  }
+  if (target === _controlTablet?.userData?.discoBtnMesh) {
+    _setDiscoActive(!_discoActive);
+    return true;
+  }
+  if (target === _spellPanel?.userData?.fireballBtnMesh) {
+    _castFireball();
+    return true;
+  }
+  if (target === _spellPanel?.userData?.arcaneBtnMesh) {
+    _castArcaneShot();
+    return true;
+  }
+  if (target === _spellPanel?.userData?.lightningBtnMesh) {
+    _castLightningStrike();
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawModeBtnMesh) {
+    _cycleEditMode();
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawToggleBtnMesh) {
+    if (_drawMode) _setDrawSelectMode('vertex');
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawEdgeBtnMesh) {
+    if (!_drawMode) _setDrawActive(true);
+    _setDrawSelectMode('edge');
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawFaceBtnMesh) {
+    if (!_drawMode) _setDrawActive(true);
+    _setDrawSelectMode('face');
+    return true;
+  }
+  if (target === _drawPanel?.userData?.drawUndoBtnMesh) {
+    if (_drawMode) {
+      if (_drawTransform.active) _cancelDrawTransform();
+      else _undoDrawStep();
+    }
+    return true;
+  }
+  return false;
+}
+
+function _desktopClickInteract(clientX, clientY, centerRay = false, additiveSelect = false) {
+  if (renderer.xr.isPresenting) return false;
+  const rect = canvas.getBoundingClientRect();
+  if (!centerRay) {
+    _desktopState.mouseNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _desktopState.mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  } else {
+    _desktopState.mouseNdc.set(0, 0);
+  }
+  _desktopState.raycaster.setFromCamera(_desktopState.mouseNdc, camera);
+  const hits = _desktopState.raycaster.intersectObjects(_desktopInteractTargets(), false);
+  if (hits.length) return _desktopTriggerInteraction(hits[0].object);
+  // Draw mode: no button hit — place/select vertices in 3D edit mode
+  if (_drawMode) {
+    return _drawPointFromRay(_desktopState.raycaster.ray, additiveSelect, _desktopState.raycaster);
+  }
+  return false;
+}
+
+function _initDesktopControls() {
+  _desktopState.yaw = playerRig.rotation.y;
+  _desktopState.pitch = playerPitch.rotation.x;
+  _updateDesktopHint();
+
+  canvas.addEventListener('click', (e) => {
+    if (renderer.xr.isPresenting) return;
+    if (!_desktopState.pointerLocked && document.pointerLockElement !== canvas) {
+      canvas.requestPointerLock();
+      return;
+    }
+    if (_drawMode && _drawTransform.active) {
+      _confirmDrawTransform();
+      return;
+    }
+    _desktopClickInteract(e.clientX, e.clientY, _desktopState.pointerLocked, !!e.shiftKey);
+  });
+
+  canvas.addEventListener('contextmenu', (e) => {
+    if (_drawMode && _drawTransform.active) {
+      e.preventDefault();
+      _cancelDrawTransform();
+    }
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    _desktopState.pointerLocked = document.pointerLockElement === canvas;
+    _updateDesktopHint();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (renderer.xr.isPresenting || !_desktopState.pointerLocked) return;
+    if (_drawMode && _drawTransform.active) {
+      _accumulateDrawTransform((e.movementX - e.movementY * 0.5) * 0.01);
+      return;
+    }
+    _desktopState.yaw -= e.movementX * _desktopState.mouseSensitivity;
+    _desktopState.pitch -= e.movementY * _desktopState.mouseSensitivity;
+    _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch, -LOOK_LIMIT, 0);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (renderer.xr.isPresenting) return;
+    const key = String(e.key || '').toLowerCase();
+    _desktopState.keys[key] = true;
+    if (e.repeat) return;
+
+    if (key === 'tab') {
+      e.preventDefault();
+      _cycleEditMode();
+      return;
+    }
+
+    if (_drawMode) {
+      if (key === '1') { _setDrawSelectMode('vertex'); return; }
+      if (key === '2') { _setDrawSelectMode('edge'); return; }
+      if (key === '3') { _setDrawSelectMode('face'); return; }
+      if (key === 'a') { _toggleSelectAllDraw(); return; }
+
+      if (_drawTransform.active) {
+        if (key === 'x' || key === 'y' || key === 'z') {
+          _setDrawTransformAxis(key, !!e.shiftKey);
+          return;
+        }
+        if (key === 'enter') { _confirmDrawTransform(); return; }
+        if (key === 'escape') { _cancelDrawTransform(); return; }
+      }
+
+      // _drawTransform keyboard ops gated — _handGrab is the primary path in VR.
+      // Re-enable with: _toolSystem.mode = 'legacy'
+      if (_toolSystem.mode === 'legacy') {
+        if (key === 'g') { _startDrawTransform('grab'); return; }
+        if (key === 'r') { _startDrawTransform('rotate'); return; }
+        if (key === 's') { _startDrawTransform('scale'); return; }
+      }
+      if (key === 'e') { _extrudeSelection(); return; }
+      if (key === 'f') { _fillFromSelection(); return; }
+      if (key === 'm') { _mergeSelection(); return; }
+      if (key === 'x' || key === 'delete') { _deleteSelection(); return; }
+      if (key === 'd' && e.shiftKey) { _duplicateSelection(); return; }
+      if (key === 'backspace') { e.preventDefault(); _undoDrawStep(); return; }
+      if (key === 'escape') { _setDrawActive(false); return; }
+    }
+
+    if (key === '1') _applySkyPreset('blue');
+    else if (key === '2') _applySkyPreset('green');
+    else if (key === '3') _applySkyPreset('red');
+    else if (key === 'l') _setLaserActive(!_laserActive);
+    else if (key === 'k') _setDiscoActive(!_discoActive);
+    else if (key === 'f') _castFireball();
+    else if (key === 'g') _castArcaneShot();
+    else if (key === 'h') _castLightningStrike();
+    else if (key === '[') _applyBrightness(_brightness - 0.1);
+    else if (key === ']') _applyBrightness(_brightness + 0.1);
+  });
+
+  window.addEventListener('keyup', (e) => {
+    const key = String(e.key || '').toLowerCase();
+    _desktopState.keys[key] = false;
+  });
+
+  renderer.xr.addEventListener('sessionstart', _updateDesktopHint);
+  renderer.xr.addEventListener('sessionend', () => {
+    _desktopState.yaw = playerRig.rotation.y;
+    _desktopState.pitch = 0;
+    _updateDesktopHint();
+  });
+}
+
+function _updateDesktopLocomotion(dt) {
+  if (renderer.xr.isPresenting || !_desktopState.active) return;
+
+  const keys = _desktopState.keys;
+  const forward = (keys['w'] ? 1 : 0) - (keys['s'] ? 1 : 0);
+  const strafe = (keys['d'] ? 1 : 0) - (keys['a'] ? 1 : 0);
+  const moveVec = new THREE.Vector3(strafe, 0, -forward);
+  if (moveVec.lengthSq() > 0) {
+    moveVec.normalize().multiplyScalar(MOVE_SPEED * dt);
+    moveVec.applyAxisAngle(_tmpUp, _desktopState.yaw);
+    playerRig.position.add(moveVec);
+  }
+
+  if (keys['arrowleft']) _desktopState.yaw += TURN_SPEED * dt;
+  if (keys['arrowright']) _desktopState.yaw -= TURN_SPEED * dt;
+  if (keys['arrowup']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch - LOOK_SPEED * dt * 0.7, -LOOK_LIMIT, 0);
+  if (keys['arrowdown']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch + LOOK_SPEED * dt * 0.7, -LOOK_LIMIT, 0);
+
+  playerRig.rotation.set(0, _desktopState.yaw, 0);
+  playerPitch.rotation.set(_desktopState.pitch, 0, 0);
+}
+
+// VR button
+const vrBtn = createVRButton(renderer);
+if (vrBtn) document.getElementById('vr-btn-wrap').appendChild(vrBtn);
+_connectPresenceSocket();
+_initDesktopControls();
+
+// ─── Lighting ─────────────────────────────────────────────────────────────────
+const _sceneAmbient = new THREE.AmbientLight(0x1a2050, 4.0);
+scene.add(_sceneAmbient);
+
+const _sceneSun = new THREE.DirectionalLight(0x6699ff, 1.6);
+_sceneSun.position.set(4, 8, 3);
+scene.add(_sceneSun);
+
+const _sceneRim = new THREE.DirectionalLight(0x2244cc, 0.9);
+_sceneRim.position.set(-5, 2, -4);
+scene.add(_sceneRim);
+
+// Soft fill from below to reduce harsh shadows
+const _sceneFill = new THREE.DirectionalLight(0x112244, 0.4);
+_sceneFill.position.set(0, -4, 2);
+scene.add(_sceneFill);
+
+// ─── Starfield ────────────────────────────────────────────────────────────────
+(function buildStars() {
+  const count = 1800;
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const theta = Math.random() * Math.PI * 2;
+    const phi = Math.acos(2 * Math.random() - 1);
+    const r = 30 + Math.random() * 20;
+    pos[i * 3]     = r * Math.sin(phi) * Math.cos(theta);
+    pos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+    pos[i * 3 + 2] = r * Math.cos(phi);
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  scene.add(new THREE.Points(geo, new THREE.PointsMaterial({
+    color: 0xfff8e8, size: 0.06, sizeAttenuation: true, transparent: true, opacity: 0.7,
+  })));
+})();
+
+// ─── Floor grid ───────────────────────────────────────────────────────────────
+const floorGeo = new THREE.PlaneGeometry(30, 30, 30, 30);
+const floorMat = new THREE.MeshStandardMaterial({
+  color: 0x0a0e1a,
+  roughness: 0.9,
+  metalness: 0.1,
+  wireframe: true,
+  transparent: true,
+  opacity: 0.18,
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.y = 0;
+scene.add(floor);
+
+// XYZ compass gizmo — full 6 axes, anchored near world origin, raised 1 meter.
+(function buildCompass() {
+  const root = new THREE.Group();
+  root.position.set(0, 1.01, 0);
+
+  const axes = [
+    { dir: new THREE.Vector3( 1,  0,  0), color: 0xff2222, label: '+X' },
+    { dir: new THREE.Vector3(-1,  0,  0), color: 0xaa1111, label: '-X' },
+    { dir: new THREE.Vector3( 0,  1,  0), color: 0x22ff22, label: '+Y' },
+    { dir: new THREE.Vector3( 0, -1,  0), color: 0x11aa11, label: '-Y' },
+    { dir: new THREE.Vector3( 0,  0, -1), color: 0x2288ff, label: '-Z' },
+    { dir: new THREE.Vector3( 0,  0,  1), color: 0x1155aa, label: '+Z' },
+  ];
+
+  axes.forEach(({ dir, color, label }) => {
+    // Arrow shaft
+    const points = [new THREE.Vector3(0,0,0), dir.clone().multiplyScalar(0.3)];
+    const line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.LineBasicMaterial({ color, linewidth: 2 })
+    );
+    root.add(line);
+
+    // Arrowhead (small cone)
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(0.02, 0.07, 6),
+      new THREE.MeshBasicMaterial({ color })
+    );
+    cone.position.copy(dir.clone().multiplyScalar(0.33));
+    // Orient cone along axis
+    cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), dir);
+    root.add(cone);
+
+    // Text sprite (canvas texture)
+    const canvas = document.createElement('canvas');
+    canvas.width = 128; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#' + color.toString(16).padStart(6, '0');
+    ctx.font = 'bold 28px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, 64, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+    sprite.scale.set(0.18, 0.09, 1);
+    sprite.position.copy(dir.clone().multiplyScalar(0.45));
+    root.add(sprite);
+
+    // Axis pull handle (invisible anchor used for distance-based grabbing).
+    const axisHandle = new THREE.Object3D();
+    axisHandle.position.copy(dir.clone().multiplyScalar(0.36));
+    root.add(axisHandle);
+    _compassAxisHandles.push({ node: axisHandle, dir: dir.clone().normalize() });
+  });
+
+  // Origin dot (grab handle)
+  const center = new THREE.Mesh(
+    new THREE.SphereGeometry(0.025, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffffff })
+  );
+  root.add(center);
+
+  scene.add(root);
+  _compassRoot = root;
+  _compassCenter = center;
+})();
+
+// ── Hand Tracking — per-segment live deformation ─────────────────────────────
+//
+// Each bone segment is an independent CylinderMesh. Every frame:
+//   position  = midpoint of the two joint world positions
+//   scale.y   = distance between the joints  (unit cylinder → exact length)
+//   quaternion = Y-axis aligned to the joint-to-joint direction
+//
+// This is the standard approach used by Three.js XRHandModel and all major
+// WebXR demos. SkinnedMesh requires a pre-authored bind pose and proper
+// inverse-bind matrices; dynamically captured rest poses cannot satisfy those
+// constraints reliably.
+//
+// Joint pairs: [proximalName, distalName, cylinderRadius, sphereCapRadius]
+const HAND_SEGMENTS = [
+  // Wrist → metacarpals (palm fan)
+  ['wrist','thumb-metacarpal',               0.013, 0.013],
+  ['wrist','index-finger-metacarpal',        0.013, 0],
+  ['wrist','middle-finger-metacarpal',       0.013, 0],
+  ['wrist','ring-finger-metacarpal',         0.012, 0],
+  ['wrist','pinky-finger-metacarpal',        0.011, 0],
+  // Palm cross-bars
+  ['index-finger-metacarpal','middle-finger-metacarpal', 0.009, 0],
+  ['middle-finger-metacarpal','ring-finger-metacarpal',  0.009, 0],
+  ['ring-finger-metacarpal','pinky-finger-metacarpal',   0.008, 0],
+  // Thumb
+  ['thumb-metacarpal','thumb-phalanx-proximal',   0.011, 0.010],
+  ['thumb-phalanx-proximal','thumb-phalanx-distal',0.010, 0.009],
+  ['thumb-phalanx-distal','thumb-tip',             0.009, 0.009],
+  // Index
+  ['index-finger-metacarpal','index-finger-phalanx-proximal',        0.010, 0.010],
+  ['index-finger-phalanx-proximal','index-finger-phalanx-intermediate',0.009,0.009],
+  ['index-finger-phalanx-intermediate','index-finger-phalanx-distal', 0.008, 0.008],
+  ['index-finger-phalanx-distal','index-finger-tip',                  0.007, 0.008],
+  // Middle
+  ['middle-finger-metacarpal','middle-finger-phalanx-proximal',        0.011, 0.010],
+  ['middle-finger-phalanx-proximal','middle-finger-phalanx-intermediate',0.010,0.009],
+  ['middle-finger-phalanx-intermediate','middle-finger-phalanx-distal', 0.009,0.008],
+  ['middle-finger-phalanx-distal','middle-finger-tip',                  0.008,0.008],
+  // Ring
+  ['ring-finger-metacarpal','ring-finger-phalanx-proximal',        0.010, 0.009],
+  ['ring-finger-phalanx-proximal','ring-finger-phalanx-intermediate',0.009,0.009],
+  ['ring-finger-phalanx-intermediate','ring-finger-phalanx-distal', 0.008,0.008],
+  ['ring-finger-phalanx-distal','ring-finger-tip',                  0.007,0.007],
+  // Pinky
+  ['pinky-finger-metacarpal','pinky-finger-phalanx-proximal',        0.009, 0.009],
+  ['pinky-finger-phalanx-proximal','pinky-finger-phalanx-intermediate',0.008,0.008],
+  ['pinky-finger-phalanx-intermediate','pinky-finger-phalanx-distal', 0.007,0.007],
+  ['pinky-finger-phalanx-distal','pinky-finger-tip',                  0.006,0.007],
+];
+
+// A sphere cap at the wrist root.
+const WRIST_CAP_RADIUS = 0.014;
+
+const _handMat     = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.75, metalness: 0.0 });
+const _handMatFlat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.75, metalness: 0.0 });
+const _ctrlMat     = new THREE.MeshStandardMaterial({ color: 0xf1f1f1, roughness: 0.6, metalness: 0.05 });
+const _ctrlAccent  = new THREE.MeshStandardMaterial({ color: 0x21242a, roughness: 0.8, metalness: 0.1 });
+
+// Shared geometries — unit cylinder (h=1) scaled per-frame; spheres per radius.
+const _cylGeoCache = new Map();
+const _sphGeoCache = new Map();
+function _cylGeo(r) {
+  if (!_cylGeoCache.has(r)) _cylGeoCache.set(r, new THREE.CylinderGeometry(r, r, 1, 8, 1));
+  return _cylGeoCache.get(r);
+}
+function _sphGeo(r) {
+  if (!_sphGeoCache.has(r)) _sphGeoCache.set(r, new THREE.SphereGeometry(r, 8, 6));
+  return _sphGeoCache.get(r);
+}
+
+// Reusable per-frame temporaries — zero GC pressure.
+const _pA  = new THREE.Vector3(), _pB = new THREE.Vector3();
+const _dir = new THREE.Vector3(), _yUp = new THREE.Vector3(0, 1, 0);
+const _q   = new THREE.Quaternion();
+
+function _alignSegment(mesh, jA, jB) {
+  jA.getWorldPosition(_pA);
+  jB.getWorldPosition(_pB);
+  _dir.subVectors(_pB, _pA);
+  const len = _dir.length();
+  if (len < 0.0005) { mesh.visible = false; return; }
+  mesh.visible = true;
+  mesh.position.addVectors(_pA, _pB).multiplyScalar(0.5);
+  mesh.scale.y = len;
+  _q.setFromUnitVectors(_yUp, _dir.normalize());
+  mesh.quaternion.copy(_q);
+}
+
+// Static fallback hand (controller mode).
+function buildStaticHand(isRight) {
+  const root = new THREE.Group();
+  root.rotation.x = -Math.PI * 0.25;
+  const flip = isRight ? 1 : -1;
+  function addSphere(r, x, y, z, mat = _ctrlMat) {
+    const m = new THREE.Mesh(_sphGeo(r), mat);
+    m.position.set(x, y, z);
+    root.add(m);
+  }
+
+  // Grip/handle: rounded downward chain.
+  [
+    { r: 0.022, x: 0, y: -0.010, z: 0.014 },
+    { r: 0.020, x: 0, y: -0.031, z: 0.004 },
+    { r: 0.017, x: 0, y: -0.048, z: -0.006 },
+    { r: 0.014, x: 0, y: -0.061, z: -0.016 },
+  ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
+  // Main face/body near top of grip.
+  [
+    { r: 0.020, x: 0, y: 0.004, z: 0.018 },
+    { r: 0.016, x: 0, y: 0.013, z: 0.006 },
+    { r: 0.015, x: 0, y: -0.001, z: 0.030 },
+  ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
+  // Tracking ring arc (Quest-like halo), mirrored by handedness.
+  [
+    { r: 0.010, x: flip * 0.010, y: 0.026, z: 0.020 },
+    { r: 0.010, x: flip * 0.026, y: 0.032, z: 0.010 },
+    { r: 0.010, x: flip * 0.037, y: 0.024, z: -0.004 },
+    { r: 0.010, x: flip * 0.035, y: 0.010, z: -0.016 },
+    { r: 0.010, x: flip * 0.021, y: 0.001, z: -0.022 },
+  ].forEach(({ r, x, y, z }) => addSphere(r, x, y, z));
+
+  // Thumbstick and face buttons on top plate.
+  addSphere(0.007, flip * 0.008, 0.022, 0.010, _ctrlAccent);
+  addSphere(0.005, flip * 0.018, 0.017, 0.018, _ctrlAccent);
+  addSphere(0.005, flip * 0.024, 0.013, 0.012, _ctrlAccent);
+
+  // Trigger and grip accents.
+  addSphere(0.007, flip * 0.012, -0.004, 0.033, _ctrlAccent);
+  addSphere(0.006, flip * 0.018, -0.028, 0.004, _ctrlAccent);
+
+  return root;
+}
+
+const _handUpdaters = [];
+
+[0, 1].forEach(idx => {
+  const ctrl    = renderer.xr.getController(idx);
+  const xrHand  = renderer.xr.getHand(idx);
+  const isRight = idx === 0;
+
+  ctrl.addEventListener('connected', (e) => {
+    ctrl.userData.inputSource = e.data;
+    const handedness = e.data?.handedness;
+    if (handedness === 'left' || handedness === 'right') {
+      _controllersByHand[handedness] = ctrl;
+    }
+  });
+  ctrl.addEventListener('disconnected', () => {
+    const hand = ctrl.userData?.inputSource?.handedness;
+    if (hand === 'left' || hand === 'right') {
+      if (_controllersByHand[hand] === ctrl) _controllersByHand[hand] = null;
+    }
+    ctrl.userData.inputSource = null;
+  });
+
+  const staticHand = buildStaticHand(isRight);
+  ctrl.add(staticHand);
+
+  // Controller ray beam — visual pointer, 3 m long, forward (-Z).
+  const _rayBeamGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(0, 0, 0),
+    new THREE.Vector3(0, 0, -3),
+  ]);
+  const _rayBeamMat = new THREE.LineBasicMaterial({ color: 0x88aaff, transparent: true, opacity: 0.45 });
+  const _rayBeamLine = new THREE.Line(_rayBeamGeo, _rayBeamMat);
+  ctrl.add(_rayBeamLine);
+  ctrl.userData.rayBeam = _rayBeamLine;
+
+  playerRig.add(ctrl);
+  playerRig.add(xrHand);
+
+  // Build all segment + cap meshes up-front (world-space, hidden by default).
+  const segMeshes = HAND_SEGMENTS.map(([, , cylR]) => {
+    const m = new THREE.Mesh(_cylGeo(cylR), _handMat);
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+
+  const capMeshes = HAND_SEGMENTS.map(([, , , capR]) => {
+    if (!capR) return null;
+    const m = new THREE.Mesh(_sphGeo(capR), _handMat);
+    m.visible = false;
+    scene.add(m);
+    return m;
+  });
+
+  // Wrist cap
+  const wristCap = new THREE.Mesh(_sphGeo(WRIST_CAP_RADIUS), _handMat);
+  wristCap.visible = false;
+  scene.add(wristCap);
+
+  let _tracking = false;
+
+  _handUpdaters.push(() => {
+    // Three.js sets xrHand.visible = true only when it has a valid hand pose
+    // each frame. Polling this is more reliable than the 'connected' event
+    // whose e.data.hand may be null/undefined depending on session type.
+    const nowTracking = xrHand.visible;
+    if (nowTracking !== _tracking) {
+      _tracking = nowTracking;
+      staticHand.visible = !nowTracking;
+      if (!nowTracking) {
+        segMeshes.forEach(m => { m.visible = false; });
+        capMeshes.forEach(m => { if (m) m.visible = false; });
+        wristCap.visible = false;
+      }
+    }
+    if (!_tracking) return;
+
+    HAND_SEGMENTS.forEach(([nameA, nameB], i) => {
+      const jA = xrHand.joints[nameA], jB = xrHand.joints[nameB];
+      // Only align when both joints have a valid pose from the XR runtime.
+      if (jA && jB && jA.visible && jB.visible) {
+        _alignSegment(segMeshes[i], jA, jB);
+        const cap = capMeshes[i];
+        if (cap) {
+          jB.getWorldPosition(cap.position);
+          cap.visible = true;
+        }
+      } else {
+        segMeshes[i].visible = false;
+        if (capMeshes[i]) capMeshes[i].visible = false;
+      }
+    });
+    // Wrist cap
+    const wj = xrHand.joints['wrist'];
+    if (wj && wj.visible) {
+      wj.getWorldPosition(wristCap.position);
+      wristCap.visible = true;
+    }
+    else { wristCap.visible = false; }
+  });
+});
+// Animation loop — drive hand segment deformation then render.
+renderer.setAnimationLoop(() => {
+  const dt = Math.min(_clock.getDelta(), 0.05);
+  _updateQuestLocomotion(dt);
+  _updateDesktopLocomotion(dt);
+  _publishLocalPresence(false);
+  _updateLasers(dt);
+  _updateFireballs(dt);
+  _updateArcaneShots(dt);
+  _updateLightningBolts(dt);
+  _updateWorldGizmoFromSelection();
+  if (_compassRoot) _compassRoot.quaternion.identity();
+  _handUpdaters.forEach(fn => fn());
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>

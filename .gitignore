@@ -1,3 +1,104 @@
+# =========================
+# PYTHON
+# =========================
 __pycache__/
-*.pyc
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments / local env files
+venv/
+.venv/
+.env/
 .env
+.env.*
+.env.local
+.env.production
+
+# =========================
+# BUILD / RUNTIME
+# =========================
+dist/
+build/
+*.log
+
+# =========================
+# NODE / FRONTEND (if used)
+# =========================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================
+# IDE / EDITOR
+# =========================
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+*.swo
+
+# =========================
+# OS FILES
+# =========================
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# =========================
+# PROJECT JUNK / BACKUPS
+# =========================
+backup/
+Blender/
+data/
+schemas/
+
+*Copy*
+*.bak
+*.tmp
+
+# =========================
+# 3D SOURCE / ENGINE FORMATS
+# =========================
+*.blend
+*.blend1
+*.mtlx
+*.tres
+*.usdc
+
+# =========================
+# DOCUMENTS
+# =========================
+*.pdf
+*.docx
+
+# =========================
+# LARGE / GENERATED ASSETS
+# =========================
+*.bin
+static/*.glb
+!static/everything_optimized_draco.glb
+
+# Runtime-generated uploaded models (very high churn)
+static/user_models/
+
+# Optional large local asset trees
+assets/*
+!assets/README.md
+three.js-r183/
+
+# =========================
+# OPTIONAL MEDIA (uncomment when needed)
+# =========================
+# *.wav
+# *.mp3
+# static/*.png
+# static/*.jpg

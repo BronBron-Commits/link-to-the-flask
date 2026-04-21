@@ -1,0 +1,285 @@
+{
+  "id": "6f3f990b7a7148f0b46cb16262321c7f",
+  "name": "BronBron_the_Brutal's Character",
+  "combat": {
+    "hp": 18,
+    "maxHp": 18,
+    "ac": 10,
+    "initiative": 1,
+    "speed": 30
+  },
+  "stats": {
+    "str": 14,
+    "dex": 9,
+    "con": 10,
+    "int": 10,
+    "wis": 15,
+    "cha": 9
+  },
+  "skills": {
+    "acrobatics": {
+      "value": -1,
+      "proficient": false
+    },
+    "animal_handling": {
+      "value": 2,
+      "proficient": false
+    },
+    "arcana": {
+      "value": 0,
+      "proficient": false
+    },
+    "athletics": {
+      "value": 2,
+      "proficient": false
+    },
+    "deception": {
+      "value": -1,
+      "proficient": false
+    },
+    "history": {
+      "value": 0,
+      "proficient": false
+    },
+    "insight": {
+      "value": 2,
+      "proficient": false
+    },
+    "intimidation": {
+      "value": -1,
+      "proficient": false
+    },
+    "investigation": {
+      "value": 0,
+      "proficient": false
+    },
+    "medicine": {
+      "value": 2,
+      "proficient": false
+    },
+    "nature": {
+      "value": 0,
+      "proficient": false
+    },
+    "perception": {
+      "value": 2,
+      "proficient": false
+    },
+    "performance": {
+      "value": -1,
+      "proficient": false
+    },
+    "persuasion": {
+      "value": -1,
+      "proficient": false
+    },
+    "religion": {
+      "value": 0,
+      "proficient": false
+    },
+    "sleight_of_hand": {
+      "value": 1,
+      "proficient": true
+    },
+    "stealth": {
+      "value": 1,
+      "proficient": true
+    },
+    "survival": {
+      "value": 2,
+      "proficient": false
+    }
+  },
+  "inventory": {
+    "items": [
+      {
+        "instanceId": "inv_001",
+        "itemId": "leather",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_002",
+        "itemId": "dagger",
+        "qty": 1,
+        "equipped": true,
+        "slot": "main_hand"
+      },
+      {
+        "instanceId": "inv_003",
+        "itemId": "sickle",
+        "qty": 1,
+        "equipped": true
+      },
+      {
+        "instanceId": "inv_004",
+        "itemId": "backpack",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_005",
+        "itemId": "book",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_006",
+        "itemId": "orb",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_007",
+        "itemId": "oil",
+        "qty": 10,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_008",
+        "itemId": "parchment",
+        "qty": 10,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_009",
+        "itemId": "tinderbox",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_010",
+        "itemId": "lamp",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_011",
+        "itemId": "ink_pen",
+        "qty": 1,
+        "equipped": false
+      },
+      {
+        "instanceId": "inv_012",
+        "itemId": "ink",
+        "qty": 1,
+        "equipped": false
+      }
+    ],
+    "capacity": 210,
+    "weight": 44
+  },
+  "weapons": [
+    {
+      "name": "Dagger",
+      "attackBonus": 4,
+      "damage": {
+        "dice": "1d4+2",
+        "flat": null,
+        "type": "piercing"
+      }
+    },
+    {
+      "name": "Dagger",
+      "attackBonus": 4,
+      "damage": {
+        "dice": "1d4+2",
+        "flat": null,
+        "type": "piercing"
+      }
+    },
+    {
+      "name": "Sickle",
+      "attackBonus": 4,
+      "damage": {
+        "dice": "1d4+2",
+        "flat": null,
+        "type": "slashing"
+      }
+    },
+    {
+      "name": "Unarmed Strike",
+      "attackBonus": 4,
+      "damage": {
+        "dice": null,
+        "flat": 3,
+        "type": "bludgeoning"
+      }
+    }
+  ],
+  "spells": [],
+  "features": [
+    {
+      "name": "WARLOCK FEATURES",
+      "type": "section"
+    },
+    {
+      "name": "Core Warlock Traits",
+      "type": "feature"
+    },
+    {
+      "name": "Eldritch Invocations",
+      "type": "feature"
+    },
+    {
+      "name": "Pact Magic",
+      "type": "feature"
+    },
+    {
+      "name": "Magical Cunning",
+      "type": "feature"
+    },
+    {
+      "name": "Warlock Subclass",
+      "type": "feature"
+    },
+    {
+      "name": "Creature Type",
+      "type": "feature"
+    },
+    {
+      "name": "Size",
+      "type": "feature"
+    },
+    {
+      "name": "Speed",
+      "type": "feature"
+    },
+    {
+      "name": "Darkvision",
+      "type": "feature"
+    },
+    {
+      "name": "Elven Lineage",
+      "type": "feature"
+    },
+    {
+      "name": "Elven Lineage Spells",
+      "type": "feature"
+    },
+    {
+      "name": "Fey Ancestry",
+      "type": "feature"
+    },
+    {
+      "name": "Keen Senses",
+      "type": "feature"
+    },
+    {
+      "name": "Trance",
+      "type": "feature"
+    },
+    {
+      "name": "FEATS",
+      "type": "section"
+    },
+    {
+      "name": "Alert",
+      "type": "feature"
+    },
+    {
+      "name": "Criminal Ability Score Improvements",
+      "type": "feature"
+    }
+  ]
+}

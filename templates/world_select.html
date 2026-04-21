@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>World Selection - Paraval</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      min-height: 100%;
+      background: radial-gradient(circle at 15% 20%, #24304c 0%, #0b1020 45%, #05080f 100%);
+      color: #e8e0d0;
+      font-family: Georgia, 'Times New Roman', serif;
+    }
+    .shell {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .panel {
+      width: min(980px, 100%);
+      border-radius: 20px;
+      border: 1px solid rgba(210, 175, 70, 0.2);
+      background: linear-gradient(150deg, rgba(17,22,36,0.94), rgba(11,14,25,0.98));
+      box-shadow: 0 24px 52px rgba(0,0,0,0.58);
+      padding: 24px;
+    }
+    .head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .title {
+      color: #f0dfa0;
+      font-size: 1.45rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .sub {
+      margin-top: 8px;
+      color: #8f8778;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.82rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      line-height: 1.5;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .btn {
+      border: 1px solid rgba(210,175,70,0.26);
+      background: rgba(14,18,29,0.96);
+      color: #f0dfa0;
+      border-radius: 10px;
+      padding: 9px 12px;
+      font-size: 0.74rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn:hover { border-color: rgba(210,175,70,0.6); }
+    .status {
+      min-height: 22px;
+      color: #9e937c;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 0.84rem;
+      margin-bottom: 14px;
+    }
+    .status.error { color: #d58f83; }
+    .grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    }
+    .card {
+      border: 1px solid rgba(210,175,70,0.18);
+      border-radius: 14px;
+      background: rgba(255,255,255,0.03);
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(210,175,70,0.45);
+      box-shadow: 0 12px 26px rgba(0,0,0,0.35);
+    }
+    .card h2 {
+      font-size: 1rem;
+      color: #e8d898;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .desc {
+      color: #b2a992;
+      line-height: 1.5;
+      font-size: 0.9rem;
+      flex: 1;
+    }
+    .meta {
+      border-top: 1px solid rgba(210,175,70,0.14);
+      padding-top: 10px;
+      color: #8f8778;
+      font-size: 0.73rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-family: Consolas, 'Courier New', monospace;
+    }
+    @keyframes gridLeave {
+      from { opacity: 1; transform: translateY(0px); }
+      to   { opacity: 0; transform: translateY(-10px); }
+    }
+    @keyframes gridEnter {
+      from { opacity: 0; transform: translateY(12px); }
+      to   { opacity: 1; transform: translateY(0px); }
+    }
+    .grid.is-leaving { animation: gridLeave 0.2s ease forwards; }
+    .grid.is-entering { animation: gridEnter 0.22s ease forwards; }
+  </style>
+</head>
+<body data-supabase-url="{{ supabase_url|e }}" data-supabase-anon-key="{{ supabase_anon_key|e }}">
+<div class="shell">
+  <section class="panel">
+    <div class="head">
+      <div>
+        <h1 class="title">Choose Your World</h1>
+        <p id="context" class="sub">Loading character and model context...</p>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/account-hub">Return to Account Hub</a>
+        <button id="back-worlds-btn" class="btn" type="button" style="display:none;">Back to World Menu</button>
+      </div>
+    </div>
+
+    <div id="status" class="status"></div>
+
+    <div class="grid" id="world-grid"></div>
+  </section>
+</div>
+
+<script>
+const SELECTED_CHARACTER_STORAGE_KEY = 'paraval_selected_character';
+const SELECTED_MODEL_STORAGE_KEY = 'paraval_selected_model_url';
+
+const contextEl = document.getElementById('context');
+const statusEl = document.getElementById('status');
+const worldGridEl = document.getElementById('world-grid');
+const backWorldsBtn = document.getElementById('back-worlds-btn');
+
+const params = new URLSearchParams(window.location.search || '');
+const urlCharacterId = String(params.get('characterId') || '').trim();
+const urlModelUrl = String(params.get('modelUrl') || '').trim();
+const FALLBACK_CHARACTER = { id: 'guest-adventurer', name: 'Guest Adventurer' };
+const OPEN_WORLD_MODEL_URL = '{{ asset_url("everything_optimized_draco.glb") }}';
+
+let selectedCharacter = null;
+let selectedModelUrl = '';
+let currentView = 'worlds';
+
+const SCENES = [
+  {
+    id: 'maridon',
+    title: 'Maridon',
+    description: 'Load the current full 3D world scene powered by everything_optimized_draco.glb.',
+    target: '/map3d',
+    tag: 'Full Scene',
+  },
+  {
+    id: 'dev-playground',
+    title: 'D&D Lounge',
+    description: 'Relax in the D&D Lounge for tabletop-style hangouts, casual staging, and lighter social scene setup.',
+    target: '{{ asset_url("dev_playground.html") }}',
+    tag: 'Scaffold',
+  },
+];
+
+function setStatus(msg, tone) {
+  statusEl.textContent = msg || '';
+  statusEl.className = `status${tone ? ` ${tone}` : ''}`;
+}
+
+function loadContext() {
+  try {
+    const rawCharacter = localStorage.getItem(SELECTED_CHARACTER_STORAGE_KEY);
+    const parsed = rawCharacter ? JSON.parse(rawCharacter) : null;
+    if (parsed && typeof parsed === 'object' && parsed.id) {
+      selectedCharacter = {
+        id: String(parsed.id),
+        name: String(parsed.name || ''),
+      };
+    }
+  } catch (_err) {
+    selectedCharacter = null;
+  }
+
+  if (urlCharacterId && selectedCharacter && selectedCharacter.id !== urlCharacterId) {
+    selectedCharacter = {
+      id: urlCharacterId,
+      name: selectedCharacter.name || urlCharacterId,
+    };
+    localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
+  }
+
+  if (!selectedCharacter || !selectedCharacter.id) {
+    selectedCharacter = { ...FALLBACK_CHARACTER };
+    localStorage.setItem(SELECTED_CHARACTER_STORAGE_KEY, JSON.stringify(selectedCharacter));
+  }
+
+  try {
+    selectedModelUrl = urlModelUrl || String(localStorage.getItem(SELECTED_MODEL_STORAGE_KEY) || '').trim();
+  } catch (_err) {
+    selectedModelUrl = urlModelUrl || '';
+  }
+
+  if (selectedModelUrl) {
+    localStorage.setItem(SELECTED_MODEL_STORAGE_KEY, selectedModelUrl);
+  }
+  contextEl.textContent = `Character: ${selectedCharacter.name || selectedCharacter.id} | Open World Model: ${OPEN_WORLD_MODEL_URL}`;
+  return true;
+}
+
+function buildWorldUrl(basePath) {
+  const url = new URL(basePath, window.location.origin);
+  url.searchParams.set('characterId', selectedCharacter.id);
+  if (url.pathname !== '/map3d' && selectedModelUrl) {
+    url.searchParams.set('modelUrl', selectedModelUrl);
+  }
+  return `${url.pathname}${url.search}`;
+}
+
+function animateGridSwap(callback) {
+  worldGridEl.classList.remove('is-entering');
+  worldGridEl.classList.add('is-leaving');
+  var done = false;
+  function finish() {
+    if (done) return; done = true;
+    worldGridEl.classList.remove('is-leaving');
+    callback();
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        worldGridEl.classList.add('is-entering');
+        worldGridEl.addEventListener('animationend', function h() {
+          worldGridEl.removeEventListener('animationend', h);
+          worldGridEl.classList.remove('is-entering');
+        });
+      });
+    });
+  }
+  worldGridEl.addEventListener('animationend', function h() {
+    worldGridEl.removeEventListener('animationend', h);
+    finish();
+  });
+  // Fallback timeout in case animationend doesn't fire
+  setTimeout(finish, 280);
+}
+
+function renderSceneMenu() {
+  animateGridSwap(function () {
+    currentView = 'scenes';
+    backWorldsBtn.style.display = 'inline-flex';
+    worldGridEl.innerHTML = SCENES.map((scene) => {
+      const href = buildWorldUrl(scene.target);
+      return `
+        <article class="card">
+          <h2>${scene.title}</h2>
+          <p class="desc">${scene.description}</p>
+          <a class="btn" href="${href}">Enter ${scene.title}</a>
+          <div class="meta">${scene.tag}</div>
+        </article>
+      `;
+    }).join('');
+    setStatus('Explore scenes and pick where to travel.');
+  });
+}
+
+function renderWorlds() {
+  animateGridSwap(function () {
+    currentView = 'worlds';
+    backWorldsBtn.style.display = 'none';
+    const worlds = [
+      {
+        id: 'explore',
+        title: 'Explore World',
+        description: 'Browse scene destinations and enter a specific world instance.',
+        action: 'open-scenes',
+        tag: 'Scene Menu',
+      },
+      {
+        id: 'arena',
+        title: 'Combat Arena',
+        description: 'Jump straight into tactical combat scenarios and encounter testing.',
+        target: '{{ asset_url("combat_arena.html") }}',
+        tag: 'Battle Instance',
+      },
+      {
+        id: 'paraval-library',
+        title: 'Paraval Library',
+        description: 'Step into a lore hall filled with Skyrim-style books, short fiction, and in-world chronicles.',
+        target: '/paraval-library',
+        tag: 'Lore Archive',
+      },
+    ];
+
+    worldGridEl.innerHTML = worlds.map((world) => {
+      if (world.action === 'open-scenes') {
+        return `
+          <article class="card">
+            <h2>${world.title}</h2>
+            <p class="desc">${world.description}</p>
+            <button class="btn js-open-scenes" type="button">Open Scene Menu</button>
+            <div class="meta">${world.tag}</div>
+          </article>
+        `;
+      }
+
+      const href = buildWorldUrl(world.target);
+      return `
+        <article class="card">
+          <h2>${world.title}</h2>
+          <p class="desc">${world.description}</p>
+          <a class="btn" href="${href}">Enter ${world.title}</a>
+          <div class="meta">${world.tag}</div>
+        </article>
+      `;
+    }).join('');
+
+    worldGridEl.querySelectorAll('.js-open-scenes').forEach((btn) => {
+      btn.addEventListener('click', renderSceneMenu);
+    });
+
+    setStatus('Choose where you want to go next.');
+  });
+}
+
+backWorldsBtn.addEventListener('click', () => {
+  if (currentView === 'scenes') {
+    renderWorlds();
+  }
+});
+
+if (loadContext()) {
+  renderWorlds();
+}
+</script>
+<script type="module">
+  import { writeNavContext } from '/static/utils/navigationContext.js';
+  writeNavContext({ lastPage: 'world-select' });
+</script>
+<script src="/static/transition.js"></script>
+</body>
+</html>
