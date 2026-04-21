@@ -1331,6 +1331,7 @@ function _buildDrawPanel() {
 _drawPanel = _buildDrawPanel();
 scene.add(_drawPanel);
 
+function _castFireball() {
   // Spawn a fireball from the player's eye position, shoot it forward
   const origin = new THREE.Vector3();
   renderer.xr.getCamera().getWorldPosition(origin);
