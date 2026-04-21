@@ -1415,6 +1415,8 @@ function _buildDrawPanel() {
 
   // Panel-side nudge buttons removed — world gizmo is the only transform tool.
   root.userData.gizmoButtons = [];
+  const gizmoBaseX = 0.155;
+  const gizmoBaseY = -0.130;
 
   // Visible mini axis gizmo at the center of control cluster.
   const gizmoRoot = new THREE.Group();
