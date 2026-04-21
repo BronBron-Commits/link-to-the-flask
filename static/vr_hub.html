@@ -84,8 +84,6 @@
   <a href="/">← Return to Home</a>
 </div>
 
-<script src="/socket.io/socket.io.js"></script>
-
 <script type="importmap">
 {
   "imports": {
@@ -358,6 +356,17 @@ const _presenceState = {
   pollTimer: null,
   lastPollSuccessAt: 0,
   usingSocket: false,
+};
+const _hintEl = document.getElementById('hint');
+const _desktopState = {
+  active: true,
+  pointerLocked: false,
+  keys: Object.create(null),
+  yaw: 0,
+  pitch: 0,
+  mouseSensitivity: 0.0022,
+  raycaster: new THREE.Raycaster(),
+  mouseNdc: new THREE.Vector2(),
 };
 
 // ─── Laser light show (beams) ────────────────────────────────────────────────
@@ -1236,6 +1245,21 @@ function _applyBrightness(b) {
   _controlTablet.userData.handle.position.y = _brightnessToY(b);
   _drawBrightnessValue(_controlTablet.userData.labelCanvas, _controlTablet.userData.labelTex, b);
 }
+
+function _setLaserActive(next) {
+  _laserActive = !!next;
+  _laserGroup.visible = _laserActive;
+  _laserPivots.forEach(({ light }) => { light.intensity = _laserActive ? 3.5 : 0; });
+  _drawTabletBtn(_controlTablet.userData.laserBtnCanvas, _controlTablet.userData.laserBtnTex, '✦', 'LASER', _laserActive);
+}
+
+function _setDiscoActive(next) {
+  _discoActive = !!next;
+  _discoGroup.visible = _discoActive;
+  _discoLights.forEach(l => { l.intensity = _discoActive ? 8 : 0; });
+  _drawTabletBtn(_controlTablet.userData.discoBtnCanvas, _controlTablet.userData.discoBtnTex, '🪩', 'DISCO', _discoActive);
+}
+
 _applyBrightness(1.0);
 _refreshSkyBtns();
 
@@ -1443,20 +1467,14 @@ function _updatePanelInteraction(leftGp, rightGp) {
       // LASER button
       _controlTablet.userData.laserBtnMesh.getWorldPosition(_tmpPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
-        _laserActive = !_laserActive;
-        _laserGroup.visible = _laserActive;
-        _laserPivots.forEach(({ light }) => { light.intensity = _laserActive ? 3.5 : 0; });
-        _drawTabletBtn(_controlTablet.userData.laserBtnCanvas, _controlTablet.userData.laserBtnTex, '✦', 'LASER', _laserActive);
+        _setLaserActive(!_laserActive);
         continue;
       }
 
       // DISCO button
       _controlTablet.userData.discoBtnMesh.getWorldPosition(_tmpPanelPos);
       if (_tmpCtrlPos.distanceTo(_tmpPanelPos) <= 0.14) {
-        _discoActive = !_discoActive;
-        _discoGroup.visible = _discoActive;
-        _discoLights.forEach(l => { l.intensity = _discoActive ? 8 : 0; });
-        _drawTabletBtn(_controlTablet.userData.discoBtnCanvas, _controlTablet.userData.discoBtnTex, '🪩', 'DISCO', _discoActive);
+        _setDiscoActive(!_discoActive);
         continue;
       }
 
@@ -1576,10 +1594,149 @@ function _updateQuestLocomotion(dt) {
   playerPitch.rotation.z = 0;
 }
 
+function _updateDesktopHint() {
+  if (!_hintEl) return;
+  if (renderer.xr.isPresenting) {
+    _hintEl.textContent = 'VR active';
+    return;
+  }
+  const lockHint = _desktopState.pointerLocked ? 'Esc: unlock mouse' : 'Click canvas: lock mouse';
+  _hintEl.textContent = `Desktop: WASD move, mouse look, click panel buttons, 1/2/3 sky, L laser, K disco, F/G spells, [/] brightness • ${lockHint}`;
+}
+
+function _desktopInteractTargets() {
+  return [
+    ...(_controlTablet?.userData?.skyBtnMeshes || []),
+    _controlTablet?.userData?.laserBtnMesh,
+    _controlTablet?.userData?.discoBtnMesh,
+    _spellPanel?.userData?.fireballBtnMesh,
+    _spellPanel?.userData?.arcaneBtnMesh,
+  ].filter(Boolean);
+}
+
+function _desktopTriggerInteraction(target) {
+  if (!target) return false;
+  if (target.userData?.skyPreset) {
+    _applySkyPreset(target.userData.skyPreset);
+    return true;
+  }
+  if (target === _controlTablet?.userData?.laserBtnMesh) {
+    _setLaserActive(!_laserActive);
+    return true;
+  }
+  if (target === _controlTablet?.userData?.discoBtnMesh) {
+    _setDiscoActive(!_discoActive);
+    return true;
+  }
+  if (target === _spellPanel?.userData?.fireballBtnMesh) {
+    _castFireball();
+    return true;
+  }
+  if (target === _spellPanel?.userData?.arcaneBtnMesh) {
+    _castArcaneShot();
+    return true;
+  }
+  return false;
+}
+
+function _desktopClickInteract(clientX, clientY, centerRay = false) {
+  if (renderer.xr.isPresenting) return false;
+  const rect = canvas.getBoundingClientRect();
+  if (!centerRay) {
+    _desktopState.mouseNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    _desktopState.mouseNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+  } else {
+    _desktopState.mouseNdc.set(0, 0);
+  }
+  _desktopState.raycaster.setFromCamera(_desktopState.mouseNdc, camera);
+  const hits = _desktopState.raycaster.intersectObjects(_desktopInteractTargets(), false);
+  if (!hits.length) return false;
+  return _desktopTriggerInteraction(hits[0].object);
+}
+
+function _initDesktopControls() {
+  _desktopState.yaw = playerRig.rotation.y;
+  _desktopState.pitch = playerPitch.rotation.x;
+  _updateDesktopHint();
+
+  canvas.addEventListener('click', (e) => {
+    if (renderer.xr.isPresenting) return;
+    if (!_desktopState.pointerLocked && document.pointerLockElement !== canvas) {
+      canvas.requestPointerLock();
+      return;
+    }
+    _desktopClickInteract(e.clientX, e.clientY, _desktopState.pointerLocked);
+  });
+
+  document.addEventListener('pointerlockchange', () => {
+    _desktopState.pointerLocked = document.pointerLockElement === canvas;
+    _updateDesktopHint();
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (renderer.xr.isPresenting || !_desktopState.pointerLocked) return;
+    _desktopState.yaw -= e.movementX * _desktopState.mouseSensitivity;
+    _desktopState.pitch -= e.movementY * _desktopState.mouseSensitivity;
+    _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch, -LOOK_LIMIT, LOOK_LIMIT);
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (renderer.xr.isPresenting) return;
+    const key = String(e.key || '').toLowerCase();
+    _desktopState.keys[key] = true;
+    if (e.repeat) return;
+
+    if (key === '1') _applySkyPreset('blue');
+    else if (key === '2') _applySkyPreset('green');
+    else if (key === '3') _applySkyPreset('red');
+    else if (key === 'l') _setLaserActive(!_laserActive);
+    else if (key === 'k') _setDiscoActive(!_discoActive);
+    else if (key === 'f') _castFireball();
+    else if (key === 'g') _castArcaneShot();
+    else if (key === '[') _applyBrightness(_brightness - 0.1);
+    else if (key === ']') _applyBrightness(_brightness + 0.1);
+  });
+
+  window.addEventListener('keyup', (e) => {
+    const key = String(e.key || '').toLowerCase();
+    _desktopState.keys[key] = false;
+  });
+
+  renderer.xr.addEventListener('sessionstart', _updateDesktopHint);
+  renderer.xr.addEventListener('sessionend', () => {
+    _desktopState.yaw = playerRig.rotation.y;
+    _desktopState.pitch = playerPitch.rotation.x;
+    _updateDesktopHint();
+  });
+}
+
+function _updateDesktopLocomotion(dt) {
+  if (renderer.xr.isPresenting || !_desktopState.active) return;
+
+  const keys = _desktopState.keys;
+  const forward = (keys['w'] ? 1 : 0) - (keys['s'] ? 1 : 0);
+  const strafe = (keys['d'] ? 1 : 0) - (keys['a'] ? 1 : 0);
+  const moveVec = new THREE.Vector3(strafe, 0, -forward);
+  if (moveVec.lengthSq() > 0) {
+    moveVec.normalize().multiplyScalar(MOVE_SPEED * dt);
+    moveVec.applyAxisAngle(_tmpUp, _desktopState.yaw);
+    playerRig.position.add(moveVec);
+  }
+
+  if (keys['arrowleft']) _desktopState.yaw += TURN_SPEED * dt;
+  if (keys['arrowright']) _desktopState.yaw -= TURN_SPEED * dt;
+  if (keys['arrowup']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch + LOOK_SPEED * dt * 0.7, -LOOK_LIMIT, LOOK_LIMIT);
+  if (keys['arrowdown']) _desktopState.pitch = THREE.MathUtils.clamp(_desktopState.pitch - LOOK_SPEED * dt * 0.7, -LOOK_LIMIT, LOOK_LIMIT);
+
+  playerRig.rotation.set(0, _desktopState.yaw, 0);
+  playerPitch.rotation.set(_desktopState.pitch, 0, 0);
+}
+
 // VR button
 const vrBtn = createVRButton(renderer);
 if (vrBtn) document.getElementById('vr-btn-wrap').appendChild(vrBtn);
 _connectPresenceSocket();
+_initDesktopControls();
 
 // ─── Lighting ─────────────────────────────────────────────────────────────────
 const _sceneAmbient = new THREE.AmbientLight(0x1a2050, 4.0);
@@ -1916,6 +2073,7 @@ const _handUpdaters = [];
 renderer.setAnimationLoop(() => {
   const dt = Math.min(_clock.getDelta(), 0.05);
   _updateQuestLocomotion(dt);
+  _updateDesktopLocomotion(dt);
   _publishLocalPresence(false);
   _updateLasers(dt);
   _updateFireballs(dt);
