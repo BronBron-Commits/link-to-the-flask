@@ -15,15 +15,6 @@ Play in a shared 3D world, import real D&D characters, and engage in turn-based 
 
 ---
 
-## 📸 Preview
-
-![Gameplay Screenshot](docs/screenshot1.png)
-![Combat Screenshot](docs/screenshot2.png)
-
-> Add real screenshots here ASAP — this is critical.
-
----
-
 ## ⚡ What Works Right Now
 
 - Join a shared 3D world
