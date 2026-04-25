@@ -25,3 +25,5 @@ Play in a shared 3D world, import real D&D characters, and engage in turn-based 
 - Enemy AI (movement + attack)
 - Combat feedback (dice, hit/miss, effects)
 - Multiplayer sync (multiple clients)
+
+![Gameplay Demo](docs/demo.gif)
