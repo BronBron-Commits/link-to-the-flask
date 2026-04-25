@@ -32,7 +32,6 @@ Play in a shared 3D world, import real D&D characters, and engage in turn-based 
 
 This is not just a frontend demo.
 
-```text
 ✔ Server-authoritative combat engine
 ✔ Real multiplayer state synchronization
 ✔ DM-controlled world logic
